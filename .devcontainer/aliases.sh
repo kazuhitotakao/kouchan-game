@@ -25,3 +25,23 @@ alias push='git push origin HEAD'
 alias log='git log --pretty=fuller -3'
 alias reset='git reset --soft HEAD~1'
 alias rebase='git rebase develop'
+
+# --- Git ブランチをプロンプトに表示 ---
+# busybox ash は PS1 を表示のたびに展開するので、$(...) がその都度評価される。
+# git-prompt.sh は bash/zsh 向けなので使わず、ash で動く小さい関数で代替する。
+git_branch() {
+  branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+  if [ "$branch" != "" ]; then
+    # 未コミットの変更や未追跡ファイルがあれば * を付ける(Mac 側の表示に合わせる)。
+    dirty=''
+    if [ "$(git status --porcelain 2>/dev/null)" != "" ]; then
+      dirty=' *'
+    fi
+
+    printf ' (%s%s)' "$branch" "$dirty"
+  fi
+}
+
+PS1='$(pwd)$(git_branch)
+# '
