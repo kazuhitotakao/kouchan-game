@@ -1,0 +1,7 @@
+{
+  "name": "Kouchan Game",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "app",
+  "workspaceFolder": "/app",
+  "shutdownAction": "stopCompose"
+}
