@@ -33,8 +33,8 @@ function startGame() {
   gameStarted.value = true;
 }
 
-/* 公園で一緒に遊ぶ */
-function playTogether() {
+/* ① 一緒にすべり台で遊ぶ */
+function playSlide() {
   childEnergy.value -= 15;
   childMood.value += 10;
   outingPoint.value += 5;
@@ -42,7 +42,31 @@ function playTogether() {
   parentStress.value += 2;
   addMinutes(30);
 
-  resultMessage.value = 'こうちゃんは大喜び！';
+  resultMessage.value = 'こうちゃんは大喜びです！';
+}
+
+/* ② 砂場で遊ぶ */
+function playSandbox() {
+  childEnergy.value -= 10;
+  childMood.value += 8;
+  outingPoint.value += 5;
+  parentEnergy.value -= 5;
+  parentStress.value += 1;
+  addMinutes(30);
+
+  resultMessage.value = 'こうちゃんは夢中で砂遊びをしています！';
+}
+
+/* ③ ベンチから見守る */
+function watchFromBench() {
+  childEnergy.value -= 10;
+  childMood.value += 5;
+  outingPoint.value += 3;
+  parentEnergy.value -= 2;
+  parentStress.value += 0;
+  addMinutes(30);
+
+  resultMessage.value = 'こうちゃんは楽しそうに遊んでいます。';
 }
 
 /* 次のイベントへ進む */
@@ -82,7 +106,18 @@ function goToNextEvent() {
       <!-- 結果がまだ無いとき -->
       <div v-if="!resultMessage">
         <h3>どうする？</h3>
-        <button @click="playTogether">一緒に遊ぶ</button>
+          <!-- ★ 3択に変更 -->
+        <button @click="playSlide">
+          一緒にすべり台で遊ぶ
+        </button>
+
+        <button @click="playSandbox">
+          砂場で遊ぶ
+        </button>
+
+        <button @click="watchFromBench">
+          ベンチから見守る
+        </button>
       </div>
 
       <!-- 結果が出たあと -->
