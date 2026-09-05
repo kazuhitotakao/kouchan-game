@@ -5,6 +5,17 @@ const gameTitle: string = 'こうちゃんといっしょ！';
 
 const gameStarted = ref(false);
 
+/* 今いるゲームイベントを管理する型
+   parkArrival  = 公園に到着した場面
+   parkMorePlay = 公園でもっと遊びたい場面
+*/
+type GameEvent = 'parkArrival' | 'parkMorePlay';
+
+/* 現在のイベント
+   最初は「公園に到着した場面」からスタート
+*/
+const currentEvent = ref<GameEvent>('parkArrival');
+
 /* ゲームのステータス */
 const childEnergy = ref(100); // こうちゃんの体力
 const childMood = ref(80); // こうちゃんの機嫌
@@ -72,9 +83,7 @@ function watchFromBench() {
 /* 次のイベントへ進む */
 function goToNextEvent() {
   resultMessage.value = '';
-
-  // 次に作るイベントへの切り替え処理を
-  // ここに追加していく
+  currentEvent.value = 'parkMorePlay';
 }
 </script>
 
@@ -91,9 +100,6 @@ function goToNextEvent() {
 
     <!-- ゲーム開始後 -->
     <div v-else>
-      <h2>公園！</h2>
-
-      <p>こうちゃんと公園にやってきました。</p>
       <h3>ステータス</h3>
 
       <p>こうちゃんの体力：{{ childEnergy }}</p>
@@ -103,28 +109,43 @@ function goToNextEvent() {
       <p>親のイライラ度：{{ parentStress }}</p>
       <p>時間：{{ currentTime }}</p>
 
-      <!-- 結果がまだ無いとき -->
-      <div v-if="!resultMessage">
-        <h3>どうする？</h3>
+      <!-- 公園に到着した場面 -->
+      <div v-if="currentEvent === 'parkArrival'">
+        <h2>公園！</h2>
+
+        <p>こうちゃんと公園にやってきました。</p>
+
+        <!-- 結果がまだ無いとき -->
+        <div v-if="!resultMessage">
+          <h3>どうする？</h3>
           <!-- ★ 3択に変更 -->
-        <button @click="playSlide">
-          一緒にすべり台で遊ぶ
-        </button>
+          <button @click="playSlide">一緒にすべり台で遊ぶ</button>
 
-        <button @click="playSandbox">
-          砂場で遊ぶ
-        </button>
+          <button @click="playSandbox">砂場で遊ぶ</button>
 
-        <button @click="watchFromBench">
-          ベンチから見守る
-        </button>
+          <button @click="watchFromBench">ベンチから見守る</button>
+        </div>
+
+        <!-- 結果が出たあと -->
+        <div v-else>
+          <h3>結果</h3>
+          <p>{{ resultMessage }}</p>
+          <button @click="goToNextEvent">次へ</button>
+        </div>
       </div>
+      <!-- 公園でもっと遊びたいイベント -->
+      <div v-else-if="currentEvent === 'parkMorePlay'">
+        <h2>まだ遊びたい！</h2>
 
-      <!-- 結果が出たあと -->
-      <div v-else>
-        <h3>結果</h3>
-        <p>{{ resultMessage }}</p>
-        <button @click="goToNextEvent">次へ</button>
+        <p>しばらく遊んだこうちゃんが、 「パパ、もっと遊ぼう！」と言っています。</p>
+
+        <h3>どうする？</h3>
+
+        <button>一緒にどんぐりを拾う</button>
+
+        <button>少し休んでから遊ぶ</button>
+
+        <button>そろそろ帰ろうと伝える</button>
       </div>
     </div>
   </main>
