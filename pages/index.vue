@@ -1099,14 +1099,6 @@ function resetGame() {
 
             <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
           </article>
-
-          <article v-else class="place-card place-card--locked">
-            <h3 class="place-card__subtitle">？？？</h3>
-
-            <p class="place-card__text">いろいろな場所を探検すると、何か見つかるかも…</p>
-
-            <p class="place-card__note">今：{{ outingPoint }}ポイント ／ {{ collectedItems.length }}種類</p>
-          </article>
         </section>
 
         <nav class="command">
@@ -2138,13 +2130,6 @@ function resetGame() {
   font-size: 15.5px;
 }
 
-.place-card__note {
-  margin: 10px 0 0;
-  color: var(--ink-soft);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
-}
-
 /* 秘密の場所 */
 .place-card--secret {
   border-color: #d9c8f2;
@@ -2155,24 +2140,6 @@ function resetGame() {
 .place-card--secret .place-card__title,
 .place-card--secret .place-card__subtitle {
   color: #6b3fae;
-}
-
-/* 未解放のヒント（横幅は「公園入口」のカードとそろえ、色だけ控えめにする） */
-.place-card--locked {
-  padding: 14px 22px;
-  border-color: #e2e6ec;
-  border-left-color: #b3bfcd;
-  background: #f6f8fa;
-  color: var(--ink-soft);
-  box-shadow: none;
-}
-
-.place-card--locked .place-card__subtitle {
-  color: #93a2b4;
-}
-
-.place-card--locked .place-card__text {
-  font-size: 14px;
 }
 
 /* いやいや中 */
