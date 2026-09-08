@@ -54,6 +54,37 @@ const snackLeft = ref(2);
 /* 結果メッセージ */
 const resultMessage = ref('');
 
+/* 今回の行動で、どのステータスがどれだけ変わったかをまとめた型
+   すべて「増えた分・減った分」の数で、-15 なら15減った という意味
+   minutes は かかった時間（分）
+*/
+type StatusChanges = {
+  childEnergy: number;
+  childMood: number;
+  outingPoint: number;
+  parentEnergy: number;
+  parentStress: number;
+  minutes: number;
+};
+
+/* 今回の行動による変化
+   null は「まだ今回の行動結果がない」という意味
+   場所を移動したら null に戻して、前の変化が残らないようにする
+*/
+const statusChanges = ref<StatusChanges | null>(null);
+
+/* 行動する前のステータスを、いったん控えておく箱
+   行動が終わったあとに「今の値 － 行動前の値」で変化量を計算する
+*/
+let statusBefore = {
+  childEnergy: 0,
+  childMood: 0,
+  outingPoint: 0,
+  parentEnergy: 0,
+  parentStress: 0,
+  minutes: 0,
+};
+
 /* ゴールしたときのランクと判定メッセージ */
 const endingRank = ref('');
 const endingTitle = ref('');
@@ -116,6 +147,96 @@ function fixAllStatus() {
   parentStress.value = keepInRange(parentStress.value);
 }
 
+/* 行動をはじめる前に呼ぶ
+   「今のステータス」を控えておくだけの処理
+*/
+function startStatusChanges() {
+  statusBefore = {
+    childEnergy: childEnergy.value,
+    childMood: childMood.value,
+    outingPoint: outingPoint.value,
+    parentEnergy: parentEnergy.value,
+    parentStress: parentStress.value,
+    minutes: currentMinutes.value,
+  };
+}
+
+/* 行動の中身がぜんぶ終わったあとに呼ぶ
+   「今の値 － 行動前の値」で、今回の変化量を作る
+
+   この計算は行動につき1回だけ行うので、
+   ・ランダムイベントの分
+   ・いやいや発生の分
+   ・再訪でポイントが1に減った分
+   もぜんぶ合計された数になる
+
+   ※ 必ず fixAllStatus()（0〜100に丸める処理）より前に呼ぶこと
+     たとえば 親の体力が0のときに だっこ をすると、
+     丸めたあとでは 0 のままなので「-15」が消えてしまう
+     丸める前に計算することで、その行動にかかったコストがきちんと出る
+*/
+function saveStatusChanges() {
+  statusChanges.value = {
+    childEnergy: childEnergy.value - statusBefore.childEnergy,
+    childMood: childMood.value - statusBefore.childMood,
+    outingPoint: outingPoint.value - statusBefore.outingPoint,
+    parentEnergy: parentEnergy.value - statusBefore.parentEnergy,
+    parentStress: parentStress.value - statusBefore.parentStress,
+    minutes: currentMinutes.value - statusBefore.minutes,
+  };
+}
+
+/* 変化量を「+5」「-10」「0」の形の文字にする */
+function formatChange(value: number) {
+  return value > 0 ? `+${value}` : String(value);
+}
+
+/* 変化が「良い」「悪い」「変化なし」のどれかを判定して、CSSのクラス名を返す
+
+   ※ 単純に プラス＝良い ではないので注意
+     ・親のイライラ度は、ふえるほど悪い（逆になる）
+     ・時間は、どの行動でも必ずふえるので色はつけない
+*/
+function changeClass(statusName: string, value: number) {
+  // 時間は良い・悪いで見ないので、いつも「変化なし」の色にする
+  if (statusName === 'minutes') {
+    return 'change--neutral';
+  }
+
+  if (value === 0) {
+    return 'change--neutral';
+  }
+
+  // 親のイライラ度だけは、ふえると悪い変化
+  if (statusName === 'parentStress') {
+    return value > 0 ? 'change--bad' : 'change--good';
+  }
+
+  // それ以外（体力・機嫌・ポイント）は、ふえると良い変化
+  return value > 0 ? 'change--good' : 'change--bad';
+}
+
+/* 中央の「今回の変化」に並べる6項目
+   表示する名前・数字・色のクラス名をまとめておく
+*/
+const changeRows = computed(() => {
+  const changes = statusChanges.value;
+
+  // まだ今回の行動結果がないときは、からっぽにする
+  if (changes === null) {
+    return [];
+  }
+
+  return [
+    { label: 'こうちゃんの体力', text: formatChange(changes.childEnergy), className: changeClass('childEnergy', changes.childEnergy) },
+    { label: 'こうちゃんの機嫌', text: formatChange(changes.childMood), className: changeClass('childMood', changes.childMood) },
+    { label: 'おでかけポイント', text: formatChange(changes.outingPoint), className: changeClass('outingPoint', changes.outingPoint) },
+    { label: '親の体力', text: formatChange(changes.parentEnergy), className: changeClass('parentEnergy', changes.parentEnergy) },
+    { label: '親のイライラ度', text: formatChange(changes.parentStress), className: changeClass('parentStress', changes.parentStress) },
+    { label: 'かかった時間', text: `${formatChange(changes.minutes)}分`, className: changeClass('minutes', changes.minutes) },
+  ];
+});
+
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
   return visitedPlaces.value.includes(place);
@@ -156,6 +277,9 @@ function addCollectedItem(itemName: string) {
 
 /* ランダムイベント
    5回に1回くらい（20%）だけ起こる
+   ※ ここに書く数字は「このハプニングだけの増減」
+     中央の「今回の変化（合計）」は行動ぜんぶを足した数なので、
+     たとえば 休む -6 ＋ ヒヤッ +4 なら 合計は -2 になる
 */
 function runRandomEvent() {
   if (Math.random() >= 0.2) {
@@ -252,13 +376,15 @@ function checkTantrum() {
    ① その場所を探検済みにする
    ② たまにランダムイベントが起こる
    ③ いやいやが始まるか判定する
-   ④ ステータスを0〜100に収める
+   ④ 今回の変化量を記録する（ランダムイベントといやいやの分もふくむ）
+   ⑤ ステータスを0〜100に収める
    ※ いやいやをなだめる行動では呼ばない（ランダムイベントを起こさないため）
 */
 function finishPlayAction(place: GameEvent) {
   addVisitedPlace(place);
   runRandomEvent();
   checkTantrum();
+  saveStatusChanges();
   fixAllStatus();
 }
 
@@ -268,10 +394,11 @@ function startGame() {
 }
 
 /* 場所を移動する
-   移動すると前の結果メッセージは消す
+   移動すると前の結果メッセージと変化量の表示は消す
 */
 function goToPlace(place: GameEvent) {
   resultMessage.value = '';
+  statusChanges.value = null;
   currentEvent.value = place;
 }
 
@@ -281,6 +408,7 @@ function goToPlace(place: GameEvent) {
 */
 function goToNextPlace() {
   resultMessage.value = '';
+  statusChanges.value = null;
 
   if (isTantrum.value) {
     currentEvent.value = 'tantrum';
@@ -299,6 +427,9 @@ function goToNextPlace() {
 
 /* ① 一緒にすべる */
 function playSlide() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 15;
   childMood.value += 5;
   addOutingPoint('slide', 6);
@@ -314,6 +445,9 @@ function playSlide() {
 
 /* ② 下で見守る */
 function watchSlide() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 10;
   childMood.value += 4;
   addOutingPoint('slide', 3);
@@ -330,6 +464,9 @@ function watchSlide() {
 
 /* ① 一緒に大きな山を作る */
 function playSandbox() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 10;
   childMood.value += 4;
   addOutingPoint('sandbox', 6);
@@ -345,6 +482,9 @@ function playSandbox() {
 
 /* ② ベンチから見守る */
 function watchFromBench() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 8;
   childMood.value += 4;
   addOutingPoint('sandbox', 3);
@@ -361,6 +501,9 @@ function watchFromBench() {
 
 /* ① 一緒にどんぐりを拾う */
 function collectAcorns() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 8;
   childMood.value += 6;
   addOutingPoint('acornArea', 8);
@@ -376,6 +519,9 @@ function collectAcorns() {
 
 /* ② 木かげで少し休む */
 function takeBreak() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value += 10;
   childMood.value -= 3;
   addOutingPoint('acornArea', 1);
@@ -392,6 +538,9 @@ function takeBreak() {
 
 /* ① 白鳥を近くで見る */
 function watchSwansClose() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 8;
   childMood.value += 7;
   addOutingPoint('pond', 9);
@@ -407,6 +556,9 @@ function watchSwansClose() {
 
 /* ② 少し離れて見る */
 function watchSwansFar() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 5;
   childMood.value += 4;
   addOutingPoint('pond', 4);
@@ -424,6 +576,9 @@ function watchSwansFar() {
 
 /* ① 走って丘をのぼる */
 function runUpHill() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 20;
   childMood.value += 7;
   addOutingPoint('hill', 11);
@@ -439,6 +594,9 @@ function runUpHill() {
 
 /* ② ゆっくり歩いてのぼる */
 function walkUpHill() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 10;
   childMood.value += 4;
   addOutingPoint('hill', 6);
@@ -456,6 +614,9 @@ function walkUpHill() {
 
 /* ① 秘密基地で遊ぶ */
 function playSecretBase() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 12;
   childMood.value += 10;
   addOutingPoint('secretSpot', 15);
@@ -471,6 +632,9 @@ function playSecretBase() {
 
 /* ② 二人で景色をながめる */
 function enjoySecretView() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value += 5;
   childMood.value += 5;
   addOutingPoint('secretSpot', 9);
@@ -487,6 +651,9 @@ function enjoySecretView() {
 
 /* ① だっこしてなだめる */
 function hugChild() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value += 12;
   childMood.value += 15;
   parentEnergy.value -= 15;
@@ -497,11 +664,16 @@ function hugChild() {
 
   resultMessage.value = 'ぎゅっとだっこすると、しばらく足をぱたぱたさせていましたが、そのうち肩にことんと頭をあずけてきました。';
 
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
   fixAllStatus();
 }
 
 /* ② おやつをあげる */
 function giveSnack() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value += 25;
   childMood.value += 8;
   outingPoint.value += 2;
@@ -514,11 +686,16 @@ function giveSnack() {
 
   resultMessage.value = 'おやつをそっと見せると、涙のたまった目で「……たべる」。ほっぺをふくらませたまま、もぐもぐ食べ始めました。';
 
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
   fixAllStatus();
 }
 
 /* ③ 少し待ってみる */
 function waitCalmly() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
   childEnergy.value -= 5;
   childMood.value -= 2;
   parentEnergy.value += 2;
@@ -529,6 +706,8 @@ function waitCalmly() {
 
   resultMessage.value = 'となりにしゃがんで待ちました。ときどきこちらをちらっと見ながら、泣き声は少しずつ小さくなっていきます。まだ少しだけごきげんななめです。';
 
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
   fixAllStatus();
 }
 
@@ -593,6 +772,7 @@ function judgeResult() {
 /* ゴールへ向かう（判定して結果画面へ） */
 function goToGoal() {
   resultMessage.value = '';
+  statusChanges.value = null;
   addMinutes(10);
   judgeResult();
   currentEvent.value = 'goal';
@@ -615,6 +795,7 @@ function resetGame() {
   snackLeft.value = 2;
 
   resultMessage.value = '';
+  statusChanges.value = null;
   endingRank.value = '';
   endingTitle.value = '';
   endingMessage.value = '';
@@ -669,6 +850,9 @@ function resetGame() {
           <span class="status-clock">
             <span class="status-clock__now">{{ currentTime }}</span>
             <span class="status-clock__limit">／ 12:00</span>
+
+            <!-- 直前の行動でかかった時間（結果を表示している間だけ出す） -->
+            <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
           </span>
         </div>
 
@@ -676,6 +860,7 @@ function resetGame() {
           <li class="status-item">
             <span class="status-item__label">こうちゃんの体力</span>
             <span class="status-item__value">{{ childEnergy }}</span>
+            <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">{{ formatChange(statusChanges.childEnergy) }}</span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
             </span>
@@ -684,6 +869,7 @@ function resetGame() {
           <li class="status-item">
             <span class="status-item__label">こうちゃんの機嫌</span>
             <span class="status-item__value">{{ childMood }}</span>
+            <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">{{ formatChange(statusChanges.childMood) }}</span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
             </span>
@@ -692,6 +878,7 @@ function resetGame() {
           <li class="status-item">
             <span class="status-item__label">親の体力</span>
             <span class="status-item__value">{{ parentEnergy }}</span>
+            <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">{{ formatChange(statusChanges.parentEnergy) }}</span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
             </span>
@@ -700,6 +887,7 @@ function resetGame() {
           <li class="status-item">
             <span class="status-item__label">親のイライラ度</span>
             <span class="status-item__value">{{ parentStress }}</span>
+            <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">{{ formatChange(statusChanges.parentStress) }}</span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-stress" :style="{ width: parentStress + '%' }"></span>
             </span>
@@ -707,7 +895,7 @@ function resetGame() {
         </ul>
 
         <div class="status-pills">
-          <span class="pill pill--point">おでかけポイント<b>{{ outingPoint }}</b></span>
+          <span class="pill pill--point">おでかけポイント<b>{{ outingPoint }}</b><span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">{{ formatChange(statusChanges.outingPoint) }}</span></span>
 
           <span class="pill pill--snack">おやつ残り<b>{{ snackLeft }}</b>個</span>
         </div>
@@ -742,15 +930,15 @@ function resetGame() {
 
           <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
           <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
-            <h3 class="place-card__subtitle">？？？</h3>
+            <h3 class="place-card__subtitle">秘密の場所を発見！</h3>
 
-            <p class="place-card__text">公園の奥に知らない道を見つけた！</p>
+            <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
           </article>
 
           <article v-else class="place-card place-card--locked">
             <h3 class="place-card__subtitle">？？？</h3>
 
-            <p class="place-card__text">おでかけポイント20以上 ＋ 見つけたもの3種類で何か起こりそう…</p>
+            <p class="place-card__text">いろいろな場所を探検すると、何か見つかるかも…</p>
 
             <p class="place-card__note">今：{{ outingPoint }}ポイント ／ {{ collectedItems.length }}種類</p>
           </article>
@@ -809,6 +997,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -851,6 +1051,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -892,6 +1104,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -933,6 +1157,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -974,6 +1210,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -1015,6 +1263,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -1056,6 +1316,18 @@ function resetGame() {
             <h3 class="result-card__title">結果</h3>
 
             <p class="result-card__text">{{ resultMessage }}</p>
+
+            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+            <div v-if="statusChanges" class="change-box">
+              <p class="change-box__title">今回の変化（合計）</p>
+
+              <ul class="change-list">
+                <li v-for="row in changeRows" :key="row.label" class="change-item">
+                  <span class="change-item__label">{{ row.label }}</span>
+                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
           </article>
         </section>
 
@@ -1171,6 +1443,12 @@ function resetGame() {
   --child-mood: #ffb03a;
   --parent-energy: #4ea8e6;
   --parent-stress: #f2705f;
+
+  /* 増減表示の色（中央カード用と、暗い上部ステータス用） */
+  --good: #1f8a4c;
+  --bad: #c9412f;
+  --good-light: #7fe0a1;
+  --bad-light: #ff9d8c;
 
   /* 各エリアの横幅の基準 */
   --frame: 1180px;
@@ -1316,6 +1594,10 @@ function resetGame() {
   font-size: 12px;
 }
 
+.status-clock .status-change {
+  margin-left: 8px;
+}
+
 /* ステータス4項目（横1列） */
 .status-list {
   display: grid;
@@ -1329,9 +1611,10 @@ function resetGame() {
 
 .status-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  /* ラベル ／ 現在値 ／ 直前の増減 の3列（ゲージは下段に全幅で置く） */
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: baseline;
-  column-gap: 8px;
+  column-gap: 6px;
 }
 
 .status-item__label {
@@ -1348,6 +1631,29 @@ function resetGame() {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
+}
+
+/* 上部ステータスの増減表示
+   結果を表示している間だけ、現在値の右側に小さく出す
+*/
+.status-change {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 暗い背景なので、明るめの色で見分ける */
+.status-change.change--good {
+  color: var(--good-light);
+}
+
+.status-change.change--bad {
+  color: var(--bad-light);
+}
+
+.status-change.change--neutral {
+  color: #b8c9e2;
 }
 
 .gauge {
@@ -1410,6 +1716,10 @@ function resetGame() {
 
 .pill--point b {
   color: var(--gold);
+}
+
+.pill .status-change {
+  margin-left: 6px;
 }
 
 .pill--snack b {
@@ -1553,9 +1863,8 @@ function resetGame() {
   color: #6b3fae;
 }
 
-/* 未解放のヒント（本編カードより控えめに、少し細く） */
+/* 未解放のヒント（横幅は「公園入口」のカードとそろえ、色だけ控えめにする） */
 .place-card--locked {
-  max-width: 620px;
   padding: 14px 22px;
   border-color: #e2e6ec;
   border-left-color: #b3bfcd;
@@ -1609,6 +1918,74 @@ function resetGame() {
   margin: 0;
   font-size: 15.5px;
   white-space: pre-line;
+}
+
+/* 今回の変化（結果カードの中）
+   PCの横幅を活かして3列に並べ、たての高さをおさえる
+*/
+.change-box {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed #e8c98a;
+}
+
+.change-box__title {
+  margin: 0 0 8px;
+  color: #8a6a1e;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.change-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.change-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 12px;
+  border: 1px solid #f0e0b8;
+  border-radius: 8px;
+  background: #fff;
+  line-height: 1.6;
+}
+
+.change-item__label {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.change-item__value {
+  flex: none;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 良い変化・悪い変化・変化なし の色分け
+   ※ 親のイライラ度は「ふえると悪い」ので、判定は changeClass() で行っている
+*/
+.change-item__value.change--good {
+  color: var(--good);
+}
+
+.change-item__value.change--bad {
+  color: var(--bad);
+}
+
+.change-item__value.change--neutral {
+  color: var(--ink-soft);
 }
 
 /* ゴールのエンディング */
@@ -1846,9 +2223,10 @@ function resetGame() {
   text-align: center;
 }
 
-/* 秘密の場所（1行使って目立たせる） */
+/* 秘密の場所
+   大きさと形はほかの場所のボタンとそろえ、ほかの場所の続きに並べる
+   目立たせるのは色（紫）だけにする */
 .cmd--secret {
-  grid-column: 1 / -1;
   border-color: #6b3fae;
   background: linear-gradient(180deg, #a97ce8 0%, #7a4fc0 100%);
   color: #fff;
@@ -1882,12 +2260,67 @@ function resetGame() {
 }
 
 /* ============================================================
+   背の低いパソコン画面（1280×720 など）向けの調整
+   「今回の変化」が増えたぶん、余白と文字を少しだけつめて
+   上部ステータス〜下部コマンドが一画面に収まるようにする
+   ============================================================ */
+@media (max-height: 800px) {
+  .status-area {
+    gap: 6px 24px;
+    padding: 8px 28px 10px;
+  }
+
+  .status-clock__now {
+    font-size: 24px;
+  }
+
+  .status-found {
+    max-height: 44px;
+  }
+
+  .stage {
+    gap: 12px;
+    padding: 18px 28px 20px;
+  }
+
+  .place-card {
+    padding: 16px 24px;
+  }
+
+  .place-card__title {
+    font-size: 22px;
+  }
+
+  .result-card {
+    padding: 22px 24px 18px;
+  }
+
+  .change-box {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+
+  .command {
+    gap: 8px 12px;
+    padding: 10px 28px 12px;
+  }
+
+  .cmd {
+    padding: 10px 16px 10px 32px;
+  }
+}
+
+/* ============================================================
    画面が狭いとき（タブレット・スマホ）へのフォールバック
    ============================================================ */
 
 /* タブレット幅：コマンドを2列に */
 @media (max-width: 900px) {
   .command {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .change-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1978,6 +2411,10 @@ function resetGame() {
 
   .result-card {
     padding: 18px 16px 14px;
+  }
+
+  .change-list {
+    grid-template-columns: 1fr;
   }
 
   .record-grid {
