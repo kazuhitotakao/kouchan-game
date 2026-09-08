@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const gameTitle: string = 'こうちゃんといっしょ！';
 
@@ -23,6 +23,15 @@ type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | '
    最初は「公園入口」からスタート
 */
 const currentEvent = ref<GameEvent>('parkEntrance');
+
+/* いま選んでいるコマンドの番号（キーボード操作用）
+   0 = 1番目、1 = 2番目、2 = 3番目 という意味
+
+   ↑↓キーでこの数字を動かし、Enter / Space でその番号のコマンドを実行する
+   別の場所へ移動したときや、新しいコマンド画面になったときは 0 に戻して、
+   いつも一番上のコマンドが選ばれている状態からはじめる
+*/
+const selectedCommandIndex = ref(0);
 
 /* ゲームのステータス */
 const childEnergy = ref(100); // こうちゃんの体力
@@ -128,6 +137,68 @@ const isAlmostNoon = computed(() => currentMinutes.value >= 11 * 60 + 30 && !isT
    の両方を満たすと解放される
 */
 const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedItems.value.length >= 3);
+
+/* ===== キーボード操作（「どうする？」コマンドボックス）用の計算 ===== */
+
+/* いま ↑↓←→ でコマンドを「選ぶ」画面かどうか
+
+   ・タイトル画面（ゲーム開始前）… ボタンは「公園へ行く」の1つだけ
+   ・ゴール／GAME OVER画面        … ボタンは「もう一度あそぶ」の1つだけ
+
+   この2つはえらぶものが無いので false にする
+   （false の画面では矢印キーをそのままにして、ページのスクロールをじゃましない。
+     ただし Enter / Space だけは、その1つのボタンを押す代わりに使える）
+*/
+const isCommandKeyboardActive = computed(() => {
+  // ゲーム開始前（タイトル画面）
+  if (!gameStarted.value) {
+    return false;
+  }
+
+  // ゴール・GAME OVER画面
+  if (currentEvent.value === 'goal' || currentEvent.value === 'gameOver') {
+    return false;
+  }
+
+  return true;
+});
+
+/* いま画面に出ているコマンドの数
+   ↑↓キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
+*/
+const commandCount = computed(() => {
+  // 公園入口は「行き先6か所 ＋ ゴール」で7つ
+  // 秘密の場所がまだ見つかっていないときは、その行が画面に無いので6つ
+  if (currentEvent.value === 'parkEntrance') {
+    return canEnterSecretSpot.value ? 7 : 6;
+  }
+
+  // 結果表示中は「次の場所を選ぶ」の1つだけ
+  if (resultMessage.value) {
+    return 1;
+  }
+
+  // いやいやタイムは、おやつが残っていれば3つ、食べきっていれば2つ
+  if (currentEvent.value === 'tantrum') {
+    return snackLeft.value > 0 ? 3 : 2;
+  }
+
+  // それ以外の場所は「行動2つ ＋ べつの場所へ行く」で3つ
+  return 3;
+});
+
+/* いやいやタイムの「少し待ってみる」が何番目になるか
+   おやつが残っていれば3番目（＝2）
+   おやつが0個で「おやつをあげる」が画面から消えているときは、
+   1つくり上がって2番目（＝1）になる
+*/
+const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
+
+/* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
+   秘密の場所が出ていれば7番目（＝6）
+   まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
+*/
+const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
@@ -524,11 +595,17 @@ function finishPlayAction(place: GameEvent) {
   saveStatusChanges();
   fixAllStatus();
   checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
 
 /* ゲーム開始 */
 function startGame() {
   gameStarted.value = true;
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
 
 /* 場所を移動する
@@ -538,6 +615,9 @@ function goToPlace(place: GameEvent) {
   resultMessage.value = '';
   statusChanges.value = null;
   currentEvent.value = place;
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
 
 /* 次の場所を選びに行く
@@ -552,6 +632,9 @@ function goToNextPlace() {
 
   resultMessage.value = '';
   statusChanges.value = null;
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 
   if (isTantrum.value) {
     currentEvent.value = 'tantrum';
@@ -813,6 +896,9 @@ function hugChild() {
 
   // だっこは親の体力を15も使うので、残りが少ないとここでGAME OVERになる
   checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
 
 /* ② おやつをあげる */
@@ -838,6 +924,9 @@ function giveSnack() {
 
   // おやつは安全な選択だが、念のためここでも判定しておく
   checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
 
 /* ③ 少し待ってみる */
@@ -861,6 +950,9 @@ function waitCalmly() {
 
   // 待つのはイライラ度が8ふえるので、たまっているとここでGAME OVERになる
   checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
 
 /* ===== ゴール ===== */
@@ -931,6 +1023,9 @@ function goToGoal() {
   resultMessage.value = '';
   statusChanges.value = null;
   addMinutes(10);
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
   judgeResult();
   currentEvent.value = 'goal';
 }
@@ -976,7 +1071,391 @@ function resetGame() {
 
   currentEvent.value = 'parkEntrance';
   gameStarted.value = false;
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
 }
+
+/* ============================================================
+   キーボード操作（各場所の「どうする？」コマンドボックス）
+
+   ・↑        1つ上のコマンドへ移動する
+   ・↓        1つ下のコマンドへ移動する
+   ・Enter    選択中のコマンドを実行する
+   ・Space    Enterと同じく、選択中のコマンドを実行する
+
+   これまでどおりマウスのクリックでも遊べる（クリック操作はそのまま）
+   ※ タイトル画面・公園入口・ゴール・GAME OVERは今回の対象外
+   ============================================================ */
+
+/* ↑：1つ上のコマンドへ移動する
+   一番上（0）でさらに上を押したときは、一番下へ回りこむ
+   例）3つあるとき 0 → 2 → 1 → 0 …
+*/
+function moveCommandUp() {
+  // すでに一番上にいるなら、一番下（コマンド数 - 1）へ回りこむ
+  if (selectedCommandIndex.value <= 0) {
+    selectedCommandIndex.value = commandCount.value - 1;
+    return;
+  }
+
+  selectedCommandIndex.value -= 1;
+}
+
+/* ↓：1つ下のコマンドへ移動する
+   一番下でさらに下を押したときは、一番上（0）へ戻る
+   例）3つあるとき 0 → 1 → 2 → 0 …
+*/
+function moveCommandDown() {
+  // すでに一番下にいるなら、一番上（0）へ戻る
+  if (selectedCommandIndex.value >= commandCount.value - 1) {
+    selectedCommandIndex.value = 0;
+    return;
+  }
+
+  selectedCommandIndex.value += 1;
+}
+
+/* ===== ここから下は、公園入口（3列にならぶコマンド）のための処理 ===== */
+
+/* 公園入口のコマンドが、いま何列で並んでいるか
+   CSSと同じ幅で切り替える
+   ・901px以上   … 3列
+   ・900px以下   … 2列
+   ・700px以下   … 1列
+*/
+const entranceColumns = ref(3);
+
+/* いまの画面幅を見て、列の数を updateする
+   画面が表示されたときと、幅が変わったときに呼ぶ
+*/
+function updateEntranceColumns() {
+  if (window.matchMedia('(max-width: 700px)').matches) {
+    entranceColumns.value = 1;
+    return;
+  }
+
+  if (window.matchMedia('(max-width: 900px)').matches) {
+    entranceColumns.value = 2;
+    return;
+  }
+
+  entranceColumns.value = 3;
+}
+
+/* ↑：公園入口では「1行ぶん（列の数ぶん）」上へ動かす
+   例）3列のとき 池(3) の1つ上は すべり台(0)
+
+   ※ 「公園の出口へ向かう（ゴール）」だけは、CSSで横1行をまるごと使っている
+     （.cmd--goal の grid-column: 1 / -1）ので、列のマス目には入っていない
+     そのため、ゴールはいちばん下の1行として別あつかいで計算する
+
+     [すべり台] [砂場] [どんぐり]
+     [池]       [丘]   [秘密]
+     [───── ゴール ─────]   ← 横いっぱいの1行
+*/
+function moveEntranceUp() {
+  const columns = entranceColumns.value;
+
+  // ゴールの番号は、そのまま「行き先の数」でもある
+  // （行き先が 0〜4 の5つなら、ゴールは5番）
+  const goalIndex = goalCommandIndex.value;
+
+  // いまゴールの行にいるなら、そのすぐ上（行き先の一番うしろ）へ
+  if (selectedCommandIndex.value === goalIndex) {
+    selectedCommandIndex.value = goalIndex - 1;
+    return;
+  }
+
+  // 1行ぶん上へ
+  const next = selectedCommandIndex.value - columns;
+
+  // 上にはみ出した＝いちばん上の行にいたので、いちばん下のゴールへ回りこむ
+  if (next < 0) {
+    selectedCommandIndex.value = goalIndex;
+    return;
+  }
+
+  selectedCommandIndex.value = next;
+}
+
+/* ↓：公園入口では「1行ぶん（列の数ぶん）」下へ動かす
+   行き先のいちばん下の行から↓を押すと、その下にあるゴールへ進む
+   ゴールからさらに↓を押すと、いちばん上のコマンドへ戻る
+*/
+function moveEntranceDown() {
+  const columns = entranceColumns.value;
+  const goalIndex = goalCommandIndex.value;
+
+  // いまゴールの行にいるなら、いちばん上のコマンドへ戻る
+  if (selectedCommandIndex.value === goalIndex) {
+    selectedCommandIndex.value = 0;
+    return;
+  }
+
+  // 1行ぶん下へ
+  const next = selectedCommandIndex.value + columns;
+
+  // 行き先の下にはもう行がない＝いちばん下の行にいたので、ゴールへ進む
+  if (next >= goalIndex) {
+    selectedCommandIndex.value = goalIndex;
+    return;
+  }
+
+  selectedCommandIndex.value = next;
+}
+
+/* Enter / Space を押したときに、いま選んでいるコマンドを実行する
+
+   やっていることは「マウスでクリックしたときと同じ関数を呼ぶ」だけ
+   今いる場所（currentEvent）と番号（selectedCommandIndex）の組み合わせで、
+   どの関数を呼ぶかを決めている
+*/
+function runSelectedCommand() {
+  // 結果表示中は「次の場所を選ぶ」しか出ていないので、それを実行する
+  if (resultMessage.value) {
+    goToNextPlace();
+    return;
+  }
+
+  // 毎回 .value と書かなくてよいように、番号を取り出しておく
+  const index = selectedCommandIndex.value;
+
+  switch (currentEvent.value) {
+    /* 公園入口
+       0 すべり台／1 砂場／2 どんぐりの木／3 池／4 丘
+       5 秘密の場所（見つけているときだけ画面に出る）
+       最後 公園の出口へ向かう（ゴール）
+
+       ※ 秘密の場所がまだ出ていないときは、その行が画面に無いので
+         ゴールが1つくり上がって5番目になる（goalCommandIndex で見る）
+    */
+    case 'parkEntrance':
+      if (index === 0) {
+        goToPlace('slide');
+      } else if (index === 1) {
+        goToPlace('sandbox');
+      } else if (index === 2) {
+        goToPlace('acornArea');
+      } else if (index === 3) {
+        goToPlace('pond');
+      } else if (index === 4) {
+        goToPlace('hill');
+      } else if (index === 5 && canEnterSecretSpot.value) {
+        goToPlace('secretSpot');
+      } else if (index === goalCommandIndex.value) {
+        goToGoal();
+      }
+      break;
+
+    /* すべり台
+       0 一緒にすべる／1 下で見守る／2 べつの場所へ行く */
+    case 'slide':
+      if (index === 0) {
+        playSlide();
+      } else if (index === 1) {
+        watchSlide();
+      } else if (index === 2) {
+        goToNextPlace();
+      }
+      break;
+
+    /* 砂場
+       0 一緒に大きな山を作る／1 ベンチから見守る／2 べつの場所へ行く */
+    case 'sandbox':
+      if (index === 0) {
+        playSandbox();
+      } else if (index === 1) {
+        watchFromBench();
+      } else if (index === 2) {
+        goToNextPlace();
+      }
+      break;
+
+    /* どんぐりの木
+       0 一緒にどんぐりを拾う／1 木かげで少し休む／2 べつの場所へ行く */
+    case 'acornArea':
+      if (index === 0) {
+        collectAcorns();
+      } else if (index === 1) {
+        takeBreak();
+      } else if (index === 2) {
+        goToNextPlace();
+      }
+      break;
+
+    /* 池
+       0 白鳥を近くで見る／1 少し離れて見る／2 べつの場所へ行く */
+    case 'pond':
+      if (index === 0) {
+        watchSwansClose();
+      } else if (index === 1) {
+        watchSwansFar();
+      } else if (index === 2) {
+        goToNextPlace();
+      }
+      break;
+
+    /* 丘
+       0 走って丘をのぼる／1 ゆっくり歩いてのぼる／2 べつの場所へ行く */
+    case 'hill':
+      if (index === 0) {
+        runUpHill();
+      } else if (index === 1) {
+        walkUpHill();
+      } else if (index === 2) {
+        goToNextPlace();
+      }
+      break;
+
+    /* 秘密の場所
+       0 秘密基地で遊ぶ／1 二人で景色をながめる／2 べつの場所へ行く */
+    case 'secretSpot':
+      if (index === 0) {
+        playSecretBase();
+      } else if (index === 1) {
+        enjoySecretView();
+      } else if (index === 2) {
+        goToNextPlace();
+      }
+      break;
+
+    /* いやいやタイム
+       おやつが残っているとき   0 だっこ／1 おやつをあげる／2 少し待ってみる
+       おやつが0個のとき       0 だっこ／1 少し待ってみる（おやつの行は画面に無い）
+
+       ※ おやつが0個のときに giveSnack() を呼んでしまわないように、
+         必ず snackLeft を見てから決める
+    */
+    case 'tantrum':
+      if (index === 0) {
+        hugChild();
+      } else if (index === 1 && snackLeft.value > 0) {
+        giveSnack();
+      } else if (index === waitCommandIndex.value) {
+        // 「少し待ってみる」は、おやつがあれば3番目（2）、なければ2番目（1）
+        waitCalmly();
+      }
+      break;
+  }
+}
+
+/* キーボードのキーが押されたときの処理
+
+   ここが今回のキーボード操作の入口
+   ① キー操作しない画面なら、なにもしないで終わり
+   ② ↑↓ならコマンドを動かす
+   ③ Enter / Space なら、選択中のコマンドを実行する
+*/
+function handleKeydown(event: KeyboardEvent) {
+  // Enter と Space は、どちらも同じ「決定」として扱う
+  // Space は event.key では ' '（半角スペース1文字）になる
+  const isDecideKey = event.key === 'Enter' || event.key === ' ';
+
+  // ⓪ ボタンが1つしかない画面（タイトル・ゴール・GAME OVER）
+  //    えらぶものが無いので ↑↓←→ は使わず、Enter / Space だけを受け取る
+  //    矢印キーはブラウザにまかせるので、ページのスクロールはじゃましない
+  if (!isCommandKeyboardActive.value) {
+    if (isDecideKey) {
+      // Spaceでページが下にスクロールするのを防ぐ
+      event.preventDefault();
+
+      // 押しっぱなしのときは、2回目以降を止める
+      if (event.repeat) {
+        return;
+      }
+
+      if (!gameStarted.value) {
+        startGame(); // タイトル画面の「公園へ行く」
+      } else {
+        resetGame(); // ゴール／GAME OVER画面の「もう一度あそぶ」
+      }
+    }
+
+    return;
+  }
+
+  // 公園入口だけは、コマンドが横にも並んでいる（3列・2列・1列）ので、
+  // ↑↓の動きかたが他の場所とちがう
+  const isEntrance = currentEvent.value === 'parkEntrance';
+
+  // ① ↑：1つ上のコマンドへ
+  if (event.key === 'ArrowUp') {
+    // 矢印キーでページが上下にスクロールしてしまわないようにする
+    event.preventDefault();
+
+    if (isEntrance) {
+      moveEntranceUp(); // 公園入口は1行ぶん（列の数ぶん）上へ
+    } else {
+      moveCommandUp(); // たて1列の場所は1つ上へ
+    }
+    return;
+  }
+
+  // ② ↓：1つ下のコマンドへ
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+
+    if (isEntrance) {
+      moveEntranceDown(); // 公園入口は1行ぶん（列の数ぶん）下へ
+    } else {
+      moveCommandDown(); // たて1列の場所は1つ下へ
+    }
+    return;
+  }
+
+  // ③ ← →：となりのコマンドへ1つ動かす（公園入口だけ）
+  //    各場所の「どうする？」はたて1列なので、左右キーは使わない
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    if (!isEntrance) {
+      return;
+    }
+
+    // 矢印キーでページが左右にスクロールしてしまわないようにする
+    event.preventDefault();
+
+    // 1つずつ動かすだけなので、たて1列のときの ↑↓ と同じ関数が使える
+    if (event.key === 'ArrowLeft') {
+      moveCommandUp(); // ← は1つ前へ
+    } else {
+      moveCommandDown(); // → は1つ次へ
+    }
+    return;
+  }
+
+  // ④ Enter / Space：いま選んでいるコマンドを実行する
+  if (isDecideKey) {
+    // Spaceでページが下にスクロールするのを防ぐ
+    // （フォーカスの当たったボタンが二重に押されるのも、これで防げる）
+    event.preventDefault();
+
+    // 押しっぱなし（長押し）のときは、同じ行動が何度も実行されてしまうので、
+    // 2回目以降のkeydownはここで止める
+    if (event.repeat) {
+      return;
+    }
+
+    runSelectedCommand();
+    return;
+  }
+}
+
+/* 画面が表示されたら、キーボードの受付をはじめる
+   公園入口の「列の数」は画面幅で変わるので、最初に1回調べて、
+   そのあとは幅が変わるたびに調べ直す
+*/
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown);
+
+  updateEntranceColumns();
+  window.addEventListener('resize', updateEntranceColumns);
+});
+
+/* 画面から離れるときは、受付をやめる（後始末） */
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('resize', updateEntranceColumns);
+});
 </script>
 
 <template>
@@ -1008,7 +1487,7 @@ function resetGame() {
           </p>
         </div>
 
-        <button class="cmd cmd--start" @click="startGame">公園へ行く</button>
+        <button class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
       </div>
     </div>
 
@@ -1124,37 +1603,37 @@ function resetGame() {
           <nav class="command">
             <p class="command__label">どこへ行く？</p>
 
-            <button class="cmd" @click="goToPlace('slide')">
+            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0">
               <span class="cmd__text">すべり台へ行く</span>
               <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
             </button>
 
-            <button class="cmd" @click="goToPlace('sandbox')">
+            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1">
               <span class="cmd__text">砂場へ行く</span>
               <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
             </button>
 
-            <button class="cmd" @click="goToPlace('acornArea')">
+            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2">
               <span class="cmd__text">どんぐりの木へ行く</span>
               <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
             </button>
 
-            <button class="cmd" @click="goToPlace('pond')">
+            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3">
               <span class="cmd__text">池へ行く</span>
               <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
             </button>
 
-            <button class="cmd" @click="goToPlace('hill')">
+            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('hill')" @mouseenter="selectedCommandIndex = 4">
               <span class="cmd__text">丘へ行く</span>
               <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
             </button>
 
-            <button v-if="canEnterSecretSpot" class="cmd cmd--secret" @click="goToPlace('secretSpot')">
+            <button v-if="canEnterSecretSpot" class="cmd cmd--secret" :class="{ 'cmd--selected': selectedCommandIndex === 5 }" @click="goToPlace('secretSpot')" @mouseenter="selectedCommandIndex = 5">
               <span class="cmd__text">秘密の場所へ行く</span>
               <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
             </button>
 
-            <button class="cmd cmd--goal" @click="goToGoal">
+            <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="goToGoal" @mouseenter="selectedCommandIndex = goalCommandIndex">
               <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
             </button>
           </nav>
@@ -1203,21 +1682,21 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="playSlide">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">一緒にすべる</span>
                 </button>
 
-                <button class="command-box__item" @click="watchSlide">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">下で見守る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1266,21 +1745,21 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="playSandbox">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">一緒に大きな山を作る</span>
                 </button>
 
-                <button class="command-box__item" @click="watchFromBench">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFromBench" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">ベンチから見守る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1329,21 +1808,21 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="collectAcorns">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">一緒にどんぐりを拾う</span>
                 </button>
 
-                <button class="command-box__item" @click="takeBreak">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="takeBreak" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">木かげで少し休む</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1392,21 +1871,21 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="watchSwansClose">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">白鳥を近くで見る</span>
                 </button>
 
-                <button class="command-box__item" @click="watchSwansFar">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">少し離れて見る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1455,21 +1934,21 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="runUpHill">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">走って丘をのぼる</span>
                 </button>
 
-                <button class="command-box__item" @click="walkUpHill">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">ゆっくり歩いてのぼる</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1518,21 +1997,21 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="playSecretBase">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSecretBase" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">秘密基地で遊ぶ</span>
                 </button>
 
-                <button class="command-box__item" @click="enjoySecretView">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="enjoySecretView" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">二人で景色をながめる</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1581,24 +2060,24 @@ function resetGame() {
               <template v-if="!resultMessage">
                 <p class="command-box__label">どうする？</p>
 
-                <button class="command-box__item" @click="hugChild">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">だっこしてなだめる</span>
                 </button>
 
-                <button v-if="snackLeft > 0" class="command-box__item" @click="giveSnack">
+                <button v-if="snackLeft > 0" class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="giveSnack" @mouseenter="selectedCommandIndex = 1">
                   <span class="command-box__text">おやつをあげる</span>
                   <span class="command-box__badge">残り{{ snackLeft }}個</span>
                 </button>
 
                 <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
 
-                <button class="command-box__item" @click="waitCalmly">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }" @click="waitCalmly" @mouseenter="selectedCommandIndex = waitCommandIndex">
                   <span class="command-box__text">少し待ってみる</span>
                 </button>
               </template>
 
               <template v-else>
-                <button class="command-box__item" @click="goToNextPlace">
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">次の場所を選ぶ</span>
                 </button>
               </template>
@@ -1652,7 +2131,7 @@ function resetGame() {
           </section>
 
           <nav class="command">
-            <button class="cmd cmd--next" @click="resetGame">
+            <button class="cmd cmd--next cmd--single" @click="resetGame">
               <span class="cmd__text">もう一度あそぶ</span>
             </button>
           </nav>
@@ -1720,7 +2199,7 @@ function resetGame() {
           </section>
 
           <nav class="command">
-            <button class="cmd cmd--next" @click="resetGame">
+            <button class="cmd cmd--next cmd--single" @click="resetGame">
               <span class="cmd__text">もう一度あそぶ</span>
             </button>
           </nav>
@@ -2831,7 +3310,7 @@ function resetGame() {
   transform: translateX(4px) scale(0.98);
 }
 
-/* 選択カーソル「▶」（ふだんは見えない） */
+/* 選択カーソル「▶」（選ばれていない行では見えない） */
 .command-box__item::before {
   position: absolute;
   left: 9px;
@@ -2842,16 +3321,23 @@ function resetGame() {
   transition: opacity 0.12s ease;
 }
 
-/* マウスを乗せた項目だけ、選んでいる見た目にする */
+/* 選んでいる項目の見た目
+
+   ・マウスを乗せた行（:hover）
+   ・キーボードの↑↓で選んでいる行（--selected）
+   のどちらも、まったく同じ見た目になるようにまとめて指定する
+*/
 .command-box__item:hover,
-.command-box__item:focus-visible {
+.command-box__item:focus-visible,
+.command-box__item--selected {
   background: rgb(255 255 255 / 12%);
   font-weight: 700;
   transform: translateX(3px);
 }
 
 .command-box__item:hover::before,
-.command-box__item:focus-visible::before {
+.command-box__item:focus-visible::before,
+.command-box__item--selected::before {
   opacity: 1;
 }
 
@@ -2946,24 +3432,52 @@ function resetGame() {
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
-/* 選択カーソル「▶」 */
+/* 選択カーソル「▶」（選ばれていないボタンでは見えない）
+
+   ▶ の色は「そのボタンの文字と同じ色」にそろえる
+   こうすると、どの色のボタンでも文字と同じ濃さで読めるようになる
+   ・白いボタン（すべり台へ行く など）… 紺色     ← ここで指定
+   ・紫のボタン（秘密の場所）          … 白       ← .cmd--secret::before
+   ・緑のボタン（ゴール）              … 白       ← .cmd--goal::before
+   ・金色のボタン（公園へ行く など）    … 濃い茶色 ← .cmd--start / --next::before
+
+   ※ 以前は全部このgold（金色）だったが、白い下地では 1.6:1 しかなく、
+     緑の下地では 1.4:1 とほとんど見えなかった
+*/
 .cmd::before {
   position: absolute;
   left: 14px;
-  color: var(--gold);
+  color: var(--navy);
   content: '▶';
   font-size: 12px;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
 
-.cmd:hover {
+/* 選んでいるボタンの見た目
+
+   ・マウスを乗せたボタン（:hover）
+   ・キーボードの↑↓←→で選んでいるボタン（--selected）
+   のどちらも、まったく同じ見た目になるようにまとめて指定する
+*/
+.cmd:hover,
+.cmd--selected {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
 }
 
 .cmd:hover::before,
-.cmd:focus-visible::before {
+.cmd:focus-visible::before,
+.cmd--selected::before {
+  opacity: 1;
+}
+
+/* ボタンが1つしかない画面（タイトル・ゴール・GAME OVER）
+   えらぶものは無いが、Enter / Space で押せることが分かるように、
+   選択カーソル「▶」をいつも出しておく
+   ※ 浮き上がる動きはマウスを乗せたときだけのままにする
+*/
+.cmd--single::before {
   opacity: 1;
 }
 
@@ -3029,6 +3543,11 @@ function resetGame() {
   color: #fff;
 }
 
+/* 紫の下地には紺色の▶が沈んでしまうので、文字と同じ白にする */
+.cmd--secret::before {
+  color: #fff;
+}
+
 /* ゴールへ向かう（1行使って目立たせる） */
 .cmd--goal {
   grid-column: 1 / -1;
@@ -3041,6 +3560,11 @@ function resetGame() {
   text-align: center;
 }
 
+/* 緑の下地でも、文字と同じ白にする */
+.cmd--goal::before {
+  color: #fff;
+}
+
 /* はじめる */
 .cmd--start {
   justify-content: center;
@@ -3049,6 +3573,16 @@ function resetGame() {
   background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
   color: #4a3208;
   font-size: 18px;
+}
+
+/* 金色のボタン（公園へ行く／もう一度あそぶ）も、文字と同じ濃い茶色にする
+   この2つは ▶ をいつも出している（.cmd--single）ので、
+   見つけやすいように少しだけ大きくもしている
+*/
+.cmd--start::before,
+.cmd--next::before {
+  color: #4a3208;
+  font-size: 13px;
 }
 
 /* ============================================================
