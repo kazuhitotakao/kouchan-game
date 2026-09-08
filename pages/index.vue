@@ -189,10 +189,17 @@ function runRandomEvent() {
 /* いやいや判定
    「こうちゃんの体力」「こうちゃんの機嫌」「今の時間」から
    いやいやが起きる確率を計算して、その確率で発生させる
+   ※ 体力が71以上のときは、いやいやは起こらない
 */
 function checkTantrum() {
   // すでにいやいや中のときは、もう一度判定しない
   if (isTantrum.value) {
+    return;
+  }
+
+  // 体力が71以上あるうちは元気いっぱいなので、
+  // 機嫌や時間に関係なく いやいや は起こらない
+  if (childEnergy.value >= 71) {
     return;
   }
 
@@ -206,10 +213,9 @@ function checkTantrum() {
     tantrumChance += 0.6; // +60%
   } else if (childEnergy.value <= 50) {
     tantrumChance += 0.35; // +35%
-  } else if (childEnergy.value <= 70) {
-    tantrumChance += 0.1; // +10%
+  } else {
+    tantrumChance += 0.1; // +10%（51〜70のとき）
   }
-  // 体力が71以上のときは、体力による上乗せなし（0%）
 
   // ② こうちゃんの機嫌
   //    機嫌が悪いほど、いやいやが起きやすくなる
