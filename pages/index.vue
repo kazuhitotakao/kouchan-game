@@ -1175,32 +1175,33 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <!-- 結果がまだ無いとき -->
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="playSlide">
+                <span class="command-box__text">一緒にすべる</span>
+              </button>
+
+              <button class="command-box__item" @click="watchSlide">
+                <span class="command-box__text">下で見守る</span>
+              </button>
+
+              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <span class="command-box__text">べつの場所へ行く</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <!-- 結果がまだ無いとき -->
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="playSlide">
-              <span class="cmd__text">一緒にすべる</span>
-            </button>
-
-            <button class="cmd" @click="watchSlide">
-              <span class="cmd__text">下で見守る</span>
-            </button>
-
-            <button class="cmd cmd--sub" @click="goToNextPlace">
-              <span class="cmd__text">べつの場所へ行く</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- 砂場 -->
@@ -1229,31 +1230,32 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="playSandbox">
+                <span class="command-box__text">一緒に大きな山を作る</span>
+              </button>
+
+              <button class="command-box__item" @click="watchFromBench">
+                <span class="command-box__text">ベンチから見守る</span>
+              </button>
+
+              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <span class="command-box__text">べつの場所へ行く</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="playSandbox">
-              <span class="cmd__text">一緒に大きな山を作る</span>
-            </button>
-
-            <button class="cmd" @click="watchFromBench">
-              <span class="cmd__text">ベンチから見守る</span>
-            </button>
-
-            <button class="cmd cmd--sub" @click="goToNextPlace">
-              <span class="cmd__text">べつの場所へ行く</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- どんぐりの木 -->
@@ -1282,31 +1284,32 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="collectAcorns">
+                <span class="command-box__text">一緒にどんぐりを拾う</span>
+              </button>
+
+              <button class="command-box__item" @click="takeBreak">
+                <span class="command-box__text">木かげで少し休む</span>
+              </button>
+
+              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <span class="command-box__text">べつの場所へ行く</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="collectAcorns">
-              <span class="cmd__text">一緒にどんぐりを拾う</span>
-            </button>
-
-            <button class="cmd" @click="takeBreak">
-              <span class="cmd__text">木かげで少し休む</span>
-            </button>
-
-            <button class="cmd cmd--sub" @click="goToNextPlace">
-              <span class="cmd__text">べつの場所へ行く</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- 池 -->
@@ -1335,31 +1338,32 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="watchSwansClose">
+                <span class="command-box__text">白鳥を近くで見る</span>
+              </button>
+
+              <button class="command-box__item" @click="watchSwansFar">
+                <span class="command-box__text">少し離れて見る</span>
+              </button>
+
+              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <span class="command-box__text">べつの場所へ行く</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="watchSwansClose">
-              <span class="cmd__text">白鳥を近くで見る</span>
-            </button>
-
-            <button class="cmd" @click="watchSwansFar">
-              <span class="cmd__text">少し離れて見る</span>
-            </button>
-
-            <button class="cmd cmd--sub" @click="goToNextPlace">
-              <span class="cmd__text">べつの場所へ行く</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- 丘 -->
@@ -1388,31 +1392,32 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="runUpHill">
+                <span class="command-box__text">走って丘をのぼる</span>
+              </button>
+
+              <button class="command-box__item" @click="walkUpHill">
+                <span class="command-box__text">ゆっくり歩いてのぼる</span>
+              </button>
+
+              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <span class="command-box__text">べつの場所へ行く</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="runUpHill">
-              <span class="cmd__text">走って丘をのぼる</span>
-            </button>
-
-            <button class="cmd" @click="walkUpHill">
-              <span class="cmd__text">ゆっくり歩いてのぼる</span>
-            </button>
-
-            <button class="cmd cmd--sub" @click="goToNextPlace">
-              <span class="cmd__text">べつの場所へ行く</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- 秘密の場所 -->
@@ -1441,31 +1446,32 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="playSecretBase">
+                <span class="command-box__text">秘密基地で遊ぶ</span>
+              </button>
+
+              <button class="command-box__item" @click="enjoySecretView">
+                <span class="command-box__text">二人で景色をながめる</span>
+              </button>
+
+              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                <span class="command-box__text">べつの場所へ行く</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="playSecretBase">
-              <span class="cmd__text">秘密基地で遊ぶ</span>
-            </button>
-
-            <button class="cmd" @click="enjoySecretView">
-              <span class="cmd__text">二人で景色をながめる</span>
-            </button>
-
-            <button class="cmd cmd--sub" @click="goToNextPlace">
-              <span class="cmd__text">べつの場所へ行く</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- いやいや中 -->
@@ -1494,34 +1500,35 @@ function resetGame() {
               </ul>
             </div>
           </article>
+
+          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+          <nav class="command-box">
+            <template v-if="!resultMessage">
+              <p class="command-box__label">どうする？</p>
+
+              <button class="command-box__item" @click="hugChild">
+                <span class="command-box__text">だっこしてなだめる</span>
+              </button>
+
+              <button v-if="snackLeft > 0" class="command-box__item" @click="giveSnack">
+                <span class="command-box__text">おやつをあげる</span>
+                <span class="command-box__badge">残り{{ snackLeft }}個</span>
+              </button>
+
+              <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
+
+              <button class="command-box__item" @click="waitCalmly">
+                <span class="command-box__text">少し待ってみる</span>
+              </button>
+            </template>
+
+            <template v-else>
+              <button class="command-box__item" @click="goToNextPlace">
+                <span class="command-box__text">次の場所を選ぶ</span>
+              </button>
+            </template>
+          </nav>
         </section>
-
-        <nav class="command">
-          <template v-if="!resultMessage">
-            <p class="command__label">どうする？</p>
-
-            <button class="cmd" @click="hugChild">
-              <span class="cmd__text">だっこしてなだめる</span>
-            </button>
-
-            <button v-if="snackLeft > 0" class="cmd" @click="giveSnack">
-              <span class="cmd__text">おやつをあげる</span>
-              <span class="cmd__badge">残り{{ snackLeft }}個</span>
-            </button>
-
-            <p v-else class="command__note">おやつは、もうぜんぶ食べてしまいました…</p>
-
-            <button class="cmd" @click="waitCalmly">
-              <span class="cmd__text">少し待ってみる</span>
-            </button>
-          </template>
-
-          <template v-else>
-            <button class="cmd cmd--next" @click="goToNextPlace">
-              <span class="cmd__text">次の場所を選ぶ</span>
-            </button>
-          </template>
-        </nav>
       </div>
 
       <!-- ゴール -->
@@ -2470,7 +2477,126 @@ function resetGame() {
 }
 
 /* ============================================================
-   【下部】コマンド欄
+   コマンドボックス（各場所の「どうする？」）
+   画面下部のフッターではなく、中央エリアの中に
+   「枠の中に選択肢が縦に並ぶ」形で置く
+
+   ※ 公園入口は下の .command（横並びグリッド）のままなので、
+     ここのCSSは公園入口には影響しない
+   ============================================================ */
+.command-box {
+  /* 中央エリアの「右下」に置く
+     ・align-self: flex-end … .stage の align-items: center を打ち消して右はしへ
+     ・margin-top: auto     … たての余白をぜんぶ上に寄せて、自分は下へ
+       （flexでは auto のマージンが justify-content より先に効くので、
+         場所の説明文は上、コマンドボックスは下、という並びになる）
+     ※ 中身があふれるときは余白が0になるので、はみ出したりはしない
+  */
+  align-self: flex-end;
+  margin-top: auto;
+
+  /* .stage > * で幅900pxが指定されているので、ここでせまく上書きする */
+  width: 100%;
+  max-width: 380px;
+  padding: 12px 14px 14px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+  box-shadow: 0 6px 18px rgb(16 29 44 / 40%);
+}
+
+/* 「どうする？」の見出し */
+.command-box__label {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--navy-line);
+  color: #cfe0f7;
+  font-size: 12px;
+  letter-spacing: 0.1em;
+}
+
+/* 選択肢1つぶん
+   大きなボタンには見せず、枠の中の「文字の行」に見えるようにする
+   左の28pxは、マウスを乗せたときに出る「▶」の場所
+*/
+.command-box__item {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 15.5px;
+  line-height: 1.7;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s ease, transform 0.12s ease;
+}
+
+/* 選択カーソル「▶」（ふだんは見えない） */
+.command-box__item::before {
+  position: absolute;
+  left: 9px;
+  color: var(--gold);
+  content: '▶';
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* マウスを乗せた項目だけ、選んでいる見た目にする */
+.command-box__item:hover,
+.command-box__item:focus-visible {
+  background: rgb(255 255 255 / 12%);
+  font-weight: 700;
+  transform: translateX(3px);
+}
+
+.command-box__item:hover::before,
+.command-box__item:focus-visible::before {
+  opacity: 1;
+}
+
+.command-box__item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.command-box__text {
+  flex: 1;
+}
+
+/* おやつの残り個数など、行の右はしに出す小さな文字 */
+.command-box__badge {
+  flex: none;
+  color: #ffd9a0;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* 「べつの場所へ行く」は少し控えめにする */
+.command-box__item--sub {
+  color: #b9cbe6;
+  font-size: 14.5px;
+}
+
+/* おやつを食べきったときのお知らせ */
+.command-box__note {
+  margin: 0;
+  padding: 6px 10px 6px 28px;
+  color: #9db2d2;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+/* ============================================================
+   【下部】コマンド欄（公園入口・ゴール・GAME OVER）
    横長を活かして、選択肢を2〜3列のグリッドで並べる
    ============================================================ */
 .command {
@@ -2794,6 +2920,11 @@ function resetGame() {
 
   .last-action-list {
     grid-template-columns: 1fr;
+  }
+
+  .command-box {
+    align-self: stretch;
+    max-width: none;
   }
 
   .record-grid {
