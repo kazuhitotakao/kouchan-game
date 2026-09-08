@@ -46,6 +46,13 @@ const collectedItems = ref<string[]>([]);
 /* いやいや中かどうか */
 const isTantrum = ref(false);
 
+/* 今回の行動で新しく見つけたもの
+   結果カードに「★ アイテム発見！」を出すためだけに使う（演出用）
+   行動をはじめるたびに空にするので、直前の1回ぶんだけが入っている
+   ※ 見つけたものの本体は collectedItems のままで、取得のルールは変えていない
+*/
+const foundItemsThisAction = ref<string[]>([]);
+
 /* いやいやが起きた回数（記録用） */
 const tantrumCount = ref(0);
 
@@ -195,6 +202,9 @@ function fixAllStatus() {
    「今のステータス」を控えておくだけの処理
 */
 function startStatusChanges() {
+  // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
+  foundItemsThisAction.value = [];
+
   statusBefore.value = {
     childEnergy: childEnergy.value,
     childMood: childMood.value,
@@ -345,6 +355,9 @@ function addCollectedItem(itemName: string) {
   }
 
   collectedItems.value.push(itemName);
+
+  // 演出用：この行動で新しく見つけたものとして覚えておく
+  foundItemsThisAction.value.push(itemName);
 
   resultMessage.value += `\n「${itemName}」を見つけました！`;
 }
@@ -944,6 +957,9 @@ function resetGame() {
   endingTitle.value = '';
   endingMessage.value = '';
 
+  // 演出用に控えていたものも空に戻す
+  foundItemsThisAction.value = [];
+
   // 今回追加したGAME OVER用のstateも空に戻す
   gameOverTitle.value = '';
   gameOverMessage.value = '';
@@ -1084,564 +1100,632 @@ function resetGame() {
            場面ごとに .stage（中央）と .command（下部）を並べる
            ========================================================== -->
 
-      <!-- 公園入口 -->
-      <div v-if="currentEvent === 'parkEntrance'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">公園入口</h2>
-
-            <p class="place-card__text">こうちゃんと公園にやってきました。どこへ探検に行こう？</p>
-          </article>
-
-          <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
-          <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
-            <h3 class="place-card__subtitle">秘密の場所を発見！</h3>
-
-            <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
-          </article>
-        </section>
-
-        <nav class="command">
-          <p class="command__label">どこへ行く？</p>
-
-          <button class="cmd" @click="goToPlace('slide')">
-            <span class="cmd__text">すべり台へ行く</span>
-            <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
-          </button>
-
-          <button class="cmd" @click="goToPlace('sandbox')">
-            <span class="cmd__text">砂場へ行く</span>
-            <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
-          </button>
-
-          <button class="cmd" @click="goToPlace('acornArea')">
-            <span class="cmd__text">どんぐりの木へ行く</span>
-            <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
-          </button>
-
-          <button class="cmd" @click="goToPlace('pond')">
-            <span class="cmd__text">池へ行く</span>
-            <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
-          </button>
-
-          <button class="cmd" @click="goToPlace('hill')">
-            <span class="cmd__text">丘へ行く</span>
-            <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
-          </button>
-
-          <button v-if="canEnterSecretSpot" class="cmd cmd--secret" @click="goToPlace('secretSpot')">
-            <span class="cmd__text">秘密の場所へ行く</span>
-            <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
-          </button>
-
-          <button class="cmd cmd--goal" @click="goToGoal">
-            <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
-          </button>
-        </nav>
-      </div>
-
-      <!-- すべり台 -->
-      <div v-else-if="currentEvent === 'slide'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">すべり台</h2>
-
-            <p class="place-card__text">大きなすべり台があります。こうちゃんは階段をのぼりはじめました。</p>
-          </article>
-
-          <!-- 結果が出たあと -->
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <!-- 結果がまだ無いとき -->
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="playSlide">
-                <span class="command-box__text">一緒にすべる</span>
-              </button>
-
-              <button class="command-box__item" @click="watchSlide">
-                <span class="command-box__text">下で見守る</span>
-              </button>
-
-              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
-                <span class="command-box__text">べつの場所へ行く</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- 砂場 -->
-      <div v-else-if="currentEvent === 'sandbox'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">砂場</h2>
-
-            <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
-          </article>
-
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="playSandbox">
-                <span class="command-box__text">一緒に大きな山を作る</span>
-              </button>
-
-              <button class="command-box__item" @click="watchFromBench">
-                <span class="command-box__text">ベンチから見守る</span>
-              </button>
-
-              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
-                <span class="command-box__text">べつの場所へ行く</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- どんぐりの木 -->
-      <div v-else-if="currentEvent === 'acornArea'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">どんぐりの木</h2>
-
-            <p class="place-card__text">大きな木の下に、どんぐりがたくさん落ちています。</p>
-          </article>
-
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="collectAcorns">
-                <span class="command-box__text">一緒にどんぐりを拾う</span>
-              </button>
-
-              <button class="command-box__item" @click="takeBreak">
-                <span class="command-box__text">木かげで少し休む</span>
-              </button>
-
-              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
-                <span class="command-box__text">べつの場所へ行く</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- 池 -->
-      <div v-else-if="currentEvent === 'pond'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">池</h2>
-
-            <p class="place-card__text">池には白鳥が泳いでいます。こうちゃんは指をさして大はしゃぎです。</p>
-          </article>
-
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="watchSwansClose">
-                <span class="command-box__text">白鳥を近くで見る</span>
-              </button>
-
-              <button class="command-box__item" @click="watchSwansFar">
-                <span class="command-box__text">少し離れて見る</span>
-              </button>
-
-              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
-                <span class="command-box__text">べつの場所へ行く</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- 丘 -->
-      <div v-else-if="currentEvent === 'hill'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">丘</h2>
-
-            <p class="place-card__text">ゆるやかな丘があります。てっぺんまでのぼれそうです。</p>
-          </article>
-
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="runUpHill">
-                <span class="command-box__text">走って丘をのぼる</span>
-              </button>
-
-              <button class="command-box__item" @click="walkUpHill">
-                <span class="command-box__text">ゆっくり歩いてのぼる</span>
-              </button>
-
-              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
-                <span class="command-box__text">べつの場所へ行く</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- 秘密の場所 -->
-      <div v-else-if="currentEvent === 'secretSpot'" class="scene">
-        <section class="stage">
-          <article class="place-card place-card--secret">
-            <h2 class="place-card__title">秘密の場所</h2>
-
-            <p class="place-card__text">しげみのおくに、細い道を見つけました。こうちゃんが手を引いて進みます。</p>
-          </article>
-
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="playSecretBase">
-                <span class="command-box__text">秘密基地で遊ぶ</span>
-              </button>
-
-              <button class="command-box__item" @click="enjoySecretView">
-                <span class="command-box__text">二人で景色をながめる</span>
-              </button>
-
-              <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
-                <span class="command-box__text">べつの場所へ行く</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- いやいや中 -->
-      <div v-else-if="currentEvent === 'tantrum'" class="scene">
-        <section class="stage">
-          <article class="place-card place-card--tantrum">
-            <h2 class="place-card__title">いやいやタイム！</h2>
-
-            <p class="place-card__text">こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。</p>
-          </article>
-
-          <article v-if="resultMessage" class="result-card">
-            <h3 class="result-card__title">結果</h3>
-
-            <p class="result-card__text">{{ resultMessage }}</p>
-
-            <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-            <div v-if="statusChanges" class="change-box">
-              <p class="change-box__title">今回の変化（合計）</p>
-
-              <ul class="change-list">
-                <li v-for="row in changeRows" :key="row.label" class="change-item">
-                  <span class="change-item__label">{{ row.label }}</span>
-                  <span class="change-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
-            </div>
-          </article>
-
-          <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-          <nav class="command-box">
-            <template v-if="!resultMessage">
-              <p class="command-box__label">どうする？</p>
-
-              <button class="command-box__item" @click="hugChild">
-                <span class="command-box__text">だっこしてなだめる</span>
-              </button>
-
-              <button v-if="snackLeft > 0" class="command-box__item" @click="giveSnack">
-                <span class="command-box__text">おやつをあげる</span>
-                <span class="command-box__badge">残り{{ snackLeft }}個</span>
-              </button>
-
-              <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
-
-              <button class="command-box__item" @click="waitCalmly">
-                <span class="command-box__text">少し待ってみる</span>
-              </button>
-            </template>
-
-            <template v-else>
-              <button class="command-box__item" @click="goToNextPlace">
-                <span class="command-box__text">次の場所を選ぶ</span>
-              </button>
-            </template>
-          </nav>
-        </section>
-      </div>
-
-      <!-- ゴール -->
-      <div v-else-if="currentEvent === 'goal'" class="scene">
-        <section class="stage">
-          <article class="place-card">
-            <h2 class="place-card__title">公園の出口</h2>
-
-            <p class="place-card__text">たくさん探検しました。そろそろ公園から帰る時間です。</p>
-          </article>
-
-          <article class="ending-card">
-            <p class="ending-card__rank">{{ endingRank }}</p>
-
-            <h3 class="ending-card__title">{{ endingTitle }}</h3>
-
-            <p class="ending-card__text">{{ endingMessage }}</p>
-          </article>
-
-          <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
-          <div class="record-grid">
-            <article class="record-card">
-              <h3 class="record-card__title">今日の記録</h3>
-
-              <ul class="record-list">
-                <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
-                <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
-                <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
-                <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
-                <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
-                <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
-                <li class="record-item"><span>帰った時間</span><b>{{ currentTime }}</b></li>
-              </ul>
+      <!-- 場面の切り替え
+           前の場面がすっと消えてから、次の場面がふわっと出るようにする
+           mode="out-in" ＝ 前が消えきってから次を出す（重ならないので位置がずれない） -->
+      <Transition name="scene" mode="out-in">
+        <!-- 公園入口 -->
+        <div v-if="currentEvent === 'parkEntrance'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">公園入口</h2>
+
+              <p class="place-card__text">こうちゃんと公園にやってきました。どこへ探検に行こう？</p>
             </article>
 
-            <article class="record-card">
-              <h3 class="record-card__title">見つけたもの</h3>
+            <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
+            <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
+              <h3 class="place-card__subtitle">秘密の場所を発見！</h3>
 
-              <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
-
-              <ul v-else class="found-list">
-                <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
-              </ul>
+              <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
             </article>
-          </div>
-        </section>
+          </section>
 
-        <nav class="command">
-          <button class="cmd cmd--next" @click="resetGame">
-            <span class="cmd__text">もう一度あそぶ</span>
-          </button>
-        </nav>
-      </div>
+          <nav class="command">
+            <p class="command__label">どこへ行く？</p>
 
-      <!-- GAME OVER（限界をむかえて途中で終わったとき）
-           自分で出口へ帰ったときとちがい、S/A/B/Cランクの判定はしない -->
-      <div v-else-if="currentEvent === 'gameOver'" class="scene">
-        <section class="stage">
-          <article class="gameover-card">
-            <p class="gameover-card__label">GAME OVER</p>
+            <button class="cmd" @click="goToPlace('slide')">
+              <span class="cmd__text">すべり台へ行く</span>
+              <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
+            </button>
 
-            <h2 class="gameover-card__title">{{ gameOverTitle }}</h2>
+            <button class="cmd" @click="goToPlace('sandbox')">
+              <span class="cmd__text">砂場へ行く</span>
+              <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
+            </button>
 
-            <p class="gameover-card__text">{{ gameOverMessage }}</p>
-          </article>
+            <button class="cmd" @click="goToPlace('acornArea')">
+              <span class="cmd__text">どんぐりの木へ行く</span>
+              <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
+            </button>
 
-          <!-- 最後に選んだ行動で、何がどれだけ変わったか
-               「親の体力 10 → 0（-15）」のように、限界になった理由が分かる -->
-          <article v-if="statusChanges" class="result-card result-card--gameover">
-            <h3 class="result-card__title">最後の行動</h3>
+            <button class="cmd" @click="goToPlace('pond')">
+              <span class="cmd__text">池へ行く</span>
+              <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
+            </button>
 
-            <p class="result-card__text">{{ resultMessage }}</p>
+            <button class="cmd" @click="goToPlace('hill')">
+              <span class="cmd__text">丘へ行く</span>
+              <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
+            </button>
 
-            <div class="change-box">
-              <p class="change-box__title">この行動での変化</p>
+            <button v-if="canEnterSecretSpot" class="cmd cmd--secret" @click="goToPlace('secretSpot')">
+              <span class="cmd__text">秘密の場所へ行く</span>
+              <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
+            </button>
 
-              <ul class="last-action-list">
-                <li v-for="row in lastActionRows" :key="row.label" class="last-action-item">
-                  <span class="last-action-item__label">{{ row.label }}</span>
-                  <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
-                  <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
-                </li>
-              </ul>
+            <button class="cmd cmd--goal" @click="goToGoal">
+              <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
+            </button>
+          </nav>
+        </div>
+
+        <!-- すべり台 -->
+        <div v-else-if="currentEvent === 'slide'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">すべり台</h2>
+
+              <p class="place-card__text">大きなすべり台があります。こうちゃんは階段をのぼりはじめました。</p>
+            </article>
+
+            <!-- 結果が出たあと -->
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <!-- 結果がまだ無いとき -->
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="playSlide">
+                  <span class="command-box__text">一緒にすべる</span>
+                </button>
+
+                <button class="command-box__item" @click="watchSlide">
+                  <span class="command-box__text">下で見守る</span>
+                </button>
+
+                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                  <span class="command-box__text">べつの場所へ行く</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 砂場 -->
+        <div v-else-if="currentEvent === 'sandbox'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">砂場</h2>
+
+              <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
+            </article>
+
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="playSandbox">
+                  <span class="command-box__text">一緒に大きな山を作る</span>
+                </button>
+
+                <button class="command-box__item" @click="watchFromBench">
+                  <span class="command-box__text">ベンチから見守る</span>
+                </button>
+
+                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                  <span class="command-box__text">べつの場所へ行く</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- どんぐりの木 -->
+        <div v-else-if="currentEvent === 'acornArea'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">どんぐりの木</h2>
+
+              <p class="place-card__text">大きな木の下に、どんぐりがたくさん落ちています。</p>
+            </article>
+
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="collectAcorns">
+                  <span class="command-box__text">一緒にどんぐりを拾う</span>
+                </button>
+
+                <button class="command-box__item" @click="takeBreak">
+                  <span class="command-box__text">木かげで少し休む</span>
+                </button>
+
+                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                  <span class="command-box__text">べつの場所へ行く</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 池 -->
+        <div v-else-if="currentEvent === 'pond'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">池</h2>
+
+              <p class="place-card__text">池には白鳥が泳いでいます。こうちゃんは指をさして大はしゃぎです。</p>
+            </article>
+
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="watchSwansClose">
+                  <span class="command-box__text">白鳥を近くで見る</span>
+                </button>
+
+                <button class="command-box__item" @click="watchSwansFar">
+                  <span class="command-box__text">少し離れて見る</span>
+                </button>
+
+                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                  <span class="command-box__text">べつの場所へ行く</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 丘 -->
+        <div v-else-if="currentEvent === 'hill'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">丘</h2>
+
+              <p class="place-card__text">ゆるやかな丘があります。てっぺんまでのぼれそうです。</p>
+            </article>
+
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="runUpHill">
+                  <span class="command-box__text">走って丘をのぼる</span>
+                </button>
+
+                <button class="command-box__item" @click="walkUpHill">
+                  <span class="command-box__text">ゆっくり歩いてのぼる</span>
+                </button>
+
+                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                  <span class="command-box__text">べつの場所へ行く</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 秘密の場所 -->
+        <div v-else-if="currentEvent === 'secretSpot'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card place-card--secret">
+              <h2 class="place-card__title">秘密の場所</h2>
+
+              <p class="place-card__text">しげみのおくに、細い道を見つけました。こうちゃんが手を引いて進みます。</p>
+            </article>
+
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="playSecretBase">
+                  <span class="command-box__text">秘密基地で遊ぶ</span>
+                </button>
+
+                <button class="command-box__item" @click="enjoySecretView">
+                  <span class="command-box__text">二人で景色をながめる</span>
+                </button>
+
+                <button class="command-box__item command-box__item--sub" @click="goToNextPlace">
+                  <span class="command-box__text">べつの場所へ行く</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- いやいや中 -->
+        <div v-else-if="currentEvent === 'tantrum'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card place-card--tantrum">
+              <h2 class="place-card__title">いやいやタイム！</h2>
+
+              <p class="place-card__text">こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。</p>
+            </article>
+
+            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+              <h3 class="result-card__title">結果</h3>
+
+              <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+              <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+              <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                <span class="found-flash__label">★ アイテム発見！</span>
+                <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+              </p>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
+            <nav class="command-box">
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" @click="hugChild">
+                  <span class="command-box__text">だっこしてなだめる</span>
+                </button>
+
+                <button v-if="snackLeft > 0" class="command-box__item" @click="giveSnack">
+                  <span class="command-box__text">おやつをあげる</span>
+                  <span class="command-box__badge">残り{{ snackLeft }}個</span>
+                </button>
+
+                <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
+
+                <button class="command-box__item" @click="waitCalmly">
+                  <span class="command-box__text">少し待ってみる</span>
+                </button>
+              </template>
+
+              <template v-else>
+                <button class="command-box__item" @click="goToNextPlace">
+                  <span class="command-box__text">次の場所を選ぶ</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- ゴール -->
+        <div v-else-if="currentEvent === 'goal'" class="scene" :key="currentEvent">
+          <section class="stage">
+            <article class="place-card">
+              <h2 class="place-card__title">公園の出口</h2>
+
+              <p class="place-card__text">たくさん探検しました。そろそろ公園から帰る時間です。</p>
+            </article>
+
+            <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' }">
+              <p class="ending-card__rank">{{ endingRank }}</p>
+
+              <h3 class="ending-card__title">{{ endingTitle }}</h3>
+
+              <p class="ending-card__text">{{ endingMessage }}</p>
+            </article>
+
+            <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
+            <div class="record-grid">
+              <article class="record-card">
+                <h3 class="record-card__title">今日の記録</h3>
+
+                <ul class="record-list">
+                  <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
+                  <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
+                  <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
+                  <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
+                  <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
+                  <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
+                  <li class="record-item"><span>帰った時間</span><b>{{ currentTime }}</b></li>
+                </ul>
+              </article>
+
+              <article class="record-card">
+                <h3 class="record-card__title">見つけたもの</h3>
+
+                <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+
+                <ul v-else class="found-list">
+                  <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                </ul>
+              </article>
             </div>
-          </article>
+          </section>
 
-          <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
-          <div class="record-grid">
-            <article class="record-card">
-              <h3 class="record-card__title">今日の記録</h3>
+          <nav class="command">
+            <button class="cmd cmd--next" @click="resetGame">
+              <span class="cmd__text">もう一度あそぶ</span>
+            </button>
+          </nav>
+        </div>
 
-              <ul class="record-list">
-                <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
-                <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
-                <li class="record-item"><span>親のイライラ度</span><b>{{ parentStress }}</b></li>
-                <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
-                <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
-                <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
-                <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
-                <li class="record-item"><span>帰宅時刻</span><b>{{ currentTime }}</b></li>
-              </ul>
+        <!-- GAME OVER（限界をむかえて途中で終わったとき）
+             自分で出口へ帰ったときとちがい、S/A/B/Cランクの判定はしない -->
+        <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" :key="currentEvent">
+          <section class="stage">
+            <article class="gameover-card">
+              <p class="gameover-card__label">GAME OVER</p>
+
+              <h2 class="gameover-card__title">{{ gameOverTitle }}</h2>
+
+              <p class="gameover-card__text">{{ gameOverMessage }}</p>
             </article>
 
-            <article class="record-card">
-              <h3 class="record-card__title">見つけたもの</h3>
+            <!-- 最後に選んだ行動で、何がどれだけ変わったか
+                 「親の体力 10 → 0（-15）」のように、限界になった理由が分かる -->
+            <article v-if="statusChanges" class="result-card result-card--gameover">
+              <h3 class="result-card__title">最後の行動</h3>
 
-              <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+              <p class="result-card__text">{{ resultMessage }}</p>
 
-              <ul v-else class="found-list">
-                <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
-              </ul>
+              <div class="change-box">
+                <p class="change-box__title">この行動での変化</p>
+
+                <ul class="last-action-list">
+                  <li v-for="row in lastActionRows" :key="row.label" class="last-action-item">
+                    <span class="last-action-item__label">{{ row.label }}</span>
+                    <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
+                    <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
             </article>
-          </div>
-        </section>
 
-        <nav class="command">
-          <button class="cmd cmd--next" @click="resetGame">
-            <span class="cmd__text">もう一度あそぶ</span>
-          </button>
-        </nav>
-      </div>
+            <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
+            <div class="record-grid">
+              <article class="record-card">
+                <h3 class="record-card__title">今日の記録</h3>
+
+                <ul class="record-list">
+                  <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
+                  <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
+                  <li class="record-item"><span>親のイライラ度</span><b>{{ parentStress }}</b></li>
+                  <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
+                  <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
+                  <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
+                  <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
+                  <li class="record-item"><span>帰宅時刻</span><b>{{ currentTime }}</b></li>
+                </ul>
+              </article>
+
+              <article class="record-card">
+                <h3 class="record-card__title">見つけたもの</h3>
+
+                <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+
+                <ul v-else class="found-list">
+                  <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                </ul>
+              </article>
+            </div>
+          </section>
+
+          <nav class="command">
+            <button class="cmd cmd--next" @click="resetGame">
+              <span class="cmd__text">もう一度あそぶ</span>
+            </button>
+          </nav>
+        </div>
+      </Transition>
     </div>
   </main>
 </template>
@@ -1870,6 +1954,10 @@ function resetGame() {
    結果を表示している間だけ、現在値の右側に小さく出す
 */
 .status-change {
+  /* 出たときに少し大きく見せてから、通常サイズへ戻す
+     ※ span のままだと transform が効かないので inline-block にする */
+  display: inline-block;
+  animation: status-pop 0.35s ease-out;
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1899,6 +1987,8 @@ function resetGame() {
   border-radius: 6px;
   background: rgb(242 112 95 / 20%);
   box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
+  /* 2.4秒かけてゆっくり明るくなって戻る（チカチカさせない） */
+  animation: danger-pulse 2.4s ease-in-out infinite;
 }
 
 .status-item--danger .status-item__label {
@@ -1933,7 +2023,8 @@ function resetGame() {
   display: block;
   height: 100%;
   border-radius: 999px;
-  transition: width 0.3s ease;
+  /* ステータスが変わったとき、パッと変わらず「スーッ」と伸び縮みする */
+  transition: width 0.5s ease-out;
 }
 
 .gauge__fill--child-energy {
@@ -2156,6 +2247,7 @@ function resetGame() {
 /* 結果メッセージのボックス */
 .result-card {
   position: relative;
+  animation: result-in 0.3s ease-out;
   padding: 26px 28px 22px;
   border: 2px dashed #e8c98a;
   border-radius: 14px;
@@ -2259,6 +2351,7 @@ function resetGame() {
 }
 
 .ending-card__rank {
+  animation: rank-in 0.5s ease-out 0.12s backwards;
   display: inline-block;
   margin: 0 0 10px;
   padding: 3px 20px;
@@ -2285,6 +2378,7 @@ function resetGame() {
 
 /* GAME OVERのカード（ゴールのエンディングカードと対になる見た目） */
 .gameover-card {
+  animation: gameover-in 0.5s ease-out;
   padding: 22px 28px;
   border: 3px solid #c9412f;
   border-radius: 14px;
@@ -2294,6 +2388,8 @@ function resetGame() {
 }
 
 .gameover-card__label {
+  /* 少し遅れて、ゆっくり大きく出す（backwards ＝ 待っている間は消えたまま） */
+  animation: gameover-label-in 0.55s ease-out 0.15s backwards;
   margin: 0 0 10px;
   color: #ff9d8c;
   font-size: 30px;
@@ -2444,6 +2540,227 @@ function resetGame() {
 }
 
 /* ============================================================
+   演出（アニメーション）
+   画像・効果音・外部ライブラリは使わず、
+   CSSの animation / transition と VueのTransitionだけで動かす
+   ============================================================ */
+
+/* --- 場面の切り替え（Transition name="scene"） ---
+   前の場面が0.15秒で消えてから、次の場面が0.24秒でふわっと出る
+   合わせて0.4秒ほどなので、テンポは悪くならない
+*/
+.scene-enter-active {
+  transition: opacity 0.24s ease-out, transform 0.24s ease-out;
+}
+
+.scene-leave-active {
+  transition: opacity 0.15s ease-in;
+}
+
+.scene-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.scene-leave-to {
+  opacity: 0;
+}
+
+/* --- 直前の増減値（-18 や +6）が出るときのポップ --- */
+@keyframes status-pop {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* --- 結果カードが下から浮き上がる --- */
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- いやいや発生：中央のカードだけを軽く左右に揺らす --- */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* いやいやが起きた結果カード
+   浮き上がってから、2回だけ小さく揺れる
+   ※ .result-card の animation を上書きするので、両方をここに書いている
+*/
+.result-card--tantrum {
+  animation:
+    result-in 0.3s ease-out,
+    shake 0.4s ease-in-out 0.3s 2;
+  border-color: #eba79c;
+  background: #fff6f3;
+}
+
+/* 「いやいや発生！」の見出し */
+.result-alert {
+  display: inline-block;
+  margin: 0 0 12px;
+  padding: 2px 14px;
+  border-radius: 999px;
+  background: var(--parent-stress);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* --- アイテム発見 --- */
+@keyframes found-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 「★ アイテム発見！」の帯
+   少し遅れて、ふわっと浮き上がりながら出す
+*/
+.found-flash {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0 0 12px;
+  padding: 8px 14px;
+  border: 1px solid #ecd6a4;
+  border-radius: 10px;
+  background: #fff6e0;
+  animation: found-in 0.4s ease-out 0.2s backwards;
+}
+
+.found-flash__label {
+  color: #8a5a00;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.found-flash__item {
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #4a3208;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* --- 危険なステータスのゆっくりした点滅 --- */
+@keyframes danger-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgb(242 112 95 / 45%);
+  }
+}
+
+/* 危険の警告メッセージも、出るときだけふわっと出す */
+.status-warnings__item {
+  animation: found-in 0.35s ease-out;
+}
+
+/* --- GAME OVER --- */
+@keyframes gameover-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes gameover-label-in {
+  from {
+    opacity: 0;
+    letter-spacing: 0.6em;
+  }
+
+  to {
+    opacity: 1;
+    letter-spacing: 0.24em;
+  }
+}
+
+/* GAME OVERの場面だけ、中央エリアの背景を少し暗くする */
+.scene--gameover .stage {
+  background: rgb(16 29 44 / 10%);
+  transition: background 0.5s ease-out;
+}
+
+/* --- ゴールのランク表示 --- */
+@keyframes rank-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Sランクだけ、金色のふちをゆっくり光らせる */
+@keyframes s-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgb(255 192 67 / 25%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 8px rgb(255 192 67 / 40%);
+  }
+}
+
+.ending-card--s {
+  border-width: 3px;
+  animation: s-glow 2.6s ease-in-out infinite;
+}
+
+.ending-card--s .ending-card__title {
+  font-size: 30px;
+}
+
+/* ============================================================
    コマンドボックス（各場所の「どうする？」）
    画面下部のフッターではなく、中央エリアの中に
    「枠の中に選択肢が縦に並ぶ」形で置く
@@ -2503,7 +2820,15 @@ function resetGame() {
   line-height: 1.7;
   text-align: left;
   cursor: pointer;
-  transition: background 0.12s ease, transform 0.12s ease;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* クリックしたとき、一瞬押しこまれたように見せる */
+.command-box__item:active {
+  transform: translateX(4px) scale(0.98);
 }
 
 /* 選択カーソル「▶」（ふだんは見えない） */
@@ -2774,6 +3099,21 @@ function resetGame() {
 
   .cmd {
     padding: 10px 16px 10px 32px;
+  }
+}
+
+/* ============================================================
+   動きを減らす設定（OS側の「視差効果を減らす」など）
+   アニメーションで気分が悪くなる人のために、演出をほぼ止める
+   ※ 見た目や配置は変わらず、動きだけが無くなる
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
