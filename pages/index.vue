@@ -8,8 +8,9 @@ const gameStarted = ref(false);
 /* 今いるゲームイベントを管理する型
    parkArrival  = 公園に到着した場面
    parkMorePlay = 公園でもっと遊びたい場面
+   parkLeave = 公園を出る場面
 */
-type GameEvent = 'parkArrival' | 'parkMorePlay';
+type GameEvent = 'parkArrival' | 'parkMorePlay' | 'parkLeave';
 
 /* 現在のイベント
    最初は「公園に到着した場面」からスタート
@@ -80,10 +81,54 @@ function watchFromBench() {
   resultMessage.value = 'こうちゃんは楽しそうに遊んでいます。';
 }
 
+/* 公園でもっと遊ぶ：どんぐりを拾う */
+function collectAcorns() {
+  childEnergy.value -= 10;
+  childMood.value += 10;
+  outingPoint.value += 8;
+  parentEnergy.value -= 5;
+  parentStress.value += 1;
+  addMinutes(20);
+
+  resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
+}
+
+/* 公園でもっと遊ぶ：少し休む */
+function takeBreak() {
+  childEnergy.value -= 5;
+  childMood.value -= 3;
+  outingPoint.value += 2;
+  parentEnergy.value += 5;
+  parentStress.value -= 2;
+  addMinutes(15);
+
+  resultMessage.value = '少し休んで、親の体力が回復しました。';
+}
+
+/* 公園でもっと遊ぶ：そろそろ帰る */
+function suggestGoingHome() {
+  childEnergy.value -= 2;
+  childMood.value -= 8;
+  outingPoint.value += 1;
+  parentEnergy.value -= 2;
+  parentStress.value += 3;
+  addMinutes(10);
+
+  resultMessage.value = 'こうちゃんは少し不満そうですが、帰る準備を始めました。';
+}
+
 /* 次のイベントへ進む */
 function goToNextEvent() {
   resultMessage.value = '';
-  currentEvent.value = 'parkMorePlay';
+
+  if (currentEvent.value === 'parkArrival') {
+    currentEvent.value = 'parkMorePlay';
+    return;
+  }
+
+  if (currentEvent.value === 'parkMorePlay') {
+    currentEvent.value = 'parkLeave';
+  }
 }
 </script>
 
@@ -137,15 +182,32 @@ function goToNextEvent() {
       <div v-else-if="currentEvent === 'parkMorePlay'">
         <h2>まだ遊びたい！</h2>
 
-        <p>しばらく遊んだこうちゃんが、 「パパ、もっと遊ぼう！」と言っています。</p>
+        <p>しばらく遊んだこうちゃんが、 「もっと遊ぼう！」と言っています。</p>
 
-        <h3>どうする？</h3>
+        <div v-if="!resultMessage">
+          <h3>どうする？</h3>
 
-        <button>一緒にどんぐりを拾う</button>
+          <button @click="collectAcorns">一緒にどんぐりを拾う</button>
 
-        <button>少し休んでから遊ぶ</button>
+          <button @click="takeBreak">少し休んでから遊ぶ</button>
 
-        <button>そろそろ帰ろうと伝える</button>
+          <button @click="suggestGoingHome">そろそろ帰ろうと伝える</button>
+        </div>
+
+        <div v-else>
+          <h3>結果</h3>
+
+          <p>{{ resultMessage }}</p>
+
+          <button @click="goToNextEvent">次へ</button>
+        </div>
+      </div>
+
+      <!-- 公園から帰るイベント -->
+      <div v-else-if="currentEvent === 'parkLeave'">
+        <h2>そろそろ帰る時間</h2>
+
+        <p>たくさん遊びました。 そろそろ公園から帰る時間です。</p>
       </div>
     </div>
   </main>
