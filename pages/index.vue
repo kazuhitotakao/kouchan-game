@@ -15,8 +15,9 @@ const gameStarted = ref(false);
    secretSpot   = 秘密の場所
    tantrum      = いやいや中（なだめる場面）
    goal         = ゴール（公園の出口）
+   gameOver     = ゲームオーバー（限界をむかえて途中で終わった）
 */
-type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'tantrum' | 'goal';
+type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'tantrum' | 'goal' | 'gameOver';
 
 /* 現在いる場所
    最初は「公園入口」からスタート
@@ -75,20 +76,29 @@ const statusChanges = ref<StatusChanges | null>(null);
 
 /* 行動する前のステータスを、いったん控えておく箱
    行動が終わったあとに「今の値 － 行動前の値」で変化量を計算する
+
+   ※ GAME OVER画面で「親の体力 10 → 0」のように行動前の値も出したいので、
+     ふつうの変数ではなく ref にして、画面からも読めるようにしている
 */
-let statusBefore = {
+const statusBefore = ref({
   childEnergy: 0,
   childMood: 0,
   outingPoint: 0,
   parentEnergy: 0,
   parentStress: 0,
   minutes: 0,
-};
+});
 
 /* ゴールしたときのランクと判定メッセージ */
 const endingRank = ref('');
 const endingTitle = ref('');
 const endingMessage = ref('');
+
+/* GAME OVERになった理由（GAME OVER画面に出す文章）
+   まだGAME OVERになっていないときは、どちらも空っぽ
+*/
+const gameOverTitle = ref('');
+const gameOverMessage = ref('');
 
 /* 今の時間を「分」に直したもの
    09:00 なら 540、12:00 なら 720 になる
@@ -111,6 +121,40 @@ const isAlmostNoon = computed(() => currentMinutes.value >= 11 * 60 + 30 && !isT
    の両方を満たすと解放される
 */
 const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedItems.value.length >= 3);
+
+/* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
+   ここが true になったゲージは、上部ステータスで目立つ見た目にする
+*/
+
+/* 親の体力が20以下 → あと1〜2回の行動で限界 */
+const isParentEnergyDanger = computed(() => parentEnergy.value <= 20);
+
+/* 親のイライラ度が80以上 → あと少しで100 */
+const isParentStressDanger = computed(() => parentStress.value >= 80);
+
+/* こうちゃんの体力が20以下 → 電池切れが近い */
+const isChildEnergyDanger = computed(() => childEnergy.value <= 20);
+
+/* 上部ステータスに出す警告メッセージ
+   危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
+*/
+const dangerWarnings = computed(() => {
+  const warnings: string[] = [];
+
+  if (isParentEnergyDanger.value) {
+    warnings.push('⚠ 親の体力が残りわずかです');
+  }
+
+  if (isParentStressDanger.value) {
+    warnings.push('⚠ 親のイライラが限界に近づいています');
+  }
+
+  if (isChildEnergyDanger.value) {
+    warnings.push('⚠ こうちゃんもかなり疲れています');
+  }
+
+  return warnings;
+});
 
 /* 時間を進める共通処理 */
 function addMinutes(minutes: number) {
@@ -151,7 +195,7 @@ function fixAllStatus() {
    「今のステータス」を控えておくだけの処理
 */
 function startStatusChanges() {
-  statusBefore = {
+  statusBefore.value = {
     childEnergy: childEnergy.value,
     childMood: childMood.value,
     outingPoint: outingPoint.value,
@@ -177,12 +221,12 @@ function startStatusChanges() {
 */
 function saveStatusChanges() {
   statusChanges.value = {
-    childEnergy: childEnergy.value - statusBefore.childEnergy,
-    childMood: childMood.value - statusBefore.childMood,
-    outingPoint: outingPoint.value - statusBefore.outingPoint,
-    parentEnergy: parentEnergy.value - statusBefore.parentEnergy,
-    parentStress: parentStress.value - statusBefore.parentStress,
-    minutes: currentMinutes.value - statusBefore.minutes,
+    childEnergy: childEnergy.value - statusBefore.value.childEnergy,
+    childMood: childMood.value - statusBefore.value.childMood,
+    outingPoint: outingPoint.value - statusBefore.value.outingPoint,
+    parentEnergy: parentEnergy.value - statusBefore.value.parentEnergy,
+    parentStress: parentStress.value - statusBefore.value.parentStress,
+    minutes: currentMinutes.value - statusBefore.value.minutes,
   };
 }
 
@@ -237,6 +281,29 @@ const changeRows = computed(() => {
   ];
 });
 
+/* GAME OVER画面に出す「最後の行動」の内訳
+   中央の changeRows とちがって「行動前 → 行動後」も一緒に出すので、
+   親の体力 10 → 0（-15） のように、なぜ限界になったのかが分かる
+*/
+const lastActionRows = computed(() => {
+  const changes = statusChanges.value;
+
+  // 直前の行動の結果がないときは、からっぽにする
+  if (changes === null) {
+    return [];
+  }
+
+  const before = statusBefore.value;
+
+  return [
+    { label: 'こうちゃんの体力', before: before.childEnergy, after: childEnergy.value, text: formatChange(changes.childEnergy), className: changeClass('childEnergy', changes.childEnergy) },
+    { label: 'こうちゃんの機嫌', before: before.childMood, after: childMood.value, text: formatChange(changes.childMood), className: changeClass('childMood', changes.childMood) },
+    { label: 'おでかけポイント', before: before.outingPoint, after: outingPoint.value, text: formatChange(changes.outingPoint), className: changeClass('outingPoint', changes.outingPoint) },
+    { label: '親の体力', before: before.parentEnergy, after: parentEnergy.value, text: formatChange(changes.parentEnergy), className: changeClass('parentEnergy', changes.parentEnergy) },
+    { label: '親のイライラ度', before: before.parentStress, after: parentStress.value, text: formatChange(changes.parentStress), className: changeClass('parentStress', changes.parentStress) },
+  ];
+});
+
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
   return visitedPlaces.value.includes(place);
@@ -244,11 +311,18 @@ function isVisited(place: GameEvent) {
 
 /* おでかけポイントを加える
    はじめての場所なら そのままのポイント
-   2回目以降の場所なら 1ポイントだけ
+   2回目以降の場所なら 半分のポイント（小数点以下は切り捨て、最低1点）
+
+   ※ 公園は6か所しかないので、2回目が1点しかもらえないと
+     「全部まわったら、あとは帰るだけ」になってしまう
+     半分もらえるようにすることで、体力が減ってきたときに
+     「もう1か所あそぶ？ それとも帰る？」と迷えるようにしている
 */
 function addOutingPoint(place: GameEvent, point: number) {
   if (isVisited(place)) {
-    outingPoint.value += 1;
+    const halfPoint = Math.floor(point / 2);
+
+    outingPoint.value += halfPoint < 1 ? 1 : halfPoint;
     return;
   }
 
@@ -279,7 +353,7 @@ function addCollectedItem(itemName: string) {
    5回に1回くらい（20%）だけ起こる
    ※ ここに書く数字は「このハプニングだけの増減」
      中央の「今回の変化（合計）」は行動ぜんぶを足した数なので、
-     たとえば 休む -6 ＋ ヒヤッ +4 なら 合計は -2 になる
+     たとえば 休む -10 ＋ ヒヤッ +10 なら 合計は 0 になる
 */
 function runRandomEvent() {
   if (Math.random() >= 0.2) {
@@ -295,8 +369,8 @@ function runRandomEvent() {
   }
 
   if (eventNumber === 1) {
-    parentEnergy.value -= 5;
-    resultMessage.value += '\n\nこうちゃんが急に「だっこ！」と言い出しました。\n親の体力 -5';
+    parentEnergy.value -= 8;
+    resultMessage.value += '\n\nこうちゃんが急に「だっこ！」と言い出しました。\n親の体力 -8';
     return;
   }
 
@@ -306,8 +380,8 @@ function runRandomEvent() {
     return;
   }
 
-  parentStress.value += 4;
-  resultMessage.value += '\n\nこうちゃんが転びそうになってヒヤッとしました。\n親のイライラ度 +4';
+  parentStress.value += 10;
+  resultMessage.value += '\n\nこうちゃんが転びそうになってヒヤッとしました。\n親のイライラ度 +10';
 }
 
 /* いやいや判定
@@ -367,9 +441,54 @@ function checkTantrum() {
   tantrumCount.value += 1;
 
   childMood.value -= 15;
-  parentStress.value += 6;
+  parentStress.value += 12;
 
   resultMessage.value += '\n\nそのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
+}
+
+/* GAME OVER判定
+   ステータスが変わる行動のあとに、必ず最後に呼ぶ
+
+   上から順番に見て、あてはまった時点でGAME OVERが決まる
+   ① 親の体力が0以下      → 親がもう動けない
+   ② 親のイライラ度が100以上 → 親の心の余裕がなくなった
+   ③ こうちゃんの体力が0以下 → 強制帰宅エンド（だっこで帰る）
+
+   ※ 必ず fixAllStatus()（0〜100に丸める処理）のあとに呼ぶこと
+     内部で -5 のようなマイナスになっていても、0に丸めてから判定する
+
+   ※ GAME OVERになったら currentEvent を 'gameOver' にする
+     これで画面がすぐGAME OVER画面に切り替わり、続きは遊べなくなる
+*/
+function checkGameOver() {
+  // すでにGAME OVERになっているときは、理由を上書きしない
+  if (currentEvent.value === 'gameOver') {
+    return;
+  }
+
+  // ① 親の体力が0以下
+  if (parentEnergy.value <= 0) {
+    gameOverTitle.value = '親の体力が限界！';
+    gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
+    currentEvent.value = 'gameOver';
+    return;
+  }
+
+  // ② 親のイライラ度が100以上
+  if (parentStress.value >= 100) {
+    gameOverTitle.value = 'イライラ限界！';
+    gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
+    currentEvent.value = 'gameOver';
+    return;
+  }
+
+  // ③ こうちゃんの体力が0以下（強制帰宅エンド）
+  if (childEnergy.value <= 0) {
+    gameOverTitle.value = 'こうちゃん電池切れ！';
+    gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
+    currentEvent.value = 'gameOver';
+    return;
+  }
 }
 
 /* 場所で1つ行動したあとの共通処理
@@ -378,7 +497,12 @@ function checkTantrum() {
    ③ いやいやが始まるか判定する
    ④ 今回の変化量を記録する（ランダムイベントといやいやの分もふくむ）
    ⑤ ステータスを0〜100に収める
+   ⑥ GAME OVERになっていないか判定する
    ※ いやいやをなだめる行動では呼ばない（ランダムイベントを起こさないため）
+
+   ⑥をいちばん最後に置いているので、
+   ランダムイベントの「だっこ！」で親の体力が0になった場合も、
+   いやいや発生でイライラ度が100になった場合も、まとめてGAME OVERになる
 */
 function finishPlayAction(place: GameEvent) {
   addVisitedPlace(place);
@@ -386,6 +510,7 @@ function finishPlayAction(place: GameEvent) {
   checkTantrum();
   saveStatusChanges();
   fixAllStatus();
+  checkGameOver();
 }
 
 /* ゲーム開始 */
@@ -407,6 +532,11 @@ function goToPlace(place: GameEvent) {
    ② 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
 */
 function goToNextPlace() {
+  // GAME OVER後にうっかり別の画面へ動いてしまわないようにする
+  if (currentEvent.value === 'gameOver') {
+    return;
+  }
+
   resultMessage.value = '';
   statusChanges.value = null;
 
@@ -430,11 +560,11 @@ function playSlide() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 15;
-  childMood.value += 5;
+  childEnergy.value -= 18;
+  childMood.value += 6;
   addOutingPoint('slide', 6);
-  parentEnergy.value -= 10;
-  parentStress.value += 3;
+  parentEnergy.value -= 17;
+  parentStress.value += 6;
   addMinutes(25);
 
   resultMessage.value = 'こうちゃんと一緒にすべりました。大喜びです！';
@@ -448,11 +578,11 @@ function watchSlide() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 10;
-  childMood.value += 4;
-  addOutingPoint('slide', 3);
-  parentEnergy.value -= 3;
-  parentStress.value += 1;
+  childEnergy.value -= 12;
+  childMood.value += 2;
+  addOutingPoint('slide', 4);
+  parentEnergy.value -= 4;
+  parentStress.value += 2;
   addMinutes(15);
 
   resultMessage.value = '下から見守りました。こうちゃんは楽しそうにすべっています。';
@@ -467,11 +597,11 @@ function playSandbox() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 10;
-  childMood.value += 4;
+  childEnergy.value -= 13;
+  childMood.value += 5;
   addOutingPoint('sandbox', 6);
-  parentEnergy.value -= 7;
-  parentStress.value += 2;
+  parentEnergy.value -= 14;
+  parentStress.value += 5;
   addMinutes(25);
 
   resultMessage.value = '一緒に大きな山を作りました。こうちゃんは夢中です！';
@@ -485,11 +615,11 @@ function watchFromBench() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 8;
-  childMood.value += 4;
-  addOutingPoint('sandbox', 3);
-  parentEnergy.value += 3;
-  parentStress.value += 1;
+  childEnergy.value -= 10;
+  childMood.value += 2;
+  addOutingPoint('sandbox', 4);
+  parentEnergy.value += 4;
+  parentStress.value += 2;
   addMinutes(20);
 
   resultMessage.value = 'ベンチから見守りました。こうちゃんは楽しそうに遊んでいます。';
@@ -504,11 +634,11 @@ function collectAcorns() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 8;
+  childEnergy.value -= 11;
   childMood.value += 6;
   addOutingPoint('acornArea', 8);
-  parentEnergy.value -= 5;
-  parentStress.value += 2;
+  parentEnergy.value -= 12;
+  parentStress.value += 4;
   addMinutes(20);
 
   resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
@@ -522,11 +652,11 @@ function takeBreak() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value += 10;
-  childMood.value -= 3;
+  childEnergy.value += 12;
+  childMood.value -= 6;
   addOutingPoint('acornArea', 1);
-  parentEnergy.value += 12;
-  parentStress.value -= 6;
+  parentEnergy.value += 14;
+  parentStress.value -= 10;
   addMinutes(20);
 
   resultMessage.value = '木かげで少し休みました。親の体力が回復しました。';
@@ -541,11 +671,11 @@ function watchSwansClose() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 8;
-  childMood.value += 7;
+  childEnergy.value -= 11;
+  childMood.value += 8;
   addOutingPoint('pond', 9);
-  parentEnergy.value -= 8;
-  parentStress.value += 6;
+  parentEnergy.value -= 16;
+  parentStress.value += 10;
   addMinutes(20);
 
   resultMessage.value = '白鳥を近くで見ました。こうちゃんは大興奮です！';
@@ -559,11 +689,11 @@ function watchSwansFar() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 5;
-  childMood.value += 4;
-  addOutingPoint('pond', 4);
-  parentEnergy.value -= 2;
-  parentStress.value += 1;
+  childEnergy.value -= 6;
+  childMood.value += 2;
+  addOutingPoint('pond', 5);
+  parentEnergy.value -= 3;
+  parentStress.value += 2;
   addMinutes(15);
 
   resultMessage.value = '少し離れて白鳥を見ました。落ち着いてながめられました。';
@@ -579,11 +709,11 @@ function runUpHill() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 20;
-  childMood.value += 7;
+  childEnergy.value -= 24;
+  childMood.value += 8;
   addOutingPoint('hill', 11);
-  parentEnergy.value -= 12;
-  parentStress.value += 3;
+  parentEnergy.value -= 21;
+  parentStress.value += 7;
   addMinutes(25);
 
   resultMessage.value = '丘のてっぺんまで走ってのぼりました。公園全体が見わたせます！';
@@ -597,11 +727,11 @@ function walkUpHill() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 10;
-  childMood.value += 4;
+  childEnergy.value -= 12;
+  childMood.value += 3;
   addOutingPoint('hill', 6);
-  parentEnergy.value -= 6;
-  parentStress.value += 2;
+  parentEnergy.value -= 10;
+  parentStress.value += 4;
   addMinutes(20);
 
   resultMessage.value = 'ゆっくり歩いてのぼりました。途中の花を見つけて楽しめました。';
@@ -617,11 +747,11 @@ function playSecretBase() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 12;
+  childEnergy.value -= 16;
   childMood.value += 10;
   addOutingPoint('secretSpot', 15);
-  parentEnergy.value -= 8;
-  parentStress.value += 1;
+  parentEnergy.value -= 17;
+  parentStress.value += 3;
   addMinutes(25);
 
   resultMessage.value = '木のトンネルの奥は秘密基地でした。こうちゃんは目をかがやかせています！';
@@ -635,11 +765,11 @@ function enjoySecretView() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value += 5;
-  childMood.value += 5;
+  childEnergy.value += 6;
+  childMood.value += 4;
   addOutingPoint('secretSpot', 9);
-  parentEnergy.value += 3;
-  parentStress.value -= 6;
+  parentEnergy.value += 5;
+  parentStress.value -= 10;
   addMinutes(20);
 
   resultMessage.value = '二人でならんで景色をながめました。とても穏やかな時間です。';
@@ -656,8 +786,8 @@ function hugChild() {
 
   childEnergy.value += 12;
   childMood.value += 15;
-  parentEnergy.value -= 15;
-  parentStress.value -= 8;
+  parentEnergy.value -= 16;
+  parentStress.value -= 10;
   addMinutes(10);
 
   isTantrum.value = false;
@@ -667,6 +797,9 @@ function hugChild() {
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
+
+  // だっこは親の体力を15も使うので、残りが少ないとここでGAME OVERになる
+  checkGameOver();
 }
 
 /* ② おやつをあげる */
@@ -674,11 +807,11 @@ function giveSnack() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value += 25;
+  childEnergy.value += 22;
   childMood.value += 8;
   outingPoint.value += 2;
-  parentEnergy.value -= 4;
-  parentStress.value -= 3;
+  parentEnergy.value -= 5;
+  parentStress.value -= 6;
   addMinutes(10);
 
   snackLeft.value -= 1;
@@ -689,6 +822,9 @@ function giveSnack() {
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
+
+  // おやつは安全な選択だが、念のためここでも判定しておく
+  checkGameOver();
 }
 
 /* ③ 少し待ってみる */
@@ -696,10 +832,10 @@ function waitCalmly() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 5;
-  childMood.value -= 2;
+  childEnergy.value -= 4;
+  childMood.value -= 6;
   parentEnergy.value += 2;
-  parentStress.value += 8;
+  parentStress.value += 14;
   addMinutes(15);
 
   isTantrum.value = false;
@@ -709,6 +845,9 @@ function waitCalmly() {
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
+
+  // 待つのはイライラ度が8ふえるので、たまっているとここでGAME OVERになる
+  checkGameOver();
 }
 
 /* ===== ゴール ===== */
@@ -734,7 +873,7 @@ function judgeResult() {
   }
 
   // ② Sランク
-  if (outingPoint.value >= 50 && parentEnergy.value >= 40 && childMood.value >= 50 && isSecretVisited && isBackInTime) {
+  if (outingPoint.value >= 50 && parentEnergy.value >= 30 && childMood.value >= 50 && isSecretVisited && isBackInTime) {
     endingRank.value = 'Sランク';
     endingTitle.value = '公園探検マスター！';
     endingMessage.value = '秘密の場所まで見つけて、時間ぴったりに帰ってこられました。こうちゃんも親も大満足の完ぺきな1日です！';
@@ -742,7 +881,7 @@ function judgeResult() {
   }
 
   // ③ Aランク
-  if (outingPoint.value >= 30 && parentEnergy.value >= 20 && childMood.value >= 30 && isBackInTime) {
+  if (outingPoint.value >= 30 && parentEnergy.value >= 15 && childMood.value >= 30 && isBackInTime) {
     endingRank.value = 'Aランク';
     endingTitle.value = '最高のおでかけ！';
     endingMessage.value = 'いろいろな場所を回って、お昼までにちゃんと帰ってこられました。「またこようね！」';
@@ -750,7 +889,7 @@ function judgeResult() {
   }
 
   // ④ Cランク
-  if (parentEnergy.value < 20 || !isBackInTime) {
+  if (parentEnergy.value < 15 || !isBackInTime) {
     endingRank.value = 'Cランク';
     endingTitle.value = '親はヘトヘト……';
 
@@ -771,6 +910,11 @@ function judgeResult() {
 
 /* ゴールへ向かう（判定して結果画面へ） */
 function goToGoal() {
+  // GAME OVERになったときは、S/A/B/Cランクの判定はしない
+  if (currentEvent.value === 'gameOver') {
+    return;
+  }
+
   resultMessage.value = '';
   statusChanges.value = null;
   addMinutes(10);
@@ -800,6 +944,20 @@ function resetGame() {
   endingTitle.value = '';
   endingMessage.value = '';
 
+  // 今回追加したGAME OVER用のstateも空に戻す
+  gameOverTitle.value = '';
+  gameOverMessage.value = '';
+
+  // 行動前の控えも0に戻しておく（前回の記録が残らないようにする）
+  statusBefore.value = {
+    childEnergy: 0,
+    childMood: 0,
+    outingPoint: 0,
+    parentEnergy: 0,
+    parentStress: 0,
+    minutes: 0,
+  };
+
   currentEvent.value = 'parkEntrance';
   gameStarted.value = false;
 }
@@ -827,6 +985,8 @@ function resetGame() {
 
           <p>
             はじめて行く場所ほど、おでかけポイントをたくさんもらえます。
+            <br />
+            2回目からは半分になりますが、それでもポイントは増やせます。
             <br />
             こうちゃんと親の体力にも気をつけながら、たくさん探検してみよう！
           </p>
@@ -857,8 +1017,8 @@ function resetGame() {
         </div>
 
         <ul class="status-list">
-          <li class="status-item">
-            <span class="status-item__label">こうちゃんの体力</span>
+          <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
+            <span class="status-item__label"><span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>こうちゃんの体力</span>
             <span class="status-item__value">{{ childEnergy }}</span>
             <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">{{ formatChange(statusChanges.childEnergy) }}</span>
             <span class="gauge">
@@ -875,8 +1035,8 @@ function resetGame() {
             </span>
           </li>
 
-          <li class="status-item">
-            <span class="status-item__label">親の体力</span>
+          <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
+            <span class="status-item__label"><span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>親の体力</span>
             <span class="status-item__value">{{ parentEnergy }}</span>
             <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">{{ formatChange(statusChanges.parentEnergy) }}</span>
             <span class="gauge">
@@ -884,8 +1044,8 @@ function resetGame() {
             </span>
           </li>
 
-          <li class="status-item">
-            <span class="status-item__label">親のイライラ度</span>
+          <li class="status-item" :class="{ 'status-item--danger': isParentStressDanger }">
+            <span class="status-item__label"><span v-if="isParentStressDanger" class="status-item__alert">⚠</span>親のイライラ度</span>
             <span class="status-item__value">{{ parentStress }}</span>
             <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">{{ formatChange(statusChanges.parentStress) }}</span>
             <span class="gauge">
@@ -909,6 +1069,11 @@ function resetGame() {
             <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
           </ul>
         </div>
+
+        <!-- 危険な状態の警告（GAME OVERになる前の合図） -->
+        <ul v-if="dangerWarnings.length > 0" class="status-warnings">
+          <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
+        </ul>
 
         <!-- そろそろお昼のお知らせ -->
         <p v-if="isAlmostNoon" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
@@ -1410,6 +1575,74 @@ function resetGame() {
           </button>
         </nav>
       </div>
+
+      <!-- GAME OVER（限界をむかえて途中で終わったとき）
+           自分で出口へ帰ったときとちがい、S/A/B/Cランクの判定はしない -->
+      <div v-else-if="currentEvent === 'gameOver'" class="scene">
+        <section class="stage">
+          <article class="gameover-card">
+            <p class="gameover-card__label">GAME OVER</p>
+
+            <h2 class="gameover-card__title">{{ gameOverTitle }}</h2>
+
+            <p class="gameover-card__text">{{ gameOverMessage }}</p>
+          </article>
+
+          <!-- 最後に選んだ行動で、何がどれだけ変わったか
+               「親の体力 10 → 0（-15）」のように、限界になった理由が分かる -->
+          <article v-if="statusChanges" class="result-card result-card--gameover">
+            <h3 class="result-card__title">最後の行動</h3>
+
+            <p class="result-card__text">{{ resultMessage }}</p>
+
+            <div class="change-box">
+              <p class="change-box__title">この行動での変化</p>
+
+              <ul class="last-action-list">
+                <li v-for="row in lastActionRows" :key="row.label" class="last-action-item">
+                  <span class="last-action-item__label">{{ row.label }}</span>
+                  <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
+                  <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
+                </li>
+              </ul>
+            </div>
+          </article>
+
+          <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
+          <div class="record-grid">
+            <article class="record-card">
+              <h3 class="record-card__title">今日の記録</h3>
+
+              <ul class="record-list">
+                <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
+                <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
+                <li class="record-item"><span>親のイライラ度</span><b>{{ parentStress }}</b></li>
+                <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
+                <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
+                <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
+                <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
+                <li class="record-item"><span>帰宅時刻</span><b>{{ currentTime }}</b></li>
+              </ul>
+            </article>
+
+            <article class="record-card">
+              <h3 class="record-card__title">見つけたもの</h3>
+
+              <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+
+              <ul v-else class="found-list">
+                <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <nav class="command">
+          <button class="cmd cmd--next" @click="resetGame">
+            <span class="cmd__text">もう一度あそぶ</span>
+          </button>
+        </nav>
+      </div>
     </div>
   </main>
 </template>
@@ -1550,6 +1783,7 @@ function resetGame() {
   grid-template-areas:
     'clock gauges pills'
     'found found found'
+    'warning warning warning'
     'notice notice notice';
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px 28px;
@@ -1654,6 +1888,37 @@ function resetGame() {
 
 .status-change.change--neutral {
   color: #b8c9e2;
+}
+
+/* 危険な状態のステータス（GAME OVERが近い）
+   背景と枠を付けて、ふだんより目立たせる
+
+   ※ padding ではなく box-shadow で背景を外側に広げているので、
+     危険になってもゲージの位置や高さはずれない
+*/
+.status-item--danger {
+  border-radius: 6px;
+  background: rgb(242 112 95 / 20%);
+  box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
+}
+
+.status-item--danger .status-item__label {
+  color: #ffd6cd;
+}
+
+.status-item--danger .status-item__value {
+  color: #ff9d8c;
+}
+
+/* 危険なゲージは枠を付けて強調する（outline は場所を取らない） */
+.status-item--danger .gauge {
+  outline: 2px solid #ff9d8c;
+  outline-offset: 1px;
+}
+
+/* ラベルの前に出す警告アイコン */
+.status-item__alert {
+  margin-right: 3px;
 }
 
 .gauge {
@@ -1766,6 +2031,28 @@ function resetGame() {
   background: #fef3d6;
   color: #6a4a10;
   font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 危険な状態の警告（親の体力・イライラ度・こうちゃんの体力） */
+.status-warnings {
+  display: flex;
+  grid-area: warning;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-warnings__item {
+  padding: 2px 12px;
+  border: 1px solid #ff9d8c;
+  border-radius: 999px;
+  background: rgb(242 112 95 / 24%);
+  color: #ffd6cd;
+  font-size: 12.5px;
+  font-weight: 700;
   line-height: 1.6;
 }
 
@@ -2020,6 +2307,93 @@ function resetGame() {
   max-width: 640px;
   margin: 0 auto;
   font-size: 14.5px;
+}
+
+/* GAME OVERのカード（ゴールのエンディングカードと対になる見た目） */
+.gameover-card {
+  padding: 22px 28px;
+  border: 3px solid #c9412f;
+  border-radius: 14px;
+  background: linear-gradient(160deg, #3b2733 0%, #241f2b 100%);
+  color: #ffeae5;
+  text-align: center;
+}
+
+.gameover-card__label {
+  margin: 0 0 10px;
+  color: #ff9d8c;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  line-height: 1.2;
+}
+
+.gameover-card__title {
+  margin: 0 0 10px;
+  color: var(--gold);
+  font-size: 24px;
+  line-height: 1.4;
+}
+
+.gameover-card__text {
+  max-width: 640px;
+  margin: 0 auto;
+  font-size: 14.5px;
+}
+
+/* GAME OVER画面の「最後の行動」 */
+.result-card--gameover {
+  border-color: #e8b3a8;
+}
+
+.last-action-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.last-action-item {
+  /* ラベル ／ 行動前→行動後 ／ 増減 の3列 */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  column-gap: 10px;
+  padding: 3px 0;
+  border-bottom: 1px dotted #e5dcc6;
+  font-size: 13.5px;
+}
+
+.last-action-item__label {
+  overflow: hidden;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.last-action-item__flow {
+  color: var(--navy);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.last-action-item__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.last-action-item__value.change--good {
+  color: var(--good);
+}
+
+.last-action-item__value.change--bad {
+  color: var(--bad);
+}
+
+.last-action-item__value.change--neutral {
+  color: var(--ink-soft);
 }
 
 /* 今日の記録／見つけたもの（2枚を横並び） */
@@ -2354,6 +2728,7 @@ function resetGame() {
       'gauges gauges'
       'pills pills'
       'found found'
+      'warning warning'
       'notice notice';
     grid-template-columns: 1fr 1fr;
     padding: 10px 12px 12px;
@@ -2417,8 +2792,20 @@ function resetGame() {
     grid-template-columns: 1fr;
   }
 
+  .last-action-list {
+    grid-template-columns: 1fr;
+  }
+
   .record-grid {
     grid-template-columns: 1fr;
+  }
+
+  .gameover-card__label {
+    font-size: 24px;
+  }
+
+  .gameover-card__title {
+    font-size: 20px;
   }
 
   .title-card {
