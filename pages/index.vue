@@ -187,18 +187,59 @@ function runRandomEvent() {
 }
 
 /* いやいや判定
-   こうちゃんの体力が50以下まで減ると、いやいやが始まってしまう
+   「こうちゃんの体力」「こうちゃんの機嫌」「今の時間」から
+   いやいやが起きる確率を計算して、その確率で発生させる
 */
 function checkTantrum() {
-  if (childEnergy.value <= 50) {
-    isTantrum.value = true;
-    tantrumCount.value += 1;
-
-    childMood.value -= 15;
-    parentStress.value += 6;
-
-    resultMessage.value += '\n\nそのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
+  // すでにいやいや中のときは、もう一度判定しない
+  if (isTantrum.value) {
+    return;
   }
+
+  // いやいやが起きる確率
+  // 0 なら 0%、0.5 なら 50%、1 なら 100% という意味
+  let tantrumChance = 0;
+
+  // ① こうちゃんの体力
+  //    疲れているほど、いやいやが起きやすくなる
+  if (childEnergy.value <= 30) {
+    tantrumChance += 0.6; // +60%
+  } else if (childEnergy.value <= 50) {
+    tantrumChance += 0.35; // +35%
+  } else if (childEnergy.value <= 70) {
+    tantrumChance += 0.1; // +10%
+  }
+  // 体力が71以上のときは、体力による上乗せなし（0%）
+
+  // ② こうちゃんの機嫌
+  //    機嫌が悪いほど、いやいやが起きやすくなる
+  if (childMood.value <= 30) {
+    tantrumChance += 0.2; // +20%
+  } else if (childMood.value <= 50) {
+    tantrumChance += 0.1; // +10%
+  }
+  // 機嫌が51以上のときは、機嫌による上乗せなし
+
+  // ③ 今の時間
+  //    11:00をすぎると、おなかもすいて眠くなり、いやいやが起きやすくなる
+  if (currentMinutes.value >= 11 * 60) {
+    tantrumChance += 0.1; // +10%
+  }
+
+  // 0以上1未満のランダムな数を出して、確率の中に入ったら いやいや発生
+  const randomNumber = Math.random();
+
+  if (randomNumber >= tantrumChance) {
+    return;
+  }
+
+  isTantrum.value = true;
+  tantrumCount.value += 1;
+
+  childMood.value -= 15;
+  parentStress.value += 6;
+
+  resultMessage.value += '\n\nそのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
 }
 
 /* 場所で1つ行動したあとの共通処理
@@ -503,7 +544,7 @@ function judgeResult() {
   if (tantrumCount.value >= 3) {
     endingRank.value = '特殊エンド';
     endingTitle.value = 'いやいや大爆発！';
-    endingMessage.value = 'いやいやが' + tantrumCount.value + '回もありました。ほっぺをふくらませたこうちゃんをだっこして、いっしょにおうちへ帰ります。それはそれで、わすれられない1日になりました。次はおやつと休けいを早めに！';
+    endingMessage.value = 'いやいやが' + tantrumCount.value + '回もありました。ほっぺをふくらませたこうちゃんをだっこして、いっしょにおうちへ帰ります。それはそれで、わすれられない1日になりました。';
     return;
   }
 
