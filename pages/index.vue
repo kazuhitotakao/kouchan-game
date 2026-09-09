@@ -4905,29 +4905,45 @@ onUnmounted(() => {
    カードを重ねると高さが増えてしまうので、
    うすい背景と細い枠だけで「ここまでが同じ人」と分かるようにしている */
 .status-group {
-  padding: 3px 10px 5px;
-  border: 1px solid rgb(255 255 255 / 12%);
+  padding: 4px 10px 6px;
+  border: 1px solid rgb(255 255 255 / 20%);
   border-radius: 8px;
 }
 
 /* 人の区別は、うすいベージュ と うすい青 の弱い差だけでつける
    ※ 赤や緑は「増えた・減った」を表す色なので、人の見わけには使わない */
 .status-group--child {
-  background: rgb(255 240 214 / 9%);
+  background: rgb(255 240 214 / 14%);
 }
 
 .status-group--parent {
-  background: rgb(206 232 247 / 11%);
+  background: rgb(206 232 247 / 16%);
 }
 
 /* 「こうちゃん」「親」の見出し
-   増える高さはこの1行だけ */
+
+   前は 10.5〜12px で、中の項目ラベル（13〜15px）より小さかった
+   見出しのほうが小さいと「まとまりの名前」だと伝わらないので、
+   ・文字を大きく（13〜15px）
+   ・色を白にしてはっきりさせる
+   ・うすい札（チップ）の形にして、数字の行と見た目を分ける
+   の3つで目立たせている
+
+   ※ 札にしても、増える高さは数pxだけ
+     display: inline-block なので、文字の長さぶんだけ横に広がる
+     （「親」の1文字でも、左右の余白で読みやすい大きさになる）
+*/
 .status-group__name {
-  margin: 0 0 1px;
-  color: #cfe9f7;
-  font-size: clamp(10.5px, 0.85vw, 12px);
+  display: inline-block;
+  margin: 0 0 3px;
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
+  font-size: clamp(13px, 1.05vw, 15px);
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
 }
 
 /* まとまりの中の2項目（横に並べる）
@@ -5502,10 +5518,13 @@ onUnmounted(() => {
   border-top: 1px dashed #f2dcae;
 }
 
+/* 「今回の変化（合計）」の見出し
+   下の こうちゃん／親／おでかけ より小さいとおかしいので、
+   こちらも少し大きくしている */
 .change-box__title {
   margin: 0 0 8px;
   color: #8a6a1e;
-  font-size: 12px;
+  font-size: 13.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
 }
@@ -5542,12 +5561,29 @@ onUnmounted(() => {
   background: var(--paper);
 }
 
+/* 「こうちゃん」「親」「おでかけ」の見出し
+
+   前は 11.5px で、中の項目ラベル（12px）より小さかった
+   見出しのほうが小さいと「まとまりの名前」だと伝わらないので、
+   上部ステータスの見出しと同じ考えかたで目立たせている
+   ・文字を大きく（11.5px → 13.5px）
+   ・うすい札（チップ）の形にして、数字の行と見た目を分ける
+
+   ※ 札の色は3つとも同じ（紺色のうすい札）
+     こうちゃん／親／おでかけ の区別は、枠の背景色でついているので、
+     見出しの色まで変えると、かえってごちゃごちゃして見えるため
+*/
 .change-group__name {
-  margin: 0 0 4px;
+  display: inline-block;
+  margin: 0 0 5px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: rgb(42 118 143 / 13%);
   color: var(--navy);
-  font-size: 11.5px;
+  font-size: 13.5px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
 }
 
 /* まとまりの中の項目は、たてに積む（1グループ2つまで） */
@@ -5856,12 +5892,18 @@ onUnmounted(() => {
   gap: 4px 18px;
 }
 
+/* GAME OVERの「最後の行動」の見出しも、中央の「今回の変化」と同じ見た目にそろえる */
 .last-action-group__name {
-  margin: 0 0 2px;
-  color: var(--ink-soft);
-  font-size: 11.5px;
+  display: inline-block;
+  margin: 0 0 3px;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: rgb(42 118 143 / 13%);
+  color: var(--navy);
+  font-size: 13.5px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
 }
 
 .last-action-list {
@@ -6735,6 +6777,18 @@ onUnmounted(() => {
     display: none;
   }
 
+  /* 「こうちゃん」「親」の札も少しだけつめる
+     （小さくしすぎると見出しに見えなくなるので、ほんの少しだけ） */
+  .status-group__name {
+    margin-bottom: 2px;
+    padding: 0 10px;
+    font-size: clamp(12.5px, 1vw, 14px);
+  }
+
+  .status-group {
+    padding: 3px 9px 5px;
+  }
+
   .stage {
     gap: 12px;
     padding: 18px 28px 20px;
@@ -6765,6 +6819,19 @@ onUnmounted(() => {
      ここを1〜2pxずつ減らすだけで、カード全体では20px以上ちぢむ */
   .change-group {
     padding: 4px 7px 5px;
+  }
+
+  /* 見出しの札も少しだけつめる
+     （小さくしすぎると見出しに見えなくなるので、ほんの少しだけ） */
+  .change-box__title {
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+
+  .change-group__name {
+    margin-bottom: 3px;
+    padding: 0 9px;
+    font-size: 13px;
   }
 
   .change-item {
