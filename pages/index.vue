@@ -569,39 +569,92 @@ function addCollectedItem(itemName: string) {
   resultMessage.value += `\n「${itemName}」を見つけました！`;
 }
 
-/* ランダムイベント
-   5回に1回くらい（20%）だけ起こる
+/* ランダムイベント（通常行動中に起きる、小さなハプニング）
+   5回に1回くらい（20%）だけ起こり、8種類の中から1つが選ばれる
+
    ※ ここに書く数字は「このハプニングだけの増減」
      中央の「今回の変化（合計）」は行動ぜんぶを足した数なので、
-     たとえば 休む -10 ＋ ヒヤッ +10 なら 合計は 0 になる
+     たとえば 休む -10 ＋ 急に走り出す +10 なら 合計は 0 になる
+
+   ※ どのイベントでも addMinutes() は呼ばない
+     「通常行動をしている、その最中に起きたこと」という扱いなので、
+     時間は通常行動のぶんだけ進む
+
+   ※ 専用画面へ移動する「突然イベント」とは別物
+     こちらは結果カードに文章とステータス変化が少し足されるだけ
 */
 function runRandomEvent() {
+  // ① まず「そもそも起こるか？」の抽選（20%）
+  //   0.2以上（＝80%）なら、何もしないでここで終わり
   if (Math.random() >= 0.2) {
     return;
   }
 
-  const eventNumber = Math.floor(Math.random() * 4);
+  // ② 起こると決まったので、8種類の中から1つ選ぶ
+  //   Math.random() * 8 で「0以上8未満の小数」を作り、
+  //   Math.floor() で小数点以下を切り捨てて 0〜7 の整数にする
+  //   8つの区間はどれも同じ幅なので、8種類が同じ確率で出る
+  const eventNumber = Math.floor(Math.random() * 8);
 
+  /* --- 良いイベント --- */
+
+  // ① 四つ葉のクローバー
+  //   ※ addOutingPoint() ではなく直接足している
+  //     addOutingPoint() は「2回目の場所は半分」という場所のためのルールで、
+  //     ハプニングは場所の探検ではないため、半減の対象にしない
   if (eventNumber === 0) {
     outingPoint.value += 5;
     resultMessage.value += '\n\nそのとき、四つ葉のクローバーを見つけました！\nおでかけポイント +5';
     return;
   }
 
+  // ② 急に「だっこ！」
   if (eventNumber === 1) {
     parentEnergy.value -= 8;
     resultMessage.value += '\n\nこうちゃんが急に「だっこ！」と言い出しました。\n親の体力 -8';
     return;
   }
 
+  // ③ きれいな鳥
   if (eventNumber === 2) {
     childMood.value += 5;
     resultMessage.value += '\n\n木の上にきれいな鳥を見つけました！\nこうちゃんの機嫌 +5';
     return;
   }
 
-  parentStress.value += 10;
-  resultMessage.value += '\n\nこうちゃんが転びそうになってヒヤッとしました。\n親のイライラ度 +10';
+  // ④ 急に走り出してヒヤッ
+  if (eventNumber === 3) {
+    parentStress.value += 10;
+    resultMessage.value += '\n\nこうちゃんが急に走り出してヒヤッとしました！\n親のイライラ度 +10';
+    return;
+  }
+
+  // ⑤ ちょうちょ
+  if (eventNumber === 4) {
+    childMood.value += 4;
+    resultMessage.value += '\n\n目の前をちょうちょがひらひら飛んでいきました。こうちゃんはうれしそうに追いかけています！\nこうちゃんの機嫌 +4';
+    return;
+  }
+
+  // ⑥ ベンチでひと休み
+  if (eventNumber === 5) {
+    parentEnergy.value += 5;
+    resultMessage.value += '\n\nちょうど空いているベンチを見つけて、少しひと休みできました。\n親の体力 +5';
+    return;
+  }
+
+  // ⑦ 靴がぽろっと脱げる
+  if (eventNumber === 6) {
+    parentStress.value += 4;
+    resultMessage.value += '\n\nこうちゃんが走っていると、片方の靴がぽろっと脱げてしまいました。ちょっと待って、履きなおします。\n親のイライラ度 +4';
+    return;
+  }
+
+  // ⑧ 水たまりで大はしゃぎ（良い面と悪い面の両方があるイベント）
+  //   ここまでの7つに当てはまらなかった＝eventNumber が 7 のとき
+  childMood.value += 5;
+  parentStress.value += 3;
+  resultMessage.value += '\n\nこうちゃんが水たまりを見つけて大はしゃぎ！楽しそうだけど、親はちょっとヒヤヒヤです。\nこうちゃんの機嫌 +5\n親のイライラ度 +3';
 }
 
 /* いやいや判定
