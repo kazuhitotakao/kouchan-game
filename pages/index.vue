@@ -2273,6 +2273,19 @@ function moveCommandDown() {
 */
 const entranceColumns = ref(3);
 
+/* ゴールの行に入る直前、何列目にいたかを覚えておく箱
+   0 = 左はし、1 = まん中、2 = 右はし
+
+   ゴール（公園の出口へ向かう）の行は横はばをまるごと使っていて、
+   ほかのコマンドのような「列」を持っていない
+   そのため覚えておかないと、↑で戻るときに行き先の
+   いちばんうしろへ帰ってしまい、
+   「池へ行く」で↓→↑としたのに「丘へ行く」に移動してしまう
+
+   ※ 見た目には出てこない、キーボード操作のためだけのメモ
+*/
+const entranceColumnBeforeGoal = ref(0);
+
 /* いまの画面幅を見て、列の数を updateする
    画面が表示されたときと、幅が変わったときに呼ぶ
 */
@@ -2293,6 +2306,9 @@ function updateEntranceColumns() {
 /* ↑：公園入口では「1行ぶん（列の数ぶん）」上へ動かす
    例）3列のとき 池(3) の1つ上は すべり台(0)
 
+   ゴールの行から↑を押したときは、entranceColumnBeforeGoal に
+   覚えておいた列へ戻る（池で↓→↑なら、ちゃんと池へ帰ってくる）
+
    ※ 「公園の出口へ向かう（ゴール）」だけは、CSSで横1行をまるごと使っている
      （.cmd--goal の grid-column: 1 / -1）ので、列のマス目には入っていない
      そのため、ゴールはいちばん下の1行として別あつかいで計算する
@@ -2308,9 +2324,18 @@ function moveEntranceUp() {
   // （行き先が 0〜4 の5つなら、ゴールは5番）
   const goalIndex = goalCommandIndex.value;
 
-  // いまゴールの行にいるなら、そのすぐ上（行き先の一番うしろ）へ
+  // いまゴールの行にいるなら、ゴールへ降りてくる前と同じ列へ戻る
   if (selectedCommandIndex.value === goalIndex) {
-    selectedCommandIndex.value = goalIndex - 1;
+    // 行き先のいちばん下の行が、何番から始まるかを求める
+    // 例）行き先が5つ・3列なら、いちばん下の行は 3番（池）から
+    const lastRowStart = Math.floor((goalIndex - 1) / columns) * columns;
+
+    // その行の、覚えておいた列へ戻る
+    const back = lastRowStart + entranceColumnBeforeGoal.value;
+
+    // その列にコマンドが無いとき（いちばん下の行が途中で終わっているとき）は、
+    // その行のいちばん右のコマンドへ寄せる
+    selectedCommandIndex.value = Math.min(back, goalIndex - 1);
     return;
   }
 
@@ -2319,6 +2344,8 @@ function moveEntranceUp() {
 
   // 上にはみ出した＝いちばん上の行にいたので、いちばん下のゴールへ回りこむ
   if (next < 0) {
+    // 回りこむときも、戻ってこられるように列を覚えておく
+    entranceColumnBeforeGoal.value = selectedCommandIndex.value % columns;
     selectedCommandIndex.value = goalIndex;
     return;
   }
@@ -2343,14 +2370,34 @@ function moveEntranceDown() {
   // 1行ぶん下へ
   const next = selectedCommandIndex.value + columns;
 
-  // 行き先の下にはもう行がない＝いちばん下の行にいたので、ゴールへ進む
-  if (next >= goalIndex) {
-    selectedCommandIndex.value = goalIndex;
+  // まっすぐ下にコマンドがあるときは、そこへ動かすだけ
+  if (next < goalIndex) {
+    selectedCommandIndex.value = next;
     return;
   }
 
-  selectedCommandIndex.value = next;
+  // ここから下は「まっすぐ下にコマンドが無かった」とき
+
+  // 行き先のいちばん下の行が、何番から始まるかを求める
+  // 例）行き先が5つ・3列なら、いちばん下の行は 3番（池）から
+  const lastRowStart = Math.floor((goalIndex - 1) / columns) * columns;
+
+  // まだ下に行き先の行が残っているとき
+  //   例）行き先が5つ・3列で「どんぐり(2)」にいる場合、
+  //      すぐ下の [池][丘] の行には3列目が無い
+  //      ここでゴールへ飛ばすと、池・丘の行をまるごと飛びこえてしまうので、
+  //      その行のいちばん近いコマンド（丘）へ寄せる
+  if (selectedCommandIndex.value < lastRowStart) {
+    selectedCommandIndex.value = goalIndex - 1;
+    return;
+  }
+
+  // いちばん下の行にいたので、その下のゴールへ進む
+  // ↑で戻ってきたときに同じ列へ帰れるよう、いまの列を覚えておく
+  entranceColumnBeforeGoal.value = selectedCommandIndex.value % columns;
+  selectedCommandIndex.value = goalIndex;
 }
+
 
 /* Enter / Space を押したときに、いま選んでいるコマンドを実行する
 
@@ -3526,7 +3573,21 @@ onUnmounted(() => {
         <!-- いやいや中 -->
         <div v-else-if="currentEvent === 'tantrum'" class="scene" key="tantrum">
           <section class="stage">
-            <article class="place-card place-card--tantrum">
+            <!-- いやいやタイムのカード
+                 place-card--tantrum        … 赤っぽい見た目（いつも付ける）
+                 place-card--tantrum-active … ゆっくりバウンスする動き（いやいや中だけ付ける）
+
+                 見た目と動きでクラスを分けているので、
+                 いやいやが終わっても、カードの色はそのままで動きだけが止まる
+
+                 ※ 付け外しの条件は currentEvent ではなく isTantrum
+                   だっこ・おやつ・待つ成功で いやいや が終わると、
+                   画面は 'tantrum' のままでも isTantrum が false になるので、
+                   その瞬間にバウンスが止まる -->
+            <article
+              class="place-card place-card--tantrum"
+              :class="{ 'place-card--tantrum-active': isTantrum }"
+            >
               <h2 class="place-card__title">いやいやタイム！</h2>
 
               <p class="place-card__text">
@@ -4999,6 +5060,16 @@ onUnmounted(() => {
   color: #c9412f;
 }
 
+/* いやいやが続いているあいだだけ、カードをゆっくり上下にバウンスさせる
+   「まだ こうちゃん は いやいや中ですよ」を、ずっと伝えつづけるための動き
+
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定でここも自動的に止まるので、
+     ここに特別な書きたしは要らない */
+.place-card--tantrum-active {
+  animation: tantrum-bounce 1.2s ease-in-out infinite;
+}
+
 /* 突然イベント（急に起きた出来事のカード）
    ふだんの場所は紺色の線だが、こちらは金色にして
    「いつもと違うことが起きた」と分かるようにしている
@@ -5564,6 +5635,27 @@ onUnmounted(() => {
 
   75% {
     transform: translateX(5px);
+  }
+}
+
+/* --- いやいや継続中：いやいやタイムのカードをゆっくり上下にバウンスさせる ---
+
+   上の shake とは役割がちがう
+   ・shake          … 「いやいや発生！」の“瞬間”の演出（左右に2回だけ揺れて止まる）
+   ・tantrum-bounce … 「まだいやいや中ですよ」の“継続”の演出（終わるまでくり返す）
+
+   くり返し動きつづけるので、はねる高さは6pxだけ、
+   1.2秒かけてゆっくり1回、にしている
+   （速く大きく animation させると、読んでいる文字が目で追えなくなるため）
+*/
+@keyframes tantrum-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-6px);
   }
 }
 
