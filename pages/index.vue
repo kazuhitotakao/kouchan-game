@@ -559,10 +559,23 @@ function changeClass(statusName: string, value: number) {
   return value > 0 ? 'change--good' : 'change--bad';
 }
 
-/* 中央の「今回の変化」に並べる6項目
+/* 中央の「今回の変化」を、誰の情報かで3つのまとまりに分けたもの
 
-   1行につき、次の4つを持たせている
-   ・label      … 「こうちゃんの体力」などの項目名
+   ① こうちゃん … 体力・機嫌
+   ② 親         … 体力・余裕
+   ③ おでかけ   … ポイント・時間
+
+   「こうちゃんの体力」なのか「親の体力」なのかを探さなくてよいように、
+   同じ人のステータスを1つの枠にまとめている
+   グループの見出しが名前を言ってくれるので、中のラベルは「体力」だけでよい
+
+   1グループは { name, groupClass, rows } の3つを持つ
+   ・name       … 「こうちゃん」などの見出し
+   ・groupClass … 枠の色を変えるためのCSSクラス名
+   ・rows       … その人のステータス2つ
+
+   rows の1行ぶんは、次の5つ
+   ・label      … 「体力」などの項目名
    ・before     … 行動する前の値（statusBefore に控えてあるもの）
    ・after      … 行動したあとの値（いま画面に出ている現在値そのもの）
    ・changeText … 「+6」「-18」の形にした増減
@@ -578,7 +591,7 @@ function changeClass(statusName: string, value: number) {
 
    ※ この computed は表示を作るだけで、ゲームの値は書きかえない
 */
-const changeRows = computed(() => {
+const changeGroups = computed(() => {
   const changes = statusChanges.value;
 
   // まだ今回の行動結果がないときは、からっぽにする
@@ -589,60 +602,72 @@ const changeRows = computed(() => {
   // 毎回 statusBefore.value と書かなくてよいように、行動前の控えを取り出しておく
   const before = statusBefore.value;
 
+  /* 1行ぶんの表示を作る小さな道具
+     同じ書きかたを6回くり返さなくてよくなる
+
+     label      … 画面に出す名前（グループ見出しがあるので「体力」だけでよい）
+     statusName … 色を決めるために changeClass() へ渡す中の名前
+     beforeValue … 行動する前の値
+     afterValue  … 行動したあとの値（0〜100に丸めたあとの、いま画面に出ている値）
+     amount      … 今回の増減
+  */
+  const makeRow = (label: string, statusName: string, beforeValue: number, afterValue: number, amount: number) => ({
+    label,
+    before: String(beforeValue),
+    after: String(afterValue),
+    changeText: formatChange(amount),
+    className: changeClass(statusName, amount),
+  });
+
   return [
     {
-      label: 'こうちゃんの体力',
-      before: String(before.childEnergy),
-      after: String(childEnergy.value),
-      changeText: formatChange(changes.childEnergy),
-      className: changeClass('childEnergy', changes.childEnergy),
+      // 見出しがあるので、中のラベルは「体力」「機嫌」だけでよい
+      name: 'こうちゃん',
+      groupClass: 'change-group--child',
+      rows: [
+        makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy),
+        makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood),
+      ],
     },
     {
-      label: 'こうちゃんの機嫌',
-      before: String(before.childMood),
-      after: String(childMood.value),
-      changeText: formatChange(changes.childMood),
-      className: changeClass('childMood', changes.childMood),
+      name: '親',
+      groupClass: 'change-group--parent',
+      rows: [
+        makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy),
+        makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm),
+      ],
     },
     {
-      label: 'おでかけポイント',
-      before: String(before.outingPoint),
-      after: String(outingPoint.value),
-      changeText: formatChange(changes.outingPoint),
-      className: changeClass('outingPoint', changes.outingPoint),
-    },
-    {
-      label: '親の体力',
-      before: String(before.parentEnergy),
-      after: String(parentEnergy.value),
-      changeText: formatChange(changes.parentEnergy),
-      className: changeClass('parentEnergy', changes.parentEnergy),
-    },
-    {
-      label: '親の余裕',
-      before: String(before.parentCalm),
-      after: String(parentCalm.value),
-      changeText: formatChange(changes.parentCalm),
-      className: changeClass('parentCalm', changes.parentCalm),
-    },
-    {
-      // 時間だけは数ではなく時計の形で出す
-      // before は「分」で控えてあるので formatMinutesToTime() で 09:00 の形に直し、
-      // after は画面の時計と同じ currentTime をそのまま使う
-      label: '時間',
-      before: removeLeadingZero(formatMinutesToTime(before.minutes)),
-      after: removeLeadingZero(currentTime.value),
-      changeText: `${formatChange(changes.minutes)}分`,
-      className: changeClass('minutes', changes.minutes),
+      // こうちゃんでも親でもない「おでかけ全体」の情報
+      name: 'おでかけ',
+      groupClass: 'change-group--outing',
+      rows: [
+        makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint),
+        {
+          // 時間だけは数ではなく時計の形で出すので、makeRow は使わない
+          // before は「分」で控えてあるので formatMinutesToTime() で 09:00 の形に直し、
+          // after は画面の時計と同じ currentTime をそのまま使う
+          label: '時間',
+          before: removeLeadingZero(formatMinutesToTime(before.minutes)),
+          after: removeLeadingZero(currentTime.value),
+          changeText: `${formatChange(changes.minutes)}分`,
+          className: changeClass('minutes', changes.minutes),
+        },
+      ],
     },
   ];
 });
 
 /* GAME OVER画面に出す「最後の行動」の内訳
-   中央の changeRows とちがって「行動前 → 行動後」も一緒に出すので、
-   親の体力 10 → 0（-15） のように、なぜ限界になったのかが分かる
+
+   中央の changeGroups と同じく、こうちゃん／親／おでかけ の3つに分けている
+   「親の体力 10 → 0（-15）」のように行動前の値も出すので、
+   どのステータスが限界になってGAME OVERになったのかが分かる
+
+   ※ こちらには時間を入れていないので、おでかけのまとまりは
+     おでかけポイントの1つだけになる
 */
-const lastActionRows = computed(() => {
+const lastActionGroups = computed(() => {
   const changes = statusChanges.value;
 
   // 直前の行動の結果がないときは、からっぽにする
@@ -652,12 +677,36 @@ const lastActionRows = computed(() => {
 
   const before = statusBefore.value;
 
+  // 中央の changeGroups と同じ作りかた（1行ぶんを作る道具）
+  const makeRow = (label: string, statusName: string, beforeValue: number, afterValue: number, amount: number) => ({
+    label,
+    before: beforeValue,
+    after: afterValue,
+    text: formatChange(amount),
+    className: changeClass(statusName, amount),
+  });
+
   return [
-    { label: 'こうちゃんの体力', before: before.childEnergy, after: childEnergy.value, text: formatChange(changes.childEnergy), className: changeClass('childEnergy', changes.childEnergy) },
-    { label: 'こうちゃんの機嫌', before: before.childMood, after: childMood.value, text: formatChange(changes.childMood), className: changeClass('childMood', changes.childMood) },
-    { label: 'おでかけポイント', before: before.outingPoint, after: outingPoint.value, text: formatChange(changes.outingPoint), className: changeClass('outingPoint', changes.outingPoint) },
-    { label: '親の体力', before: before.parentEnergy, after: parentEnergy.value, text: formatChange(changes.parentEnergy), className: changeClass('parentEnergy', changes.parentEnergy) },
-    { label: '親の余裕', before: before.parentCalm, after: parentCalm.value, text: formatChange(changes.parentCalm), className: changeClass('parentCalm', changes.parentCalm) },
+    {
+      name: 'こうちゃん',
+      rows: [
+        makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy),
+        makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood),
+      ],
+    },
+    {
+      name: '親',
+      rows: [
+        makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy),
+        makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm),
+      ],
+    },
+    {
+      name: 'おでかけ',
+      rows: [
+        makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint),
+      ],
+    },
   ];
 });
 
@@ -2773,13 +2822,20 @@ onUnmounted(() => {
           </span>
         </div>
 
-        <ul class="status-list">
-          <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
-            <span class="status-item__label">
-              <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
-              こうちゃんの体力
-            </span>
-            <span class="status-item__value">{{ childEnergy }}</span>
+        <!-- ゲージを「こうちゃん」と「親」の2つのまとまりに分ける
+             見出し＋うすい背景だけでグループに見せているので、
+             増える高さは見出し1行ぶんだけ（1280×720でも一画面に収まる） -->
+        <div class="status-groups">
+          <section class="status-group status-group--child">
+            <p class="status-group__name">こうちゃん</p>
+
+            <ul class="status-list">
+              <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
+                <span class="status-item__label">
+                  <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
+                  体力
+                </span>
+                <span class="status-item__value">{{ childEnergy }}</span>
             <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
               {{ formatChange(statusChanges.childEnergy) }}
             </span>
@@ -2792,11 +2848,11 @@ onUnmounted(() => {
               <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
               <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
             </span>
-          </li>
+              </li>
 
-          <li class="status-item">
-            <span class="status-item__label">こうちゃんの機嫌</span>
-            <span class="status-item__value">{{ childMood }}</span>
+              <li class="status-item">
+                <span class="status-item__label">機嫌</span>
+                <span class="status-item__value">{{ childMood }}</span>
             <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
               {{ formatChange(statusChanges.childMood) }}
             </span>
@@ -2806,14 +2862,20 @@ onUnmounted(() => {
               <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
               <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
             </span>
-          </li>
+              </li>
+            </ul>
+          </section>
 
-          <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
-            <span class="status-item__label">
-              <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
-              親の体力
-            </span>
-            <span class="status-item__value">{{ parentEnergy }}</span>
+          <section class="status-group status-group--parent">
+            <p class="status-group__name">親</p>
+
+            <ul class="status-list">
+              <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
+                <span class="status-item__label">
+                  <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
+                  体力
+                </span>
+                <span class="status-item__value">{{ parentEnergy }}</span>
             <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
               {{ formatChange(statusChanges.parentEnergy) }}
             </span>
@@ -2823,14 +2885,14 @@ onUnmounted(() => {
               <!-- 目もり：あぶないライン（親の体力20以下） -->
               <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
             </span>
-          </li>
+              </li>
 
-          <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
-            <span class="status-item__label">
-              <span v-if="isParentCalmDanger" class="status-item__alert">⚠</span>
-              親の余裕
-            </span>
-            <span class="status-item__value">{{ parentCalm }}</span>
+              <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
+                <span class="status-item__label">
+                  <span v-if="isParentCalmDanger" class="status-item__alert">⚠</span>
+                  余裕
+                </span>
+                <span class="status-item__value">{{ parentCalm }}</span>
             <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
               {{ formatChange(statusChanges.parentCalm) }}
             </span>
@@ -2840,8 +2902,10 @@ onUnmounted(() => {
               <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
               <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
             </span>
-          </li>
-        </ul>
+              </li>
+            </ul>
+          </section>
+        </div>
 
         <!-- ゲージの目もりの説明 -->
         <p class="gauge-legend">
@@ -3015,21 +3079,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3117,21 +3189,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3218,21 +3298,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3319,21 +3407,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3420,21 +3516,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3521,21 +3625,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3639,21 +3751,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3738,21 +3858,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3831,21 +3959,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -3924,21 +4060,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -4017,21 +4161,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -4120,21 +4272,29 @@ onUnmounted(() => {
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
 
-                <ul class="change-list">
-                  <li v-for="row in changeRows" :key="row.label" class="change-item">
-                    <span class="change-item__label">{{ row.label }}</span>
+                <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                     外側のループでグループ、内側のループでその中の項目を出す -->
+                <div class="change-groups">
+                  <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                    <p class="change-group__name">{{ group.name }}</p>
 
-                    <!-- 行動前 → 行動後
-                         「いまいくつになったか」がすぐ分かるように、
-                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                    <span class="change-item__flow">
-                      <span class="change-item__before">{{ row.before }}</span>
-                      <span class="change-item__arrow">→</span>
-                      <span class="change-item__after">{{ row.after }}</span>
-                    </span>
-                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                  </li>
-                </ul>
+                    <ul class="change-list">
+                      <li v-for="row in group.rows" :key="row.label" class="change-item">
+                        <span class="change-item__label">{{ row.label }}</span>
+
+                        <!-- 行動前 → 行動後
+                             「いまいくつになったか」がすぐ分かるように、
+                             行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                        <span class="change-item__flow">
+                          <span class="change-item__before">{{ row.before }}</span>
+                          <span class="change-item__arrow">→</span>
+                          <span class="change-item__after">{{ row.after }}</span>
+                        </span>
+                        <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -4220,29 +4380,40 @@ onUnmounted(() => {
 
                 <ul class="record-list">
                   <li class="record-item">
-                    <span>おでかけポイント</span>
-                    <b>{{ outingPoint }}</b>
+                    <span>こうちゃんの体力</span>
+                    <b>{{ childEnergy }}</b>
                   </li>
-                  <li class="record-item">
-                    <span>親の体力</span>
-                    <b>{{ parentEnergy }}</b>
-                  </li>
+
                   <li class="record-item">
                     <span>こうちゃんの機嫌</span>
                     <b>{{ childMood }}</b>
                   </li>
+
                   <li class="record-item">
-                    <span>こうちゃんの体力</span>
-                    <b>{{ childEnergy }}</b>
+                    <span>親の体力</span>
+                    <b>{{ parentEnergy }}</b>
                   </li>
+
+                  <li class="record-item">
+                    <span>親の余裕</span>
+                    <b>{{ parentCalm }}</b>
+                  </li>
+
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ outingPoint }}</b>
+                  </li>
+
                   <li class="record-item">
                     <span>いやいや発生</span>
                     <b>{{ tantrumCount }}回</b>
                   </li>
+
                   <li class="record-item">
                     <span>探検した場所の数</span>
                     <b>{{ visitedPlaces.length }}か所</b>
                   </li>
+
                   <li class="record-item">
                     <span>帰った時間</span>
                     <b>{{ currentTime }}</b>
@@ -4316,13 +4487,20 @@ onUnmounted(() => {
               <div class="change-box">
                 <p class="change-box__title">この行動での変化</p>
 
-                <ul class="last-action-list">
-                  <li v-for="row in lastActionRows" :key="row.label" class="last-action-item">
-                    <span class="last-action-item__label">{{ row.label }}</span>
-                    <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
-                    <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
-                  </li>
-                </ul>
+                <!-- 中央の「今回の変化」と同じく、誰の情報かで3つに分ける -->
+                <div class="last-action-groups">
+                  <section v-for="group in lastActionGroups" :key="group.name" class="last-action-group">
+                    <p class="last-action-group__name">{{ group.name }}</p>
+
+                    <ul class="last-action-list">
+                      <li v-for="row in group.rows" :key="row.label" class="last-action-item">
+                        <span class="last-action-item__label">{{ row.label }}</span>
+                        <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
+                        <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
+                      </li>
+                    </ul>
+                  </section>
+                </div>
               </div>
             </article>
 
@@ -4333,33 +4511,40 @@ onUnmounted(() => {
 
                 <ul class="record-list">
                   <li class="record-item">
-                    <span>おでかけポイント</span>
-                    <b>{{ outingPoint }}</b>
+                    <span>こうちゃんの体力</span>
+                    <b>{{ childEnergy }}</b>
                   </li>
-                  <li class="record-item">
-                    <span>親の体力</span>
-                    <b>{{ parentEnergy }}</b>
-                  </li>
-                  <li class="record-item">
-                    <span>親の余裕</span>
-                    <b>{{ parentCalm }}</b>
-                  </li>
+
                   <li class="record-item">
                     <span>こうちゃんの機嫌</span>
                     <b>{{ childMood }}</b>
                   </li>
+
                   <li class="record-item">
-                    <span>こうちゃんの体力</span>
-                    <b>{{ childEnergy }}</b>
+                    <span>親の体力</span>
+                    <b>{{ parentEnergy }}</b>
                   </li>
+
+                  <li class="record-item">
+                    <span>親の余裕</span>
+                    <b>{{ parentCalm }}</b>
+                  </li>
+
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ outingPoint }}</b>
+                  </li>
+
                   <li class="record-item">
                     <span>いやいや発生</span>
                     <b>{{ tantrumCount }}回</b>
                   </li>
+
                   <li class="record-item">
                     <span>探検した場所の数</span>
                     <b>{{ visitedPlaces.length }}か所</b>
                   </li>
+
                   <li class="record-item">
                     <span>帰宅時刻</span>
                     <b>{{ currentTime }}</b>
@@ -4622,11 +4807,51 @@ onUnmounted(() => {
   margin-left: 8px;
 }
 
-/* ステータス4項目（横1列） */
-.status-list {
+/* 「こうちゃん」と「親」の2つのまとまりを、左右に並べる場所
+   PCでは 1fr : 1fr なので、左右がぴったり同じ幅になり、
+   ラベル・数字・増減・ゲージの位置が左右対称にそろう */
+.status-groups {
   display: grid;
   grid-area: gauges;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px;
+}
+
+/* ひとつのまとまり（こうちゃん／親）
+   カードを重ねると高さが増えてしまうので、
+   うすい背景と細い枠だけで「ここまでが同じ人」と分かるようにしている */
+.status-group {
+  padding: 3px 10px 5px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 8px;
+}
+
+/* 人の区別は、うすいベージュ と うすい青 の弱い差だけでつける
+   ※ 赤や緑は「増えた・減った」を表す色なので、人の見わけには使わない */
+.status-group--child {
+  background: rgb(255 240 214 / 9%);
+}
+
+.status-group--parent {
+  background: rgb(206 232 247 / 11%);
+}
+
+/* 「こうちゃん」「親」の見出し
+   増える高さはこの1行だけ */
+.status-group__name {
+  margin: 0 0 1px;
+  color: #cfe9f7;
+  font-size: clamp(10.5px, 0.85vw, 12px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+/* まとまりの中の2項目（横に並べる）
+   ここを縦積みにすると上部ステータスの高さが倍になってしまうので、
+   PCでは必ず横に2つ並べる */
+.status-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 14px;
   margin: 0;
   padding: 0;
@@ -5146,10 +5371,51 @@ onUnmounted(() => {
   letter-spacing: 0.1em;
 }
 
-.change-list {
+/* 「今回の変化」を こうちゃん／親／おでかけ の3つに分けて横に並べる場所 */
+.change-groups {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px 10px;
+  gap: 8px;
+}
+
+/* ひとつのまとまり */
+.change-group {
+  padding: 5px 8px 7px;
+  border: 1px solid #f0e2c8;
+  border-radius: 10px;
+}
+
+/* 人の区別は、上部ステータスと同じ うすいベージュ と うすい青 でそろえる
+   ※ 赤や緑は増減の色なので、ここでは使わない */
+.change-group--child {
+  border-color: #efe2c8;
+  background: #fffaf0;
+}
+
+.change-group--parent {
+  border-color: #d9e9f3;
+  background: #f5fbff;
+}
+
+/* おでかけは人ではないので、中立的な紙の色にする */
+.change-group--outing {
+  border-color: #e8e0d2;
+  background: var(--paper);
+}
+
+.change-group__name {
+  margin: 0 0 4px;
+  color: var(--navy);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+/* まとまりの中の項目は、たてに積む（1グループ2つまで） */
+.change-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -5444,10 +5710,25 @@ onUnmounted(() => {
   border-color: #e8b3a8;
 }
 
+/* GAME OVERの「最後の行動」も、こうちゃん／親／おでかけ の3つに分けて横に並べる */
+.last-action-groups {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 18px;
+}
+
+.last-action-group__name {
+  margin: 0 0 2px;
+  color: var(--ink-soft);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
 .last-action-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2px 18px;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -6416,7 +6697,12 @@ onUnmounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .change-list {
+  /* 3グループ横並び → 2列（おでかけが下へ折り返す） */
+  .change-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .last-action-groups {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -6511,7 +6797,17 @@ onUnmounted(() => {
     padding: 18px 16px 14px;
   }
 
-  .change-list {
+  /* こうちゃん → 親 → おでかけ の1列に積む */
+  .change-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .last-action-groups {
+    grid-template-columns: 1fr;
+  }
+
+  /* 上部ステータスも、こうちゃん と 親 を上下に積む */
+  .status-groups {
     grid-template-columns: 1fr;
   }
 
