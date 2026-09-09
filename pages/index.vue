@@ -2434,18 +2434,22 @@ onUnmounted(() => {
    高さを画面いっぱいに固定して、ページ自体はスクロールさせない
    ============================================================ */
 .game {
-  /* 色の設定 */
-  --navy: #23395e;
-  --navy-deep: #182a47;
-  --navy-line: #47679c;
-  --paper: #fffdf5;
-  --ink: #33455c;
-  --ink-soft: #7b8ca1;
-  --gold: #ffc043;
-  --child-energy: #5ac47a;
-  --child-mood: #ffb03a;
-  --parent-energy: #4ea8e6;
-  --parent-stress: #f2705f;
+  /* 色の設定（ふんわりしたパステル配色）
+     こい色は使わず、クレヨンで塗ったような やわらかい色でそろえている
+     ※ 上部ステータスの文字は白なので、下地の色は
+       白い文字が読める明るさ（コントラスト4.5以上）までにとどめている
+  */
+  --navy: #2a768f; /* ふかいそらいろ（上部バー・見出し） */
+  --navy-deep: #226981;
+  --navy-line: #86c6dd;
+  --paper: #fffdf9; /* カードの紙 */
+  --ink: #4e5860; /* 文字（まっ黒ではなく、やわらかい すみあお） */
+  --ink-soft: #8d949b;
+  --gold: #ffd166; /* パステルの黄色 */
+  --child-energy: #96dfc4; /* ミント */
+  --child-mood: #ffd98f; /* バターイエロー */
+  --parent-energy: #93cff5; /* そらいろ */
+  --parent-stress: #ffa3a3; /* さんご */
 
   /* ゲージの目もり（しきい値）の色
      ゲージの中身（緑・オレンジ・青・赤）のどれに重なっても見えるように、
@@ -2459,10 +2463,10 @@ onUnmounted(() => {
   --line-danger: #000000;
 
   /* 増減表示の色（中央カード用と、暗い上部ステータス用） */
-  --good: #1f8a4c;
-  --bad: #c9412f;
-  --good-light: #7fe0a1;
-  --bad-light: #ff9d8c;
+  --good: #2f9e63;
+  --bad: #d55a4b;
+  --good-light: #b9f2cd;
+  --bad-light: #ffc6bd;
 
   /* 各エリアの横幅の基準 */
   --frame: 1180px;
@@ -2476,7 +2480,7 @@ onUnmounted(() => {
   height: 100dvh;
   overflow: hidden;
   margin: 0 auto;
-  background: linear-gradient(180deg, #8ed2f0 0%, #cfe8bf 42%, #f4f7e8 100%);
+  background: linear-gradient(180deg, #d6f0fb 0%, #e8f6ee 45%, #fffdf2 100%);
   color: var(--ink);
   font-family:
     system-ui,
@@ -2487,7 +2491,7 @@ onUnmounted(() => {
     sans-serif;
   font-size: 16px;
   line-height: 1.7;
-  box-shadow: 0 0 60px rgb(0 0 0 / 55%);
+  box-shadow: 0 0 60px rgb(42 118 143 / 35%);
 }
 
 .title-screen,
@@ -2596,7 +2600,7 @@ onUnmounted(() => {
 }
 
 .status-area__title {
-  color: #dbe8fa;
+  color: #eef9ff;
   /* clamp(いちばん小さいとき, 画面幅に合わせた大きさ, いちばん大きいとき)
      画面が広いほど大きく、せまい画面でも小さくなりすぎないようにする書き方
      1.15vw ＝ 画面の横幅の1.15%（1280pxの画面なら約14.7px） */
@@ -2619,7 +2623,7 @@ onUnmounted(() => {
 }
 
 .status-clock__limit {
-  color: #a9bedd;
+  color: #daeffb;
   font-size: clamp(13px, 1vw, 15px);
 }
 
@@ -2665,7 +2669,7 @@ onUnmounted(() => {
 .status-item__label {
   grid-column: 1 / -1;
   overflow: hidden;
-  color: #cfe0f7;
+  color: #eaf7ff;
   font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.5;
   text-overflow: ellipsis;
@@ -2706,7 +2710,7 @@ onUnmounted(() => {
 }
 
 .status-change.change--neutral {
-  color: #b8c9e2;
+  color: #daeffb;
 }
 
 /* 危険な状態のステータス（GAME OVERが近い）
@@ -2728,7 +2732,7 @@ onUnmounted(() => {
 }
 
 .status-item--danger .status-item__value {
-  color: #ff9d8c;
+  color: #ffd2c9;
 }
 
 /* 危険なゲージは枠を付けて強調する（outline は場所を取らない） */
@@ -2750,7 +2754,7 @@ onUnmounted(() => {
   height: 10px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgb(0 0 0 / 32%);
+  background: rgb(16 52 70 / 26%);
 }
 
 /* ゲージのしきい値を示す縦線（目もり）
@@ -2816,7 +2820,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 2px 16px;
   margin: 0;
-  color: #a9bedd;
+  color: #daeffb;
   font-size: clamp(11.5px, 0.9vw, 13px);
   line-height: 1.4;
 }
@@ -2892,7 +2896,7 @@ onUnmounted(() => {
 }
 
 .pill--snack b {
-  color: #ffd9a0;
+  color: #ffe1b0;
 }
 
 /* 見つけたもの（横1列のチップ） */
@@ -2905,18 +2909,18 @@ onUnmounted(() => {
   overflow-y: auto;
   padding: 7px 14px;
   border-radius: 8px;
-  background: rgb(0 0 0 / 22%);
+  background: rgb(16 52 70 / 20%);
 }
 
 .status-found__label {
   flex: none;
-  color: #cfe0f7;
+  color: #eaf7ff;
   font-size: clamp(13px, 1.05vw, 15px);
   white-space: nowrap;
 }
 
 .status-found__empty {
-  color: #a3b7d6;
+  color: #bfe2f0;
   font-size: clamp(13px, 1vw, 15px);
 }
 
@@ -2932,8 +2936,8 @@ onUnmounted(() => {
 .status-found__item {
   padding: 3px 12px;
   border-radius: 999px;
-  background: #fef3d6;
-  color: #6a4a10;
+  background: #fff3cf;
+  color: #7a5410;
   font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.6;
 }
@@ -3037,14 +3041,14 @@ onUnmounted(() => {
 
 /* 秘密の場所 */
 .place-card--secret {
-  border-color: #d9c8f2;
-  border-left-color: #7a4fc0;
+  border-color: #e6dbfa;
+  border-left-color: #8f6ad4;
   background: #f9f4ff;
 }
 
 .place-card--secret .place-card__title,
 .place-card--secret .place-card__subtitle {
-  color: #6b3fae;
+  color: #7f5cc8;
 }
 
 /* いやいや中 */
@@ -3063,7 +3067,7 @@ onUnmounted(() => {
   position: relative;
   animation: result-in 0.3s ease-out;
   padding: 26px 28px 22px;
-  border: 2px dashed #e8c98a;
+  border: 2px dashed #f2dcae;
   border-radius: 14px;
   background: #fffaeb;
 }
@@ -3093,7 +3097,7 @@ onUnmounted(() => {
 .change-box {
   margin-top: 16px;
   padding-top: 14px;
-  border-top: 1px dashed #e8c98a;
+  border-top: 1px dashed #f2dcae;
 }
 
 .change-box__title {
@@ -3119,7 +3123,7 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
   padding: 3px 12px;
-  border: 1px solid #f0e0b8;
+  border: 1px solid #f7ead0;
   border-radius: 8px;
   background: #fff;
   line-height: 1.6;
@@ -3246,7 +3250,7 @@ onUnmounted(() => {
   align-items: baseline;
   column-gap: 10px;
   padding: 3px 0;
-  border-bottom: 1px dotted #e5dcc6;
+  border-bottom: 1px dotted #f0e7d8;
   font-size: 13.5px;
 }
 
@@ -3346,7 +3350,7 @@ onUnmounted(() => {
 
 .found-list__item {
   padding: 3px 14px;
-  border: 1px solid #ecd6a4;
+  border: 1px solid #f5e2be;
   border-radius: 999px;
   background: #fff6e0;
   color: #6a4a10;
@@ -3472,7 +3476,7 @@ onUnmounted(() => {
   gap: 6px 10px;
   margin: 0 0 12px;
   padding: 8px 14px;
-  border: 1px solid #ecd6a4;
+  border: 1px solid #f5e2be;
   border-radius: 10px;
   background: #fff6e0;
   animation: found-in 0.4s ease-out 0.2s backwards;
@@ -3610,7 +3614,7 @@ onUnmounted(() => {
   margin: 0 0 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--navy-line);
-  color: #cfe0f7;
+  color: #dcf0f9;
   font-size: 12px;
   letter-spacing: 0.1em;
 }
@@ -3705,7 +3709,7 @@ onUnmounted(() => {
 .command-box__note {
   margin: 0;
   padding: 6px 10px 6px 28px;
-  color: #9db2d2;
+  color: #b8dfef;
   font-size: 13px;
   line-height: 1.7;
 }
@@ -3731,7 +3735,7 @@ onUnmounted(() => {
 .command__label {
   grid-column: 1 / -1;
   margin: 0;
-  color: #cfe0f7;
+  color: #dcf0f9;
   font-size: 12px;
   letter-spacing: 0.1em;
 }
@@ -3742,7 +3746,7 @@ onUnmounted(() => {
   padding: 9px 14px;
   border: 1px dashed var(--navy-line);
   border-radius: 10px;
-  color: #9db2d2;
+  color: #b8dfef;
   font-size: 13px;
 }
 
@@ -3859,7 +3863,7 @@ onUnmounted(() => {
   grid-column: 1 / -1;
   justify-self: center;
   max-width: 380px;
-  border-color: #e0a521;
+  border-color: #e8b23c;
   background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
   color: #4a3208;
 }
@@ -3872,8 +3876,8 @@ onUnmounted(() => {
    大きさと形はほかの場所のボタンとそろえ、ほかの場所の続きに並べる
    目立たせるのは色（紫）だけにする */
 .cmd--secret {
-  border-color: #6b3fae;
-  background: linear-gradient(180deg, #a97ce8 0%, #7a4fc0 100%);
+  border-color: #7f5cc8;
+  background: linear-gradient(180deg, #bd9bef 0%, #8f6ad4 100%);
   color: #fff;
 }
 
@@ -3908,7 +3912,7 @@ onUnmounted(() => {
 .cmd--start {
   justify-content: center;
   padding: 16px 24px;
-  border-color: #e0a521;
+  border-color: #e8b23c;
   background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
   color: #4a3208;
   font-size: 18px;
