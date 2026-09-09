@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-const gameTitle: string = 'こうちゃんといっしょ！';
+const gameTitle: string = 'こうちゃんの大冒険';
 
 const gameStarted = ref(false);
 
@@ -163,6 +163,17 @@ const isCommandKeyboardActive = computed(() => {
   return true;
 });
 
+/* いま「いやいやが続いている状態」かどうか
+   ・いやいやタイムの画面にいる（currentEvent === 'tantrum'）
+   ・まだ isTantrum が true（＝なだめられていない）
+
+   「少し待ってみる」に失敗したときは、結果メッセージを出したまま
+   この状態になるので、そのままもう一度コマンドを選べるようにする
+   ※ GAME OVERになったときは currentEvent が 'gameOver' に変わるため、
+     ここは自動的に false になり、GAME OVER画面のほうが優先される
+*/
+const isTantrumUnsolved = computed(() => currentEvent.value === 'tantrum' && isTantrum.value);
+
 /* いま画面に出ているコマンドの数
    ↑↓キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
 */
@@ -173,14 +184,17 @@ const commandCount = computed(() => {
     return canEnterSecretSpot.value ? 7 : 6;
   }
 
+  // いやいやが続いているあいだは、おやつが残っていれば3つ、食べきっていれば2つ
+  // 「少し待ってみる」に失敗して結果メッセージが出ているときも、
+  // いやいやはまだ終わっていないので、この3つ（2つ）から選び直す
+  // ※ 下の「結果表示中は1つ」より先に判定するのがポイント
+  if (isTantrumUnsolved.value) {
+    return snackLeft.value > 0 ? 3 : 2;
+  }
+
   // 結果表示中は「次の場所を選ぶ」の1つだけ
   if (resultMessage.value) {
     return 1;
-  }
-
-  // いやいやタイムは、おやつが残っていれば3つ、食べきっていれば2つ
-  if (currentEvent.value === 'tantrum') {
-    return snackLeft.value > 0 ? 3 : 2;
   }
 
   // それ以外の場所は「行動2つ ＋ べつの場所へ行く」で3つ
@@ -193,6 +207,15 @@ const commandCount = computed(() => {
    1つくり上がって2番目（＝1）になる
 */
 const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
+
+/* いやいやタイムの「待つ」コマンドに出す文字
+   1回目は「少し待ってみる」
+   待つことに失敗して2回目以降になったときは「もう少し待ってみる」
+
+   いやいやが続いたまま結果メッセージが出ている＝待つことに失敗した直後、
+   という意味なので、新しい ref を増やさなくても区別できる
+*/
+const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し待ってみる' : '少し待ってみる'));
 
 /* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
    秘密の場所が出ていれば7番目（＝6）
@@ -894,7 +917,7 @@ function hugChild() {
   saveStatusChanges();
   fixAllStatus();
 
-  // だっこは親の体力を15も使うので、残りが少ないとここでGAME OVERになる
+  // だっこは親の体力を16も使うので、残りが少ないとここでGAME OVERになる
   checkGameOver();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
@@ -929,7 +952,14 @@ function giveSnack() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 少し待ってみる */
+/* ③ 少し待ってみる
+   だっこ・おやつとちがって、これだけは失敗することがある
+   ・60%（0.6）… 落ち着いて、いやいや終了
+   ・40%       … まだ落ち着かないので、いやいやが続く
+
+   成功しても失敗しても、下のステータスの増減と時間（15分）は毎回発生する
+   ＝「もう一度待つか、だっこするか、おやつを使うか」を考える場面になる
+*/
 function waitCalmly() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -940,18 +970,32 @@ function waitCalmly() {
   parentStress.value += 14;
   addMinutes(15);
 
-  isTantrum.value = false;
+  // 0以上1未満のランダムな数を出して、0.6より小さければ成功（＝60%）
+  const calmSuccess = Math.random() < 0.6;
 
-  resultMessage.value = 'となりにしゃがんで待ちました。ときどきこちらをちらっと見ながら、泣き声は少しずつ小さくなっていきます。まだ少しだけごきげんななめです。';
+  if (calmSuccess) {
+    // 落ち着いてくれたので、いやいや終了
+    isTantrum.value = false;
+
+    resultMessage.value = 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
+  } else {
+    // 失敗したときは isTantrum を true のままにしておく（false にはしない）
+    // ここでは checkTantrum() を呼ばない
+    // 新しいいやいやが起きたのではなく、同じいやいやが続いているだけなので、
+    // tantrumCount も増やさない
+    resultMessage.value = 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
+  }
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
 
-  // 待つのはイライラ度が8ふえるので、たまっているとここでGAME OVERになる
+  // 待つのはイライラ度が14ふえるので、たまっているとここでGAME OVERになる
+  // ※ GAME OVERになると currentEvent が 'gameOver' に変わるので、
+  //   いやいやが続いていてもGAME OVER画面のほうが優先される
   checkGameOver();
 
-  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  // 失敗したときも、すぐ次のコマンドを選べるように一番上（0＝だっこ）へ戻す
   selectedCommandIndex.value = 0;
 }
 
@@ -1213,7 +1257,9 @@ function moveEntranceDown() {
 */
 function runSelectedCommand() {
   // 結果表示中は「次の場所を選ぶ」しか出ていないので、それを実行する
-  if (resultMessage.value) {
+  // ただし「少し待ってみる」に失敗していやいやが続いているときは、
+  // 画面に出ているのは いやいや のコマンドなので、ここでは進めない
+  if (resultMessage.value && !isTantrumUnsolved.value) {
     goToNextPlace();
     return;
   }
@@ -1465,23 +1511,19 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!gameStarted" class="title-screen">
       <div class="title-card">
-        <p class="title-card__badge">こうえん たんけん ゲーム</p>
-
         <h1 class="title-card__name">{{ gameTitle }}</h1>
-
-        <p class="title-card__lead">こうちゃんといっしょに、公園をたんけんしよう！</p>
 
         <div class="title-card__rule">
           <p>
-            タイムリミットはお昼の12:00。
+            探検できるのは3時間。タイムリミットはお昼の12:00です。
             <br />
-            それまでにいろいろな場所をまわって、公園の出口まで帰ってこよう！
+            それまでにいろいろな場所をまわって、公園の出口を目指そう！
           </p>
 
           <p>
-            はじめて行く場所ほど、おでかけポイントをたくさんもらえます。
+            はじめて行く場所では、おでかけポイントをたくさんもらえます。
             <br />
-            2回目からは半分になりますが、それでもポイントは増やせます。
+            2回目からはもらえるポイントが半分になります。
             <br />
             こうちゃんと親の体力にも気をつけながら、たくさん探検してみよう！
           </p>
@@ -1513,9 +1555,14 @@ onUnmounted(() => {
 
         <ul class="status-list">
           <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
-            <span class="status-item__label"><span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>こうちゃんの体力</span>
+            <span class="status-item__label">
+              <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
+              こうちゃんの体力
+            </span>
             <span class="status-item__value">{{ childEnergy }}</span>
-            <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">{{ formatChange(statusChanges.childEnergy) }}</span>
+            <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
+              {{ formatChange(statusChanges.childEnergy) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
             </span>
@@ -1524,25 +1571,37 @@ onUnmounted(() => {
           <li class="status-item">
             <span class="status-item__label">こうちゃんの機嫌</span>
             <span class="status-item__value">{{ childMood }}</span>
-            <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">{{ formatChange(statusChanges.childMood) }}</span>
+            <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
+              {{ formatChange(statusChanges.childMood) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
             </span>
           </li>
 
           <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
-            <span class="status-item__label"><span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>親の体力</span>
+            <span class="status-item__label">
+              <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
+              親の体力
+            </span>
             <span class="status-item__value">{{ parentEnergy }}</span>
-            <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">{{ formatChange(statusChanges.parentEnergy) }}</span>
+            <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
+              {{ formatChange(statusChanges.parentEnergy) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
             </span>
           </li>
 
           <li class="status-item" :class="{ 'status-item--danger': isParentStressDanger }">
-            <span class="status-item__label"><span v-if="isParentStressDanger" class="status-item__alert">⚠</span>親のイライラ度</span>
+            <span class="status-item__label">
+              <span v-if="isParentStressDanger" class="status-item__alert">⚠</span>
+              親のイライラ度
+            </span>
             <span class="status-item__value">{{ parentStress }}</span>
-            <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">{{ formatChange(statusChanges.parentStress) }}</span>
+            <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">
+              {{ formatChange(statusChanges.parentStress) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-stress" :style="{ width: parentStress + '%' }"></span>
             </span>
@@ -1550,9 +1609,19 @@ onUnmounted(() => {
         </ul>
 
         <div class="status-pills">
-          <span class="pill pill--point">おでかけポイント<b>{{ outingPoint }}</b><span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">{{ formatChange(statusChanges.outingPoint) }}</span></span>
+          <span class="pill pill--point">
+            おでかけポイント
+            <b>{{ outingPoint }}</b>
+            <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
+              {{ formatChange(statusChanges.outingPoint) }}
+            </span>
+          </span>
 
-          <span class="pill pill--snack">おやつ残り<b>{{ snackLeft }}</b>個</span>
+          <span class="pill pill--snack">
+            おやつ残り
+            <b>{{ snackLeft }}</b>
+            個
+          </span>
         </div>
 
         <div class="status-found">
@@ -1690,7 +1759,11 @@ onUnmounted(() => {
                   <span class="command-box__text">下で見守る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
@@ -1753,7 +1826,11 @@ onUnmounted(() => {
                   <span class="command-box__text">ベンチから見守る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
@@ -1816,7 +1893,11 @@ onUnmounted(() => {
                   <span class="command-box__text">木かげで少し休む</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
@@ -1879,7 +1960,11 @@ onUnmounted(() => {
                   <span class="command-box__text">少し離れて見る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
@@ -1942,7 +2027,11 @@ onUnmounted(() => {
                   <span class="command-box__text">ゆっくり歩いてのぼる</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
@@ -2005,7 +2094,11 @@ onUnmounted(() => {
                   <span class="command-box__text">二人で景色をながめる</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
@@ -2025,14 +2118,17 @@ onUnmounted(() => {
             <article class="place-card place-card--tantrum">
               <h2 class="place-card__title">いやいやタイム！</h2>
 
-              <p class="place-card__text">こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。</p>
+              <p class="place-card__text">
+                こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
+              </p>
             </article>
 
             <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
               <h3 class="result-card__title">結果</h3>
 
               <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+              <!-- 待つことに失敗して、まだいやいやが続いているときに出す -->
+              <p v-if="isTantrum" class="result-alert">まだ いやいや は続いています…</p>
 
               <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
               <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -2057,7 +2153,8 @@ onUnmounted(() => {
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
-              <template v-if="!resultMessage">
+              <!-- いやいやが続いているあいだは、結果が出ていてもコマンドを出しつづける -->
+              <template v-if="isTantrumUnsolved">
                 <p class="command-box__label">どうする？</p>
 
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
@@ -2071,8 +2168,12 @@ onUnmounted(() => {
 
                 <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }" @click="waitCalmly" @mouseenter="selectedCommandIndex = waitCommandIndex">
-                  <span class="command-box__text">少し待ってみる</span>
+                <button
+                  class="command-box__item"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }"
+                  @click="waitCalmly"
+                  @mouseenter="selectedCommandIndex = waitCommandIndex">
+                  <span class="command-box__text">{{ waitCommandLabel }}</span>
                 </button>
               </template>
 
@@ -2108,13 +2209,34 @@ onUnmounted(() => {
                 <h3 class="record-card__title">今日の記録</h3>
 
                 <ul class="record-list">
-                  <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
-                  <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
-                  <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
-                  <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
-                  <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
-                  <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
-                  <li class="record-item"><span>帰った時間</span><b>{{ currentTime }}</b></li>
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ outingPoint }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>親の体力</span>
+                    <b>{{ parentEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの機嫌</span>
+                    <b>{{ childMood }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの体力</span>
+                    <b>{{ childEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>いやいや発生</span>
+                    <b>{{ tantrumCount }}回</b>
+                  </li>
+                  <li class="record-item">
+                    <span>探検した場所の数</span>
+                    <b>{{ visitedPlaces.length }}か所</b>
+                  </li>
+                  <li class="record-item">
+                    <span>帰った時間</span>
+                    <b>{{ currentTime }}</b>
+                  </li>
                 </ul>
               </article>
 
@@ -2175,14 +2297,38 @@ onUnmounted(() => {
                 <h3 class="record-card__title">今日の記録</h3>
 
                 <ul class="record-list">
-                  <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
-                  <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
-                  <li class="record-item"><span>親のイライラ度</span><b>{{ parentStress }}</b></li>
-                  <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
-                  <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
-                  <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
-                  <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
-                  <li class="record-item"><span>帰宅時刻</span><b>{{ currentTime }}</b></li>
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ outingPoint }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>親の体力</span>
+                    <b>{{ parentEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>親のイライラ度</span>
+                    <b>{{ parentStress }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの機嫌</span>
+                    <b>{{ childMood }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの体力</span>
+                    <b>{{ childEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>いやいや発生</span>
+                    <b>{{ tantrumCount }}回</b>
+                  </li>
+                  <li class="record-item">
+                    <span>探検した場所の数</span>
+                    <b>{{ visitedPlaces.length }}か所</b>
+                  </li>
+                  <li class="record-item">
+                    <span>帰宅時刻</span>
+                    <b>{{ currentTime }}</b>
+                  </li>
                 </ul>
               </article>
 
@@ -2259,7 +2405,13 @@ onUnmounted(() => {
   margin: 0 auto;
   background: linear-gradient(180deg, #8ed2f0 0%, #cfe8bf 42%, #f4f7e8 100%);
   color: var(--ink);
-  font-family: system-ui, -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Hiragino Kaku Gothic ProN',
+    'Yu Gothic',
+    Meiryo,
+    sans-serif;
   font-size: 16px;
   line-height: 1.7;
   box-shadow: 0 0 60px rgb(0 0 0 / 55%);
@@ -3029,7 +3181,9 @@ onUnmounted(() => {
    合わせて0.4秒ほどなので、テンポは悪くならない
 */
 .scene-enter-active {
-  transition: opacity 0.24s ease-out, transform 0.24s ease-out;
+  transition:
+    opacity 0.24s ease-out,
+    transform 0.24s ease-out;
 }
 
 .scene-leave-active {
@@ -3429,7 +3583,9 @@ onUnmounted(() => {
   line-height: 1.4;
   text-align: left;
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 /* 選択カーソル「▶」（選ばれていないボタンでは見えない）
