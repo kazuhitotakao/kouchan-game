@@ -61,7 +61,7 @@ const childEnergy = ref(100); // こうちゃんの体力
 const childMood = ref(55); // こうちゃんの機嫌（ぐずりだすライン50のすぐ上からスタート）
 const outingPoint = ref(0); // おでかけポイント
 const parentEnergy = ref(100); // 親の体力
-const parentStress = ref(0); // 親のイライラ度
+const parentCalm = ref(100); // 親の余裕（100 = とても余裕がある、0 = GAME OVER）
 const currentTime = ref('09:00'); // 時間
 
 /* 探検済みの場所
@@ -158,7 +158,7 @@ type StatusChanges = {
   childMood: number;
   outingPoint: number;
   parentEnergy: number;
-  parentStress: number;
+  parentCalm: number;
   minutes: number;
 };
 
@@ -179,7 +179,7 @@ const statusBefore = ref({
   childMood: 0,
   outingPoint: 0,
   parentEnergy: 0,
-  parentStress: 0,
+  parentCalm: 0,
   minutes: 0,
 });
 
@@ -368,8 +368,8 @@ const fussMoodLine = 50;
 /* こうちゃん・親の体力：これ以下はあぶない（GAME OVERが近い） */
 const dangerEnergyLine = 20;
 
-/* 親のイライラ度：これ以上はあぶない（100でGAME OVER） */
-const dangerStressLine = 80;
+/* 親の余裕：これ以下はあぶない（0でGAME OVER） */
+const dangerCalmLine = 20;
 
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
@@ -378,8 +378,8 @@ const dangerStressLine = 80;
 /* 親の体力が20以下 → あと1〜2回の行動で限界 */
 const isParentEnergyDanger = computed(() => parentEnergy.value <= dangerEnergyLine);
 
-/* 親のイライラ度が80以上 → あと少しで100 */
-const isParentStressDanger = computed(() => parentStress.value >= dangerStressLine);
+/* 親の余裕が20以下 → あと少しで0 */
+const isParentCalmDanger = computed(() => parentCalm.value <= dangerCalmLine);
 
 /* こうちゃんの体力が20以下 → 電池切れが近い */
 const isChildEnergyDanger = computed(() => childEnergy.value <= dangerEnergyLine);
@@ -402,8 +402,8 @@ const dangerWarnings = computed(() => {
     warnings.push('⚠ 親の体力が残りわずかです');
   }
 
-  if (isParentStressDanger.value) {
-    warnings.push('⚠ 親のイライラが限界に近づいています');
+  if (isParentCalmDanger.value) {
+    warnings.push('⚠ 親の余裕が残りわずかです');
   }
 
   if (isChildEnergyDanger.value) {
@@ -445,7 +445,7 @@ function fixAllStatus() {
   childEnergy.value = keepInRange(childEnergy.value);
   childMood.value = keepInRange(childMood.value);
   parentEnergy.value = keepInRange(parentEnergy.value);
-  parentStress.value = keepInRange(parentStress.value);
+  parentCalm.value = keepInRange(parentCalm.value);
 }
 
 /* 行動をはじめる前に呼ぶ
@@ -467,7 +467,7 @@ function startStatusChanges() {
     childMood: childMood.value,
     outingPoint: outingPoint.value,
     parentEnergy: parentEnergy.value,
-    parentStress: parentStress.value,
+    parentCalm: parentCalm.value,
     minutes: currentMinutes.value,
   };
 }
@@ -492,7 +492,7 @@ function saveStatusChanges() {
     childMood: childMood.value - statusBefore.value.childMood,
     outingPoint: outingPoint.value - statusBefore.value.outingPoint,
     parentEnergy: parentEnergy.value - statusBefore.value.parentEnergy,
-    parentStress: parentStress.value - statusBefore.value.parentStress,
+    parentCalm: parentCalm.value - statusBefore.value.parentCalm,
     minutes: currentMinutes.value - statusBefore.value.minutes,
   };
 }
@@ -535,9 +535,11 @@ function removeLeadingZero(time: string) {
 
 /* 変化が「良い」「悪い」「変化なし」のどれかを判定して、CSSのクラス名を返す
 
-   ※ 単純に プラス＝良い ではないので注意
-     ・親のイライラ度は、ふえるほど悪い（逆になる）
-     ・時間は、どの行動でも必ずふえるので色はつけない
+   ステータスは4つとも「100に近いほど良い・0に近いほど危ない」でそろえてあるので、
+   判定はとてもシンプルになる
+     ・プラス（ふえた） → 良い変化
+     ・マイナス（減った） → 悪い変化
+   ※ 時間だけは、どの行動でも必ずふえるので色はつけない
 */
 function changeClass(statusName: string, value: number) {
   // 時間は良い・悪いで見ないので、いつも「変化なし」の色にする
@@ -549,12 +551,7 @@ function changeClass(statusName: string, value: number) {
     return 'change--neutral';
   }
 
-  // 親のイライラ度だけは、ふえると悪い変化
-  if (statusName === 'parentStress') {
-    return value > 0 ? 'change--bad' : 'change--good';
-  }
-
-  // それ以外（体力・機嫌・ポイント）は、ふえると良い変化
+  // 体力・機嫌・ポイント・親の余裕は、どれも ふえると良い変化
   return value > 0 ? 'change--good' : 'change--bad';
 }
 
@@ -618,11 +615,11 @@ const changeRows = computed(() => {
       className: changeClass('parentEnergy', changes.parentEnergy),
     },
     {
-      label: '親のイライラ度',
-      before: String(before.parentStress),
-      after: String(parentStress.value),
-      changeText: formatChange(changes.parentStress),
-      className: changeClass('parentStress', changes.parentStress),
+      label: '親の余裕',
+      before: String(before.parentCalm),
+      after: String(parentCalm.value),
+      changeText: formatChange(changes.parentCalm),
+      className: changeClass('parentCalm', changes.parentCalm),
     },
     {
       // 時間だけは数ではなく時計の形で出す
@@ -656,7 +653,7 @@ const lastActionRows = computed(() => {
     { label: 'こうちゃんの機嫌', before: before.childMood, after: childMood.value, text: formatChange(changes.childMood), className: changeClass('childMood', changes.childMood) },
     { label: 'おでかけポイント', before: before.outingPoint, after: outingPoint.value, text: formatChange(changes.outingPoint), className: changeClass('outingPoint', changes.outingPoint) },
     { label: '親の体力', before: before.parentEnergy, after: parentEnergy.value, text: formatChange(changes.parentEnergy), className: changeClass('parentEnergy', changes.parentEnergy) },
-    { label: '親のイライラ度', before: before.parentStress, after: parentStress.value, text: formatChange(changes.parentStress), className: changeClass('parentStress', changes.parentStress) },
+    { label: '親の余裕', before: before.parentCalm, after: parentCalm.value, text: formatChange(changes.parentCalm), className: changeClass('parentCalm', changes.parentCalm) },
   ];
 });
 
@@ -783,9 +780,9 @@ function runRandomEvent() {
 
   // ④ 急に走り出してヒヤッ
   if (eventNumber === 3) {
-    parentStress.value += 10;
+    parentCalm.value -= 10;
     randomEventText.value = 'こうちゃんが急に走り出してヒヤッとしました！';
-    addRandomEventEffect('親のイライラ度', 'parentStress', 10);
+    addRandomEventEffect('親の余裕', 'parentCalm', -10);
     return;
   }
 
@@ -807,9 +804,9 @@ function runRandomEvent() {
 
   // ⑦ 靴がぽろっと脱げる
   if (eventNumber === 6) {
-    parentStress.value += 4;
+    parentCalm.value -= 4;
     randomEventText.value = 'こうちゃんが走っていると、片方の靴がぽろっと脱げてしまいました。ちょっと待って、履きなおします。';
-    addRandomEventEffect('親のイライラ度', 'parentStress', 4);
+    addRandomEventEffect('親の余裕', 'parentCalm', -4);
     return;
   }
 
@@ -817,10 +814,10 @@ function runRandomEvent() {
   //   ここまでの7つに当てはまらなかった＝eventNumber が 7 のとき
   //   2つステータスが動くので、しるしも2つ並べる
   childMood.value += 5;
-  parentStress.value += 3;
+  parentCalm.value -= 3;
   randomEventText.value = 'こうちゃんが水たまりを見つけて大はしゃぎ！楽しそうだけど、親はちょっとヒヤヒヤです。';
   addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
-  addRandomEventEffect('親のイライラ度', 'parentStress', 3);
+  addRandomEventEffect('親の余裕', 'parentCalm', -3);
 }
 
 /* 疲れてくると、だんだん機嫌もわるくなる
@@ -904,7 +901,7 @@ function checkTantrum() {
   tantrumCount.value += 1;
 
   childMood.value -= 15;
-  parentStress.value += 12;
+  parentCalm.value -= 12;
 
   tantrumText.value = 'そのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
 }
@@ -914,7 +911,7 @@ function checkTantrum() {
 
    上から順番に見て、あてはまった時点でGAME OVERが決まる
    ① 親の体力が0以下      → 親がもう動けない
-   ② 親のイライラ度が100以上 → 親の心の余裕がなくなった
+   ② 親の余裕が0以下       → 親の心の余裕がなくなった
    ③ こうちゃんの体力が0以下 → 強制帰宅エンド（だっこで帰る）
 
    ※ 必ず fixAllStatus()（0〜100に丸める処理）のあとに呼ぶこと
@@ -937,9 +934,9 @@ function checkGameOver() {
     return;
   }
 
-  // ② 親のイライラ度が100以上
-  if (parentStress.value >= 100) {
-    gameOverTitle.value = 'イライラ限界！';
+  // ② 親の余裕が0以下
+  if (parentCalm.value <= 0) {
+    gameOverTitle.value = '親の余裕がなくなった！';
     gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
     currentEvent.value = 'gameOver';
     return;
@@ -1013,7 +1010,7 @@ function checkSuddenEvent() {
 
    ⑦を⑥の次に置いているので、
    ランダムイベントの「だっこ！」で親の体力が0になった場合も、
-   いやいや発生でイライラ度が100になった場合も、まとめてGAME OVERになる
+   いやいや発生で親の余裕が0になった場合も、まとめてGAME OVERになる
 
    ③がいやいや判定より前にあるのもポイント
    下がったあとの機嫌でいやいやを判定するので、
@@ -1126,7 +1123,7 @@ function playSlide() {
   childMood.value += 6;
   addOutingPoint('slide', 6);
   parentEnergy.value -= 17;
-  parentStress.value += 6;
+  parentCalm.value -= 6;
   addMinutes(25);
 
   resultMessage.value = 'こうちゃんと一緒にすべりました。大喜びです！';
@@ -1144,7 +1141,7 @@ function watchSlide() {
   childMood.value += 2;
   addOutingPoint('slide', 4);
   parentEnergy.value -= 4;
-  parentStress.value += 2;
+  parentCalm.value -= 2;
   addMinutes(15);
 
   resultMessage.value = '下から見守りました。こうちゃんは楽しそうにすべっています。';
@@ -1163,7 +1160,7 @@ function playSandbox() {
   childMood.value += 5;
   addOutingPoint('sandbox', 6);
   parentEnergy.value -= 14;
-  parentStress.value += 5;
+  parentCalm.value -= 5;
   addMinutes(25);
 
   resultMessage.value = '一緒に大きな山を作りました。こうちゃんは夢中です！';
@@ -1181,7 +1178,7 @@ function watchFromBench() {
   childMood.value += 2;
   addOutingPoint('sandbox', 4);
   parentEnergy.value += 4;
-  parentStress.value += 2;
+  parentCalm.value -= 2;
   addMinutes(20);
 
   resultMessage.value = 'ベンチから見守りました。こうちゃんは楽しそうに遊んでいます。';
@@ -1200,7 +1197,7 @@ function collectAcorns() {
   childMood.value += 6;
   addOutingPoint('acornArea', 8);
   parentEnergy.value -= 12;
-  parentStress.value += 4;
+  parentCalm.value -= 4;
   addMinutes(20);
 
   resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
@@ -1218,7 +1215,7 @@ function takeBreak() {
   childMood.value -= 6;
   addOutingPoint('acornArea', 1);
   parentEnergy.value += 14;
-  parentStress.value -= 10;
+  parentCalm.value += 10;
   addMinutes(20);
 
   resultMessage.value = '木かげで少し休みました。親の体力が回復しました。';
@@ -1237,7 +1234,7 @@ function watchSwansClose() {
   childMood.value += 8;
   addOutingPoint('pond', 9);
   parentEnergy.value -= 16;
-  parentStress.value += 10;
+  parentCalm.value -= 10;
   addMinutes(20);
 
   resultMessage.value = '白鳥を近くで見ました。こうちゃんは大興奮です！';
@@ -1255,7 +1252,7 @@ function watchSwansFar() {
   childMood.value += 2;
   addOutingPoint('pond', 5);
   parentEnergy.value -= 3;
-  parentStress.value += 2;
+  parentCalm.value -= 2;
   addMinutes(15);
 
   resultMessage.value = '少し離れて白鳥を見ました。落ち着いてながめられました。';
@@ -1275,7 +1272,7 @@ function runUpHill() {
   childMood.value += 8;
   addOutingPoint('hill', 11);
   parentEnergy.value -= 21;
-  parentStress.value += 7;
+  parentCalm.value -= 7;
   addMinutes(25);
 
   resultMessage.value = '丘のてっぺんまで走ってのぼりました。公園全体が見わたせます！';
@@ -1293,7 +1290,7 @@ function walkUpHill() {
   childMood.value += 3;
   addOutingPoint('hill', 6);
   parentEnergy.value -= 10;
-  parentStress.value += 4;
+  parentCalm.value -= 4;
   addMinutes(20);
 
   resultMessage.value = 'ゆっくり歩いてのぼりました。途中の花を見つけて楽しめました。';
@@ -1313,7 +1310,7 @@ function playSecretBase() {
   childMood.value += 10;
   addOutingPoint('secretSpot', 15);
   parentEnergy.value -= 17;
-  parentStress.value += 3;
+  parentCalm.value -= 3;
   addMinutes(25);
 
   resultMessage.value = '木のトンネルの奥は秘密基地でした。こうちゃんは目をかがやかせています！';
@@ -1331,7 +1328,7 @@ function enjoySecretView() {
   childMood.value += 4;
   addOutingPoint('secretSpot', 9);
   parentEnergy.value += 5;
-  parentStress.value -= 10;
+  parentCalm.value += 10;
   addMinutes(20);
 
   resultMessage.value = '二人でならんで景色をながめました。とても穏やかな時間です。';
@@ -1345,7 +1342,7 @@ function enjoySecretView() {
 
    いやいや対応の中では、いちばん確実に落ち着かせられる方法
    ただし親の体力を16も使ううえ、公園で泣かれているあいだの
-   気持ちの消耗まではゼロにならないので、イライラ度は少し増える
+   気持ちの消耗まではゼロにならないので、親の余裕は少し減る
 */
 function hugChild() {
   // 行動する前のステータスを控えておく
@@ -1354,7 +1351,7 @@ function hugChild() {
   childEnergy.value += 12;
   childMood.value += 15;
   parentEnergy.value -= 16;
-  parentStress.value += 5;
+  parentCalm.value -= 5;
   addMinutes(10);
 
   isTantrum.value = false;
@@ -1381,9 +1378,9 @@ function giveSnack() {
   childMood.value += 8;
   outingPoint.value += 2;
   parentEnergy.value -= 5;
-  // いやいや対応の中では、いちばん軽く済む方法
+  // いやいや対応の中では、いちばん軽く済む方法（親の余裕は3しか減らない）
   // そのかわり、おやつは1日2個しか持ってきていない
-  parentStress.value += 3;
+  parentCalm.value -= 3;
   addMinutes(10);
 
   snackLeft.value -= 1;
@@ -1410,11 +1407,11 @@ function giveSnack() {
    成功しても失敗しても、下のステータスの増減と時間（15分）は毎回発生する
    ＝「もう一度待つか、だっこするか、おやつを使うか」を考える場面になる
 
-   いやいや対応の3つは、どれも親のイライラ度が増える
+   いやいや対応の3つは、どれも親の余裕が減る
    何で払うかがちがうだけ
-   ・だっこ … 親の体力 -16 ／ イライラ +5（確実に終わる）
-   ・おやつ … おやつ -1   ／ イライラ +3（いちばん軽いが、1日2個まで）
-   ・待つ   … 親の体力 +2 ／ イライラ +18（体力は減らないが、50%で失敗する）
+   ・だっこ … 親の体力 -16 ／ 親の余裕 -5（確実に終わる）
+   ・おやつ … おやつ -1   ／ 親の余裕 -3（いちばん軽いが、1日2個まで）
+   ・待つ   … 親の体力 +2 ／ 親の余裕 -18（体力は減らないが、50%で失敗する）
 */
 function waitCalmly() {
   // 行動する前のステータスを控えておく
@@ -1424,8 +1421,8 @@ function waitCalmly() {
   childMood.value -= 6;
   parentEnergy.value += 2;
   // 泣いている横で待つのがいちばんこたえる
-  // 体力は使わないが、そのぶんイライラ度で払う（失敗すればもう一度払う）
-  parentStress.value += 18;
+  // 体力は使わないが、そのぶん親の余裕で払う（失敗すればもう一度払う）
+  parentCalm.value -= 18;
   addMinutes(15);
 
   // 0以上1未満のランダムな数を出して、0.5より小さければ成功（＝50%）
@@ -1448,7 +1445,7 @@ function waitCalmly() {
   saveStatusChanges();
   fixAllStatus();
 
-  // 待つのはイライラ度が14ふえるので、たまっているとここでGAME OVERになる
+  // 待つのは親の余裕が18減るので、残りが少ないとここでGAME OVERになる
   // ※ GAME OVERになると currentEvent が 'gameOver' に変わるので、
   //   いやいやが続いていてもGAME OVER画面のほうが優先される
   checkGameOver();
@@ -1604,7 +1601,7 @@ function watchDogClose() {
 
   childMood.value += 6;
   outingPoint.value += 3;
-  parentStress.value += 3;
+  parentCalm.value -= 3;
   addMinutes(10);
 
   resultMessage.value = '飼い主さんに聞いてから、近くで見せてもらいました。こうちゃんは大喜びですが、急に手を出さないか見ているのは少しどきどきします。';
@@ -1660,6 +1657,19 @@ function keepDistanceFromDog() {
 
    ※ このイベントからは checkTantrum() を呼ばない
      「ころぶ → 選ぶ → 結果」だけの、シンプルな流れにしている
+
+   ※ ころんだ直後は、こうちゃんの機嫌が下がっている
+     下の4つに書いてある数字は「ころんだ分」も入れた合計なので、
+     じょうずになだめても、機嫌はころぶ前より少し上がるくらいで止まる
+     （おやつ +5 ／ だっこ +3 ／ 痛いの痛いの +1 ／ 見守る -4）
+
+   ※ 目の前で子どもがころぶと、どうしてもヒヤッとする
+     そのため、どれを選んでも親の余裕は減る
+     何で払うかがちがうだけで、いやいや対応とまったく同じ考えかた
+     ・だっこ       … 親の体力 -10 ／ 親の余裕 -3
+     ・見守る       … 親の体力 +1  ／ 親の余裕 -8（体力は減らないが、いちばん心にくる）
+     ・痛いの痛いの … 親の体力 -3  ／ 親の余裕 -5
+     ・おやつ       … おやつ -1    ／ 親の余裕 -2（いちばん軽いが、1日2個まで）
 */
 
 /* ① すぐにだっこする */
@@ -1667,10 +1677,10 @@ function hugAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 8;
+  childMood.value += 3;
   childEnergy.value += 3;
   parentEnergy.value -= 10;
-  parentStress.value -= 3;
+  parentCalm.value -= 3;
   addMinutes(10);
 
   resultMessage.value = 'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。';
@@ -1691,11 +1701,12 @@ function watchAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 3;
+  childMood.value -= 4;
   parentEnergy.value += 1;
+  parentCalm.value -= 8;
   addMinutes(5);
 
-  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっています。';
+  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっていますが、口はへの字のままです。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -1709,7 +1720,7 @@ function watchAfterFall() {
 /* ③ 痛いの痛いのとんでいけ〜
 
    だっこ（親の体力-10）ほど親の力を使わずに、
-   見守る（機嫌+3）よりも こうちゃん の気持ちを切りかえられる、
+   見守る（機嫌-4）よりも こうちゃん の気持ちを立てなおせる、
    ちょうど真ん中の選択肢
    声をかけて、痛いのを空へ投げるまねをするだけなので、おやつも減らない
 */
@@ -1717,10 +1728,10 @@ function blowPainAway() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 6;
+  childMood.value += 1;
   childEnergy.value += 2;
   parentEnergy.value -= 3;
-  parentStress.value -= 2;
+  parentCalm.value -= 5;
   addMinutes(5);
 
   resultMessage.value =
@@ -1742,9 +1753,10 @@ function giveSnackAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 10;
+  childMood.value += 5;
   childEnergy.value += 8;
   parentEnergy.value -= 2;
+  parentCalm.value -= 2;
   addMinutes(5);
 
   snackLeft.value -= 1;
@@ -1887,9 +1899,9 @@ function calculateFinalScore() {
     scoreBreakdown.value.push({ label: 'こうちゃんの体力', points: 3 });
   }
 
-  // ⑨ 親の余裕ボーナス：イライラ度が30以下なら+3点
-  //   「落ち着いた気持ちのまま帰れた」ごほうび
-  if (parentStress.value <= 30) {
+  // ⑨ 親の余裕ボーナス：親の余裕が70以上なら+3点
+  //   「余裕を残したまま帰れた」ごほうび
+  if (parentCalm.value >= 70) {
     scoreBreakdown.value.push({ label: '親の余裕', points: 3 });
   }
 
@@ -1934,8 +1946,8 @@ function isWornOut() {
     return true;
   }
 
-  // 親がイライラしている
-  if (parentStress.value > 30) {
+  // 親の余裕が少なくなっている
+  if (parentCalm.value < 70) {
     return true;
   }
 
@@ -2068,7 +2080,7 @@ function resetGame() {
   childMood.value = 55;
   outingPoint.value = 0;
   parentEnergy.value = 100;
-  parentStress.value = 0;
+  parentCalm.value = 100;
   currentTime.value = '09:00';
 
   visitedPlaces.value = [];
@@ -2109,7 +2121,7 @@ function resetGame() {
     childMood: 0,
     outingPoint: 0,
     parentEnergy: 0,
-    parentStress: 0,
+    parentCalm: 0,
     minutes: 0,
   };
 
@@ -2675,20 +2687,20 @@ onUnmounted(() => {
             </span>
           </li>
 
-          <li class="status-item" :class="{ 'status-item--danger': isParentStressDanger }">
+          <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
             <span class="status-item__label">
-              <span v-if="isParentStressDanger" class="status-item__alert">⚠</span>
-              親のイライラ度
+              <span v-if="isParentCalmDanger" class="status-item__alert">⚠</span>
+              親の余裕
             </span>
-            <span class="status-item__value">{{ parentStress }}</span>
-            <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">
-              {{ formatChange(statusChanges.parentStress) }}
+            <span class="status-item__value">{{ parentCalm }}</span>
+            <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
+              {{ formatChange(statusChanges.parentCalm) }}
             </span>
             <span class="gauge">
-              <span class="gauge__fill gauge__fill--parent-stress" :style="{ width: parentStress + '%' }"></span>
+              <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
 
-              <!-- 目もり：あぶないライン（イライラ度80以上／100でGAME OVER） -->
-              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerStressLine + '%' }" title="ここより右はあぶないです（イライラ度80／100でGAME OVER）"></span>
+              <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
             </span>
           </li>
         </ul>
@@ -4172,8 +4184,8 @@ onUnmounted(() => {
                     <b>{{ parentEnergy }}</b>
                   </li>
                   <li class="record-item">
-                    <span>親のイライラ度</span>
-                    <b>{{ parentStress }}</b>
+                    <span>親の余裕</span>
+                    <b>{{ parentCalm }}</b>
                   </li>
                   <li class="record-item">
                     <span>こうちゃんの機嫌</span>
@@ -4253,7 +4265,7 @@ onUnmounted(() => {
   --child-energy: #96dfc4; /* ミント */
   --child-mood: #ffd98f; /* バターイエロー */
   --parent-energy: #93cff5; /* そらいろ */
-  --parent-stress: #ffa3a3; /* さんご */
+  --parent-calm: #ffa3a3; /* さんご（親の余裕ゲージと、いやいや関連の表示に使う） */
 
   /* ゲージの目もり（しきい値）の色
      ゲージの中身（緑・オレンジ・青・赤）のどれに重なっても見えるように、
@@ -4620,8 +4632,8 @@ onUnmounted(() => {
   background: var(--parent-energy);
 }
 
-.gauge__fill--parent-stress {
-  background: var(--parent-stress);
+.gauge__fill--parent-calm {
+  background: var(--parent-calm);
 }
 
 /* ゲージの目もりの説明（ゲージの下に1行だけ） */
@@ -4771,7 +4783,7 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-/* 危険な状態の警告（親の体力・イライラ度・こうちゃんの体力） */
+/* 危険な状態の警告（親の体力・親の余裕・こうちゃんの体力） */
 .status-warnings {
   display: flex;
   grid-area: warning;
@@ -4883,7 +4895,7 @@ onUnmounted(() => {
 /* いやいや中 */
 .place-card--tantrum {
   border-color: #f7d3cd;
-  border-left-color: var(--parent-stress);
+  border-left-color: var(--parent-calm);
   background: #fff5f3;
 }
 
@@ -5066,7 +5078,7 @@ onUnmounted(() => {
 }
 
 /* 良い変化・悪い変化・変化なし の色分け
-   ※ 親のイライラ度は「ふえると悪い」ので、判定は changeClass() で行っている
+   ※ ステータスは4つとも「ふえると良い」でそろえてあるので、判定は changeClass() にまかせている
 */
 .change-item__value.change--good {
   color: var(--good);
@@ -5454,7 +5466,7 @@ onUnmounted(() => {
   margin: 0 0 12px;
   padding: 2px 14px;
   border-radius: 999px;
-  background: var(--parent-stress);
+  background: var(--parent-calm);
   color: #fff;
   font-size: 13px;
   font-weight: 700;
@@ -5586,7 +5598,7 @@ onUnmounted(() => {
 }
 
 /* 増減の数字（色は結果カードの「今回の変化」と同じ考えかた）
-   ※ 親のイライラ度は「ふえると悪い」ので、判定は changeClass() にまかせている
+   ※ 良い・悪いの判定は changeClass() にまかせている
 */
 .event-flash__item-value {
   font-size: 15px;
@@ -5613,7 +5625,7 @@ onUnmounted(() => {
 .tantrum-line {
   margin: 12px 0 0;
   padding: 10px 14px;
-  border-left: 5px solid var(--parent-stress);
+  border-left: 5px solid var(--parent-calm);
   border-radius: 6px;
   background: #fff5f3;
   color: #a33a29;
