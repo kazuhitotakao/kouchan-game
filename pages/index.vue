@@ -2447,6 +2447,17 @@ onUnmounted(() => {
   --parent-energy: #4ea8e6;
   --parent-stress: #f2705f;
 
+  /* ゲージの目もり（しきい値）の色
+     ゲージの中身（緑・オレンジ・青・赤）のどれに重なっても見えるように、
+     2本の線は「色」も「太さ」も変えてある
+     ・ぐずりだすライン … 白（まわりを黒く縁取り）
+     ・あぶないライン   … 黒（まわりを白く縁取り・少し太い）
+     白と黒は明るさが正反対なので、どのゲージの上でも見分けやすい
+     縁取りをおたがい逆の色にしてあるので、下地が明るくても暗くても消えない
+  */
+  --line-fuss: #ffffff;
+  --line-danger: #000000;
+
   /* 増減表示の色（中央カード用と、暗い上部ステータス用） */
   --good: #1f8a4c;
   --bad: #c9412f;
@@ -2754,18 +2765,24 @@ onUnmounted(() => {
   /* 線の中心をしきい値の位置に合わせる（左に半分ずらす） */
   margin-left: -1.5px;
   border-radius: 1px;
-  /* まわりに細い影を付けて、ゲージの色に負けないようにする */
-  box-shadow: 0 0 0 1px rgb(16 29 44 / 70%);
 }
 
-/* ぐずりだすライン（金色） */
+/* ぐずりだすライン（水色・細め）
+   まわりを暗く縁取りして、明るいゲージの上でもはっきり見えるようにする
+*/
 .gauge__mark--fuss {
-  background: var(--gold);
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
 }
 
-/* あぶないライン（赤） */
+/* あぶないライン（黒・太め）
+   暗い下地に重なっても消えないように、まわりを白く縁取る
+*/
 .gauge__mark--danger {
-  background: #ff7a63;
+  width: 4px;
+  margin-left: -2px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
 }
 
 .gauge__fill {
@@ -2819,11 +2836,14 @@ onUnmounted(() => {
 }
 
 .gauge-legend__mark--fuss {
-  background: var(--gold);
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
 }
 
 .gauge-legend__mark--danger {
-  background: #ff7a63;
+  width: 4px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
 }
 
 /* おでかけポイント・おやつ残り（右端に縦積み） */
