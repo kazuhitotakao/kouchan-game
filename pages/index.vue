@@ -16,8 +16,31 @@ const gameStarted = ref(false);
    tantrum      = いやいや中（なだめる場面）
    goal         = ゴール（公園の出口）
    gameOver     = ゲームオーバー（限界をむかえて途中で終わった）
+
+   ここから下は「突然イベント」の画面
+   通常行動のあとに20%で起こる、専用画面つきの出来事
+   emergencySiren = 救急車のサイレンが聞こえる
+   ladybug        = テントウムシを見つける
+   dog            = 犬が近づいてくる
+   fallDown       = こうちゃんがころぶ
+   fountain       = 噴水が突然出る
 */
-type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'tantrum' | 'goal' | 'gameOver';
+type GameEvent =
+  | 'parkEntrance'
+  | 'slide'
+  | 'sandbox'
+  | 'acornArea'
+  | 'pond'
+  | 'hill'
+  | 'secretSpot'
+  | 'tantrum'
+  | 'goal'
+  | 'gameOver'
+  | 'emergencySiren'
+  | 'ladybug'
+  | 'dog'
+  | 'fallDown'
+  | 'fountain';
 
 /* 現在いる場所
    最初は「公園入口」からスタート
@@ -67,6 +90,26 @@ const tantrumCount = ref(0);
 
 /* おやつの残り回数（今日持ってきた分だけ） */
 const snackLeft = ref(2);
+
+/* 突然イベントが起きる確率
+   0.2 ＝ 20%（5回に1回くらい）
+   ここの数字だけを書きかえれば、起きやすさを変えられる
+   例）0.15 なら15%、0.25 なら25%
+*/
+const suddenEventChance = 0.2;
+
+/* 次に起こす予定の突然イベント（予定表）
+
+   null                    … 予定なし
+   'emergencySiren' など   … 次の「次へ」で、その突然イベント画面へ移動する
+
+   ※ 通常行動が終わった瞬間に画面を切り替えてしまうと、
+     せっかくの結果メッセージと「今回の変化」が読まれる前に消えてしまう
+     そこで、いったんここへ書いておいて、
+     プレイヤーが結果を確認して「次へ」を押したときに移動する
+     （いやいや（isTantrum）とまったく同じ考え方）
+*/
+const pendingSuddenEvent = ref<GameEvent | null>(null);
 
 /* 結果メッセージ */
 const resultMessage = ref('');
@@ -218,7 +261,15 @@ const commandCount = computed(() => {
     return 1;
   }
 
+  // 突然イベント「こうちゃんがころんだ」だけは、
+  // おやつが残っていれば4つ、食べきっていれば3つになる
+  // （4番目の「おやつで気をそらす」が画面から消えるため）
+  if (currentEvent.value === 'fallDown') {
+    return snackLeft.value > 0 ? 4 : 3;
+  }
+
   // それ以外の場所は「行動2つ ＋ べつの場所へ行く」で3つ
+  // 突然イベント（救急車・テントウムシ・犬・噴水）も選択肢が3つなので、ここに当てはまる
   return 3;
 });
 
@@ -241,9 +292,22 @@ const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessag
 /* 結果カードの下に出す「次へ進む」コマンドの文字
    いやいやが起きているときは、次の場所ではなく
    まず こうちゃん をなだめる場面へ進むので、文言だけ変える
-   （押したときに呼ぶ goToNextPlace() は今までと同じ）
+   突然イベントの予定があるときも、この先で何か起きることが伝わる文言にする
+   （押したときに呼ぶ goToNextPlace() は、どの場合も今までと同じ）
 */
-const nextPlaceCommandLabel = computed(() => (isTantrum.value ? 'こうちゃんのところへ行く' : '次の場所を選ぶ'));
+const nextPlaceCommandLabel = computed(() => {
+  // いやいやが最優先（goToNextPlace() の分けかたと同じ順番にそろえてある）
+  if (isTantrum.value) {
+    return 'こうちゃんのところへ行く';
+  }
+
+  // 突然イベントの予定があるとき
+  if (pendingSuddenEvent.value !== null) {
+    return 'なにか起こりそう…';
+  }
+
+  return '次の場所を選ぶ';
+});
 
 /* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
    秘密の場所が出ていれば7番目（＝6）
@@ -647,6 +711,51 @@ function checkGameOver() {
   }
 }
 
+/* 突然イベントの抽選
+
+   ① 20%（suddenEventChance）で発生するか決める
+   ② 発生したら、5種類の中からランダムで1つ選ぶ
+   ③ currentEvent はここでは変えず、pendingSuddenEvent（予定表）に書くだけ
+
+   ③がいちばん大事なところ
+   ここで画面を切り替えてしまうと、いま終わったばかりの行動の
+   結果メッセージと「今回の変化」が、読まれる前に消えてしまう
+   実際に画面が切り替わるのは、プレイヤーが「次へ」を押して
+   goToNextPlace() が呼ばれたとき
+*/
+function checkSuddenEvent() {
+  // 0以上1未満のランダムな数を出して、0.2より小さければ発生（＝20%）
+  // 逆に0.2以上なら、今回は何も起こらないのでここで終わり（＝80%）
+  if (Math.random() >= suddenEventChance) {
+    return;
+  }
+
+  // 0・1・2・3・4 のどれかをランダムに作って、5種類から1つ選ぶ
+  const eventNumber = Math.floor(Math.random() * 5);
+
+  if (eventNumber === 0) {
+    pendingSuddenEvent.value = 'emergencySiren';
+    return;
+  }
+
+  if (eventNumber === 1) {
+    pendingSuddenEvent.value = 'ladybug';
+    return;
+  }
+
+  if (eventNumber === 2) {
+    pendingSuddenEvent.value = 'dog';
+    return;
+  }
+
+  if (eventNumber === 3) {
+    pendingSuddenEvent.value = 'fallDown';
+    return;
+  }
+
+  pendingSuddenEvent.value = 'fountain';
+}
+
 /* 場所で1つ行動したあとの共通処理
    ① その場所を探検済みにする
    ② たまにランダムイベントが起こる
@@ -654,9 +763,11 @@ function checkGameOver() {
    ④ 今回の変化量を記録する（ランダムイベントといやいやの分もふくむ）
    ⑤ ステータスを0〜100に収める
    ⑥ GAME OVERになっていないか判定する
+   ⑦ 突然イベントが起きるか抽選する（起きるなら予定表に書くだけ）
    ※ いやいやをなだめる行動では呼ばない（ランダムイベントを起こさないため）
+   ※ 突然イベントの行動でも呼ばない（突然イベントが連続で起きないようにするため）
 
-   ⑥をいちばん最後に置いているので、
+   ⑥を⑤の次に置いているので、
    ランダムイベントの「だっこ！」で親の体力が0になった場合も、
    いやいや発生でイライラ度が100になった場合も、まとめてGAME OVERになる
 */
@@ -667,6 +778,21 @@ function finishPlayAction(place: GameEvent) {
   saveStatusChanges();
   fixAllStatus();
   checkGameOver();
+
+  /* ⑦ 突然イベントの抽選（いちばん最後）
+
+     つぎの3つのときは抽選しない
+     ・GAME OVERになった  … もう続きが無いので
+     ・いやいやが発生した  … まず こうちゃん をなだめるほうが先
+     ・12:00を過ぎた      … このあとはゴールへ向かうだけ
+
+     当たっても、この場では画面を切り替えない
+     pendingSuddenEvent（予定表）に書いておくだけなので、
+     いま出ている結果カードはそのまま読める
+  */
+  if (currentEvent.value !== 'gameOver' && !isTantrum.value && !isTimeOver.value) {
+    checkSuddenEvent();
+  }
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -693,8 +819,17 @@ function goToPlace(place: GameEvent) {
 }
 
 /* 次の場所を選びに行く
-   ① いやいや中なら、まずはなだめる場面へ
-   ② 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
+
+   上から順番に見て、あてはまった時点で行き先が決まる
+   ① GAME OVER中なら、どこへも動かさない
+   ② いやいや中なら、まずはなだめる場面へ
+   ③ 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
+   ④ 突然イベントの予定があれば、その専用画面へ
+   ⑤ 何もなければ、いつもどおり公園入口へ
+
+   ④が③より下にあるのがポイント
+   お昼を過ぎているのに突然イベントを始めてしまうと、
+   「12:00までに帰る」というルールが崩れてしまう
 */
 function goToNextPlace() {
   // GAME OVER後にうっかり別の画面へ動いてしまわないようにする
@@ -715,6 +850,16 @@ function goToNextPlace() {
 
   if (isTimeOver.value) {
     goToGoal();
+    return;
+  }
+
+  // 突然イベントの予定があれば、その画面へ移動する
+  // 移動したら予定表は空（null）に戻す
+  // ※ ここで戻しておかないと、突然イベントが終わったあとに
+  //   もう一度おなじ画面へ入ってしまう
+  if (pendingSuddenEvent.value !== null) {
+    currentEvent.value = pendingSuddenEvent.value;
+    pendingSuddenEvent.value = null;
     return;
   }
 
@@ -1048,6 +1193,369 @@ function waitCalmly() {
   selectedCommandIndex.value = 0;
 }
 
+/* ============================================================
+   突然イベント（通常行動のあと、20%で起こる出来事）
+
+   通常の場所の行動とちがうところ
+   ・finishPlayAction() を呼ばない
+     → runRandomEvent() / checkTantrum() / checkSuddenEvent() が動かないので、
+       突然イベントから続けて突然イベントが起きることはない
+     → visitedPlaces（探検した場所）にも入らない
+   ・そのかわり、どの行動も次の4つは必ず行う
+     ① startStatusChanges()  行動前のステータスを控える（いちばん最初）
+     ② saveStatusChanges()   「今回の変化」を作る（0〜100に丸める前）
+     ③ fixAllStatus()        ステータスを0〜100に収める
+     ④ checkGameOver()       限界をむかえていないか判定する
+
+   ※ おでかけポイントは addOutingPoint() ではなく、そのまま足している
+     addOutingPoint() は「2回目の場所は半分」というルールの関数で、
+     突然イベントは「場所」ではないため
+   ============================================================ */
+
+/* ===== 突然イベント：救急車のサイレン ===== */
+
+/* ① 立ち止まって救急車を探す */
+function lookForAmbulance() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 8;
+  outingPoint.value += 3;
+  parentEnergy.value -= 2;
+  addMinutes(10);
+
+  resultMessage.value = 'しばらく探していると、道路の向こうを救急車が走っていきました。こうちゃんは「いた！」と大喜びです！';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ② 音を聞きながら少し待つ */
+function listenToSiren() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 4;
+  addMinutes(5);
+
+  resultMessage.value = '二人で耳をすませていると、ピーポーの音がだんだん遠ざかっていきました。こうちゃんは最後まで「ピーポー」とまねをしています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ③ 先へ進む（ステータスも時間も変わらない） */
+function walkOnFromSiren() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  resultMessage.value = '「またこんど見ようね」と声をかけて、先へ進みました。こうちゃんは何度か後ろをふりかえっています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ===== 突然イベント：テントウムシ ===== */
+
+/* ① 一緒にじっくり観察する */
+function watchLadybug() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 7;
+  outingPoint.value += 4;
+  addMinutes(10);
+
+  resultMessage.value = '二人でしゃがんで、じっくり見つめました。こうちゃんは「 てちてち歩いている、かわいい 」と満足げです。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ② 手に乗せてみる */
+function holdLadybug() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 9;
+  outingPoint.value += 5;
+  addMinutes(10);
+
+  resultMessage.value = 'そっと指を近づけると、テントウムシが乗ってきました。こうちゃんは手を上にあげ、テントウムシを飛ばそうとしています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ③ そっと見送る */
+function seeOffLadybug() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 3;
+  addMinutes(5);
+
+  resultMessage.value = 'しばらく見ていると、テントウムシはぱっと羽を広げて飛んでいきました。こうちゃんは「ばいばい」と手をふっています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ===== 突然イベント：犬が近づいてくる ===== */
+
+/* ① 近くで見る */
+function watchDogClose() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 6;
+  outingPoint.value += 3;
+  parentStress.value += 3;
+  addMinutes(10);
+
+  resultMessage.value = '飼い主さんに聞いてから、近くで見せてもらいました。こうちゃんは大喜びですが、急に手を出さないか見ているのは少しどきどきします。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ② 親の後ろから見る */
+function watchDogBehindParent() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 3;
+  parentEnergy.value -= 2;
+  addMinutes(5);
+
+  resultMessage.value = 'こうちゃんは親の足のうしろに、そっとかくれました。ときどき顔だけ出して、犬をじっと見つめています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ③ 少し離れる */
+function keepDistanceFromDog() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  addMinutes(5);
+
+  resultMessage.value = '手をつないで、少しだけ道のはしへよけました。犬はしっぽをふりながら、そのまま通りすぎていきました。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ===== 突然イベント：こうちゃんがころんだ =====
+
+   ※ このイベントからは checkTantrum() を呼ばない
+     「ころぶ → 選ぶ → 結果」だけの、シンプルな流れにしている
+*/
+
+/* ① すぐにだっこする */
+function hugAfterFall() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 8;
+  childEnergy.value += 3;
+  parentEnergy.value -= 10;
+  parentStress.value -= 3;
+  addMinutes(10);
+
+  resultMessage.value = 'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+
+  // だっこは親の体力を10使うので、残りが少ないとここでGAME OVERになる
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ② 「大丈夫？」と見守る */
+function watchAfterFall() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 3;
+  parentEnergy.value += 1;
+  addMinutes(5);
+
+  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ③ 痛いの痛いのとんでいけ〜
+
+   だっこ（親の体力-10）ほど親の力を使わずに、
+   見守る（機嫌+3）よりも こうちゃん の気持ちを切りかえられる、
+   ちょうど真ん中の選択肢
+   声をかけて、痛いのを空へ投げるまねをするだけなので、おやつも減らない
+*/
+function blowPainAway() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 6;
+  childEnergy.value += 2;
+  parentEnergy.value -= 3;
+  parentStress.value -= 2;
+  addMinutes(5);
+
+  resultMessage.value =
+    'ひざをそっとなでながら「いたいの いたいの とんでいけ〜！」と、遠くの空へ投げるまねをしました。こうちゃんは飛んでいったほうをじっと見上げて、「とんでった」とにっこりしました。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ④ おやつで気をそらす
+   おやつが1個以上あるときだけ、画面にこのコマンドが出る
+*/
+function giveSnackAfterFall() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 10;
+  childEnergy.value += 8;
+  parentEnergy.value -= 2;
+  addMinutes(5);
+
+  snackLeft.value -= 1;
+
+  resultMessage.value = 'おやつをそっと見せると、こうちゃんの目がぱっと変わりました。ころんだことは、もうすっかり忘れているようです。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ===== 突然イベント：噴水が突然出る ===== */
+
+/* ① 近くまで見に行く */
+function goCloseToFountain() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 9;
+  childEnergy.value -= 7;
+  outingPoint.value += 5;
+  parentEnergy.value -= 5;
+  addMinutes(10);
+
+  resultMessage.value = '手をつないで噴水のすぐそばまで行きました。こうちゃんは水しぶきに向かって、きゃーっと走りまわっています！';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ② 少し離れて見る */
+function watchFountainFar() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childMood.value += 5;
+  outingPoint.value += 2;
+  addMinutes(5);
+
+  resultMessage.value = '少し離れた場所から、二人でながめました。水の音を聞きながら、こうちゃんは指をさして笑っています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ③ 先へ進む（ステータスも時間も変わらない） */
+function walkOnFromFountain() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  resultMessage.value = '「またあとでね」と手をつないで、そのまま先へ進みました。うしろで噴水の音がしています。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
 /* ===== ゴール ===== */
 
 /* 今回のプレイの総合スコアを計算する
@@ -1322,6 +1830,11 @@ function resetGame() {
   // 今回追加したGAME OVER用のstateも空に戻す
   gameOverTitle.value = '';
   gameOverMessage.value = '';
+
+  // 突然イベントの予定も空に戻す
+  // ※ 戻しておかないと、前回のプレイの予定が
+  //   次のゲームの1回目の行動のあとに出てきてしまう
+  pendingSuddenEvent.value = null;
 
   // 行動前の控えも0に戻しておく（前回の記録が残らないようにする）
   statusBefore.value = {
@@ -1601,6 +2114,76 @@ function runSelectedCommand() {
       } else if (index === waitCommandIndex.value) {
         // 「少し待ってみる」は、おやつがあれば3番目（2）、なければ2番目（1）
         waitCalmly();
+      }
+      break;
+
+    /* ここから下は突然イベント */
+
+    /* 救急車のサイレン
+       0 立ち止まって救急車を探す／1 音を聞きながら少し待つ／2 先へ進む */
+    case 'emergencySiren':
+      if (index === 0) {
+        lookForAmbulance();
+      } else if (index === 1) {
+        listenToSiren();
+      } else if (index === 2) {
+        walkOnFromSiren();
+      }
+      break;
+
+    /* テントウムシ
+       0 一緒にじっくり観察する／1 手に乗せてみる／2 そっと見送る */
+    case 'ladybug':
+      if (index === 0) {
+        watchLadybug();
+      } else if (index === 1) {
+        holdLadybug();
+      } else if (index === 2) {
+        seeOffLadybug();
+      }
+      break;
+
+    /* 犬が近づいてきた
+       0 近くで見る／1 親の後ろから見る／2 少し離れる */
+    case 'dog':
+      if (index === 0) {
+        watchDogClose();
+      } else if (index === 1) {
+        watchDogBehindParent();
+      } else if (index === 2) {
+        keepDistanceFromDog();
+      }
+      break;
+
+    /* こうちゃんがころんだ
+       0 すぐにだっこする／1 「大丈夫？」と見守る
+       2 痛いの痛いのとんでいけ〜／3 おやつで気をそらす
+
+       ※ おやつのコマンドはいちばん下（3番目）なので、
+         おやつが0個のときは画面に無いだけで、番号のくり上がりは起きない
+         それでも念のため、snackLeft を見てから実行する
+    */
+    case 'fallDown':
+      if (index === 0) {
+        hugAfterFall();
+      } else if (index === 1) {
+        watchAfterFall();
+      } else if (index === 2) {
+        blowPainAway();
+      } else if (index === 3 && snackLeft.value > 0) {
+        giveSnackAfterFall();
+      }
+      break;
+
+    /* 噴水が出た
+       0 近くまで見に行く／1 少し離れて見る／2 先へ進む */
+    case 'fountain':
+      if (index === 0) {
+        goCloseToFountain();
+      } else if (index === 1) {
+        watchFountainFar();
+      } else if (index === 2) {
+        walkOnFromFountain();
       }
       break;
   }
@@ -2430,6 +3013,311 @@ onUnmounted(() => {
                 </button>
               </template>
 
+              <template v-else>
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 突然イベント：救急車のサイレン！ -->
+        <div v-else-if="currentEvent === 'emergencySiren'" class="scene" key="emergencySiren">
+          <section class="stage">
+            <article class="place-card place-card--sudden">
+              <p class="place-card__flash">突然イベント！</p>
+
+              <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
+
+              <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。こうちゃんは「きゅうきゅうしゃ！」と目を輝かせています。</p>
+            </article>
+
+            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+            <article v-if="resultMessage" class="result-card">
+              <h3 class="result-card__title">結果</h3>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+            <nav class="command-box">
+              <!-- まだ選んでいないとき -->
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">立ち止まって救急車を探す</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1">
+                  <span class="command-box__text">音を聞きながら少し待つ</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2">
+                  <span class="command-box__text">先へ進む</span>
+                </button>
+              </template>
+
+              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
+              <template v-else>
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 突然イベント：テントウムシ発見！ -->
+        <div v-else-if="currentEvent === 'ladybug'" class="scene" key="ladybug">
+          <section class="stage">
+            <article class="place-card place-card--sudden">
+              <p class="place-card__flash">突然イベント！</p>
+
+              <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
+
+              <p class="place-card__text">葉っぱの上にテントウムシがいました。こうちゃんは「てんとうむし！」とうれしそうにしゃがみこみました。</p>
+            </article>
+
+            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+            <article v-if="resultMessage" class="result-card">
+              <h3 class="result-card__title">結果</h3>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+            <nav class="command-box">
+              <!-- まだ選んでいないとき -->
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">一緒にじっくり観察する</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1">
+                  <span class="command-box__text">手に乗せてみる</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2">
+                  <span class="command-box__text">そっと見送る</span>
+                </button>
+              </template>
+
+              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
+              <template v-else>
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 突然イベント：犬が近づいてきた！ -->
+        <div v-else-if="currentEvent === 'dog'" class="scene" key="dog">
+          <section class="stage">
+            <article class="place-card place-card--sudden">
+              <p class="place-card__flash">突然イベント！</p>
+
+              <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
+
+              <p class="place-card__text">散歩中の犬が、しっぽをふりながら近づいてきました。こうちゃんは気になっているようです。</p>
+            </article>
+
+            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+            <article v-if="resultMessage" class="result-card">
+              <h3 class="result-card__title">結果</h3>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+            <nav class="command-box">
+              <!-- まだ選んでいないとき -->
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">近くで見る</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1">
+                  <span class="command-box__text">親の後ろから見る</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2">
+                  <span class="command-box__text">少し離れる</span>
+                </button>
+              </template>
+
+              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
+              <template v-else>
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 突然イベント：こうちゃんがころんだ！ -->
+        <div v-else-if="currentEvent === 'fallDown'" class="scene" key="fallDown">
+          <section class="stage">
+            <article class="place-card place-card--sudden">
+              <p class="place-card__flash">突然イベント！</p>
+
+              <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
+
+              <p class="place-card__text">走っていたこうちゃんがつまずいてころんでしまいました。少しびっくりした顔でこちらを見ています。</p>
+            </article>
+
+            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+            <article v-if="resultMessage" class="result-card">
+              <h3 class="result-card__title">結果</h3>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+            <nav class="command-box">
+              <!-- まだ選んでいないとき -->
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">すぐにだっこする</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 1">
+                  <span class="command-box__text">「大丈夫？」と見守る</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 2">
+                  <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
+                </button>
+
+                <button
+                  v-if="snackLeft > 0"
+                  class="command-box__item"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }"
+                  @click="giveSnackAfterFall"
+                  @mouseenter="selectedCommandIndex = 3">
+                  <span class="command-box__text">おやつで気をそらす</span>
+                  <span class="command-box__badge">残り{{ snackLeft }}個</span>
+                </button>
+              </template>
+
+              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
+              <template v-else>
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                </button>
+              </template>
+            </nav>
+          </section>
+        </div>
+
+        <!-- 突然イベント：噴水が出た！ -->
+        <div v-else-if="currentEvent === 'fountain'" class="scene" key="fountain">
+          <section class="stage">
+            <article class="place-card place-card--sudden">
+              <p class="place-card__flash">突然イベント！</p>
+
+              <h2 class="place-card__title">⛲ 噴水が出た！</h2>
+
+              <p class="place-card__text">突然、噴水から勢いよく水が飛び出しました。こうちゃんは「わあ！」と大喜びです。</p>
+            </article>
+
+            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+            <article v-if="resultMessage" class="result-card">
+              <h3 class="result-card__title">結果</h3>
+
+              <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+              <div v-if="statusChanges" class="change-box">
+                <p class="change-box__title">今回の変化（合計）</p>
+
+                <ul class="change-list">
+                  <li v-for="row in changeRows" :key="row.label" class="change-item">
+                    <span class="change-item__label">{{ row.label }}</span>
+                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+                  </li>
+                </ul>
+              </div>
+            </article>
+
+            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+            <nav class="command-box">
+              <!-- まだ選んでいないとき -->
+              <template v-if="!resultMessage">
+                <p class="command-box__label">どうする？</p>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0">
+                  <span class="command-box__text">近くまで見に行く</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1">
+                  <span class="command-box__text">少し離れて見る</span>
+                </button>
+
+                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2">
+                  <span class="command-box__text">先へ進む</span>
+                </button>
+              </template>
+
+              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                   <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
@@ -3293,6 +4181,36 @@ onUnmounted(() => {
 
 .place-card--tantrum .place-card__title {
   color: #c9412f;
+}
+
+/* 突然イベント（急に起きた出来事のカード）
+   ふだんの場所は紺色の線だが、こちらは金色にして
+   「いつもと違うことが起きた」と分かるようにしている
+*/
+.place-card--sudden {
+  border-color: #f6dfae;
+  border-left-color: var(--gold);
+  background: #fffaec;
+}
+
+.place-card--sudden .place-card__title {
+  color: #8a5a00;
+}
+
+/* 「突然イベント！」の帯
+   アイテム発見の帯と同じ動き（found-in）で、ふわっと出す
+*/
+.place-card__flash {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 2px 14px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #4a3208;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  animation: found-in 0.4s ease-out 0.15s backwards;
 }
 
 /* 結果メッセージのボックス */
