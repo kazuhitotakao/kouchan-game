@@ -98,7 +98,7 @@ type RandomEventEffect = {
 
 /* 今回の行動で起きたランダムイベント（演出用）
    ・randomEventText    … 何が起きたかの文章
-   ・randomEventEffects … そのハプニングだけのステータス増減
+   ・randomEventEffects … そのできごとだけのステータス増減
 
    前は結果メッセージの文章に「おでかけポイント +5」と書き足していたが、
    それだと地の文にまぎれて見のがされてしまうので、
@@ -114,8 +114,8 @@ const randomEventEffects = ref<RandomEventEffect[]>([]);
 /* 今回の行動でいやいやが始まったときの文章（演出用）
 
    結果メッセージに書き足すと、あとから画面に足した
-   「アイテム発見」「ハプニング」の表示より前に出てしまい、
-   起きた順（行動 → アイテム → ハプニング → いやいや）と食いちがう
+   「アイテム発見」「ちいさなできごと」の表示より前に出てしまい、
+   起きた順（行動 → アイテム → ちいさなできごと → いやいや）と食いちがう
    そこで文章だけここに持ち、画面のいちばん下に出す
 */
 const tantrumText = ref('');
@@ -459,7 +459,7 @@ function startStatusChanges() {
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
 
-  // 演出用：前の行動のハプニング表示も空へ戻す
+  // 演出用：前の行動のちいさなできごとの表示も空へ戻す
   randomEventText.value = '';
   randomEventEffects.value = [];
 
@@ -709,10 +709,13 @@ function addCollectedItem(itemName: string) {
   foundItemsThisAction.value.push(itemName);
 }
 
-/* ランダムイベント（通常行動中に起きる、小さなハプニング）
-   5回に1回くらい（20%）だけ起こり、8種類の中から1つが選ばれる
+/* ランダムイベント
+   （通常行動中に起きる、ちいさなできごと）
 
-   ※ ここに書く数字は「このハプニングだけの増減」
+   5回に1回くらい（20%）だけ起こり、
+   8種類の中から1つが選ばれる
+
+   ※ ここに書く数字は「このできごとだけの増減」
      中央の「今回の変化（合計）」は行動ぜんぶを足した数なので、
      たとえば 休む -10 ＋ 急に走り出す +10 なら 合計は 0 になる
 
@@ -758,7 +761,7 @@ function runRandomEvent() {
   // ① 四つ葉のクローバー
   //   ※ addOutingPoint() ではなく直接足している
   //     addOutingPoint() は「2回目の場所は半分」という場所のためのルールで、
-  //     ハプニングは場所の探検ではないため、半減の対象にしない
+  //     ちいさなできごとは場所の探検ではないため、半減の対象にしない
   if (eventNumber === 0) {
     outingPoint.value += 5;
     randomEventText.value = 'そのとき、四つ葉のクローバーを見つけました！';
@@ -2108,7 +2111,7 @@ function judgeResult() {
       }
 
       // あまり回っていないのに疲れたとき
-      // （いやいややハプニングで、先に気持ちや体力を持っていかれた形）
+      // （いやいややちいさなできごとで、先に気持ちや体力を持っていかれた形）
       // ここで「遊びすぎた」と書くと、2か所しか回っていない人と話が合わない
       endingTitle.value = '今日はちょっと大変…';
       endingMessage.value = 'あまり探検できないうちに、どっと疲れてしまいました。次は元気なうちに、どんどん先へ進んでみよう！';
@@ -2940,11 +2943,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -2957,7 +2960,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3042,11 +3045,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3059,7 +3062,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3143,11 +3146,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3160,7 +3163,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3244,11 +3247,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3261,7 +3264,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3345,11 +3348,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3362,7 +3365,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3446,11 +3449,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3463,7 +3466,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3550,11 +3553,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3567,7 +3570,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3649,11 +3652,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3666,7 +3669,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3742,11 +3745,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3759,7 +3762,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3835,11 +3838,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3852,7 +3855,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -3928,11 +3931,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -3945,7 +3948,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -4031,11 +4034,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -4048,7 +4051,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -4122,6 +4125,11 @@ onUnmounted(() => {
                 <span class="ending-card__score-value">{{ finalScore }}</span>
                 <span class="ending-card__score-max">/ 100</span>
               </p>
+
+              <!-- 今回のランク
+                   結果のいちばん大事なところなので、
+                   小さなラベル ＋ 大きなバッジ の2段にして目立たせる -->
+              <p class="ending-card__rank-label">今回のランク</p>
 
               <p class="ending-card__rank">{{ endingRank }}</p>
 
@@ -4223,11 +4231,11 @@ onUnmounted(() => {
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
               <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
 
-              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
                    色つきのしるし（おでかけポイント +5 など）で出す -->
               <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ハプニング！</p>
+                <p class="event-flash__label">ちいさなできごと！</p>
 
                 <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -4240,7 +4248,7 @@ onUnmounted(() => {
               </div>
 
               <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
                    読めるように、いちばん最後に置く -->
               <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -5189,17 +5197,38 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* 「今回のランク」の小さなラベル
+   総合スコアの「総合スコア」ラベルと、わざと同じ見た目にしてそろえている */
+.ending-card__rank-label {
+  margin: 0 0 6px;
+  color: #a07a2a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+/* ランクのバッジ
+   ・min-width で、Dランクでも S+ランクでも同じ大きさに見えるようにする
+   ・box-sizing: border-box にしているので、padding をふくめた幅が
+     max-width: 100% におさまり、せまい画面でもカードからはみ出さない
+   ・色は上部バーと同じ --navy と --gold を使って、画面から浮かないようにする */
 .ending-card__rank {
   animation: rank-in 0.5s ease-out 0.12s backwards;
   display: inline-block;
-  margin: 0 0 10px;
-  padding: 3px 20px;
-  border-radius: 999px;
+  box-sizing: border-box;
+  min-width: 180px;
+  max-width: 100%;
+  margin: 0 0 14px;
+  padding: 10px 26px;
+  border: 3px solid var(--gold);
+  border-radius: 14px;
   background: var(--navy);
+  box-shadow: 0 3px 0 rgb(34 105 129 / 35%);
   color: var(--gold);
-  font-size: 13px;
+  font-size: clamp(30px, 3vw, 36px);
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
 }
 
 .ending-card__title {
@@ -5229,7 +5258,9 @@ onUnmounted(() => {
   align-items: baseline;
   justify-content: center;
   gap: 6px;
-  margin: 0 0 14px;
+  /* ランクのバッジを大きくしたぶん、ここの下の余白は少しつめる
+     （カード全体が縦に長くなりすぎないようにするため） */
+  margin: 0 0 10px;
 }
 
 .ending-card__score-value {
@@ -5622,12 +5653,12 @@ onUnmounted(() => {
   color: #7a5410;
 }
 
-/* 行動の最中に起きた小さなハプニング（ランダムイベント）
+/* 行動の最中に起きたちいさなできごと（ランダムイベント）
 
    前は結果の文章のうしろに、そのまま文字で書き足していたので、
    「おでかけポイント +5」が地の文にまぎれて気づきにくかった
    ・専用の枠（左に太い線）
-   ・「ハプニング！」の帯
+   ・「ちいさなできごと！」の帯
    ・ステータスの増減は、色つきのしるし
    の3つで、ひと目で分かるようにしている
 */
@@ -5770,15 +5801,22 @@ onUnmounted(() => {
 }
 
 /* --- ゴールのランク表示 --- */
+/* ランクの登場演出
+   バッジが大きくなったので、前の scale(0.6) から広がる動きだと
+   はねすぎて見える
+   「少し大きい状態から通常サイズにもどる ＋ 少し下からふわっと出る」
+   くらいの、おだやかな動きにしている
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定でここも自動的に止まる */
 @keyframes rank-in {
   from {
     opacity: 0;
-    transform: scale(0.6);
+    transform: translateY(6px) scale(1.06);
   }
 
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -6207,10 +6245,26 @@ onUnmounted(() => {
     padding-top: 10px;
   }
 
-  /* ハプニングの枠も、背の低い画面では少しつめる */
+  /* ちいさなできごとの枠も、背の低い画面では少しつめる */
   .event-flash {
     margin-top: 10px;
     padding: 10px 14px 11px;
+  }
+
+  /* ゴールの結果カードも、たてにつめて1画面におさめる
+     ランクのバッジは主役なので、小さくしすぎないように気をつける */
+  .ending-card {
+    padding: 16px 24px;
+  }
+
+  .ending-card__score-value {
+    font-size: 40px;
+  }
+
+  .ending-card__rank {
+    margin-bottom: 10px;
+    padding: 8px 22px;
+    font-size: clamp(27px, 2.6vw, 31px);
   }
 
   .event-flash__text {
@@ -6380,6 +6434,16 @@ onUnmounted(() => {
 
   .record-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* ゴールのランクバッジ
+     スマホでは min-width 180px のままだと画面いっぱいになるので、
+     少しだけ小さくして左右に余白を残す
+     （max-width: 100% と box-sizing のおかげで、はみ出しはしない） */
+  .ending-card__rank {
+    min-width: 150px;
+    padding: 8px 20px;
+    font-size: 28px;
   }
 
   .gameover-card__label {
