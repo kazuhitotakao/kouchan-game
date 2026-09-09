@@ -1092,7 +1092,12 @@ function enjoySecretView() {
 
 /* ===== いやいや中（なだめる場面） ===== */
 
-/* ① だっこしてなだめる */
+/* ① だっこしてなだめる
+
+   いやいや対応の中では、いちばん確実に落ち着かせられる方法
+   ただし親の体力を16も使ううえ、公園で泣かれているあいだの
+   気持ちの消耗まではゼロにならないので、イライラ度は少し増える
+*/
 function hugChild() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -1100,7 +1105,7 @@ function hugChild() {
   childEnergy.value += 12;
   childMood.value += 15;
   parentEnergy.value -= 16;
-  parentStress.value -= 10;
+  parentStress.value += 5;
   addMinutes(10);
 
   isTantrum.value = false;
@@ -1127,7 +1132,9 @@ function giveSnack() {
   childMood.value += 8;
   outingPoint.value += 2;
   parentEnergy.value -= 5;
-  parentStress.value -= 6;
+  // いやいや対応の中では、いちばん軽く済む方法
+  // そのかわり、おやつは1日2個しか持ってきていない
+  parentStress.value += 3;
   addMinutes(10);
 
   snackLeft.value -= 1;
@@ -1153,6 +1160,12 @@ function giveSnack() {
 
    成功しても失敗しても、下のステータスの増減と時間（15分）は毎回発生する
    ＝「もう一度待つか、だっこするか、おやつを使うか」を考える場面になる
+
+   いやいや対応の3つは、どれも親のイライラ度が増える
+   何で払うかがちがうだけ
+   ・だっこ … 親の体力 -16 ／ イライラ +5（確実に終わる）
+   ・おやつ … おやつ -1   ／ イライラ +3（いちばん軽いが、1日2個まで）
+   ・待つ   … 親の体力 +2 ／ イライラ +18（体力は減らないが、50%で失敗する）
 */
 function waitCalmly() {
   // 行動する前のステータスを控えておく
@@ -1161,7 +1174,9 @@ function waitCalmly() {
   childEnergy.value -= 4;
   childMood.value -= 6;
   parentEnergy.value += 2;
-  parentStress.value += 14;
+  // 泣いている横で待つのがいちばんこたえる
+  // 体力は使わないが、そのぶんイライラ度で払う（失敗すればもう一度払う）
+  parentStress.value += 18;
   addMinutes(15);
 
   // 0以上1未満のランダムな数を出して、0.5より小さければ成功（＝50%）
