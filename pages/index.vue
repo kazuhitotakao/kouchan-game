@@ -110,6 +110,27 @@ const endingRank = ref('');
 const endingTitle = ref('');
 const endingMessage = ref('');
 
+/* 今回のプレイの総合スコア（0〜100点）
+   ゴールしたときに calculateFinalScore() で計算して入れる
+   まだゴールしていないときは0
+*/
+const finalScore = ref(0);
+
+/* スコア内訳の1行ぶんの型
+   label  … 「おでかけポイント」などの項目名
+   points … その項目でもらった点数（マイナスもある）
+*/
+type ScoreBreakdownItem = {
+  label: string;
+  points: number;
+};
+
+/* スコアの内訳
+   「何で何点もらったのか」を1行ずつためておいて、結果画面に並べる
+   ゴールするたびに calculateFinalScore() の中で空に戻す
+*/
+const scoreBreakdown = ref<ScoreBreakdownItem[]>([]);
+
 /* GAME OVERになった理由（GAME OVER画面に出す文章）
    まだGAME OVERになっていないときは、どちらも空っぽ
 */
@@ -1029,19 +1050,156 @@ function waitCalmly() {
 
 /* ===== ゴール ===== */
 
+/* 今回のプレイの総合スコアを計算する
+
+   この関数は「点数を数えるだけ」で、ランクの判定はしない
+   （ランクを決めるのは judgeResult() の役目）
+
+   やっていること
+   ① scoreBreakdown を空にする（前回の結果を消す）
+   ② 加点・減点を1項目ずつ計算して scoreBreakdown に push する
+   ③ scoreBreakdown の points を全部たす
+   ④ 0〜100に収めて finalScore に入れる
+
+   ※ 0点の項目は、結果画面がごちゃごちゃしないように push しない
+*/
+function calculateFinalScore() {
+  // ① 前回のプレイの内訳が残らないように、まず空っぽに戻す
+  scoreBreakdown.value = [];
+
+  // ② 基本点：おでかけポイントは、そのまま点数になる
+  //   （0点でも「ここがスコアの土台」と分かるように、いつも表示する）
+  scoreBreakdown.value.push({ label: 'おでかけポイント', points: outingPoint.value });
+
+  // ③ 秘密の場所ボーナス：探検できていれば +10点
+  if (isVisited('secretSpot')) {
+    scoreBreakdown.value.push({ label: '秘密の場所発見', points: 10 });
+  }
+
+  // ④ 見つけたものボーナス：1種類につき +2点
+  const itemPoints = collectedItems.value.length * 2;
+
+  if (itemPoints > 0) {
+    scoreBreakdown.value.push({ label: '見つけたもの', points: itemPoints });
+  }
+
+  // ⑤ 帰宅時間ボーナス
+  //   goToGoal() で出口まで10分歩いたあとの時間で判定される
+  //   ・11:30まで      → +8点
+  //   ・11:31〜12:00   → +4点
+  //   ・12:00を過ぎた  → -10点
+  if (currentMinutes.value <= 11 * 60 + 30) {
+    scoreBreakdown.value.push({ label: '余裕をもって帰宅', points: 8 });
+  } else if (currentMinutes.value <= 12 * 60) {
+    scoreBreakdown.value.push({ label: '時間内に帰宅', points: 4 });
+  } else {
+    scoreBreakdown.value.push({ label: '時間オーバー', points: -10 });
+  }
+
+  // ⑥ 親の体力ボーナス：50以上で+5点、30〜49で+3点、29以下は0点
+  if (parentEnergy.value >= 50) {
+    scoreBreakdown.value.push({ label: '親の体力', points: 5 });
+  } else if (parentEnergy.value >= 30) {
+    scoreBreakdown.value.push({ label: '親の体力', points: 3 });
+  }
+
+  // ⑦ こうちゃんの機嫌ボーナス：70以上で+5点、50〜69で+3点、49以下は0点
+  if (childMood.value >= 70) {
+    scoreBreakdown.value.push({ label: 'こうちゃんの機嫌', points: 5 });
+  } else if (childMood.value >= 50) {
+    scoreBreakdown.value.push({ label: 'こうちゃんの機嫌', points: 3 });
+  }
+
+  // ⑧ こうちゃんの体力ボーナス：30以上なら+3点
+  if (childEnergy.value >= 30) {
+    scoreBreakdown.value.push({ label: 'こうちゃんの体力', points: 3 });
+  }
+
+  // ⑨ 親の余裕ボーナス：イライラ度が30以下なら+3点
+  //   「落ち着いた気持ちのまま帰れた」ごほうび
+  if (parentStress.value <= 30) {
+    scoreBreakdown.value.push({ label: '親の余裕', points: 3 });
+  }
+
+  // ⑩ いやいや減点：1回につき -2点
+  if (tantrumCount.value > 0) {
+    scoreBreakdown.value.push({ label: 'いやいや', points: tantrumCount.value * -2 });
+  }
+
+  // ⑪ 内訳の点数を全部たす
+  let total = 0;
+
+  for (const item of scoreBreakdown.value) {
+    total += item.points;
+  }
+
+  // ⑫ 0〜100に収める（100を超えたら100、0未満なら0）
+  //   ※ ここで丸めるので、内訳の単純合計と finalScore がずれることがある
+  finalScore.value = keepInRange(total);
+}
+
+/* へとへとで帰ってきたかどうかを判定する
+
+   スコアが低くなる理由は、大きく分けて2つある
+   ① 遊びすぎて、こうちゃんも親もクタクタになった
+   ② ほとんど遊ばずに、すぐ帰ってきた
+
+   点数はどちらも同じくらい低くなるけれど、
+   ①に「まだまだ元気だね」と言うのも、
+   ②に「遊びすぎたね」と言うのもおかしいので、ここで見分けて文章を変える
+
+   ※ 使っている数字は、calculateFinalScore() のボーナスの基準とそろえている
+     （＝「ボーナスをもらえなかった項目が1つでもあれば、疲れて帰ってきた」）
+*/
+function isWornOut() {
+  // 親かこうちゃんの体力が減っている
+  if (parentEnergy.value < 50 || childEnergy.value < 30) {
+    return true;
+  }
+
+  // こうちゃんの機嫌がよくない
+  if (childMood.value < 50) {
+    return true;
+  }
+
+  // 親がイライラしている
+  if (parentStress.value > 30) {
+    return true;
+  }
+
+  // いやいやが1回でも起きた
+  if (tantrumCount.value > 0) {
+    return true;
+  }
+
+  // お昼を過ぎてしまった
+  if (currentMinutes.value > 12 * 60) {
+    return true;
+  }
+
+  // どれにも当てはまらない＝二人とも元気なまま帰ってきた
+  return false;
+}
+
 /* 結果のランクを判定する
+
    上から順番に見て、あてはまった時点で決まる
-   ① いやいや3回以上          → 特殊エンド（通常ランクより優先）
-   ② Sランクの条件をすべて満たす
-   ③ Aランクの条件をすべて満たす
-   ④ 親の体力が20未満、または12:00を過ぎた → Cランク
-   ⑤ それ以外                 → Bランク
+   ① 総合スコアを計算する（特殊エンドでもスコアは表示するので、いちばん先に呼ぶ）
+   ② いやいや3回以上 → 特殊エンド（通常ランクより優先）
+   ③ 総合スコアで S+ / S / A / B / C / D を決める
+
+   ※ CランクとDランクだけは、同じ点数でも
+     「遊びすぎて疲れた」のか「あまり遊ばずに帰った」のかで文章を変える
+     （コマンドを1つ選んで出口へ行くだけでもCランクになるので、
+       いつも「遊びすぎた」と出すと話が合わなくなるため）
+
+   ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
 */
 function judgeResult() {
-  const isBackInTime = currentMinutes.value <= 12 * 60;
-  const isSecretVisited = isVisited('secretSpot');
+  // ① まずスコアを計算する（ランク判定はこのあと）
+  calculateFinalScore();
 
-  // ① 特殊エンド
+  // ② 特殊エンド（スコアよりも優先される。通常ランクは表示しない）
   if (tantrumCount.value >= 3) {
     endingRank.value = '特殊エンド';
     endingTitle.value = 'いやいや大爆発！';
@@ -1049,45 +1207,75 @@ function judgeResult() {
     return;
   }
 
-  // ② Sランク
-  if (outingPoint.value >= 50 && parentEnergy.value >= 30 && childMood.value >= 50 && isSecretVisited && isBackInTime) {
+  // ③ ここから下は、総合スコアだけでランクが決まる（点数の高いほうから順に見ていく）
+
+  // 85〜100点
+  if (finalScore.value >= 85) {
+    endingRank.value = 'S+ランク';
+    endingTitle.value = '伝説の公園大冒険！';
+    endingMessage.value = 'たくさん探検して、こうちゃんも親も大満足！ずっとわすれられない大冒険になりました！';
+    return;
+  }
+
+  // 70〜84点
+  if (finalScore.value >= 70) {
     endingRank.value = 'Sランク';
     endingTitle.value = '公園探検マスター！';
-    endingMessage.value = '秘密の場所まで見つけて、時間ぴったりに帰ってこられました。こうちゃんも親も大満足の完ぺきな1日です！';
+    endingMessage.value = 'たくさんの場所を探検して、楽しい思い出をいっぱい作れました！';
     return;
   }
 
-  // ③ Aランク
-  if (outingPoint.value >= 30 && parentEnergy.value >= 15 && childMood.value >= 30 && isBackInTime) {
+  // 55〜69点
+  if (finalScore.value >= 55) {
     endingRank.value = 'Aランク';
     endingTitle.value = '最高のおでかけ！';
-    endingMessage.value = 'いろいろな場所を回って、お昼までにちゃんと帰ってこられました。「またこようね！」';
+    endingMessage.value = 'いろいろな場所を回って、こうちゃんも楽しそう。とてもいいおでかけになりました！';
     return;
   }
 
-  // ④ Cランク
-  if (parentEnergy.value < 15 || !isBackInTime) {
-    endingRank.value = 'Cランク';
-    endingTitle.value = '親はヘトヘト……';
+  // 40〜54点
+  if (finalScore.value >= 40) {
+    endingRank.value = 'Bランク';
+    endingTitle.value = '楽しい公園探検！';
+    endingMessage.value = '楽しく公園を探検できました。次はちがう場所にも行ってみよう！';
+    return;
+  }
 
-    if (!isBackInTime) {
-      endingMessage.value = 'お昼を大きく過ぎてしまいました。お腹はぺこぺこ、親はもうクタクタです。次はもっと早めに帰ろう！';
+  // 25〜39点
+  if (finalScore.value >= 25) {
+    endingRank.value = 'Cランク';
+
+    // 遊びすぎて疲れたとき
+    if (isWornOut()) {
+      endingTitle.value = 'ちょっと遊びすぎた！';
+      endingMessage.value = 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！';
       return;
     }
 
-    endingMessage.value = '遊びすぎて親の体力が空っぽです。木かげで休んだり、だっこを減らしたりして体力を残そう！';
+    // まだまだ元気なのに帰ってきたとき
+    endingTitle.value = 'あっさり公園さんぽ';
+    endingMessage.value = '二人ともまだまだ元気なまま、おうちへ帰ってきました。次はもう少し公園の中を探検してみよう！';
     return;
   }
 
-  // ⑤ Bランク
-  endingRank.value = 'Bランク';
-  endingTitle.value = '楽しい公園探検！';
-  endingMessage.value = 'ひととおり遊べました。もう少しいろいろな場所を回れば、もっと良い結果になりそうです。';
+  // 0〜24点
+  endingRank.value = 'Dランク';
+
+  // 遊びすぎて疲れたとき
+  if (isWornOut()) {
+    endingTitle.value = '今日は大変だった……';
+    endingMessage.value = '今日はちょっと大変な公園探検でした。次は無理せず、休みながら遊んでみよう！';
+    return;
+  }
+
+  // 公園に来たばかりで帰ってきたとき
+  endingTitle.value = 'ちょっとだけ公園';
+  endingMessage.value = '公園に着いたばかりなのに、もう帰り道。こうちゃんはまだ遊びたそうです。次はもっと探検してみよう！';
 }
 
 /* ゴールへ向かう（判定して結果画面へ） */
 function goToGoal() {
-  // GAME OVERになったときは、S/A/B/Cランクの判定はしない
+  // GAME OVERになったときは、S+〜Dランクの判定はしない
   if (currentEvent.value === 'gameOver') {
     return;
   }
@@ -1123,6 +1311,10 @@ function resetGame() {
   endingRank.value = '';
   endingTitle.value = '';
   endingMessage.value = '';
+
+  // 前回の総合スコアと内訳が残らないように、0と空の配列に戻す
+  finalScore.value = 0;
+  scoreBreakdown.value = [];
 
   // 演出用に控えていたものも空に戻す
   foundItemsThisAction.value = [];
@@ -1543,17 +1735,13 @@ onUnmounted(() => {
 
         <div class="title-card__rule">
           <p>
-            探検できるのは3時間。タイムリミットはお昼の12:00です。
-            <br />
-            それまでにいろいろな場所をまわって、公園の出口を目指そう！
+            冒険の舞台は9時から12時の公園です！      
           </p>
-
+          
           <p>
-            はじめて行く場所では、おでかけポイントをたくさんもらえます。
+            どんな出会い、冒険があるかな。
             <br />
-            2回目からはもらえるポイントが半分になります。
-            <br />
-            こうちゃんと親の体力にも気をつけながら、たくさん探検してみよう！
+            たくさん探索してみよう！
           </p>
         </div>
 
@@ -1682,7 +1870,10 @@ onUnmounted(() => {
           <span class="pill pill--snack">
             おやつ残り
             <b>{{ snackLeft }}</b>
-            個
+
+            <!-- 「個」も、上のおでかけポイントの増減表示と同じ幅の置き場所に入れる
+                 こうすると、2つの数字が上下でぴったり同じ位置にそろう -->
+            <span class="pill__unit">個</span>
           </span>
         </div>
 
@@ -1715,7 +1906,7 @@ onUnmounted(() => {
            mode="out-in" ＝ 前が消えきってから次を出す（重ならないので位置がずれない） -->
       <Transition name="scene" mode="out-in">
         <!-- 公園入口 -->
-        <div v-if="currentEvent === 'parkEntrance'" class="scene" :key="currentEvent">
+        <div v-if="currentEvent === 'parkEntrance'" class="scene" key="parkEntrance">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">公園入口</h2>
@@ -1771,7 +1962,7 @@ onUnmounted(() => {
         </div>
 
         <!-- すべり台 -->
-        <div v-else-if="currentEvent === 'slide'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'slide'" class="scene" key="slide">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">すべり台</h2>
@@ -1840,7 +2031,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 砂場 -->
-        <div v-else-if="currentEvent === 'sandbox'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'sandbox'" class="scene" key="sandbox">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">砂場</h2>
@@ -1907,7 +2098,7 @@ onUnmounted(() => {
         </div>
 
         <!-- どんぐりの木 -->
-        <div v-else-if="currentEvent === 'acornArea'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'acornArea'" class="scene" key="acornArea">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">どんぐりの木</h2>
@@ -1974,7 +2165,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 池 -->
-        <div v-else-if="currentEvent === 'pond'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'pond'" class="scene" key="pond">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">池</h2>
@@ -2041,7 +2232,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 丘 -->
-        <div v-else-if="currentEvent === 'hill'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'hill'" class="scene" key="hill">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">丘</h2>
@@ -2108,7 +2299,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 秘密の場所 -->
-        <div v-else-if="currentEvent === 'secretSpot'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
           <section class="stage">
             <article class="place-card place-card--secret">
               <h2 class="place-card__title">秘密の場所</h2>
@@ -2175,7 +2366,7 @@ onUnmounted(() => {
         </div>
 
         <!-- いやいや中 -->
-        <div v-else-if="currentEvent === 'tantrum'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'tantrum'" class="scene" key="tantrum">
           <section class="stage">
             <article class="place-card place-card--tantrum">
               <h2 class="place-card__title">いやいやタイム！</h2>
@@ -2249,7 +2440,7 @@ onUnmounted(() => {
         </div>
 
         <!-- ゴール -->
-        <div v-else-if="currentEvent === 'goal'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'goal'" class="scene" key="goal">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">公園の出口</h2>
@@ -2257,12 +2448,36 @@ onUnmounted(() => {
               <p class="place-card__text">たくさん探検しました。そろそろ公園から帰る時間です。</p>
             </article>
 
-            <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' }">
+            <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
+                 SランクとS+ランクのときだけ、カードがきらきら光る -->
+            <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' || endingRank === 'S+ランク' }">
+              <!-- 総合スコア（0〜100点） -->
+              <p class="ending-card__score-label">総合スコア</p>
+
+              <p class="ending-card__score">
+                <span class="ending-card__score-value">{{ finalScore }}</span>
+                <span class="ending-card__score-max">/ 100</span>
+              </p>
+
               <p class="ending-card__rank">{{ endingRank }}</p>
 
               <h3 class="ending-card__title">{{ endingTitle }}</h3>
 
               <p class="ending-card__text">{{ endingMessage }}</p>
+            </article>
+
+            <!-- スコア内訳（何で何点もらったか）
+                 プラスは緑・マイナスは赤にしたいので、
+                 数字の形は formatChange()、色は changeClass() を使いまわしている -->
+            <article class="score-card">
+              <h3 class="score-card__title">スコア内訳</h3>
+
+              <ul class="score-list">
+                <li v-for="row in scoreBreakdown" :key="row.label" class="score-item">
+                  <span class="score-item__label">{{ row.label }}</span>
+                  <span class="score-item__value" :class="changeClass('score', row.points)">{{ formatChange(row.points) }}</span>
+                </li>
+              </ul>
             </article>
 
             <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
@@ -2322,8 +2537,8 @@ onUnmounted(() => {
         </div>
 
         <!-- GAME OVER（限界をむかえて途中で終わったとき）
-             自分で出口へ帰ったときとちがい、S/A/B/Cランクの判定はしない -->
-        <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" :key="currentEvent">
+             自分で出口へ帰ったときとちがい、S+〜Dランクの判定はしない -->
+        <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" key="gameOver">
           <section class="stage">
             <article class="gameover-card">
               <p class="gameover-card__label">GAME OVER</p>
@@ -2884,11 +3099,29 @@ onUnmounted(() => {
   color: var(--gold);
 }
 
-/* おでかけポイントの増減も、置き場所をいつも空けておく（同じ理由） */
-.pill__change {
+/* 数字の右がわの置き場所（おでかけポイントの増減 と おやつの「個」）
+
+   ・増減（+5など）は出たり消えたりするので、いつも同じ幅を空けておく
+   ・「個」も同じ幅にそろえる
+     ピルは右寄せなので、右がわの幅が同じなら
+     2つの数字（ポイントとおやつ）が上下でぴったり同じ位置に並ぶ
+*/
+.pill__change,
+.pill__unit {
   display: inline-block;
   width: 34px;
   text-align: left;
+}
+
+/* 「個」は数字にくっつきすぎるので、少しあける
+   増減表示（+5 など）の margin-left と同じ 6px にそろえている
+
+   ※ padding ではなく text-indent を使う
+     text-indent は「文字を右へずらす」だけで枠の幅（34px）は変わらないので、
+     上下2つの数字の位置がそろったままになる
+*/
+.pill__unit {
+  text-indent: 6px;
 }
 
 .pill .status-change {
@@ -3192,6 +3425,93 @@ onUnmounted(() => {
   max-width: 640px;
   margin: 0 auto;
   font-size: 14.5px;
+}
+
+/* 総合スコア（エンディングカードのいちばん上に大きく出す） */
+.ending-card__score-label {
+  margin: 0 0 2px;
+  color: #a07a2a;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.ending-card__score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 14px;
+}
+
+.ending-card__score-value {
+  color: #8a5a00;
+  font-size: 48px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.ending-card__score-max {
+  color: #b08a3c;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* スコア内訳（何で何点もらったかの一覧） */
+.score-card {
+  padding: 18px 22px;
+  border: 2px solid #f0e0bd;
+  border-radius: 14px;
+  background: var(--paper);
+}
+
+.score-card__title {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #f6eeda;
+  color: var(--navy);
+  font-size: 15px;
+}
+
+.score-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.score-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px dotted #ece2cd;
+  font-size: 14px;
+}
+
+.score-item:last-child {
+  border-bottom: none;
+}
+
+.score-item__value {
+  flex: none;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* プラスは緑・マイナスは赤（changeClass() が付けるクラス名にあわせている） */
+.score-item__value.change--good {
+  color: var(--good);
+}
+
+.score-item__value.change--bad {
+  color: var(--bad);
+}
+
+.score-item__value.change--neutral {
+  color: var(--ink-soft);
 }
 
 /* GAME OVERのカード（ゴールのエンディングカードと対になる見た目） */
