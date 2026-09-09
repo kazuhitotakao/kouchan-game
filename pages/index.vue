@@ -230,18 +230,39 @@ const nextPlaceCommandLabel = computed(() => (isTantrum.value ? 'こうちゃん
 */
 const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 
+/* ===== ゲージのしきい値（目もり） =====
+   ゲームのルールで使っている数字を、ここに名前を付けてまとめておく
+   ・ゲージの上に線（目もり）を出すときの位置
+   ・ルールの判定（いやいや発生・危険な状態）
+   の両方で同じ定数を使うので、あとから数字を変えても線とルールがずれない
+*/
+
+/* こうちゃんの体力：これを下回ると「いやいや」が起きるようになる
+   （71以上あるうちは元気いっぱいなので、いやいやは起こらない）
+*/
+const fussEnergyLine = 71;
+
+/* こうちゃんの機嫌：これ以下だと「いやいや」が起きやすくなる */
+const fussMoodLine = 50;
+
+/* こうちゃん・親の体力：これ以下はあぶない（GAME OVERが近い） */
+const dangerEnergyLine = 20;
+
+/* 親のイライラ度：これ以上はあぶない（100でGAME OVER） */
+const dangerStressLine = 80;
+
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
 */
 
 /* 親の体力が20以下 → あと1〜2回の行動で限界 */
-const isParentEnergyDanger = computed(() => parentEnergy.value <= 20);
+const isParentEnergyDanger = computed(() => parentEnergy.value <= dangerEnergyLine);
 
 /* 親のイライラ度が80以上 → あと少しで100 */
-const isParentStressDanger = computed(() => parentStress.value >= 80);
+const isParentStressDanger = computed(() => parentStress.value >= dangerStressLine);
 
 /* こうちゃんの体力が20以下 → 電池切れが近い */
-const isChildEnergyDanger = computed(() => childEnergy.value <= 20);
+const isChildEnergyDanger = computed(() => childEnergy.value <= dangerEnergyLine);
 
 /* 上部ステータスに出す警告メッセージ
    危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
@@ -511,7 +532,7 @@ function checkTantrum() {
 
   // 体力が71以上あるうちは元気いっぱいなので、
   // 機嫌や時間に関係なく いやいや は起こらない
-  if (childEnergy.value >= 71) {
+  if (childEnergy.value >= fussEnergyLine) {
     return;
   }
 
@@ -533,7 +554,7 @@ function checkTantrum() {
   //    機嫌が悪いほど、いやいやが起きやすくなる
   if (childMood.value <= 30) {
     tantrumChance += 0.2; // +20%
-  } else if (childMood.value <= 50) {
+  } else if (childMood.value <= fussMoodLine) {
     tantrumChance += 0.1; // +10%
   }
   // 機嫌が51以上のときは、機嫌による上乗せなし
@@ -1555,8 +1576,12 @@ onUnmounted(() => {
             <span class="status-clock__now">{{ currentTime }}</span>
             <span class="status-clock__limit">／ 12:00</span>
 
-            <!-- 直前の行動でかかった時間（結果を表示している間だけ出す） -->
-            <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
+            <!-- 直前の行動でかかった時間（結果を表示している間だけ出す）
+                 出たり消えたりしても幅が変わらないように、
+                 外側の span で置き場所（幅）をいつも確保しておく -->
+            <span class="status-clock__change">
+              <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
+            </span>
           </span>
         </div>
 
@@ -1572,6 +1597,12 @@ onUnmounted(() => {
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
+
+              <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
+              <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
+
+              <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
             </span>
           </li>
 
@@ -1583,6 +1614,9 @@ onUnmounted(() => {
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
+
+              <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
+              <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
             </span>
           </li>
 
@@ -1597,6 +1631,9 @@ onUnmounted(() => {
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
+
+              <!-- 目もり：あぶないライン（親の体力20以下） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
             </span>
           </li>
 
@@ -1611,16 +1648,34 @@ onUnmounted(() => {
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-stress" :style="{ width: parentStress + '%' }"></span>
+
+              <!-- 目もり：あぶないライン（イライラ度80以上／100でGAME OVER） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerStressLine + '%' }" title="ここより右はあぶないです（イライラ度80／100でGAME OVER）"></span>
             </span>
           </li>
         </ul>
+
+        <!-- ゲージの目もりの説明 -->
+        <p class="gauge-legend">
+          <span class="gauge-legend__item">
+            <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
+            ぐずりだすライン
+          </span>
+
+          <span class="gauge-legend__item">
+            <span class="gauge-legend__mark gauge-legend__mark--danger"></span>
+            あぶないライン
+          </span>
+        </p>
 
         <div class="status-pills">
           <span class="pill pill--point">
             おでかけポイント
             <b>{{ outingPoint }}</b>
-            <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
-              {{ formatChange(statusChanges.outingPoint) }}
+            <span class="pill__change">
+              <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
+                {{ formatChange(statusChanges.outingPoint) }}
+              </span>
             </span>
           </span>
 
@@ -2503,13 +2558,15 @@ onUnmounted(() => {
   flex: none;
   grid-template-areas:
     'clock gauges pills'
+    'legend legend legend'
     'found found found'
     'warning warning warning'
     'notice notice notice';
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px 28px;
+  /* 文字を大きくしたぶん、列のすき間と左右の余白を少しつめて場所を作る */
+  gap: 10px 20px;
   align-items: center;
-  padding: 12px 28px 14px;
+  padding: 12px 24px 14px;
   border-bottom: 3px solid var(--gold);
   background: linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
   color: #fff;
@@ -2522,13 +2579,19 @@ onUnmounted(() => {
   grid-area: clock;
   flex-direction: column;
   align-items: flex-start;
-  padding-right: 24px;
+  gap: 2px;
+  padding-right: 18px;
   border-right: 1px solid var(--navy-line);
 }
 
 .status-area__title {
-  color: #cfe0f7;
-  font-size: 12px;
+  color: #dbe8fa;
+  /* clamp(いちばん小さいとき, 画面幅に合わせた大きさ, いちばん大きいとき)
+     画面が広いほど大きく、せまい画面でも小さくなりすぎないようにする書き方
+     1.15vw ＝ 画面の横幅の1.15%（1280pxの画面なら約14.7px） */
+  font-size: clamp(14px, 1.15vw, 17px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -2539,14 +2602,25 @@ onUnmounted(() => {
 }
 
 .status-clock__now {
-  font-size: 28px;
+  font-size: clamp(30px, 2.3vw, 36px);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .status-clock__limit {
   color: #a9bedd;
-  font-size: 12px;
+  font-size: clamp(13px, 1vw, 15px);
+}
+
+/* 時間の増減（+20分）を置く場所
+   中身が出ても消えても幅が変わらないように、いつも同じ幅を空けておく
+   ここが伸び縮みすると、右にあるゲージやポイントの位置までずれてしまう
+   （時間は増えるだけなので「+25分」が入る幅にしてある）
+*/
+.status-clock__change {
+  display: inline-block;
+  width: 52px;
+  text-align: left;
 }
 
 .status-clock .status-change {
@@ -2558,7 +2632,7 @@ onUnmounted(() => {
   display: grid;
   grid-area: gauges;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 20px;
+  gap: 6px 14px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2566,23 +2640,32 @@ onUnmounted(() => {
 
 .status-item {
   display: grid;
-  /* ラベル ／ 現在値 ／ 直前の増減 の3列（ゲージは下段に全幅で置く） */
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  /* 上から3段に分けて置く
+     1段目 … ラベル（横はばいっぱい）
+     2段目 … 現在値 ／ 直前の増減
+     3段目 … ゲージ（横はばいっぱい）
+     ラベルを独立した行にすることで、文字を大きくしても
+     「こうちゃんの体力」が「こうちゃんの…」と切れなくなる */
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: baseline;
-  column-gap: 6px;
+  column-gap: 8px;
 }
 
 .status-item__label {
+  grid-column: 1 / -1;
   overflow: hidden;
-  color: #bed2ee;
-  font-size: 11px;
+  color: #cfe0f7;
+  font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .status-item__value {
-  font-size: 16px;
+  /* 100 → 98 → 9 とけた数が変わっても右の増減表示が動かないように、
+     数字3けたぶん（3ch）の幅をいつも確保しておく */
+  min-width: 3ch;
+  font-size: clamp(20px, 1.7vw, 24px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
@@ -2596,7 +2679,7 @@ onUnmounted(() => {
      ※ span のままだと transform が効かないので inline-block にする */
   display: inline-block;
   animation: status-pop 0.35s ease-out;
-  font-size: 12px;
+  font-size: clamp(13px, 1vw, 15px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2649,12 +2732,40 @@ onUnmounted(() => {
 }
 
 .gauge {
+  /* 目もり（.gauge__mark）を上に重ねるので、位置の基準にする */
+  position: relative;
   display: block;
   grid-column: 1 / -1;
-  height: 8px;
+  height: 10px;
   overflow: hidden;
   border-radius: 999px;
   background: rgb(0 0 0 / 32%);
+}
+
+/* ゲージのしきい値を示す縦線（目もり）
+   left にしきい値の数字（％）を入れて、その位置に立てる
+   ゲージの伸び縮みとは関係なく、いつも同じ場所にある
+*/
+.gauge__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  /* 線の中心をしきい値の位置に合わせる（左に半分ずらす） */
+  margin-left: -1.5px;
+  border-radius: 1px;
+  /* まわりに細い影を付けて、ゲージの色に負けないようにする */
+  box-shadow: 0 0 0 1px rgb(16 29 44 / 70%);
+}
+
+/* ぐずりだすライン（金色） */
+.gauge__mark--fuss {
+  background: var(--gold);
+}
+
+/* あぶないライン（赤） */
+.gauge__mark--danger {
+  background: #ff7a63;
 }
 
 .gauge__fill {
@@ -2681,34 +2792,79 @@ onUnmounted(() => {
   background: var(--parent-stress);
 }
 
+/* ゲージの目もりの説明（ゲージの下に1行だけ） */
+.gauge-legend {
+  display: flex;
+  grid-area: legend;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  color: #a9bedd;
+  font-size: clamp(11.5px, 0.9vw, 13px);
+  line-height: 1.4;
+}
+
+.gauge-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 説明の前に置く、ゲージの目もりと同じ見た目の小さな線 */
+.gauge-legend__mark {
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+}
+
+.gauge-legend__mark--fuss {
+  background: var(--gold);
+}
+
+.gauge-legend__mark--danger {
+  background: #ff7a63;
+}
+
 /* おでかけポイント・おやつ残り（右端に縦積み） */
 .status-pills {
   display: flex;
   grid-area: pills;
   flex-direction: column;
-  gap: 4px;
-  padding-left: 24px;
+  gap: 6px;
+  padding-left: 18px;
   border-left: 1px solid var(--navy-line);
 }
 
 .pill {
-  padding: 2px 12px;
+  padding: 4px 14px;
   border: 1px solid var(--navy-line);
   border-radius: 8px;
   background: rgb(255 255 255 / 8%);
-  font-size: 11px;
+  font-size: clamp(13px, 1.05vw, 15px);
   text-align: right;
   white-space: nowrap;
 }
 
 .pill b {
+  /* こちらも数字2けたぶんの幅を確保して、けたが増えてもずれないようにする */
+  display: inline-block;
+  min-width: 2ch;
   margin-left: 6px;
-  font-size: 16px;
+  font-size: clamp(19px, 1.5vw, 22px);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .pill--point b {
   color: var(--gold);
+}
+
+/* おでかけポイントの増減も、置き場所をいつも空けておく（同じ理由） */
+.pill__change {
+  display: inline-block;
+  width: 34px;
+  text-align: left;
 }
 
 .pill .status-change {
@@ -2725,23 +2881,23 @@ onUnmounted(() => {
   grid-area: found;
   align-items: center;
   gap: 12px;
-  max-height: 56px;
+  max-height: 64px;
   overflow-y: auto;
-  padding: 5px 12px;
+  padding: 7px 14px;
   border-radius: 8px;
   background: rgb(0 0 0 / 22%);
 }
 
 .status-found__label {
   flex: none;
-  color: #bed2ee;
-  font-size: 11px;
+  color: #cfe0f7;
+  font-size: clamp(13px, 1.05vw, 15px);
   white-space: nowrap;
 }
 
 .status-found__empty {
-  color: #8fa4c4;
-  font-size: 12px;
+  color: #a3b7d6;
+  font-size: clamp(13px, 1vw, 15px);
 }
 
 .status-found__list {
@@ -2754,11 +2910,11 @@ onUnmounted(() => {
 }
 
 .status-found__item {
-  padding: 1px 10px;
+  padding: 3px 12px;
   border-radius: 999px;
   background: #fef3d6;
   color: #6a4a10;
-  font-size: 12px;
+  font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.6;
 }
 
@@ -2779,7 +2935,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: rgb(242 112 95 / 24%);
   color: #ffd6cd;
-  font-size: 12.5px;
+  font-size: clamp(13.5px, 1.1vw, 16px);
   font-weight: 700;
   line-height: 1.6;
 }
@@ -2793,7 +2949,7 @@ onUnmounted(() => {
   border-radius: 4px;
   background: rgb(255 192 67 / 18%);
   color: #ffe6b0;
-  font-size: 12.5px;
+  font-size: clamp(13.5px, 1.1vw, 16px);
   line-height: 1.5;
 }
 
@@ -3760,11 +3916,26 @@ onUnmounted(() => {
   }
 
   .status-clock__now {
-    font-size: 24px;
+    font-size: clamp(24px, 1.9vw, 30px);
+  }
+
+  /* 文字は大きいままにしたいので、いちばん大きいときの値だけ少し下げる */
+  .status-item__value {
+    font-size: clamp(18px, 1.5vw, 21px);
+  }
+
+  .pill b {
+    font-size: clamp(17px, 1.35vw, 20px);
   }
 
   .status-found {
-    max-height: 44px;
+    max-height: 52px;
+  }
+
+  /* 高さが足りないので、目もりの説明は隠す
+     （目もりの線そのものは残り、マウスを乗せると説明が出る） */
+  .gauge-legend {
+    display: none;
   }
 
   .stage {
@@ -3856,6 +4027,7 @@ onUnmounted(() => {
     grid-template-areas:
       'clock clock'
       'gauges gauges'
+      'legend legend'
       'pills pills'
       'found found'
       'warning warning'
@@ -3874,7 +4046,7 @@ onUnmounted(() => {
   }
 
   .status-clock__now {
-    font-size: 20px;
+    font-size: 24px;
   }
 
   .status-list {
