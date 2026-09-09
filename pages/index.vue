@@ -217,6 +217,13 @@ const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
 */
 const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し待ってみる' : '少し待ってみる'));
 
+/* 結果カードの下に出す「次へ進む」コマンドの文字
+   いやいやが起きているときは、次の場所ではなく
+   まず こうちゃん をなだめる場面へ進むので、文言だけ変える
+   （押したときに呼ぶ goToNextPlace() は今までと同じ）
+*/
+const nextPlaceCommandLabel = computed(() => (isTantrum.value ? 'こうちゃんのところへ行く' : '次の場所を選ぶ'));
+
 /* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
    秘密の場所が出ていれば7番目（＝6）
    まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
@@ -954,8 +961,8 @@ function giveSnack() {
 
 /* ③ 少し待ってみる
    だっこ・おやつとちがって、これだけは失敗することがある
-   ・60%（0.6）… 落ち着いて、いやいや終了
-   ・40%       … まだ落ち着かないので、いやいやが続く
+   ・50%（0.5）… 落ち着いて、いやいや終了
+   ・50%       … まだ落ち着かないので、いやいやが続く
 
    成功しても失敗しても、下のステータスの増減と時間（15分）は毎回発生する
    ＝「もう一度待つか、だっこするか、おやつを使うか」を考える場面になる
@@ -970,8 +977,8 @@ function waitCalmly() {
   parentStress.value += 14;
   addMinutes(15);
 
-  // 0以上1未満のランダムな数を出して、0.6より小さければ成功（＝60%）
-  const calmSuccess = Math.random() < 0.6;
+  // 0以上1未満のランダムな数を出して、0.5より小さければ成功（＝50%）
+  const calmSuccess = Math.random() < 0.5;
 
   if (calmSuccess) {
     // 落ち着いてくれたので、いやいや終了
@@ -1770,7 +1777,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1837,7 +1844,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1904,7 +1911,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1971,7 +1978,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -2038,7 +2045,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -2105,7 +2112,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -2179,7 +2186,7 @@ onUnmounted(() => {
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
