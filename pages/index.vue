@@ -1543,17 +1543,13 @@ onUnmounted(() => {
 
         <div class="title-card__rule">
           <p>
-            探検できるのは3時間。タイムリミットはお昼の12:00です。
-            <br />
-            それまでにいろいろな場所をまわって、公園の出口を目指そう！
+            冒険の舞台は9時から12時の公園です！      
           </p>
-
+          
           <p>
-            はじめて行く場所では、おでかけポイントをたくさんもらえます。
+            どんな出会い、冒険があるかな。
             <br />
-            2回目からはもらえるポイントが半分になります。
-            <br />
-            こうちゃんと親の体力にも気をつけながら、たくさん探検してみよう！
+            たくさん探索してみよう！
           </p>
         </div>
 
@@ -1715,7 +1711,7 @@ onUnmounted(() => {
            mode="out-in" ＝ 前が消えきってから次を出す（重ならないので位置がずれない） -->
       <Transition name="scene" mode="out-in">
         <!-- 公園入口 -->
-        <div v-if="currentEvent === 'parkEntrance'" class="scene" :key="currentEvent">
+        <div v-if="currentEvent === 'parkEntrance'" class="scene" key="parkEntrance">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">公園入口</h2>
@@ -1771,7 +1767,7 @@ onUnmounted(() => {
         </div>
 
         <!-- すべり台 -->
-        <div v-else-if="currentEvent === 'slide'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'slide'" class="scene" key="slide">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">すべり台</h2>
@@ -1840,7 +1836,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 砂場 -->
-        <div v-else-if="currentEvent === 'sandbox'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'sandbox'" class="scene" key="sandbox">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">砂場</h2>
@@ -1907,7 +1903,7 @@ onUnmounted(() => {
         </div>
 
         <!-- どんぐりの木 -->
-        <div v-else-if="currentEvent === 'acornArea'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'acornArea'" class="scene" key="acornArea">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">どんぐりの木</h2>
@@ -1974,7 +1970,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 池 -->
-        <div v-else-if="currentEvent === 'pond'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'pond'" class="scene" key="pond">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">池</h2>
@@ -2041,7 +2037,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 丘 -->
-        <div v-else-if="currentEvent === 'hill'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'hill'" class="scene" key="hill">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">丘</h2>
@@ -2108,7 +2104,7 @@ onUnmounted(() => {
         </div>
 
         <!-- 秘密の場所 -->
-        <div v-else-if="currentEvent === 'secretSpot'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
           <section class="stage">
             <article class="place-card place-card--secret">
               <h2 class="place-card__title">秘密の場所</h2>
@@ -2175,7 +2171,7 @@ onUnmounted(() => {
         </div>
 
         <!-- いやいや中 -->
-        <div v-else-if="currentEvent === 'tantrum'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'tantrum'" class="scene" key="tantrum">
           <section class="stage">
             <article class="place-card place-card--tantrum">
               <h2 class="place-card__title">いやいやタイム！</h2>
@@ -2249,7 +2245,7 @@ onUnmounted(() => {
         </div>
 
         <!-- ゴール -->
-        <div v-else-if="currentEvent === 'goal'" class="scene" :key="currentEvent">
+        <div v-else-if="currentEvent === 'goal'" class="scene" key="goal">
           <section class="stage">
             <article class="place-card">
               <h2 class="place-card__title">公園の出口</h2>
@@ -2323,7 +2319,7 @@ onUnmounted(() => {
 
         <!-- GAME OVER（限界をむかえて途中で終わったとき）
              自分で出口へ帰ったときとちがい、S/A/B/Cランクの判定はしない -->
-        <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" :key="currentEvent">
+        <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" key="gameOver">
           <section class="stage">
             <article class="gameover-card">
               <p class="gameover-card__label">GAME OVER</p>
