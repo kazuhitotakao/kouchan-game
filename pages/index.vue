@@ -362,6 +362,10 @@ const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 */
 const fussEnergyLine = 71;
 
+/* 公園にある場所の数（すべり台・砂場・どんぐり・池・丘・秘密の場所）
+   結果の文章で「ぜんぶ回れたか」を見るのに使う */
+const totalPlaceCount = 6;
+
 /* こうちゃんの機嫌：これ以下だと「いやいや」が起きやすくなる */
 const fussMoodLine = 50;
 
@@ -2005,10 +2009,12 @@ function isWornOut() {
    ② いやいや3回以上 → 特殊エンド（通常ランクより優先）
    ③ 総合スコアで S+ / S / A / B / C / D を決める
 
-   ※ CランクとDランクだけは、同じ点数でも
-     「遊びすぎて疲れた」のか「あまり遊ばずに帰った」のかで文章を変える
-     （コマンドを1つ選んで出口へ行くだけでもCランクになるので、
-       いつも「遊びすぎた」と出すと話が合わなくなるため）
+   ※ 同じランクでも、実際に何が起きたかで文章を変えている
+     画面には「回った場所」「帰った時間」「機嫌」も出ているので、
+     文章がそれとくいちがうと、遊んでいる人が混乱してしまうため
+     ・Aランク … こうちゃんの機嫌が低いときは「楽しそう」と書かない
+     ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
+     ・C／Dランク … 「遊びすぎた」は、実際に3か所以上まわったときだけ使う
 
    ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
 */
@@ -2045,6 +2051,16 @@ function judgeResult() {
   // 70〜83点
   if (finalScore.value >= 70) {
     endingRank.value = 'Aランク';
+
+    // こうちゃんの機嫌が下がったまま帰ってきたとき
+    // （点数はよくても「こうちゃんも楽しそう」と書くと、
+    //   画面に出ている機嫌の数字と食いちがってしまう）
+    if (childMood.value < fussMoodLine) {
+      endingTitle.value = 'いい探検、でもおつかれ気味';
+      endingMessage.value = 'いろいろな場所を回れました！ただ、こうちゃんは最後すこしぐずり気味。次は休みやおやつをはさみながら回ってみよう！';
+      return;
+    }
+
     endingTitle.value = '最高のおでかけ！';
     endingMessage.value = 'いろいろな場所を回って、こうちゃんも楽しそう。とてもいいおでかけになりました！';
     return;
@@ -2053,8 +2069,28 @@ function judgeResult() {
   // 55〜69点
   if (finalScore.value >= 55) {
     endingRank.value = 'Bランク';
-    endingTitle.value = '楽しい公園探検！';
-    endingMessage.value = '楽しく公園を探検できました。次はちがう場所にも行ってみよう！';
+
+    // ① お昼をすぎて帰ってきたとき
+    //   Bランクのほとんどがこれ
+    //   たくさん回れたぶん時間がかかり、時間オーバーで10点ひかれている
+    //   ここで「次はちがう場所にも行ってみよう」と書くと、
+    //   6か所ぜんぶ回った人にまで探検不足だと言うことになってしまう
+    if (currentMinutes.value > 12 * 60) {
+      endingTitle.value = '時間ぎりぎり大冒険！';
+      endingMessage.value = 'たくさん探検できました！でも、夢中になっているうちにお昼をすぎてしまいました。次はもう少し早めに切りあげてみよう！';
+      return;
+    }
+
+    // ② 時間内に帰れたけれど、まだ行っていない場所が残っているとき
+    if (visitedPlaces.value.length < totalPlaceCount) {
+      endingTitle.value = '楽しい公園探検！';
+      endingMessage.value = '楽しく公園を探検できました。次はちがう場所にも行ってみよう！';
+      return;
+    }
+
+    // ③ 時間内に6か所ぜんぶ回れたとき
+    endingTitle.value = '公園ぜんぶ制覇！';
+    endingMessage.value = '公園をぜんぶ回って、時間内に帰ってこられました！次はこうちゃんの機嫌や、見つけたものの数も気にしてみよう！';
     return;
   }
 
@@ -2062,10 +2098,20 @@ function judgeResult() {
   if (finalScore.value >= 38) {
     endingRank.value = 'Cランク';
 
-    // 遊びすぎて疲れたとき
+    // 疲れて帰ってきたとき
     if (isWornOut()) {
-      endingTitle.value = 'ちょっと遊びすぎた！';
-      endingMessage.value = 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！';
+      // たくさん回ったうえで疲れたのなら「遊びすぎた」でよい
+      if (visitedPlaces.value.length >= 3) {
+        endingTitle.value = 'ちょっと遊びすぎた！';
+        endingMessage.value = 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！';
+        return;
+      }
+
+      // あまり回っていないのに疲れたとき
+      // （いやいややハプニングで、先に気持ちや体力を持っていかれた形）
+      // ここで「遊びすぎた」と書くと、2か所しか回っていない人と話が合わない
+      endingTitle.value = '今日はちょっと大変…';
+      endingMessage.value = 'あまり探検できないうちに、どっと疲れてしまいました。次は元気なうちに、どんどん先へ進んでみよう！';
       return;
     }
 
@@ -2078,10 +2124,19 @@ function judgeResult() {
   // 0〜37点
   endingRank.value = 'Dランク';
 
-  // 遊びすぎて疲れたとき
+  // 疲れて帰ってきたとき
   if (isWornOut()) {
+    // たくさん回ったうえで疲れたとき
+    if (visitedPlaces.value.length >= 3) {
+      endingTitle.value = '今日は大変だった……';
+      endingMessage.value = '今日はちょっと大変な公園探検でした。次は無理せず、休みながら遊んでみよう！';
+      return;
+    }
+
+    // あまり回っていないのに疲れたとき
+    // 「無理せず休みながら」と書くと、まだ遊んでいない人には合わないので変える
     endingTitle.value = '今日は大変だった……';
-    endingMessage.value = '今日はちょっと大変な公園探検でした。次は無理せず、休みながら遊んでみよう！';
+    endingMessage.value = 'あまり遊べないうちに、二人ともへとへとになってしまいました。次は元気なうちに探検してみよう！';
     return;
   }
 
