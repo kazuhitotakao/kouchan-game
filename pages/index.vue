@@ -820,15 +820,21 @@ function runRandomEvent() {
   addRandomEventEffect('親の余裕', 'parentCalm', -3);
 }
 
-/* 疲れてくると、だんだん機嫌もわるくなる
+/* 疲れたり、おなかがすいたりすると、だんだん機嫌もわるくなる
 
-   こうちゃんの体力が「ぐずりだすライン（71）」を下回っているあいだは、
-   通常行動をするたびに機嫌が4下がる
+   機嫌が下がる理由は2つあり、両方かさなることもある
+   ① 遊びつかれてきた … 体力が「ぐずりだすライン（71）」より下 → 機嫌 -4
+   ② おなかがすいてきた … 11:00をすぎた                        → 機嫌 -3
 
    これが無いと、遊ぶ行動はどれも機嫌がふえるだけなので、
    機嫌はすぐ100に張りついて「見るだけの数字」になってしまう
+
+   ②（時間）を入れているのは、控えめに遊ぶと体力がほとんど減らず、
+   ①だけでは機嫌がまったく下がらなくなってしまうため
+   お昼が近づけば、元気に遊んでいても だんだんぐずってくる、というルールにしている
+
    下がる力があることで、
-   「もう1か所あそぶ？ 休む？ おやつを使う？」を
+   「もう1か所あそぶ？ 休む？ おやつを使う？ そろそろ帰る？」を
    最後まで考えられる数字になる
 
    ※ いやいやをなだめる行動と突然イベントでは呼ばれない
@@ -836,12 +842,15 @@ function runRandomEvent() {
      なだめている最中にさらに機嫌が下がると、立て直せなくなってしまう
 */
 function dropMoodWhenTired() {
-  // まだ元気（体力71以上）なら、機嫌は下がらない
-  if (childEnergy.value >= fussEnergyLine) {
-    return;
+  // ① 遊びつかれてきた
+  if (childEnergy.value < fussEnergyLine) {
+    childMood.value -= 4;
   }
 
-  childMood.value -= 4;
+  // ② お昼が近づいて、おなかがすいてきた
+  if (currentMinutes.value >= 11 * 60) {
+    childMood.value -= 3;
+  }
 }
 
 /* いやいや判定
@@ -855,9 +864,12 @@ function checkTantrum() {
     return;
   }
 
-  // 体力が71以上あるうちは元気いっぱいなので、
-  // 機嫌や時間に関係なく いやいや は起こらない
-  if (childEnergy.value >= fussEnergyLine) {
+  // 体力が71以上あるうちは元気いっぱいなので、いやいやは起こらない
+  // ただし11:00をすぎたら、まだ元気でも
+  // 「おなかすいた」「まだ帰りたくない」でぐずることがある
+  // ※ これが無いと、控えめに遊んで体力を減らさないだけで
+  //   いやいやを最後まで完全に避けられてしまう
+  if (childEnergy.value >= fussEnergyLine && currentMinutes.value < 11 * 60) {
     return;
   }
 
@@ -1112,6 +1124,24 @@ function goToNextPlace() {
   currentEvent.value = 'parkEntrance';
 }
 
+/* ============================================================
+   場所での行動（6か所 × 2コマンド）
+
+   親の2つのステータスは、減る理由をわけてある
+   ・親の体力 … 体をどれだけ使ったか（走る・だっこする・立ちっぱなし）
+   ・親の余裕 … どれだけヒヤッとしたか（水辺・高い所・見失いそう）
+
+   そのため、同じ「よく遊ぶ」コマンドでも場所によって中身がちがう
+   ・池を近くで見る   … 体力 -13 ／ 余裕 -14（水があるので、いちばん気が張る）
+   ・丘を走ってのぼる … 体力 -17 ／ 余裕 -11（体力もいちばん使い、見失いそうでもある）
+   ・どんぐりを拾う   … 体力 -10 ／ 余裕  -3（しゃがんで拾うだけなので穏やか）
+
+   こうすると
+   「体力は残っているけれど、余裕がないから池はやめておこう」
+   「余裕はあるから、静かなどんぐりの木で点をかせごう」
+   のように、2つの数字を見くらべて場所を選べるようになる
+   ============================================================ */
+
 /* ===== すべり台 ===== */
 
 /* ① 一緒にすべる */
@@ -1122,8 +1152,8 @@ function playSlide() {
   childEnergy.value -= 18;
   childMood.value += 6;
   addOutingPoint('slide', 6);
-  parentEnergy.value -= 17;
-  parentCalm.value -= 6;
+  parentEnergy.value -= 14;
+  parentCalm.value -= 9;
   addMinutes(25);
 
   resultMessage.value = 'こうちゃんと一緒にすべりました。大喜びです！';
@@ -1159,8 +1189,8 @@ function playSandbox() {
   childEnergy.value -= 13;
   childMood.value += 5;
   addOutingPoint('sandbox', 6);
-  parentEnergy.value -= 14;
-  parentCalm.value -= 5;
+  parentEnergy.value -= 12;
+  parentCalm.value -= 4;
   addMinutes(25);
 
   resultMessage.value = '一緒に大きな山を作りました。こうちゃんは夢中です！';
@@ -1177,7 +1207,7 @@ function watchFromBench() {
   childEnergy.value -= 10;
   childMood.value += 2;
   addOutingPoint('sandbox', 4);
-  parentEnergy.value += 4;
+  parentEnergy.value += 2;
   parentCalm.value -= 2;
   addMinutes(20);
 
@@ -1196,8 +1226,8 @@ function collectAcorns() {
   childEnergy.value -= 11;
   childMood.value += 6;
   addOutingPoint('acornArea', 8);
-  parentEnergy.value -= 12;
-  parentCalm.value -= 4;
+  parentEnergy.value -= 10;
+  parentCalm.value -= 3;
   addMinutes(20);
 
   resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
@@ -1233,8 +1263,8 @@ function watchSwansClose() {
   childEnergy.value -= 11;
   childMood.value += 8;
   addOutingPoint('pond', 9);
-  parentEnergy.value -= 16;
-  parentCalm.value -= 10;
+  parentEnergy.value -= 13;
+  parentCalm.value -= 14;
   addMinutes(20);
 
   resultMessage.value = '白鳥を近くで見ました。こうちゃんは大興奮です！';
@@ -1271,8 +1301,8 @@ function runUpHill() {
   childEnergy.value -= 24;
   childMood.value += 8;
   addOutingPoint('hill', 11);
-  parentEnergy.value -= 21;
-  parentCalm.value -= 7;
+  parentEnergy.value -= 17;
+  parentCalm.value -= 11;
   addMinutes(25);
 
   resultMessage.value = '丘のてっぺんまで走ってのぼりました。公園全体が見わたせます！';
@@ -1309,8 +1339,8 @@ function playSecretBase() {
   childEnergy.value -= 16;
   childMood.value += 10;
   addOutingPoint('secretSpot', 15);
-  parentEnergy.value -= 17;
-  parentCalm.value -= 3;
+  parentEnergy.value -= 14;
+  parentCalm.value -= 4;
   addMinutes(25);
 
   resultMessage.value = '木のトンネルの奥は秘密基地でした。こうちゃんは目をかがやかせています！';
@@ -1327,8 +1357,8 @@ function enjoySecretView() {
   childEnergy.value += 6;
   childMood.value += 4;
   addOutingPoint('secretSpot', 9);
-  parentEnergy.value += 5;
-  parentCalm.value += 10;
+  parentEnergy.value += 4;
+  parentCalm.value += 6;
   addMinutes(20);
 
   resultMessage.value = '二人でならんで景色をながめました。とても穏やかな時間です。';
@@ -1869,10 +1899,13 @@ function calculateFinalScore() {
 
   // ⑤ 帰宅時間ボーナス
   //   goToGoal() で出口まで10分歩いたあとの時間で判定される
-  //   ・11:30まで      → +8点
-  //   ・11:31〜12:00   → +4点
+  //   ・11:45まで      → +8点
+  //   ・11:46〜12:00   → +4点
   //   ・12:00を過ぎた  → -10点
-  if (currentMinutes.value <= 11 * 60 + 30) {
+  //   ※ 11:45 にしているのは、6か所ぜんぶ回ると
+  //     いやいや や 突然イベント の時間で必ずはみ出してしまい、
+  //     +8点が「ぜったいに取れないボーナス」になっていたため
+  if (currentMinutes.value <= 11 * 60 + 45) {
     scoreBreakdown.value.push({ label: '余裕をもって帰宅', points: 8 });
   } else if (currentMinutes.value <= 12 * 60) {
     scoreBreakdown.value.push({ label: '時間内に帰宅', points: 4 });
@@ -1993,40 +2026,40 @@ function judgeResult() {
 
   // ③ ここから下は、総合スコアだけでランクが決まる（点数の高いほうから順に見ていく）
 
-  // 85〜100点
-  if (finalScore.value >= 85) {
+  // 92〜100点
+  if (finalScore.value >= 92) {
     endingRank.value = 'S+ランク';
     endingTitle.value = '伝説の公園大冒険！';
     endingMessage.value = 'たくさん探検して、こうちゃんも親も大満足！ずっとわすれられない大冒険になりました！';
     return;
   }
 
-  // 70〜84点
-  if (finalScore.value >= 70) {
+  // 84〜91点
+  if (finalScore.value >= 84) {
     endingRank.value = 'Sランク';
     endingTitle.value = '公園探検マスター！';
     endingMessage.value = 'たくさんの場所を探検して、楽しい思い出をいっぱい作れました！';
     return;
   }
 
-  // 55〜69点
-  if (finalScore.value >= 55) {
+  // 70〜83点
+  if (finalScore.value >= 70) {
     endingRank.value = 'Aランク';
     endingTitle.value = '最高のおでかけ！';
     endingMessage.value = 'いろいろな場所を回って、こうちゃんも楽しそう。とてもいいおでかけになりました！';
     return;
   }
 
-  // 40〜54点
-  if (finalScore.value >= 40) {
+  // 55〜69点
+  if (finalScore.value >= 55) {
     endingRank.value = 'Bランク';
     endingTitle.value = '楽しい公園探検！';
     endingMessage.value = '楽しく公園を探検できました。次はちがう場所にも行ってみよう！';
     return;
   }
 
-  // 25〜39点
-  if (finalScore.value >= 25) {
+  // 38〜54点
+  if (finalScore.value >= 38) {
     endingRank.value = 'Cランク';
 
     // 遊びすぎて疲れたとき
@@ -2042,7 +2075,7 @@ function judgeResult() {
     return;
   }
 
-  // 0〜24点
+  // 0〜37点
   endingRank.value = 'Dランク';
 
   // 遊びすぎて疲れたとき
