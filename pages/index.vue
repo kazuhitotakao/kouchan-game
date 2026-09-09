@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-const gameTitle: string = 'こうちゃんといっしょ！';
+const gameTitle: string = 'こうちゃんの大冒険';
 
 const gameStarted = ref(false);
 
@@ -163,6 +163,17 @@ const isCommandKeyboardActive = computed(() => {
   return true;
 });
 
+/* いま「いやいやが続いている状態」かどうか
+   ・いやいやタイムの画面にいる（currentEvent === 'tantrum'）
+   ・まだ isTantrum が true（＝なだめられていない）
+
+   「少し待ってみる」に失敗したときは、結果メッセージを出したまま
+   この状態になるので、そのままもう一度コマンドを選べるようにする
+   ※ GAME OVERになったときは currentEvent が 'gameOver' に変わるため、
+     ここは自動的に false になり、GAME OVER画面のほうが優先される
+*/
+const isTantrumUnsolved = computed(() => currentEvent.value === 'tantrum' && isTantrum.value);
+
 /* いま画面に出ているコマンドの数
    ↑↓キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
 */
@@ -173,14 +184,17 @@ const commandCount = computed(() => {
     return canEnterSecretSpot.value ? 7 : 6;
   }
 
+  // いやいやが続いているあいだは、おやつが残っていれば3つ、食べきっていれば2つ
+  // 「少し待ってみる」に失敗して結果メッセージが出ているときも、
+  // いやいやはまだ終わっていないので、この3つ（2つ）から選び直す
+  // ※ 下の「結果表示中は1つ」より先に判定するのがポイント
+  if (isTantrumUnsolved.value) {
+    return snackLeft.value > 0 ? 3 : 2;
+  }
+
   // 結果表示中は「次の場所を選ぶ」の1つだけ
   if (resultMessage.value) {
     return 1;
-  }
-
-  // いやいやタイムは、おやつが残っていれば3つ、食べきっていれば2つ
-  if (currentEvent.value === 'tantrum') {
-    return snackLeft.value > 0 ? 3 : 2;
   }
 
   // それ以外の場所は「行動2つ ＋ べつの場所へ行く」で3つ
@@ -194,24 +208,61 @@ const commandCount = computed(() => {
 */
 const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
 
+/* いやいやタイムの「待つ」コマンドに出す文字
+   1回目は「少し待ってみる」
+   待つことに失敗して2回目以降になったときは「もう少し待ってみる」
+
+   いやいやが続いたまま結果メッセージが出ている＝待つことに失敗した直後、
+   という意味なので、新しい ref を増やさなくても区別できる
+*/
+const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し待ってみる' : '少し待ってみる'));
+
+/* 結果カードの下に出す「次へ進む」コマンドの文字
+   いやいやが起きているときは、次の場所ではなく
+   まず こうちゃん をなだめる場面へ進むので、文言だけ変える
+   （押したときに呼ぶ goToNextPlace() は今までと同じ）
+*/
+const nextPlaceCommandLabel = computed(() => (isTantrum.value ? 'こうちゃんのところへ行く' : '次の場所を選ぶ'));
+
 /* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
    秘密の場所が出ていれば7番目（＝6）
    まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
 */
 const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 
+/* ===== ゲージのしきい値（目もり） =====
+   ゲームのルールで使っている数字を、ここに名前を付けてまとめておく
+   ・ゲージの上に線（目もり）を出すときの位置
+   ・ルールの判定（いやいや発生・危険な状態）
+   の両方で同じ定数を使うので、あとから数字を変えても線とルールがずれない
+*/
+
+/* こうちゃんの体力：これを下回ると「いやいや」が起きるようになる
+   （71以上あるうちは元気いっぱいなので、いやいやは起こらない）
+*/
+const fussEnergyLine = 71;
+
+/* こうちゃんの機嫌：これ以下だと「いやいや」が起きやすくなる */
+const fussMoodLine = 50;
+
+/* こうちゃん・親の体力：これ以下はあぶない（GAME OVERが近い） */
+const dangerEnergyLine = 20;
+
+/* 親のイライラ度：これ以上はあぶない（100でGAME OVER） */
+const dangerStressLine = 80;
+
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
 */
 
 /* 親の体力が20以下 → あと1〜2回の行動で限界 */
-const isParentEnergyDanger = computed(() => parentEnergy.value <= 20);
+const isParentEnergyDanger = computed(() => parentEnergy.value <= dangerEnergyLine);
 
 /* 親のイライラ度が80以上 → あと少しで100 */
-const isParentStressDanger = computed(() => parentStress.value >= 80);
+const isParentStressDanger = computed(() => parentStress.value >= dangerStressLine);
 
 /* こうちゃんの体力が20以下 → 電池切れが近い */
-const isChildEnergyDanger = computed(() => childEnergy.value <= 20);
+const isChildEnergyDanger = computed(() => childEnergy.value <= dangerEnergyLine);
 
 /* 上部ステータスに出す警告メッセージ
    危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
@@ -481,7 +532,7 @@ function checkTantrum() {
 
   // 体力が71以上あるうちは元気いっぱいなので、
   // 機嫌や時間に関係なく いやいや は起こらない
-  if (childEnergy.value >= 71) {
+  if (childEnergy.value >= fussEnergyLine) {
     return;
   }
 
@@ -503,7 +554,7 @@ function checkTantrum() {
   //    機嫌が悪いほど、いやいやが起きやすくなる
   if (childMood.value <= 30) {
     tantrumChance += 0.2; // +20%
-  } else if (childMood.value <= 50) {
+  } else if (childMood.value <= fussMoodLine) {
     tantrumChance += 0.1; // +10%
   }
   // 機嫌が51以上のときは、機嫌による上乗せなし
@@ -894,7 +945,7 @@ function hugChild() {
   saveStatusChanges();
   fixAllStatus();
 
-  // だっこは親の体力を15も使うので、残りが少ないとここでGAME OVERになる
+  // だっこは親の体力を16も使うので、残りが少ないとここでGAME OVERになる
   checkGameOver();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
@@ -929,7 +980,14 @@ function giveSnack() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 少し待ってみる */
+/* ③ 少し待ってみる
+   だっこ・おやつとちがって、これだけは失敗することがある
+   ・50%（0.5）… 落ち着いて、いやいや終了
+   ・50%       … まだ落ち着かないので、いやいやが続く
+
+   成功しても失敗しても、下のステータスの増減と時間（15分）は毎回発生する
+   ＝「もう一度待つか、だっこするか、おやつを使うか」を考える場面になる
+*/
 function waitCalmly() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -940,18 +998,32 @@ function waitCalmly() {
   parentStress.value += 14;
   addMinutes(15);
 
-  isTantrum.value = false;
+  // 0以上1未満のランダムな数を出して、0.5より小さければ成功（＝50%）
+  const calmSuccess = Math.random() < 0.5;
 
-  resultMessage.value = 'となりにしゃがんで待ちました。ときどきこちらをちらっと見ながら、泣き声は少しずつ小さくなっていきます。まだ少しだけごきげんななめです。';
+  if (calmSuccess) {
+    // 落ち着いてくれたので、いやいや終了
+    isTantrum.value = false;
+
+    resultMessage.value = 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
+  } else {
+    // 失敗したときは isTantrum を true のままにしておく（false にはしない）
+    // ここでは checkTantrum() を呼ばない
+    // 新しいいやいやが起きたのではなく、同じいやいやが続いているだけなので、
+    // tantrumCount も増やさない
+    resultMessage.value = 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
+  }
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
 
-  // 待つのはイライラ度が8ふえるので、たまっているとここでGAME OVERになる
+  // 待つのはイライラ度が14ふえるので、たまっているとここでGAME OVERになる
+  // ※ GAME OVERになると currentEvent が 'gameOver' に変わるので、
+  //   いやいやが続いていてもGAME OVER画面のほうが優先される
   checkGameOver();
 
-  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  // 失敗したときも、すぐ次のコマンドを選べるように一番上（0＝だっこ）へ戻す
   selectedCommandIndex.value = 0;
 }
 
@@ -1213,7 +1285,9 @@ function moveEntranceDown() {
 */
 function runSelectedCommand() {
   // 結果表示中は「次の場所を選ぶ」しか出ていないので、それを実行する
-  if (resultMessage.value) {
+  // ただし「少し待ってみる」に失敗していやいやが続いているときは、
+  // 画面に出ているのは いやいや のコマンドなので、ここでは進めない
+  if (resultMessage.value && !isTantrumUnsolved.value) {
     goToNextPlace();
     return;
   }
@@ -1465,23 +1539,19 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!gameStarted" class="title-screen">
       <div class="title-card">
-        <p class="title-card__badge">こうえん たんけん ゲーム</p>
-
         <h1 class="title-card__name">{{ gameTitle }}</h1>
-
-        <p class="title-card__lead">こうちゃんといっしょに、公園をたんけんしよう！</p>
 
         <div class="title-card__rule">
           <p>
-            タイムリミットはお昼の12:00。
+            探検できるのは3時間。タイムリミットはお昼の12:00です。
             <br />
-            それまでにいろいろな場所をまわって、公園の出口まで帰ってこよう！
+            それまでにいろいろな場所をまわって、公園の出口を目指そう！
           </p>
 
           <p>
-            はじめて行く場所ほど、おでかけポイントをたくさんもらえます。
+            はじめて行く場所では、おでかけポイントをたくさんもらえます。
             <br />
-            2回目からは半分になりますが、それでもポイントは増やせます。
+            2回目からはもらえるポイントが半分になります。
             <br />
             こうちゃんと親の体力にも気をつけながら、たくさん探検してみよう！
           </p>
@@ -1506,53 +1576,114 @@ onUnmounted(() => {
             <span class="status-clock__now">{{ currentTime }}</span>
             <span class="status-clock__limit">／ 12:00</span>
 
-            <!-- 直前の行動でかかった時間（結果を表示している間だけ出す） -->
-            <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
+            <!-- 直前の行動でかかった時間（結果を表示している間だけ出す）
+                 出たり消えたりしても幅が変わらないように、
+                 外側の span で置き場所（幅）をいつも確保しておく -->
+            <span class="status-clock__change">
+              <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
+            </span>
           </span>
         </div>
 
         <ul class="status-list">
           <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
-            <span class="status-item__label"><span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>こうちゃんの体力</span>
+            <span class="status-item__label">
+              <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
+              こうちゃんの体力
+            </span>
             <span class="status-item__value">{{ childEnergy }}</span>
-            <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">{{ formatChange(statusChanges.childEnergy) }}</span>
+            <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
+              {{ formatChange(statusChanges.childEnergy) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
+
+              <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
+              <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
+
+              <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
             </span>
           </li>
 
           <li class="status-item">
             <span class="status-item__label">こうちゃんの機嫌</span>
             <span class="status-item__value">{{ childMood }}</span>
-            <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">{{ formatChange(statusChanges.childMood) }}</span>
+            <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
+              {{ formatChange(statusChanges.childMood) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
+
+              <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
+              <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
             </span>
           </li>
 
           <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
-            <span class="status-item__label"><span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>親の体力</span>
+            <span class="status-item__label">
+              <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
+              親の体力
+            </span>
             <span class="status-item__value">{{ parentEnergy }}</span>
-            <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">{{ formatChange(statusChanges.parentEnergy) }}</span>
+            <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
+              {{ formatChange(statusChanges.parentEnergy) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
+
+              <!-- 目もり：あぶないライン（親の体力20以下） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
             </span>
           </li>
 
           <li class="status-item" :class="{ 'status-item--danger': isParentStressDanger }">
-            <span class="status-item__label"><span v-if="isParentStressDanger" class="status-item__alert">⚠</span>親のイライラ度</span>
+            <span class="status-item__label">
+              <span v-if="isParentStressDanger" class="status-item__alert">⚠</span>
+              親のイライラ度
+            </span>
             <span class="status-item__value">{{ parentStress }}</span>
-            <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">{{ formatChange(statusChanges.parentStress) }}</span>
+            <span v-if="statusChanges && statusChanges.parentStress !== 0" class="status-change" :class="changeClass('parentStress', statusChanges.parentStress)">
+              {{ formatChange(statusChanges.parentStress) }}
+            </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-stress" :style="{ width: parentStress + '%' }"></span>
+
+              <!-- 目もり：あぶないライン（イライラ度80以上／100でGAME OVER） -->
+              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerStressLine + '%' }" title="ここより右はあぶないです（イライラ度80／100でGAME OVER）"></span>
             </span>
           </li>
         </ul>
 
-        <div class="status-pills">
-          <span class="pill pill--point">おでかけポイント<b>{{ outingPoint }}</b><span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">{{ formatChange(statusChanges.outingPoint) }}</span></span>
+        <!-- ゲージの目もりの説明 -->
+        <p class="gauge-legend">
+          <span class="gauge-legend__item">
+            <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
+            ぐずりだすライン
+          </span>
 
-          <span class="pill pill--snack">おやつ残り<b>{{ snackLeft }}</b>個</span>
+          <span class="gauge-legend__item">
+            <span class="gauge-legend__mark gauge-legend__mark--danger"></span>
+            あぶないライン
+          </span>
+        </p>
+
+        <div class="status-pills">
+          <span class="pill pill--point">
+            おでかけポイント
+            <b>{{ outingPoint }}</b>
+            <span class="pill__change">
+              <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
+                {{ formatChange(statusChanges.outingPoint) }}
+              </span>
+            </span>
+          </span>
+
+          <span class="pill pill--snack">
+            おやつ残り
+            <b>{{ snackLeft }}</b>
+            個
+          </span>
         </div>
 
         <div class="status-found">
@@ -1690,14 +1821,18 @@ onUnmounted(() => {
                   <span class="command-box__text">下で見守る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1753,14 +1888,18 @@ onUnmounted(() => {
                   <span class="command-box__text">ベンチから見守る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1816,14 +1955,18 @@ onUnmounted(() => {
                   <span class="command-box__text">木かげで少し休む</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1879,14 +2022,18 @@ onUnmounted(() => {
                   <span class="command-box__text">少し離れて見る</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -1942,14 +2089,18 @@ onUnmounted(() => {
                   <span class="command-box__text">ゆっくり歩いてのぼる</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -2005,14 +2156,18 @@ onUnmounted(() => {
                   <span class="command-box__text">二人で景色をながめる</span>
                 </button>
 
-                <button class="command-box__item command-box__item--sub" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 2">
+                <button
+                  class="command-box__item command-box__item--sub"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                  @click="goToNextPlace"
+                  @mouseenter="selectedCommandIndex = 2">
                   <span class="command-box__text">べつの場所へ行く</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -2025,14 +2180,17 @@ onUnmounted(() => {
             <article class="place-card place-card--tantrum">
               <h2 class="place-card__title">いやいやタイム！</h2>
 
-              <p class="place-card__text">こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。</p>
+              <p class="place-card__text">
+                こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
+              </p>
             </article>
 
             <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
               <h3 class="result-card__title">結果</h3>
 
               <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-              <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+              <!-- 待つことに失敗して、まだいやいやが続いているときに出す -->
+              <p v-if="isTantrum" class="result-alert">まだ いやいや は続いています…</p>
 
               <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
               <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -2057,7 +2215,8 @@ onUnmounted(() => {
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
-              <template v-if="!resultMessage">
+              <!-- いやいやが続いているあいだは、結果が出ていてもコマンドを出しつづける -->
+              <template v-if="isTantrumUnsolved">
                 <p class="command-box__label">どうする？</p>
 
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
@@ -2071,14 +2230,18 @@ onUnmounted(() => {
 
                 <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }" @click="waitCalmly" @mouseenter="selectedCommandIndex = waitCommandIndex">
-                  <span class="command-box__text">少し待ってみる</span>
+                <button
+                  class="command-box__item"
+                  :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }"
+                  @click="waitCalmly"
+                  @mouseenter="selectedCommandIndex = waitCommandIndex">
+                  <span class="command-box__text">{{ waitCommandLabel }}</span>
                 </button>
               </template>
 
               <template v-else>
                 <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">次の場所を選ぶ</span>
+                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                 </button>
               </template>
             </nav>
@@ -2108,13 +2271,34 @@ onUnmounted(() => {
                 <h3 class="record-card__title">今日の記録</h3>
 
                 <ul class="record-list">
-                  <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
-                  <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
-                  <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
-                  <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
-                  <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
-                  <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
-                  <li class="record-item"><span>帰った時間</span><b>{{ currentTime }}</b></li>
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ outingPoint }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>親の体力</span>
+                    <b>{{ parentEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの機嫌</span>
+                    <b>{{ childMood }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの体力</span>
+                    <b>{{ childEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>いやいや発生</span>
+                    <b>{{ tantrumCount }}回</b>
+                  </li>
+                  <li class="record-item">
+                    <span>探検した場所の数</span>
+                    <b>{{ visitedPlaces.length }}か所</b>
+                  </li>
+                  <li class="record-item">
+                    <span>帰った時間</span>
+                    <b>{{ currentTime }}</b>
+                  </li>
                 </ul>
               </article>
 
@@ -2175,14 +2359,38 @@ onUnmounted(() => {
                 <h3 class="record-card__title">今日の記録</h3>
 
                 <ul class="record-list">
-                  <li class="record-item"><span>おでかけポイント</span><b>{{ outingPoint }}</b></li>
-                  <li class="record-item"><span>親の体力</span><b>{{ parentEnergy }}</b></li>
-                  <li class="record-item"><span>親のイライラ度</span><b>{{ parentStress }}</b></li>
-                  <li class="record-item"><span>こうちゃんの機嫌</span><b>{{ childMood }}</b></li>
-                  <li class="record-item"><span>こうちゃんの体力</span><b>{{ childEnergy }}</b></li>
-                  <li class="record-item"><span>いやいや発生</span><b>{{ tantrumCount }}回</b></li>
-                  <li class="record-item"><span>探検した場所の数</span><b>{{ visitedPlaces.length }}か所</b></li>
-                  <li class="record-item"><span>帰宅時刻</span><b>{{ currentTime }}</b></li>
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ outingPoint }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>親の体力</span>
+                    <b>{{ parentEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>親のイライラ度</span>
+                    <b>{{ parentStress }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの機嫌</span>
+                    <b>{{ childMood }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>こうちゃんの体力</span>
+                    <b>{{ childEnergy }}</b>
+                  </li>
+                  <li class="record-item">
+                    <span>いやいや発生</span>
+                    <b>{{ tantrumCount }}回</b>
+                  </li>
+                  <li class="record-item">
+                    <span>探検した場所の数</span>
+                    <b>{{ visitedPlaces.length }}か所</b>
+                  </li>
+                  <li class="record-item">
+                    <span>帰宅時刻</span>
+                    <b>{{ currentTime }}</b>
+                  </li>
                 </ul>
               </article>
 
@@ -2239,6 +2447,17 @@ onUnmounted(() => {
   --parent-energy: #4ea8e6;
   --parent-stress: #f2705f;
 
+  /* ゲージの目もり（しきい値）の色
+     ゲージの中身（緑・オレンジ・青・赤）のどれに重なっても見えるように、
+     2本の線は「色」も「太さ」も変えてある
+     ・ぐずりだすライン … 白（まわりを黒く縁取り）
+     ・あぶないライン   … 黒（まわりを白く縁取り・少し太い）
+     白と黒は明るさが正反対なので、どのゲージの上でも見分けやすい
+     縁取りをおたがい逆の色にしてあるので、下地が明るくても暗くても消えない
+  */
+  --line-fuss: #ffffff;
+  --line-danger: #000000;
+
   /* 増減表示の色（中央カード用と、暗い上部ステータス用） */
   --good: #1f8a4c;
   --bad: #c9412f;
@@ -2259,7 +2478,13 @@ onUnmounted(() => {
   margin: 0 auto;
   background: linear-gradient(180deg, #8ed2f0 0%, #cfe8bf 42%, #f4f7e8 100%);
   color: var(--ink);
-  font-family: system-ui, -apple-system, 'Hiragino Kaku Gothic ProN', 'Yu Gothic', Meiryo, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Hiragino Kaku Gothic ProN',
+    'Yu Gothic',
+    Meiryo,
+    sans-serif;
   font-size: 16px;
   line-height: 1.7;
   box-shadow: 0 0 60px rgb(0 0 0 / 55%);
@@ -2344,13 +2569,15 @@ onUnmounted(() => {
   flex: none;
   grid-template-areas:
     'clock gauges pills'
+    'legend legend legend'
     'found found found'
     'warning warning warning'
     'notice notice notice';
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 8px 28px;
+  /* 文字を大きくしたぶん、列のすき間と左右の余白を少しつめて場所を作る */
+  gap: 10px 20px;
   align-items: center;
-  padding: 12px 28px 14px;
+  padding: 12px 24px 14px;
   border-bottom: 3px solid var(--gold);
   background: linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
   color: #fff;
@@ -2363,13 +2590,19 @@ onUnmounted(() => {
   grid-area: clock;
   flex-direction: column;
   align-items: flex-start;
-  padding-right: 24px;
+  gap: 2px;
+  padding-right: 18px;
   border-right: 1px solid var(--navy-line);
 }
 
 .status-area__title {
-  color: #cfe0f7;
-  font-size: 12px;
+  color: #dbe8fa;
+  /* clamp(いちばん小さいとき, 画面幅に合わせた大きさ, いちばん大きいとき)
+     画面が広いほど大きく、せまい画面でも小さくなりすぎないようにする書き方
+     1.15vw ＝ 画面の横幅の1.15%（1280pxの画面なら約14.7px） */
+  font-size: clamp(14px, 1.15vw, 17px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
@@ -2380,14 +2613,25 @@ onUnmounted(() => {
 }
 
 .status-clock__now {
-  font-size: 28px;
+  font-size: clamp(30px, 2.3vw, 36px);
   font-weight: 700;
   letter-spacing: 0.02em;
 }
 
 .status-clock__limit {
   color: #a9bedd;
-  font-size: 12px;
+  font-size: clamp(13px, 1vw, 15px);
+}
+
+/* 時間の増減（+20分）を置く場所
+   中身が出ても消えても幅が変わらないように、いつも同じ幅を空けておく
+   ここが伸び縮みすると、右にあるゲージやポイントの位置までずれてしまう
+   （時間は増えるだけなので「+25分」が入る幅にしてある）
+*/
+.status-clock__change {
+  display: inline-block;
+  width: 52px;
+  text-align: left;
 }
 
 .status-clock .status-change {
@@ -2399,7 +2643,7 @@ onUnmounted(() => {
   display: grid;
   grid-area: gauges;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 4px 20px;
+  gap: 6px 14px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2407,23 +2651,32 @@ onUnmounted(() => {
 
 .status-item {
   display: grid;
-  /* ラベル ／ 現在値 ／ 直前の増減 の3列（ゲージは下段に全幅で置く） */
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  /* 上から3段に分けて置く
+     1段目 … ラベル（横はばいっぱい）
+     2段目 … 現在値 ／ 直前の増減
+     3段目 … ゲージ（横はばいっぱい）
+     ラベルを独立した行にすることで、文字を大きくしても
+     「こうちゃんの体力」が「こうちゃんの…」と切れなくなる */
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: baseline;
-  column-gap: 6px;
+  column-gap: 8px;
 }
 
 .status-item__label {
+  grid-column: 1 / -1;
   overflow: hidden;
-  color: #bed2ee;
-  font-size: 11px;
+  color: #cfe0f7;
+  font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .status-item__value {
-  font-size: 16px;
+  /* 100 → 98 → 9 とけた数が変わっても右の増減表示が動かないように、
+     数字3けたぶん（3ch）の幅をいつも確保しておく */
+  min-width: 3ch;
+  font-size: clamp(20px, 1.7vw, 24px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: 1.2;
@@ -2437,7 +2690,7 @@ onUnmounted(() => {
      ※ span のままだと transform が効かないので inline-block にする */
   display: inline-block;
   animation: status-pop 0.35s ease-out;
-  font-size: 12px;
+  font-size: clamp(13px, 1vw, 15px);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -2490,12 +2743,46 @@ onUnmounted(() => {
 }
 
 .gauge {
+  /* 目もり（.gauge__mark）を上に重ねるので、位置の基準にする */
+  position: relative;
   display: block;
   grid-column: 1 / -1;
-  height: 8px;
+  height: 10px;
   overflow: hidden;
   border-radius: 999px;
   background: rgb(0 0 0 / 32%);
+}
+
+/* ゲージのしきい値を示す縦線（目もり）
+   left にしきい値の数字（％）を入れて、その位置に立てる
+   ゲージの伸び縮みとは関係なく、いつも同じ場所にある
+*/
+.gauge__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  /* 線の中心をしきい値の位置に合わせる（左に半分ずらす） */
+  margin-left: -1.5px;
+  border-radius: 1px;
+}
+
+/* ぐずりだすライン（水色・細め）
+   まわりを暗く縁取りして、明るいゲージの上でもはっきり見えるようにする
+*/
+.gauge__mark--fuss {
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
+}
+
+/* あぶないライン（黒・太め）
+   暗い下地に重なっても消えないように、まわりを白く縁取る
+*/
+.gauge__mark--danger {
+  width: 4px;
+  margin-left: -2px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
 }
 
 .gauge__fill {
@@ -2522,34 +2809,82 @@ onUnmounted(() => {
   background: var(--parent-stress);
 }
 
+/* ゲージの目もりの説明（ゲージの下に1行だけ） */
+.gauge-legend {
+  display: flex;
+  grid-area: legend;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  color: #a9bedd;
+  font-size: clamp(11.5px, 0.9vw, 13px);
+  line-height: 1.4;
+}
+
+.gauge-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* 説明の前に置く、ゲージの目もりと同じ見た目の小さな線 */
+.gauge-legend__mark {
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+}
+
+.gauge-legend__mark--fuss {
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
+}
+
+.gauge-legend__mark--danger {
+  width: 4px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
+}
+
 /* おでかけポイント・おやつ残り（右端に縦積み） */
 .status-pills {
   display: flex;
   grid-area: pills;
   flex-direction: column;
-  gap: 4px;
-  padding-left: 24px;
+  gap: 6px;
+  padding-left: 18px;
   border-left: 1px solid var(--navy-line);
 }
 
 .pill {
-  padding: 2px 12px;
+  padding: 4px 14px;
   border: 1px solid var(--navy-line);
   border-radius: 8px;
   background: rgb(255 255 255 / 8%);
-  font-size: 11px;
+  font-size: clamp(13px, 1.05vw, 15px);
   text-align: right;
   white-space: nowrap;
 }
 
 .pill b {
+  /* こちらも数字2けたぶんの幅を確保して、けたが増えてもずれないようにする */
+  display: inline-block;
+  min-width: 2ch;
   margin-left: 6px;
-  font-size: 16px;
+  font-size: clamp(19px, 1.5vw, 22px);
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .pill--point b {
   color: var(--gold);
+}
+
+/* おでかけポイントの増減も、置き場所をいつも空けておく（同じ理由） */
+.pill__change {
+  display: inline-block;
+  width: 34px;
+  text-align: left;
 }
 
 .pill .status-change {
@@ -2566,23 +2901,23 @@ onUnmounted(() => {
   grid-area: found;
   align-items: center;
   gap: 12px;
-  max-height: 56px;
+  max-height: 64px;
   overflow-y: auto;
-  padding: 5px 12px;
+  padding: 7px 14px;
   border-radius: 8px;
   background: rgb(0 0 0 / 22%);
 }
 
 .status-found__label {
   flex: none;
-  color: #bed2ee;
-  font-size: 11px;
+  color: #cfe0f7;
+  font-size: clamp(13px, 1.05vw, 15px);
   white-space: nowrap;
 }
 
 .status-found__empty {
-  color: #8fa4c4;
-  font-size: 12px;
+  color: #a3b7d6;
+  font-size: clamp(13px, 1vw, 15px);
 }
 
 .status-found__list {
@@ -2595,11 +2930,11 @@ onUnmounted(() => {
 }
 
 .status-found__item {
-  padding: 1px 10px;
+  padding: 3px 12px;
   border-radius: 999px;
   background: #fef3d6;
   color: #6a4a10;
-  font-size: 12px;
+  font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.6;
 }
 
@@ -2620,7 +2955,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: rgb(242 112 95 / 24%);
   color: #ffd6cd;
-  font-size: 12.5px;
+  font-size: clamp(13.5px, 1.1vw, 16px);
   font-weight: 700;
   line-height: 1.6;
 }
@@ -2634,7 +2969,7 @@ onUnmounted(() => {
   border-radius: 4px;
   background: rgb(255 192 67 / 18%);
   color: #ffe6b0;
-  font-size: 12.5px;
+  font-size: clamp(13.5px, 1.1vw, 16px);
   line-height: 1.5;
 }
 
@@ -3029,7 +3364,9 @@ onUnmounted(() => {
    合わせて0.4秒ほどなので、テンポは悪くならない
 */
 .scene-enter-active {
-  transition: opacity 0.24s ease-out, transform 0.24s ease-out;
+  transition:
+    opacity 0.24s ease-out,
+    transform 0.24s ease-out;
 }
 
 .scene-leave-active {
@@ -3429,7 +3766,9 @@ onUnmounted(() => {
   line-height: 1.4;
   text-align: left;
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
 }
 
 /* 選択カーソル「▶」（選ばれていないボタンでは見えない）
@@ -3597,11 +3936,26 @@ onUnmounted(() => {
   }
 
   .status-clock__now {
-    font-size: 24px;
+    font-size: clamp(24px, 1.9vw, 30px);
+  }
+
+  /* 文字は大きいままにしたいので、いちばん大きいときの値だけ少し下げる */
+  .status-item__value {
+    font-size: clamp(18px, 1.5vw, 21px);
+  }
+
+  .pill b {
+    font-size: clamp(17px, 1.35vw, 20px);
   }
 
   .status-found {
-    max-height: 44px;
+    max-height: 52px;
+  }
+
+  /* 高さが足りないので、目もりの説明は隠す
+     （目もりの線そのものは残り、マウスを乗せると説明が出る） */
+  .gauge-legend {
+    display: none;
   }
 
   .stage {
@@ -3693,6 +4047,7 @@ onUnmounted(() => {
     grid-template-areas:
       'clock clock'
       'gauges gauges'
+      'legend legend'
       'pills pills'
       'found found'
       'warning warning'
@@ -3711,7 +4066,7 @@ onUnmounted(() => {
   }
 
   .status-clock__now {
-    font-size: 20px;
+    font-size: 24px;
   }
 
   .status-list {
