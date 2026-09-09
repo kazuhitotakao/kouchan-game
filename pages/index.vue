@@ -58,7 +58,7 @@ const selectedCommandIndex = ref(0);
 
 /* ゲームのステータス */
 const childEnergy = ref(100); // こうちゃんの体力
-const childMood = ref(80); // こうちゃんの機嫌
+const childMood = ref(55); // こうちゃんの機嫌（ぐずりだすライン50のすぐ上からスタート）
 const outingPoint = ref(0); // おでかけポイント
 const parentEnergy = ref(100); // 親の体力
 const parentStress = ref(0); // 親のイライラ度
@@ -84,6 +84,41 @@ const isTantrum = ref(false);
    ※ 見つけたものの本体は collectedItems のままで、取得のルールは変えていない
 */
 const foundItemsThisAction = ref<string[]>([]);
+
+/* ランダムイベントで動いたステータス1つぶんの型
+   label     … 「おでかけポイント」などの項目名
+   text      … 「+5」「-8」の形にした増減
+   className … 増減の色（changeClass() が返すクラス名）
+*/
+type RandomEventEffect = {
+  label: string;
+  text: string;
+  className: string;
+};
+
+/* 今回の行動で起きたランダムイベント（演出用）
+   ・randomEventText    … 何が起きたかの文章
+   ・randomEventEffects … そのハプニングだけのステータス増減
+
+   前は結果メッセージの文章に「おでかけポイント +5」と書き足していたが、
+   それだと地の文にまぎれて見のがされてしまうので、
+   文章と増減を分けて持ち、画面では専用の枠に出す
+
+   ※ ステータスの数字そのものは、今までどおり outingPoint などを直接動かしている
+     ここに入れるのは「画面に出すためのメモ」だけ
+   ※ 行動をはじめるたびに空へ戻すので、直前の1回ぶんだけが入っている
+*/
+const randomEventText = ref('');
+const randomEventEffects = ref<RandomEventEffect[]>([]);
+
+/* 今回の行動でいやいやが始まったときの文章（演出用）
+
+   結果メッセージに書き足すと、あとから画面に足した
+   「アイテム発見」「ハプニング」の表示より前に出てしまい、
+   起きた順（行動 → アイテム → ハプニング → いやいや）と食いちがう
+   そこで文章だけここに持ち、画面のいちばん下に出す
+*/
+const tantrumText = ref('');
 
 /* いやいやが起きた回数（記録用） */
 const tantrumCount = ref(0);
@@ -420,6 +455,13 @@ function startStatusChanges() {
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
 
+  // 演出用：前の行動のハプニング表示も空へ戻す
+  randomEventText.value = '';
+  randomEventEffects.value = [];
+
+  // 演出用：前の行動のいやいや文も空へ戻す
+  tantrumText.value = '';
+
   statusBefore.value = {
     childEnergy: childEnergy.value,
     childMood: childMood.value,
@@ -460,6 +502,37 @@ function formatChange(value: number) {
   return value > 0 ? `+${value}` : String(value);
 }
 
+/* 「分」で持っている時間を「09:25」の形の文字にする
+
+   statusBefore.minutes には 09:00 が 540（＝9×60）のように
+   分だけの数で入っているので、そのままだと画面に出せない
+   60で割った答えが「時」、60で割ったあまりが「分」になる
+
+   padStart(2, '0') は「2けたに足りないぶんを0でうめる」という意味
+   （9 → 09）。addMinutes() の中の書きかたとそろえてある
+*/
+function formatMinutesToTime(totalMinutes: number) {
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+}
+
+/* 時計の文字から、先頭の「0」を取る（09:25 → 9:25）
+
+   結果カードの「時間」は 9:25 のほうがすっと読めるので、ここだけ0を外す
+   ※ 上部ステータスの時計は 09:25 のままにしてある
+     こちらはいつも同じ幅で並んでいたほうが、時間の進みが見やすいため
+*/
+function removeLeadingZero(time: string) {
+  // '0' ではじまっているときだけ、1文字目を取りのぞく
+  if (time.startsWith('0')) {
+    return time.slice(1);
+  }
+
+  return time;
+}
+
 /* 変化が「良い」「悪い」「変化なし」のどれかを判定して、CSSのクラス名を返す
 
    ※ 単純に プラス＝良い ではないので注意
@@ -486,7 +559,23 @@ function changeClass(statusName: string, value: number) {
 }
 
 /* 中央の「今回の変化」に並べる6項目
-   表示する名前・数字・色のクラス名をまとめておく
+
+   1行につき、次の4つを持たせている
+   ・label      … 「こうちゃんの体力」などの項目名
+   ・before     … 行動する前の値（statusBefore に控えてあるもの）
+   ・after      … 行動したあとの値（いま画面に出ている現在値そのもの）
+   ・changeText … 「+6」「-18」の形にした増減
+   ・className  … 増減の色（良い・悪い・変化なし）
+
+   before と after を並べて出すことで、
+   「-18 減った」だけでなく「残り82になった」まで一目で分かるようにする
+
+   ※ after には fixAllStatus() で0〜100に丸めたあとの現在値を使う
+     たとえば 親の体力が 10 のときに 17 使うと、内部の計算では -7 になるが、
+     画面のステータスは 0 なので「10 → 0（-17）」と出る
+     （増減の -17 は statusChanges にそのまま残っているので、ここは変えない）
+
+   ※ この computed は表示を作るだけで、ゲームの値は書きかえない
 */
 const changeRows = computed(() => {
   const changes = statusChanges.value;
@@ -496,13 +585,55 @@ const changeRows = computed(() => {
     return [];
   }
 
+  // 毎回 statusBefore.value と書かなくてよいように、行動前の控えを取り出しておく
+  const before = statusBefore.value;
+
   return [
-    { label: 'こうちゃんの体力', text: formatChange(changes.childEnergy), className: changeClass('childEnergy', changes.childEnergy) },
-    { label: 'こうちゃんの機嫌', text: formatChange(changes.childMood), className: changeClass('childMood', changes.childMood) },
-    { label: 'おでかけポイント', text: formatChange(changes.outingPoint), className: changeClass('outingPoint', changes.outingPoint) },
-    { label: '親の体力', text: formatChange(changes.parentEnergy), className: changeClass('parentEnergy', changes.parentEnergy) },
-    { label: '親のイライラ度', text: formatChange(changes.parentStress), className: changeClass('parentStress', changes.parentStress) },
-    { label: 'かかった時間', text: `${formatChange(changes.minutes)}分`, className: changeClass('minutes', changes.minutes) },
+    {
+      label: 'こうちゃんの体力',
+      before: String(before.childEnergy),
+      after: String(childEnergy.value),
+      changeText: formatChange(changes.childEnergy),
+      className: changeClass('childEnergy', changes.childEnergy),
+    },
+    {
+      label: 'こうちゃんの機嫌',
+      before: String(before.childMood),
+      after: String(childMood.value),
+      changeText: formatChange(changes.childMood),
+      className: changeClass('childMood', changes.childMood),
+    },
+    {
+      label: 'おでかけポイント',
+      before: String(before.outingPoint),
+      after: String(outingPoint.value),
+      changeText: formatChange(changes.outingPoint),
+      className: changeClass('outingPoint', changes.outingPoint),
+    },
+    {
+      label: '親の体力',
+      before: String(before.parentEnergy),
+      after: String(parentEnergy.value),
+      changeText: formatChange(changes.parentEnergy),
+      className: changeClass('parentEnergy', changes.parentEnergy),
+    },
+    {
+      label: '親のイライラ度',
+      before: String(before.parentStress),
+      after: String(parentStress.value),
+      changeText: formatChange(changes.parentStress),
+      className: changeClass('parentStress', changes.parentStress),
+    },
+    {
+      // 時間だけは数ではなく時計の形で出す
+      // before は「分」で控えてあるので formatMinutesToTime() で 09:00 の形に直し、
+      // after は画面の時計と同じ currentTime をそのまま使う
+      label: '時間',
+      before: removeLeadingZero(formatMinutesToTime(before.minutes)),
+      after: removeLeadingZero(currentTime.value),
+      changeText: `${formatChange(changes.minutes)}分`,
+      className: changeClass('minutes', changes.minutes),
+    },
   ];
 });
 
@@ -572,9 +703,9 @@ function addCollectedItem(itemName: string) {
   collectedItems.value.push(itemName);
 
   // 演出用：この行動で新しく見つけたものとして覚えておく
+  // 「〜を見つけました！」の文は、この foundItemsThisAction をもとに
+  // 画面のほうで組み立てる（アイテムの名前だけ色をつけて目立たせるため）
   foundItemsThisAction.value.push(itemName);
-
-  resultMessage.value += `\n「${itemName}」を見つけました！`;
 }
 
 /* ランダムイベント（通常行動中に起きる、小さなハプニング）
@@ -591,6 +722,23 @@ function addCollectedItem(itemName: string) {
    ※ 専用画面へ移動する「突然イベント」とは別物
      こちらは結果カードに文章とステータス変化が少し足されるだけ
 */
+/* ランダムイベントで動いたステータスを、画面に出す形で1つ控える
+
+   label    … 画面に出す項目名（「おでかけポイント」など）
+   statName … 中の名前（changeClass() に渡して色を決めるのに使う）
+   amount   … その増減（5 なら +5、-8 なら -8）
+
+   ※ ステータスそのものは、呼ぶ前に outingPoint.value += 5 のように動かしてある
+     この関数は「画面に出す用のメモを1行足す」だけ
+*/
+function addRandomEventEffect(label: string, statName: string, amount: number) {
+  randomEventEffects.value.push({
+    label,
+    text: formatChange(amount),
+    className: changeClass(statName, amount),
+  });
+}
+
 function runRandomEvent() {
   // ① まず「そもそも起こるか？」の抽選（20%）
   //   0.2以上（＝80%）なら、何もしないでここで終わり
@@ -612,57 +760,91 @@ function runRandomEvent() {
   //     ハプニングは場所の探検ではないため、半減の対象にしない
   if (eventNumber === 0) {
     outingPoint.value += 5;
-    resultMessage.value += '\n\nそのとき、四つ葉のクローバーを見つけました！\nおでかけポイント +5';
+    randomEventText.value = 'そのとき、四つ葉のクローバーを見つけました！';
+    addRandomEventEffect('おでかけポイント', 'outingPoint', 5);
     return;
   }
 
   // ② 急に「だっこ！」
   if (eventNumber === 1) {
     parentEnergy.value -= 8;
-    resultMessage.value += '\n\nこうちゃんが急に「だっこ！」と言い出しました。\n親の体力 -8';
+    randomEventText.value = 'こうちゃんが急に「だっこ！」と言い出しました。';
+    addRandomEventEffect('親の体力', 'parentEnergy', -8);
     return;
   }
 
   // ③ きれいな鳥
   if (eventNumber === 2) {
     childMood.value += 5;
-    resultMessage.value += '\n\n木の上にきれいな鳥を見つけました！\nこうちゃんの機嫌 +5';
+    randomEventText.value = '木の上にきれいな鳥を見つけました！';
+    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
     return;
   }
 
   // ④ 急に走り出してヒヤッ
   if (eventNumber === 3) {
     parentStress.value += 10;
-    resultMessage.value += '\n\nこうちゃんが急に走り出してヒヤッとしました！\n親のイライラ度 +10';
+    randomEventText.value = 'こうちゃんが急に走り出してヒヤッとしました！';
+    addRandomEventEffect('親のイライラ度', 'parentStress', 10);
     return;
   }
 
   // ⑤ ちょうちょ
   if (eventNumber === 4) {
     childMood.value += 4;
-    resultMessage.value += '\n\n目の前をちょうちょがひらひら飛んでいきました。こうちゃんはうれしそうに追いかけています！\nこうちゃんの機嫌 +4';
+    randomEventText.value = '目の前をちょうちょがひらひら飛んでいきました。こうちゃんはうれしそうに追いかけています！';
+    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 4);
     return;
   }
 
   // ⑥ ベンチでひと休み
   if (eventNumber === 5) {
     parentEnergy.value += 5;
-    resultMessage.value += '\n\nちょうど空いているベンチを見つけて、少しひと休みできました。\n親の体力 +5';
+    randomEventText.value = 'ちょうど空いているベンチを見つけて、少しひと休みできました。';
+    addRandomEventEffect('親の体力', 'parentEnergy', 5);
     return;
   }
 
   // ⑦ 靴がぽろっと脱げる
   if (eventNumber === 6) {
     parentStress.value += 4;
-    resultMessage.value += '\n\nこうちゃんが走っていると、片方の靴がぽろっと脱げてしまいました。ちょっと待って、履きなおします。\n親のイライラ度 +4';
+    randomEventText.value = 'こうちゃんが走っていると、片方の靴がぽろっと脱げてしまいました。ちょっと待って、履きなおします。';
+    addRandomEventEffect('親のイライラ度', 'parentStress', 4);
     return;
   }
 
   // ⑧ 水たまりで大はしゃぎ（良い面と悪い面の両方があるイベント）
   //   ここまでの7つに当てはまらなかった＝eventNumber が 7 のとき
+  //   2つステータスが動くので、しるしも2つ並べる
   childMood.value += 5;
   parentStress.value += 3;
-  resultMessage.value += '\n\nこうちゃんが水たまりを見つけて大はしゃぎ！楽しそうだけど、親はちょっとヒヤヒヤです。\nこうちゃんの機嫌 +5\n親のイライラ度 +3';
+  randomEventText.value = 'こうちゃんが水たまりを見つけて大はしゃぎ！楽しそうだけど、親はちょっとヒヤヒヤです。';
+  addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
+  addRandomEventEffect('親のイライラ度', 'parentStress', 3);
+}
+
+/* 疲れてくると、だんだん機嫌もわるくなる
+
+   こうちゃんの体力が「ぐずりだすライン（71）」を下回っているあいだは、
+   通常行動をするたびに機嫌が4下がる
+
+   これが無いと、遊ぶ行動はどれも機嫌がふえるだけなので、
+   機嫌はすぐ100に張りついて「見るだけの数字」になってしまう
+   下がる力があることで、
+   「もう1か所あそぶ？ 休む？ おやつを使う？」を
+   最後まで考えられる数字になる
+
+   ※ いやいやをなだめる行動と突然イベントでは呼ばれない
+     （どちらも finishPlayAction() を通らないため）
+     なだめている最中にさらに機嫌が下がると、立て直せなくなってしまう
+*/
+function dropMoodWhenTired() {
+  // まだ元気（体力71以上）なら、機嫌は下がらない
+  if (childEnergy.value >= fussEnergyLine) {
+    return;
+  }
+
+  childMood.value -= 4;
 }
 
 /* いやいや判定
@@ -724,7 +906,7 @@ function checkTantrum() {
   childMood.value -= 15;
   parentStress.value += 12;
 
-  resultMessage.value += '\n\nそのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
+  tantrumText.value = 'そのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
 }
 
 /* GAME OVER判定
@@ -820,27 +1002,33 @@ function checkSuddenEvent() {
 /* 場所で1つ行動したあとの共通処理
    ① その場所を探検済みにする
    ② たまにランダムイベントが起こる
-   ③ いやいやが始まるか判定する
-   ④ 今回の変化量を記録する（ランダムイベントといやいやの分もふくむ）
-   ⑤ ステータスを0〜100に収める
-   ⑥ GAME OVERになっていないか判定する
-   ⑦ 突然イベントが起きるか抽選する（起きるなら予定表に書くだけ）
+   ③ 疲れていたら、機嫌が少し下がる
+   ④ いやいやが始まるか判定する
+   ⑤ 今回の変化量を記録する（ランダムイベントと機嫌ダウン、いやいやの分もふくむ）
+   ⑥ ステータスを0〜100に収める
+   ⑦ GAME OVERになっていないか判定する
+   ⑧ 突然イベントが起きるか抽選する（起きるなら予定表に書くだけ）
    ※ いやいやをなだめる行動では呼ばない（ランダムイベントを起こさないため）
    ※ 突然イベントの行動でも呼ばない（突然イベントが連続で起きないようにするため）
 
-   ⑥を⑤の次に置いているので、
+   ⑦を⑥の次に置いているので、
    ランダムイベントの「だっこ！」で親の体力が0になった場合も、
    いやいや発生でイライラ度が100になった場合も、まとめてGAME OVERになる
+
+   ③がいやいや判定より前にあるのもポイント
+   下がったあとの機嫌でいやいやを判定するので、
+   「疲れて機嫌もわるい」ときほど、ちゃんといやいやが起きやすくなる
 */
 function finishPlayAction(place: GameEvent) {
   addVisitedPlace(place);
   runRandomEvent();
+  dropMoodWhenTired();
   checkTantrum();
   saveStatusChanges();
   fixAllStatus();
   checkGameOver();
 
-  /* ⑦ 突然イベントの抽選（いちばん最後）
+  /* ⑧ 突然イベントの抽選（いちばん最後）
 
      つぎの3つのときは抽選しない
      ・GAME OVERになった  … もう続きが無いので
@@ -1877,7 +2065,7 @@ function goToGoal() {
 /* もう一度あそぶ */
 function resetGame() {
   childEnergy.value = 100;
-  childMood.value = 80;
+  childMood.value = 55;
   outingPoint.value = 0;
   parentEnergy.value = 100;
   parentStress.value = 0;
@@ -1902,6 +2090,9 @@ function resetGame() {
 
   // 演出用に控えていたものも空に戻す
   foundItemsThisAction.value = [];
+  randomEventText.value = '';
+  randomEventEffects.value = [];
+  tantrumText.value = '';
 
   // 今回追加したGAME OVER用のstateも空に戻す
   gameOverTitle.value = '';
@@ -2539,7 +2730,7 @@ onUnmounted(() => {
         <div class="status-found">
           <span class="status-found__label">見つけたもの</span>
 
-          <span v-if="collectedItems.length === 0" class="status-found__empty">まだなし</span>
+          <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
 
           <ul v-else class="status-found__list">
             <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
@@ -2645,6 +2836,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -2652,7 +2868,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -2713,6 +2938,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -2720,7 +2970,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -2780,6 +3039,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -2787,7 +3071,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -2847,6 +3140,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -2854,7 +3172,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -2914,6 +3241,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -2921,7 +3273,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -2981,6 +3342,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -2988,7 +3374,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3051,6 +3446,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -3058,7 +3478,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3116,6 +3545,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -3123,7 +3577,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3175,6 +3638,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -3182,7 +3670,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3234,6 +3731,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -3241,7 +3763,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3293,6 +3824,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -3300,7 +3856,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3362,6 +3927,31 @@ onUnmounted(() => {
 
               <p class="result-card__text">{{ resultMessage }}</p>
 
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
               <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
               <div v-if="statusChanges" class="change-box">
                 <p class="change-box__title">今回の変化（合計）</p>
@@ -3369,7 +3959,16 @@ onUnmounted(() => {
                 <ul class="change-list">
                   <li v-for="row in changeRows" :key="row.label" class="change-item">
                     <span class="change-item__label">{{ row.label }}</span>
-                    <span class="change-item__value" :class="row.className">{{ row.text }}</span>
+
+                    <!-- 行動前 → 行動後
+                         「いまいくつになったか」がすぐ分かるように、
+                         行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                    <span class="change-item__flow">
+                      <span class="change-item__before">{{ row.before }}</span>
+                      <span class="change-item__arrow">→</span>
+                      <span class="change-item__after">{{ row.after }}</span>
+                    </span>
+                    <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
                   </li>
                 </ul>
               </div>
@@ -3519,6 +4118,31 @@ onUnmounted(() => {
               <h3 class="result-card__title">最後の行動</h3>
 
               <p class="result-card__text">{{ resultMessage }}</p>
+
+              <!-- 見つけたものの文
+                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+
+              <!-- 行動の最中に起きた小さなハプニング（ランダムイベント）
+                   地の文にまぎれないように、専用の枠と
+                   色つきのしるし（おでかけポイント +5 など）で出す -->
+              <div v-if="randomEventText" class="event-flash">
+                <p class="event-flash__label">ハプニング！</p>
+
+                <p class="event-flash__text">{{ randomEventText }}</p>
+
+                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                    <span class="event-flash__item-label">{{ effect.label }}</span>
+                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                  </li>
+                </ul>
+              </div>
+
+              <!-- いやいやが始まったときの文
+                   起きた順（行動 → アイテム → ハプニング → いやいや）で
+                   読めるように、いちばん最後に置く -->
+              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
               <div class="change-box">
                 <p class="change-box__title">この行動での変化</p>
@@ -3728,15 +4352,22 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
+/* タイトル画面の説明（どんなゲームかを伝えるいちばん大事な文章）
+   ここを読んでもらってから「公園へ行く」を押してほしいので、
+   本文より大きめの文字にして、行のすき間もゆったりとる
+*/
 .title-card__rule {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 16px;
   margin-bottom: 26px;
-  padding: 20px 24px;
+  padding: 24px 26px;
   border-radius: 14px;
   background: #f2f6fb;
-  font-size: 15px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.9;
   text-align: left;
 }
 
@@ -4345,12 +4976,20 @@ onUnmounted(() => {
   list-style: none;
 }
 
+/* 1枚のカードの中を、上下2段に分ける
+
+     こうちゃんの体力      ← 1段目：ラベル（横はばいっぱい）
+     100 → 82      -18    ← 2段目：左に「前 → 後」、右に増減
+
+   flex から grid に変えているのは、
+   「ラベルだけ1行まるごと使う」という置きかたが grid のほうが書きやすいため
+*/
 .change-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 3px 12px;
+  column-gap: 8px;
+  padding: 4px 12px 5px;
   border: 1px solid #f7ead0;
   border-radius: 8px;
   background: #fff;
@@ -4358,6 +4997,8 @@ onUnmounted(() => {
 }
 
 .change-item__label {
+  /* 1 / -1 ＝ 左はしから右はしまで（＝1行まるごと使う） */
+  grid-column: 1 / -1;
   overflow: hidden;
   color: var(--ink-soft);
   font-size: 12px;
@@ -4365,11 +5006,63 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* 「100 → 82」の部分をならべる入れもの
+   中の3つ（前・矢印・後）を、たての中心ではなく
+   文字の下ラインでそろえる（baseline）と、大きさがちがってもきれいに並ぶ
+
+   tabular-nums ＝ 数字の幅をぜんぶ同じにする書きかた
+   100 でも 82 でも幅が変わらないので、6枚のカードがガタガタしない
+*/
+.change-item__flow {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  overflow: hidden;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 行動前の値（100）
+   「もう終わった値」なので、小さく・うすい色にして一歩下がってもらう
+*/
+.change-item__before {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+/* 矢印
+   数字ではないので、いちばんうすくする
+*/
+.change-item__arrow {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+/* 行動後の値（82）＝ いま何点なのか
+   このカードでいちばん知りたい数字なので、
+   大きく・濃い紺色（見出しと同じ色）にして目立たせる
+
+   ※ 良い・悪いの色は付けない
+     色で意味を伝えるのは、となりの増減（+6 / -18）の役目
+*/
+.change-item__after {
+  color: var(--navy);
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .change-item__value {
-  flex: none;
+  /* 右はしにそろえる（grid では flex: none ではなく justify-self を使う） */
+  justify-self: end;
+  /* 出たときに、上部ステータスの増減と同じ小さなポップをする
+     ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+       ページ下のまとめて止める指定でここも自動的に止まる */
+  animation: status-pop 0.35s ease-out;
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* 良い変化・悪い変化・変化なし の色分け
@@ -4811,6 +5504,121 @@ onUnmounted(() => {
   color: #4a3208;
   font-size: 13px;
   font-weight: 700;
+}
+
+/* 「〜を見つけました！」の文
+   アイテムの名前だけ、うすい黄色の下じきを敷いて
+   地の文の中でもすぐ目に入るようにする
+*/
+.found-line {
+  margin: 10px 0 0;
+  font-size: 15.5px;
+}
+
+.found-line__name {
+  padding: 1px 8px;
+  border-radius: 6px;
+  background: #fff1c9;
+  color: #7a5410;
+}
+
+/* 行動の最中に起きた小さなハプニング（ランダムイベント）
+
+   前は結果の文章のうしろに、そのまま文字で書き足していたので、
+   「おでかけポイント +5」が地の文にまぎれて気づきにくかった
+   ・専用の枠（左に太い線）
+   ・「ハプニング！」の帯
+   ・ステータスの増減は、色つきのしるし
+   の3つで、ひと目で分かるようにしている
+*/
+.event-flash {
+  margin: 12px 0 0;
+  padding: 12px 16px 14px;
+  border: 1px solid #cfe3ef;
+  border-left: 5px solid var(--navy-line);
+  border-radius: 10px;
+  background: #f2f9fc;
+  /* アイテムの帯と同じ動きで、少し遅れてふわっと出す */
+  animation: found-in 0.4s ease-out 0.25s backwards;
+}
+
+.event-flash__label {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.event-flash__text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+/* ステータスの増減のしるし（おでかけポイント +5 など） */
+.event-flash__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-flash__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 14px;
+  border: 1px solid #d8e7ef;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.event-flash__item-label {
+  color: var(--ink-soft);
+  font-size: 12.5px;
+}
+
+/* 増減の数字（色は結果カードの「今回の変化」と同じ考えかた）
+   ※ 親のイライラ度は「ふえると悪い」ので、判定は changeClass() にまかせている
+*/
+.event-flash__item-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-flash__item-value.change--good {
+  color: var(--good);
+}
+
+.event-flash__item-value.change--bad {
+  color: var(--bad);
+}
+
+.event-flash__item-value.change--neutral {
+  color: var(--ink-soft);
+}
+
+/* いやいやが始まったときの文
+   結果カードのいちばん下に置き、
+   いやいやの色（さんご）の線をつけて、ここで場面が変わることを伝える
+*/
+.tantrum-line {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  border-left: 5px solid var(--parent-stress);
+  border-radius: 6px;
+  background: #fff5f3;
+  color: #a33a29;
+  font-size: 14.5px;
+  line-height: 1.7;
 }
 
 /* --- 危険なステータスのゆっくりした点滅 --- */
@@ -5299,6 +6107,34 @@ onUnmounted(() => {
     padding-top: 10px;
   }
 
+  /* ハプニングの枠も、背の低い画面では少しつめる */
+  .event-flash {
+    margin-top: 10px;
+    padding: 10px 14px 11px;
+  }
+
+  .event-flash__text {
+    font-size: 14px;
+  }
+
+  /* 「前 → 後」で1行ふえたので、背の低い画面では余白と文字を少しつめて
+     上部ステータス〜下部コマンドが一画面に収まるようにする */
+  .change-item {
+    padding: 2px 10px 3px;
+  }
+
+  .change-item__before {
+    font-size: 12px;
+  }
+
+  .change-item__after {
+    font-size: 17px;
+  }
+
+  .change-item__value {
+    font-size: 14px;
+  }
+
   .command {
     gap: 8px 12px;
     padding: 10px 28px 12px;
@@ -5460,6 +6296,14 @@ onUnmounted(() => {
 
   .title-card__name {
     font-size: 26px;
+  }
+
+  /* 説明文は大きいままにしたいが、スマホの画面幅に収まる大きさへ少し下げる */
+  .title-card__rule {
+    gap: 12px;
+    padding: 18px 18px;
+    font-size: 16.5px;
+    line-height: 1.8;
   }
 
   .command {
