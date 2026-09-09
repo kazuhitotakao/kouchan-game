@@ -349,6 +349,14 @@ const isParentStressDanger = computed(() => parentStress.value >= dangerStressLi
 /* こうちゃんの体力が20以下 → 電池切れが近い */
 const isChildEnergyDanger = computed(() => childEnergy.value <= dangerEnergyLine);
 
+/* いま「リザルト画面」にいるかどうか
+   ・ゴール（総合スコアとランクの発表）
+   ・GAME OVER
+   どちらも遊びが終わったあとの画面なので、
+   上部ステータスの忠告（あぶないよ／そろそろお昼だよ）は出さない
+*/
+const isResultScene = computed(() => currentEvent.value === 'goal' || currentEvent.value === 'gameOver');
+
 /* 上部ステータスに出す警告メッセージ
    危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
 */
@@ -2538,13 +2546,14 @@ onUnmounted(() => {
           </ul>
         </div>
 
-        <!-- 危険な状態の警告（GAME OVERになる前の合図） -->
-        <ul v-if="dangerWarnings.length > 0" class="status-warnings">
+        <!-- 危険な状態の警告（GAME OVERになる前の合図）
+             リザルト画面では、もう気をつけようがないので出さない -->
+        <ul v-if="dangerWarnings.length > 0 && !isResultScene" class="status-warnings">
           <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
         </ul>
 
-        <!-- そろそろお昼のお知らせ -->
-        <p v-if="isAlmostNoon" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
+        <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
+        <p v-if="isAlmostNoon && !isResultScene" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
       </header>
 
       <!-- ==========================================================
