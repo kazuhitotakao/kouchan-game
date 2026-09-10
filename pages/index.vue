@@ -417,6 +417,43 @@ const dangerWarnings = computed(() => {
    Oscillator（音を出す）→ Gain（音量を調整）→ destination（スピーカー）
    ============================================================ */
 
+/* 効果音を鳴らすかどうか（プレイヤーの設定）
+   true  … 効果音ON（はじめてのときはこちら）
+   false … 効果音OFF
+
+   ※ 体力や機嫌とちがって「ゲームのステータス」ではなく「設定」なので、
+     resetGame（もう一度あそぶ）では初期値に戻さない
+*/
+const soundEnabled = ref(true);
+
+/* 効果音の設定を保存しておく名前（localStorageのキー）
+   同じブラウザの他のページと名前がぶつからないよう、ゲーム名を頭に付けている
+*/
+const soundStorageKey = 'kouchan-game-sound-enabled';
+
+/* 効果音のON/OFFを切り替える
+
+   localStorage は、ブラウザに小さなメモを残しておける保存場所
+   ページを閉じても消えないので、次に開いたときも設定を思い出せる
+*/
+function toggleSound() {
+  // ① まず切り替える（true なら false へ、false なら true へ）
+  soundEnabled.value = !soundEnabled.value;
+
+  // サーバー側には localStorage が無いので、ここで終わり
+  if (!import.meta.client) {
+    return;
+  }
+
+  // ② 次に開いたときのために保存しておく
+  try {
+    localStorage.setItem(soundStorageKey, String(soundEnabled.value));
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 保存できなくても、このページを開いているあいだのON/OFFは正常に動く
+  }
+}
+
 /* 作業台（AudioContext）を入れておく箱
 
    null は「まだ作っていない」という意味
@@ -433,8 +470,16 @@ let audioContext: AudioContext | null = null;
    呼んだ側は「null なら何もしない」だけで済む
 */
 function getAudioContext() {
-  // サーバー側では音を鳴らせないので、ここで終わり
-  if (!import.meta.client) {
+  /* ここが効果音ON/OFFの「関所」
+
+     4種類の音（decision・item・tantrum・goal）は、どれも必ずこの関数を通る
+     なので、ここで null を返すだけで、すべての効果音がまとめて止まる
+     ゲーム処理のあちこちに if (soundEnabled.value) を書く必要はない
+
+     効果音OFFのときは AudioContext も作らない
+     （下の new AudioContext() の行まで、そもそもたどり着かない）
+  */
+  if (!import.meta.client || !soundEnabled.value) {
     return null;
   }
 
@@ -2860,6 +2905,23 @@ function runSelectedCommand() {
    ③ Enter / Space なら、選択中のコマンドを実行する
 */
 function handleKeydown(event: KeyboardEvent) {
+  /* 効果音ボタンにフォーカスしているときは、ゲームのキー操作をしない
+
+     このゲームのキー操作は window 全体で受け取っているため、
+     音ボタンを選んだ状態で Enter を押すと、
+     「音のON/OFF」と「ゲームの決定（公園へ行く など）」が同時に起きてしまう
+     それを防ぐために、いちばん最初にここで抜ける
+
+     ※ event.preventDefault() は呼ばない
+       呼ばずに return することで、button本来の Enter / Space による
+       クリック動作はブラウザにそのまま任せられる
+  */
+  const target = event.target as HTMLElement | null;
+
+  if (target?.closest?.('.sound-toggle')) {
+    return;
+  }
+
   // Enter と Space は、どちらも同じ「決定」として扱う
   // Space は event.key では ' '（半角スペース1文字）になる
   const isDecideKey = event.key === 'Enter' || event.key === ' ';
@@ -2961,6 +3023,24 @@ onMounted(() => {
 
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
+
+  /* 前回の効果音の設定を思い出す
+
+     localStorage には文字しか入らないので、'true' / 'false' という
+     「文字」で戻ってくる。保存したことが無いときは null になる
+     null のときは、最初に決めた true（＝ON）のままにする
+  */
+  try {
+    const savedSoundSetting = localStorage.getItem(soundStorageKey);
+
+    if (savedSoundSetting === 'false') {
+      soundEnabled.value = false;
+    } else if (savedSoundSetting === 'true') {
+      soundEnabled.value = true;
+    }
+  } catch {
+    // 読み込めなくても、初期値のONで普通に遊べる
+  }
 });
 
 /* 画面から離れるときは、受付をやめる（後始末） */
@@ -2977,6 +3057,22 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!gameStarted" class="title-screen">
       <div class="title-card">
+        <!-- 設定（効果音ON/OFF）
+             「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく -->
+        <div class="title-card__tools">
+          <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? '効果音をオフにする' : '効果音をオンにする'" @click="toggleSound">
+            <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+            <span class="sound-toggle__text">効果音</span>
+            <span class="sound-toggle__state">
+                <!-- ON と OFF を同じ場所に重ねて置いておく
+                     使わないほうは「見えなくする」だけで場所は残るので、
+                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              </span>
+          </button>
+        </div>
+
         <h1 class="title-card__name">{{ gameTitle }}</h1>
 
         <div class="title-card__rule">
@@ -3002,7 +3098,23 @@ onUnmounted(() => {
            ========================================================== -->
       <header class="status-area">
         <div class="status-area__head">
-          <span class="status-area__title">{{ gameTitle }}</span>
+          <!-- タイトルと音ボタンを同じ行に並べる
+               新しい行を作らないので、上部ステータスの高さは変わらない -->
+          <div class="status-area__titleRow">
+            <span class="status-area__title">{{ gameTitle }}</span>
+
+            <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? '効果音をオフにする' : '効果音をオンにする'" @click="toggleSound">
+              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+              <span class="sound-toggle__text">効果音</span>
+              <span class="sound-toggle__state">
+                <!-- ON と OFF を同じ場所に重ねて置いておく
+                     使わないほうは「見えなくする」だけで場所は残るので、
+                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              </span>
+            </button>
+          </div>
 
           <span class="status-clock">
             <span class="status-clock__now">{{ currentTime }}</span>
@@ -5088,6 +5200,122 @@ onUnmounted(() => {
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
+}
+
+/* ゲームタイトルと音ボタンを、同じ1行に並べるための入れもの
+   新しい行を増やさないので、上部ステータスの高さは今までと変わらない */
+.status-area__titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ===== 効果音のON/OFFボタン（設定用の小さなボタン） =====
+
+   これは「設定」なので、選択中コマンドの水色発光のようには目立たせない
+   ONを緑・OFFを赤にはしない
+   （このゲームでは 緑＝良い変化 / 赤＝あぶない という意味が決まっているため、
+     音の設定に使うと意味を取りちがえてしまう）
+   navy と 水色 だけの、中立的な見た目にしている
+
+   高さは padding 4px + 文字11.5px + 枠1px で約21px
+   タイトル1行ぶん（約25px）より小さいので、行の高さは変わらない
+*/
+.sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--navy-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 55%);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+/* マウスを乗せたとき：少しだけ明るくする（発光やアニメーションはしない） */
+.sound-toggle:hover {
+  border-color: var(--navy);
+  background: rgb(255 255 255 / 85%);
+}
+
+/* 押した瞬間：ほんの少しだけ沈む（cmdボタンほど大きくは動かさない） */
+.sound-toggle:active {
+  transform: translateY(1px);
+}
+
+/* Tabキーで移動してきたとき、どこにいるかが分かるようにする
+   コマンドの選択発光ほど派手にはしない */
+.sound-toggle:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.sound-toggle__icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* 「ON」と「OFF」で、ボタンの幅を変えないための工夫
+
+   上部ステータスは grid-template-columns: auto ... なので、
+   1列目（タイトル＋時計）は中の文字の幅そのままに広がる
+   そのため ON（2文字）→ OFF（3文字）でボタンが少し広がると、
+   右にあるゲージやおでかけポイントの位置までずれてしまう
+
+   そこで ON と OFF を同じマスに重ねて置き、
+   使わないほうを visibility で見えなくする
+   display: none とちがい visibility は「場所は残したまま消す」ので、
+   幅はいつも長いほう（OFF）のままになり、切り替えてもずれない
+*/
+.sound-toggle__state {
+  display: grid;
+}
+
+.sound-toggle__stateText {
+  grid-area: 1 / 1; /* 2つとも同じマスに置いて重ねる */
+  text-align: center;
+}
+
+/* いま使わないほうを見えなくする（場所はそのまま残る）
+   aria-pressed は true = 効果音ON、false = 効果音OFF */
+.sound-toggle[aria-pressed='true'] .sound-toggle__stateText--off,
+.sound-toggle[aria-pressed='false'] .sound-toggle__stateText--on {
+  visibility: hidden;
+}
+
+/* ===== 上部ステータス内（濃い青の上）に置くとき ===== */
+.sound-toggle--bar {
+  border-color: rgb(134 198 221 / 70%);
+  background: rgb(255 255 255 / 12%);
+  color: #eef9ff;
+}
+
+.sound-toggle--bar:hover {
+  border-color: #eef9ff;
+  background: rgb(255 255 255 / 24%);
+}
+
+.sound-toggle--bar:focus-visible {
+  outline-color: #eef9ff;
+}
+
+/* タイトル画面：カードの右上へ小さく置く
+   上のよぶんな余白へ食い込ませて、カードの高さがほとんど変わらないようにする */
+.title-card__tools {
+  display: flex;
+  justify-content: flex-end;
+  margin: -16px 0 10px;
 }
 
 .status-clock {
@@ -7337,6 +7565,23 @@ onUnmounted(() => {
     width: 100%;
     padding-right: 0;
     border-right: none;
+  }
+
+  /* スマホでは「効果音」の文字を隠して「🔊 ON」だけの短い表示にする
+     こうすると、せまい画面でもボタンがはみ出さない
+     ※ aria-label は隠さないので、読み上げでは
+       「効果音をオフにする」と今までどおり伝わる */
+  .sound-toggle {
+    gap: 4px;
+    padding: 4px 8px;
+  }
+
+  .sound-toggle__text {
+    display: none;
+  }
+
+  .status-area__titleRow {
+    gap: 8px;
   }
 
   .status-clock__now {
