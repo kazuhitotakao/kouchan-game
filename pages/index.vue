@@ -5413,12 +5413,6 @@ onUnmounted(() => {
         <!-- ゴール -->
         <div v-else-if="currentEvent === 'goal'" class="scene" key="goal">
           <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">公園の出口</h2>
-
-              <p class="place-card__text">たくさん探検しました。そろそろ公園から帰る時間です。</p>
-            </article>
-
             <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
                  SランクとS+ランクのときだけ、カードがきらきら光る -->
             <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' || endingRank === 'S+ランク' }">
