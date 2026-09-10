@@ -3,6 +3,22 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 const gameTitle: string = 'こうちゃんの大冒険';
 
+/* 画面は3段階あり、この2つの組み合わせで決まる
+
+   titleEntered  gameStarted   画面
+   ----------------------------------------------------
+   false         false         起動画面（▶ はじめる）
+   true          false         タイトル画面（公園へ行く）
+   true          true          ゲーム画面
+
+   ※ 起動画面をはさんでいるのは、ブラウザの決まりへの対応
+     「ユーザーがまだ一度も触っていないページでは音を鳴らせない」ため、
+     ページを開いた直後にBGMを鳴らそうとしても止められてしまう
+     そこで「▶ はじめる」を1回押してもらい、
+     その操作をきっかけにタイトルBGMを鳴らしはじめる
+*/
+const titleEntered = ref(false);
+
 const gameStarted = ref(false);
 
 /* 今いる場所を管理する型
@@ -234,7 +250,8 @@ const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedIt
      ただし Enter / Space だけは、その1つのボタンを押す代わりに使える）
 */
 const isCommandKeyboardActive = computed(() => {
-  // ゲーム開始前（タイトル画面）
+  // ゲーム開始前（起動画面・タイトル画面）
+  // どちらもボタンは1つだけなので、えらぶ操作は要らない
   if (!gameStarted.value) {
     return false;
   }
@@ -441,20 +458,31 @@ function toggleSound() {
   // ① まず切り替える（true なら false へ、false なら true へ）
   soundEnabled.value = !soundEnabled.value;
 
-  /* ② 公園BGMも合わせる
+  /* ② BGMも合わせる
        効果音は getAudioContext() が soundEnabled を見てくれるので何もしなくてよいが、
        BGMは「いま鳴っている曲」なので、その場で止める・再開する必要がある
 
-       ONに戻したときは、公園を探検している最中だけ再開する
-       （タイトル・ゴール・GAME OVERの画面では、もともとBGMは鳴らない）
-       止めたところからの続きなので、playParkBgm() ではなく resumeParkBgm() を使う
+       ONに戻したときは、いまの画面に合う曲だけを再開する
+       ・起動画面            … どちらも鳴らさない（まだ何も始まっていない）
+       ・タイトル画面        … タイトルBGM
+       ・公園を探検している最中 … 公園BGM
+       ・ゴール／GAME OVER   … どちらも鳴らさない（もともと無音の画面）
+
+       止めたところからの続きなので、play〜ではなく resume〜 を使う
+
+       ※ タイトルBGMの条件に titleEntered が要る
+         「!gameStarted」だけだと起動画面も当てはまってしまい、
+         起動画面でONに戻しただけで曲が鳴りだしてしまう
   */
   if (soundEnabled.value) {
-    if (gameStarted.value && !isResultScene.value) {
+    if (titleEntered.value && !gameStarted.value) {
+      resumeTitleBgm();
+    } else if (gameStarted.value && !isResultScene.value) {
       resumeParkBgm();
     }
   } else {
     // OFFのときは pause() だけ（どこまで再生したかを覚えておく）
+    pauseTitleBgm();
     pauseParkBgm();
   }
 
@@ -658,6 +686,18 @@ function playGoalSound() {
    HTMLAudioElement（new Audio）を使うのがいちばん簡単
    ============================================================ */
 
+/* BGMの音量（0＝無音、1＝そのままの大きさ）
+
+   タイトルBGMと公園BGMで同じ値を使う
+   別々に書くと、片方だけ直したときに音の大きさがちぐはぐになるので、
+   ここ1か所だけを書きかえれば、2曲まとめて調整できるようにしている
+
+   ※ 効果音（0.05〜0.09あたり）とは仕組みがちがうので、数字の見え方も別もの
+     効果音は一瞬だけ鳴るが、BGMはずっと後ろで流れ続けるため、
+     大きくしすぎると会話や効果音が聞こえにくくなる
+*/
+const bgmVolume = 0.25;
+
 /* 公園BGMを入れておく箱
 
    null は「まだ作っていない」という意味
@@ -689,15 +729,96 @@ function getParkBgm() {
       // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
       parkBgm.loop = true;
 
-      // volume … 音の大きさ（0＝無音、1＝そのままの大きさ）
-      // BGMは後ろでずっと流れるものなので、効果音よりかなり小さくする
-      parkBgm.volume = 0.15;
+      // volume … 音の大きさ（上の bgmVolume でまとめて決めている）
+      parkBgm.volume = bgmVolume;
     }
 
     return parkBgm;
   } catch {
     // BGMが使えない環境でも、ゲームは続けられるようにする
     return null;
+  }
+}
+
+/* BGMがフェードインしきるまでの長さ（ミリ秒）
+   1000 で1秒かけて、無音から ふだんの音量まで上がる
+   タイトルBGMと公園BGMで同じ値を使う */
+const bgmFadeInDuration = 1000;
+
+/* フェードインの途中経過を進める係の番号（していないときは null） */
+let bgmFadeTimer: ReturnType<typeof setInterval> | null = null;
+
+/* いまフェードインの最中にある曲（していないときは null）
+   途中でやめたときに「どの曲の音量を戻すか」が分かるように覚えておく */
+let fadingBgm: HTMLAudioElement | null = null;
+
+/* BGMをフェードインさせる（音量を0から少しずつ上げる）
+
+   HTML Audio には「だんだん大きくする」機能が無いので、
+   0.05秒ごとに volume を少しずつ足していって、自分で作る
+
+   いきなり ふだんの音量で始まると唐突に聞こえるので、
+   すっと入ってくるようにするための演出
+
+   ※ タイトルBGMと公園BGMのどちらにも使える
+     2曲が同時に鳴ることはない（切り替えるときは必ず前の曲を止める）ので、
+     フェインの係は1つだけ用意しておけば足りる
+*/
+function startBgmFadeIn(bgm: HTMLAudioElement) {
+  // 前のフェードが残っていたら止める（音量の取り合いにならないように）
+  cancelBgmFade();
+
+  if (!import.meta.client) {
+    return;
+  }
+
+  const stepMs = 50; // 何ミリ秒ごとに音量を上げるか
+  const totalSteps = Math.ceil(bgmFadeInDuration / stepMs);
+  let doneSteps = 0;
+
+  bgm.volume = 0; // まずは無音から
+  fadingBgm = bgm;
+
+  bgmFadeTimer = setInterval(() => {
+    doneSteps += 1;
+
+    // 進み具合（0 → 1）を、そのまま音量の割合として使う
+    const ratio = doneSteps / totalSteps;
+
+    try {
+      bgm.volume = ratio >= 1 ? bgmVolume : bgmVolume * ratio;
+    } catch {
+      // 何もしない
+    }
+
+    // ふだんの音量まで上がりきったら終わり
+    if (ratio >= 1) {
+      cancelBgmFade();
+    }
+  }, stepMs);
+}
+
+/* フェードインを途中でやめる
+
+   ※ やめたあとは volume を ふだんの大きさへ戻しておく
+     0.1 まで上がった途中で止めると、次に鳴らすとき小さいままになってしまう
+*/
+function cancelBgmFade() {
+  if (bgmFadeTimer === null) {
+    return;
+  }
+
+  clearInterval(bgmFadeTimer);
+  bgmFadeTimer = null;
+
+  if (fadingBgm) {
+    try {
+      fadingBgm.volume = bgmVolume;
+    } catch {
+      // 何もしない
+    }
+
+    fadingBgm = null;
   }
 }
 
@@ -722,12 +843,70 @@ function playParkBgm() {
 
   try {
     bgm.currentTime = 0; // 曲の先頭へ戻す
+
+    // 無音から少しずつ大きくしていく
+    startBgmFadeIn(bgm);
     // play() は「再生できたかどうか」をあとから知らせる形（Promise）になっている
     // 自動再生をブラウザに止められることがあるので、失敗しても何もしないでおく
     bgm.play().catch(() => {});
   } catch {
     // BGMが鳴らなくても、ゲームは止めない
   }
+}
+
+/* 公園BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+   1000 で1秒。ここだけ書きかえれば、間の長さを調整できる */
+const parkBgmStartDelay = 1000;
+
+/* 「あとで鳴らす」の予約票
+
+   null は「予約していない」という意味
+   setTimeout() は予約すると番号を返してくれるので、それを control用に取っておく
+   （あとで「やっぱり鳴らさない」と取り消すのに必要）
+*/
+let parkBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* 公園BGMを「少し待ってから」最初から鳴らす
+
+   「公園へ行く」を押した瞬間にいきなり曲が始まると、
+   決定音「ポン♪」が鳴りはじめの曲にかき消されてしまい、
+   タイトルBGMからの切り替わりも唐突に聞こえる
+   そこで少しだけ間を空けて、決定音が鳴り終わってから曲を始める
+
+   ※ 待たせるのは「音を鳴らすこと」だけ
+     画面の切り替えやゲームの処理は、いつもどおりすぐ進む
+*/
+function playParkBgmSoon() {
+  // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+  cancelParkBgmStart();
+
+  // サーバー側では音を鳴らさないので、予約もしない
+  if (!import.meta.client) {
+    return;
+  }
+
+  parkBgmTimer = setTimeout(() => {
+    parkBgmTimer = null;
+
+    /* 待っているあいだに画面が変わっていたら、もう鳴らさない
+       （すぐ「もう一度あそぶ」でタイトルへ戻った、
+         ゴールやGAME OVERになった、などの場合） */
+    if (!gameStarted.value || isResultScene.value) {
+      return;
+    }
+
+    playParkBgm();
+  }, parkBgmStartDelay);
+}
+
+/* 「あとで鳴らす」の予約を取り消す */
+function cancelParkBgmStart() {
+  if (parkBgmTimer === null) {
+    return;
+  }
+
+  clearTimeout(parkBgmTimer);
+  parkBgmTimer = null;
 }
 
 /* 公園BGMを「続きから」再生する（サウンドをONに戻したとき用）
@@ -759,6 +938,10 @@ function resumeParkBgm() {
    もう一度 play() すると、止めたところから続きが鳴る
 */
 function pauseParkBgm() {
+  // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
+  // （こうしないと、次に再開したとき小さい音のままになる）
+  cancelBgmFade();
+
   if (!parkBgm) {
     return;
   }
@@ -776,6 +959,17 @@ function pauseParkBgm() {
    currentTime = 0 で先頭に戻しておく
 */
 function stopParkBgm() {
+  /* 「あとで鳴らす」の予約も取り消す
+
+     ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
+       予約だけして、まだ曲を作っていない状態のことがあるため
+       （公園へ行った直後にゴールした、など）
+       あとに置くと、取り消せずに あとから鳴りだしてしまう */
+  cancelParkBgmStart();
+
+  // フェードインの途中で止めることもあるので、音量も戻しておく
+  cancelBgmFade();
+
   if (!parkBgm) {
     return;
   }
@@ -783,6 +977,133 @@ function stopParkBgm() {
   try {
     parkBgm.pause();
     parkBgm.currentTime = 0;
+  } catch {
+    // 何もしない
+  }
+}
+
+/* ============================================================
+   タイトル画面のBGM
+
+   作りは公園BGM（上）とまったく同じで、鳴らす曲と鳴らす場面だけがちがう
+   ・タイトルBGM … gameStarted === false のあいだ（タイトル画面）
+   ・公園BGM     … 「公園へ行く」を押してから、ゴール／GAME OVERまで
+
+   2曲が同時に鳴らないよう、切り替えるときは
+   「前の曲を止めてから、次の曲を鳴らす」の順番にしている
+   ============================================================ */
+
+/* タイトルBGMを入れておく箱
+   公園BGMと同じく、サーバー側では作れないので null から始める */
+let titleBgm: HTMLAudioElement | null = null;
+
+/* タイトルBGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ 公園BGMと同じく、ここでは soundEnabled を見ない
+     OFFにした瞬間に「鳴っている曲を止める」ために必要になるため
+*/
+function getTitleBgm() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!titleBgm) {
+      // public/audio/title-bgm.mp3 は、URLでは /audio/title-bgm.mp3 になる
+      titleBgm = new Audio('/audio/title-bgm.mp3');
+
+      // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+      titleBgm.loop = true;
+
+      // volume … 公園BGMと同じ大きさにそろえる（上の bgmVolume）
+      titleBgm.volume = bgmVolume;
+    }
+
+    return titleBgm;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* タイトルBGMを「最初から」再生する
+   ページを開いたときと、「もう一度あそぶ」でタイトルに戻ったとき用 */
+function playTitleBgm() {
+  // サウンドOFFのときは、ここで終わり
+  // ※ getTitleBgm() より先に見ることで、OFFのあいだは
+  //   mp3の読み込みそのものが起きないようにしている
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getTitleBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.currentTime = 0; // 曲の先頭へ戻す
+
+    // タイトルBGMはフェードインさせず、そのまま鳴らす
+    // （フェードインするのは公園BGMだけ）
+    bgm.volume = bgmVolume;
+
+    bgm.play().catch(() => {});
+  } catch {
+    // BGMが鳴らなくても、ゲームは止めない
+  }
+}
+
+/* タイトルBGMを「続きから」再生する（サウンドをONに戻したとき用） */
+function resumeTitleBgm() {
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getTitleBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.play().catch(() => {});
+  } catch {
+    // 何もしない
+  }
+}
+
+/* タイトルBGMを一時停止する（どこまで再生したかは覚えたまま） */
+function pauseTitleBgm() {
+  // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
+  cancelBgmFade();
+
+  if (!titleBgm) {
+    return;
+  }
+
+  try {
+    titleBgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
+/* タイトルBGMを完全に止める（次はまた最初から鳴るようにする） */
+function stopTitleBgm() {
+  // フェードインの途中で止めることもあるので、音量も戻しておく
+  cancelBgmFade();
+
+  if (!titleBgm) {
+    return;
+  }
+
+  try {
+    titleBgm.pause();
+    titleBgm.currentTime = 0;
   } catch {
     // 何もしない
   }
@@ -1495,18 +1816,48 @@ function finishPlayAction(place: GameEvent) {
   selectedCommandIndex.value = 0;
 }
 
+/* 起動画面の「▶ はじめる」
+
+   この画面がある理由はただ1つ、タイトルBGMを鳴らすため
+
+   ブラウザには「ユーザーがまだ一度も触っていないページでは
+   勝手に音を鳴らしてはいけない」という決まりがある
+   ページを開いた直後に鳴らそうとしても止められてしまうので、
+   ボタンを1回押してもらい、その操作をきっかけに鳴らしはじめる
+
+   ※ ここでは決定音を鳴らさない
+     タイトルBGMが鳴りはじめるのと同時になると、
+     決定音がかき消されて聞こえないため
+     （曲が鳴りはじめること自体が、押せたことの合図になる）
+*/
+function enterTitle() {
+  playTitleBgm();
+
+  titleEntered.value = true;
+}
+
 /* ゲーム開始 */
 function startGame() {
   // 決定音「ポン♪」（タイトルの「公園へ行く」）
   playDecisionSound();
 
-  /* 公園BGMを最初から鳴らしはじめる
+  /* BGMをタイトル用から公園用へ切り替える
+
+     2曲が重ならないように、かならず
+     「タイトルBGMを止める → 公園BGMを鳴らす」の順番にする
+     タイトルBGMは stopTitleBgm() で先頭に戻しておくので、
+     次にタイトル画面へ戻ったときは、また最初から鳴る
+
+     公園BGMは少しだけ間を空けてから鳴らしはじめる
+     すぐ鳴らすと、決定音「ポン♪」が曲にかき消されてしまうため
+     （待つのは音だけで、画面の切り替えはこのあとすぐ行う）
 
      ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがある
      ここはプレイヤーが「公園へ行く」を決定した瞬間なので、
      このタイミングで始めるのが確実
   */
-  playParkBgm();
+  stopTitleBgm();
+  playParkBgmSoon();
 
   gameStarted.value = true;
 
@@ -2639,10 +2990,17 @@ function resetGame() {
   //   ページを開いているあいだ、ずっと同じものを使い続ける
   playDecisionSound();
 
-  /* 公園BGMを止めて、曲を先頭に戻しておく
-     このあとタイトル画面（無音）に戻り、
-     次に「公園へ行く」を押したときにまた最初から鳴る */
+  /* BGMを公園用からタイトル用へ戻す
+
+     startGame() と逆の切り替え
+     「公園BGMを止める → タイトルBGMを最初から鳴らす」の順番にする
+     公園BGMは先頭に戻しておくので、
+     次に「公園へ行く」を押したときにまた最初から鳴る
+
+     ※ ここは「もう一度あそぶ」を押した直後＝ユーザーが操作したあとなので、
+       自動再生を止められることなくタイトルBGMを鳴らせる */
   stopParkBgm();
+  playTitleBgm();
 
   childEnergy.value = 100;
   childMood.value = 55;
@@ -3124,7 +3482,9 @@ function handleKeydown(event: KeyboardEvent) {
         return;
       }
 
-      if (!gameStarted.value) {
+      if (!titleEntered.value) {
+        enterTitle(); // 起動画面の「▶ はじめる」
+      } else if (!gameStarted.value) {
         startGame(); // タイトル画面の「公園へ行く」
       } else {
         resetGame(); // ゴール／GAME OVER画面の「もう一度あそぶ」
@@ -3226,6 +3586,13 @@ onMounted(() => {
   } catch {
     // 読み込めなくても、初期値のONで普通に遊べる
   }
+
+  /* ※ ここではBGMを鳴らさない
+
+     ページを開いた直後は、ブラウザの決まりで音を鳴らせない
+     タイトルBGMは、起動画面の「▶ はじめる」を押したとき
+     （＝ユーザーが操作したとき）に enterTitle() で鳴らしはじめる
+  */
 });
 
 /* 画面から離れるときは、受付をやめる（後始末） */
@@ -3233,17 +3600,57 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('resize', updateEntranceColumns);
 
-  // 別のページへ移ったあともBGMが鳴り続けないように止めておく
+  // 別のページへ移ったあともBGMが鳴り続けないように、2曲とも止めておく
+  pauseTitleBgm();
   pauseParkBgm();
+
+  // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
+  // 残っていると、ページを離れたあとも動きつづけてしまう
+  cancelParkBgmStart();
+  cancelBgmFade();
 });
 </script>
 
 <template>
   <main class="game">
     <!-- ============================================================
+         起動画面（いちばん最初の1枚）
+
+         この画面をはさむ理由は、ブラウザの決まりへの対応
+         ページを開いた直後は音を鳴らせないので、
+         「▶ はじめる」を1回押してもらい、
+         その操作をきっかけにタイトルBGMを鳴らしはじめる
+         ============================================================ -->
+    <div v-if="!titleEntered" class="title-screen">
+      <div class="title-card title-card--boot">
+        <!-- 設定（サウンドON/OFF）
+             「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく -->
+        <div class="title-card__tools">
+          <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+            <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+            <span class="sound-toggle__text">サウンド</span>
+            <span class="sound-toggle__state">
+              <!-- ON と OFF を同じ場所に重ねて置いておく
+                   使わないほうは「見えなくする」だけで場所は残るので、
+                   ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+              <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+              <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+            </span>
+          </button>
+        </div>
+
+        <h1 class="title-card__name">{{ gameTitle }}</h1>
+
+        <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
+             （「公園へ行く」「もう一度あそぶ」と同じ書き方） -->
+        <button class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
+      </div>
+    </div>
+
+    <!-- ============================================================
          タイトル画面（ゲーム開始前）
          ============================================================ -->
-    <div v-if="!gameStarted" class="title-screen">
+    <div v-else-if="!gameStarted" class="title-screen">
       <div class="title-card">
         <!-- 設定（サウンドON/OFF）
              「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく -->
@@ -5313,6 +5720,19 @@ onUnmounted(() => {
   color: var(--navy);
   font-size: 36px;
   line-height: 1.35;
+}
+
+/* 起動画面のカード
+   出すのはタイトルと「▶ はじめる」だけなので、
+   説明文が入るタイトル画面より、ゆったりした余白にする
+   ※ せまい画面（700px以下）では、下のメディアクエリの
+     .title-card の余白が後ろに書いてあるぶん優先される */
+.title-card--boot {
+  padding: 56px 44px;
+}
+
+.title-card--boot .title-card__name {
+  margin: 0 0 28px;
 }
 
 .title-card__lead {
