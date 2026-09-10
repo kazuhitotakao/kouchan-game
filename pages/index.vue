@@ -688,15 +688,22 @@ function playGoalSound() {
 
 /* BGMの音量（0＝無音、1＝そのままの大きさ）
 
-   タイトルBGMと公園BGMで同じ値を使う
-   別々に書くと、片方だけ直したときに音の大きさがちぐはぐになるので、
-   ここ1か所だけを書きかえれば、2曲まとめて調整できるようにしている
+   volume は「もとの音源を何倍にするか」なので、
+   同じ数字にしても、録音そのものが大きい曲は大きく聞こえてしまう
+   公園BGMがタイトルBGMより大きく聞こえたので、
+   耳で聞いてそろうように、曲ごとに数字を分けている
+   （音を差しかえたときは、ここの2つで調整する）
 
    ※ 効果音（0.05〜0.09あたり）とは仕組みがちがうので、数字の見え方も別もの
      効果音は一瞬だけ鳴るが、BGMはずっと後ろで流れ続けるため、
      大きくしすぎると会話や効果音が聞こえにくくなる
 */
-const bgmVolume = 0.25;
+
+/* タイトルBGMの音量 */
+const titleBgmVolume = 0.25;
+
+/* 公園BGMの音量（タイトルBGMより録音が大きいので、少し下げてそろえる） */
+const parkBgmVolume = 0.17;
 
 /* 公園BGMを入れておく箱
 
@@ -729,8 +736,8 @@ function getParkBgm() {
       // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
       parkBgm.loop = true;
 
-      // volume … 音の大きさ（上の bgmVolume でまとめて決めている）
-      parkBgm.volume = bgmVolume;
+      // volume … 音の大きさ（上の parkBgmVolume で決めている）
+      parkBgm.volume = parkBgmVolume;
     }
 
     return parkBgm;
@@ -752,6 +759,10 @@ let bgmFadeTimer: ReturnType<typeof setInterval> | null = null;
    途中でやめたときに「どの曲の音量を戻すか」が分かるように覚えておく */
 let fadingBgm: HTMLAudioElement | null = null;
 
+/* その曲の ふだんの音量（＝どこまで上げたら終わりか）
+   曲ごとに音量がちがうので、いっしょに覚えておく */
+let fadingBgmVolume = 0;
+
 /* BGMをフェードインさせる（音量を0から少しずつ上げる）
 
    HTML Audio には「だんだん大きくする」機能が無いので、
@@ -763,8 +774,11 @@ let fadingBgm: HTMLAudioElement | null = null;
    ※ タイトルBGMと公園BGMのどちらにも使える
      2曲が同時に鳴ることはない（切り替えるときは必ず前の曲を止める）ので、
      フェインの係は1つだけ用意しておけば足りる
+
+   bgm          … フェードインさせたい曲
+   targetVolume … 上がりきったときの音量（曲ごとにちがう）
 */
-function startBgmFadeIn(bgm: HTMLAudioElement) {
+function startBgmFadeIn(bgm: HTMLAudioElement, targetVolume: number) {
   // 前のフェードが残っていたら止める（音量の取り合いにならないように）
   cancelBgmFade();
 
@@ -778,6 +792,7 @@ function startBgmFadeIn(bgm: HTMLAudioElement) {
 
   bgm.volume = 0; // まずは無音から
   fadingBgm = bgm;
+  fadingBgmVolume = targetVolume;
 
   bgmFadeTimer = setInterval(() => {
     doneSteps += 1;
@@ -786,7 +801,7 @@ function startBgmFadeIn(bgm: HTMLAudioElement) {
     const ratio = doneSteps / totalSteps;
 
     try {
-      bgm.volume = ratio >= 1 ? bgmVolume : bgmVolume * ratio;
+      bgm.volume = ratio >= 1 ? targetVolume : targetVolume * ratio;
     } catch {
       // 何もしない
     }
@@ -813,12 +828,13 @@ function cancelBgmFade() {
 
   if (fadingBgm) {
     try {
-      fadingBgm.volume = bgmVolume;
+      fadingBgm.volume = fadingBgmVolume;
     } catch {
       // 何もしない
     }
 
     fadingBgm = null;
+    fadingBgmVolume = 0;
   }
 }
 
@@ -845,7 +861,7 @@ function playParkBgm() {
     bgm.currentTime = 0; // 曲の先頭へ戻す
 
     // 無音から少しずつ大きくしていく
-    startBgmFadeIn(bgm);
+    startBgmFadeIn(bgm, parkBgmVolume);
     // play() は「再生できたかどうか」をあとから知らせる形（Promise）になっている
     // 自動再生をブラウザに止められることがあるので、失敗しても何もしないでおく
     bgm.play().catch(() => {});
@@ -1017,8 +1033,8 @@ function getTitleBgm() {
       // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
       titleBgm.loop = true;
 
-      // volume … 公園BGMと同じ大きさにそろえる（上の bgmVolume）
-      titleBgm.volume = bgmVolume;
+      // volume … 音の大きさ（上の titleBgmVolume で決めている）
+      titleBgm.volume = titleBgmVolume;
     }
 
     return titleBgm;
@@ -1049,7 +1065,7 @@ function playTitleBgm() {
 
     // タイトルBGMはフェードインさせず、そのまま鳴らす
     // （フェードインするのは公園BGMだけ）
-    bgm.volume = bgmVolume;
+    bgm.volume = titleBgmVolume;
 
     bgm.play().catch(() => {});
   } catch {
@@ -5986,6 +6002,19 @@ onUnmounted(() => {
   margin: -16px 0 10px;
 }
 
+/* 起動画面だけ、さらに右上のすみへ寄せる
+
+   この画面はタイトルと「▶ はじめる」しか出ないので、
+   カードの余白（padding: 56px 44px）がとても広い
+   マイナスの余白でその余白へ食い込ませて、
+   カードの角から 22px のところへボタンを置く
+
+   ※ マイナスの余白は「その分だけ外側へはみ出す」という意味
+     はみ出す先はカードの内側の余白なので、外へは出ない */
+.title-card--boot .title-card__tools {
+  margin: -34px -22px 12px;
+}
+
 .status-clock {
   color: var(--gold);
   font-variant-numeric: tabular-nums;
@@ -8344,6 +8373,12 @@ onUnmounted(() => {
 
   .title-card {
     padding: 24px 20px;
+  }
+
+  /* せまい画面ではカードの余白そのものが小さくなる（上 24px / 横 20px）ので、
+     食い込ませる量も小さくしないと、ボタンがカードの外へ出てしまう */
+  .title-card--boot .title-card__tools {
+    margin: -12px -8px 8px;
   }
 
   .title-card__name {
