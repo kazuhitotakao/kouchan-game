@@ -402,6 +402,186 @@ const dangerWarnings = computed(() => {
   return warnings;
 });
 
+/* ============================================================
+   効果音（Web Audio API）
+
+   音声ファイル（MP3・WAV）は使わず、ブラウザに最初から入っている
+   Web Audio API で、その場で音そのものを作って鳴らす
+
+   使う部品は3つだけ
+   ・AudioContext    … 音を作るための「作業台」。これが無いと何も作れない
+   ・OscillatorNode  … 音の発生源。「1秒間に何回ふるえるか」を決めると、その高さの音が出る
+   ・GainNode        … 音量つまみ。時間に沿って音量を変えられる
+
+   つなぎ方は
+   Oscillator（音を出す）→ Gain（音量を調整）→ destination（スピーカー）
+   ============================================================ */
+
+/* 作業台（AudioContext）を入れておく箱
+
+   null は「まだ作っていない」という意味
+   AudioContext は作るのが重たいので、1個だけ作って、ずっと使い回す
+   ※ ここで new AudioContext() をしないのが大事
+     Nuxtはサーバー側でも一度このコードを読むが、
+     サーバーには window も AudioContext も無いのでエラーになってしまう
+*/
+let audioContext: AudioContext | null = null;
+
+/* 作業台を用意して返す（初めて音を鳴らすときだけ作る）
+
+   音が出せないときは null を返すので、
+   呼んだ側は「null なら何もしない」だけで済む
+*/
+function getAudioContext() {
+  // サーバー側では音を鳴らせないので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!audioContext) {
+      audioContext = new AudioContext();
+    }
+
+    /* ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがあり、
+       そのとき作業台は suspended（お休み中）になっている
+       resume() で起こすが、await はしない
+       ここでゲームを待たせると、画面の切り替わりが音のせいで遅れてしまう */
+    if (audioContext.state === 'suspended') {
+      audioContext.resume().catch(() => {});
+    }
+
+    return audioContext;
+  } catch {
+    // 音が使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* 音を1つだけ鳴らす、共通の関数
+
+   frequency … 音の高さ（Hz）。数が大きいほど高い音。440ならピアノの「ラ」
+   startTime … いつ鳴らしはじめるか（AudioContextの中の時計の時刻）
+   duration  … 音の長さ（秒）
+   volume    … 音の大きさ（0〜1）。今回はどれも0.1以下の控えめな値にしている
+   type      … 波の形。sine と triangle はどちらも丸くてやさしい音になる
+   endFrequency … 指定すると、その高さまで音程がなめらかに変化する（省略可）
+
+   ※ OscillatorNode は「1回鳴らしたら使い捨て」という決まりなので、
+     鳴らすたびに新しく作る（作業台だけは使い回す）
+*/
+function playTone(frequency: number, startTime: number, duration: number, volume: number, type: OscillatorType = 'sine', endFrequency?: number) {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  try {
+    const oscillator = context.createOscillator(); // 音の発生源
+    const gain = context.createGain(); // 音量つまみ
+
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(frequency, startTime);
+
+    // 音程を変化させる指定があるときだけ、なめらかに動かす
+    if (endFrequency !== undefined) {
+      oscillator.frequency.exponentialRampToValueAtTime(endFrequency, startTime + duration);
+    }
+
+    /* 音量の動き（これが無いと、鳴りはじめと鳴り終わりに「ブツッ」と雑音が入る）
+       ① ほぼ無音からはじめる
+       ② 0.015秒かけて、すっと目的の音量まで上げる
+       ③ そのあと、鳴り終わりに向かってゆっくり下げる
+
+       ※ 下げる先を 0 ではなく 0.001 にしているのは、
+         exponentialRampToValueAtTime() が 0 を受け取れないため
+         （0へ向かう計算ができないので、代わりに「ほぼ0」を使う）
+    */
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    // 発生源 → 音量つまみ → スピーカー の順につなぐ
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration + 0.02);
+  } catch {
+    // 音が鳴らなくても、ゲームは止めない
+  }
+}
+
+/* ① コマンド決定音「ポン♪」
+   700Hzの丸い音を0.09秒だけ。鋭くならないよう triangle にしている
+*/
+function playDecisionSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  playTone(700, context.currentTime, 0.09, 0.06, 'triangle');
+}
+
+/* ② アイテム発見音「キラリン♪」
+   ラ → ミ → 高いソ と、明るい音を3つ short に重ねて上っていく
+
+   ※ 決定音と同時に鳴ると聞き取りにくいので、0.06秒だけ後ろにずらす
+     ゲーム処理は待たせず、鳴らす時刻だけをずらしているのがポイント
+*/
+function playItemSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const start = context.currentTime + 0.06;
+
+  playTone(880, start, 0.12, 0.05, 'sine');
+  playTone(1174.7, start + 0.07, 0.12, 0.05, 'sine');
+  playTone(1568, start + 0.14, 0.16, 0.05, 'sine');
+}
+
+/* ③ いやいや発生音「ポヨヨン……」
+   320Hzから170Hzへ、音程をするすると下げてしょんぼり感を出す
+   怖い警告音にならないよう、やわらかい triangle を使う
+
+   ※ 決定音・アイテム音のあとに聞こえるよう、0.12秒ずらす
+*/
+function playTantrumSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  playTone(320, context.currentTime + 0.12, 0.28, 0.07, 'triangle', 170);
+}
+
+/* ④ ゴール音「タタターン♪」
+   ド → ミ → ソ → 高いド と上がっていく、短い明るいファンファーレ
+   最後の「高いド」だけ長めに伸ばして、締めくくりらしくする
+*/
+function playGoalSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const start = context.currentTime;
+
+  playTone(523.25, start, 0.14, 0.08, 'triangle'); // ド
+  playTone(659.25, start + 0.12, 0.14, 0.08, 'triangle'); // ミ
+  playTone(783.99, start + 0.24, 0.14, 0.08, 'triangle'); // ソ
+  playTone(1046.5, start + 0.38, 0.42, 0.09, 'triangle'); // 高いド
+}
+
 /* 時間を進める共通処理 */
 function addMinutes(minutes: number) {
   const [hour, minute] = currentTime.value.split(':').map(Number);
@@ -439,8 +619,17 @@ function fixAllStatus() {
 
 /* 行動をはじめる前に呼ぶ
    「今のステータス」を控えておくだけの処理
+
+   ※ 各場所の行動・いやいや対応・突然イベントの31個の関数は、
+     どれも1行目でこの関数を呼んでいる＝「行動がはじまった瞬間」の共通の入口
+     クリックでも Enter / Space でも必ずここを通るので、
+     決定音はここで1回だけ鳴らせばよい
+     （31個すべてに同じ1行を書き足すより、こちらのほうが見通しがよい）
 */
 function startStatusChanges() {
+  // 決定音「ポン♪」
+  playDecisionSound();
+
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
 
@@ -723,6 +912,10 @@ function addCollectedItem(itemName: string) {
 
   collectedItems.value.push(itemName);
 
+  // アイテム発見音「キラリン♪」
+  // 上の重複チェックを通りぬけた＝本当に新しいものを見つけたときだけ鳴る
+  playItemSound();
+
   // 演出用：この行動で新しく見つけたものとして覚えておく
   // 「〜を見つけました！」の文は、この foundItemsThisAction をもとに
   // 画面のほうで組み立てる（アイテムの名前だけ色をつけて目立たせるため）
@@ -939,6 +1132,12 @@ function checkTantrum() {
   isTantrum.value = true;
   tantrumCount.value += 1;
 
+  // いやいや発生音「ポヨヨン……」
+  // 抽選に当たって、新しいいやいやが始まったこの瞬間だけ鳴らす
+  // ※「少し待ってみる」に失敗して同じいやいやが続くときは、
+  //   関数のいちばん上（isTantrum が true）で return しているので鳴らない
+  playTantrumSound();
+
   childMood.value -= 15;
   parentCalm.value -= 12;
 
@@ -1085,6 +1284,9 @@ function finishPlayAction(place: GameEvent) {
 
 /* ゲーム開始 */
 function startGame() {
+  // 決定音「ポン♪」（タイトルの「公園へ行く」）
+  playDecisionSound();
+
   gameStarted.value = true;
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
@@ -1095,6 +1297,9 @@ function startGame() {
    移動すると前の結果メッセージと変化量の表示は消す
 */
 function goToPlace(place: GameEvent) {
+  // 決定音「ポン♪」（公園入口から各場所へ移動するとき）
+  playDecisionSound();
+
   resultMessage.value = '';
   statusChanges.value = null;
   currentEvent.value = place;
@@ -1120,6 +1325,16 @@ function goToNextPlace() {
   // GAME OVER後にうっかり別の画面へ動いてしまわないようにする
   if (currentEvent.value === 'gameOver') {
     return;
+  }
+
+  /* 決定音「ポン♪」（次の場所を選ぶ／べつの場所へ行く／次へ）
+
+     ただし、このあと ③ でゴールへ向かうときは鳴らさない
+     ゴールではファンファーレだけを聞かせたいので、決定音を重ねない
+     （③に進むのは「いやいや中ではない」かつ「12:00を過ぎている」ときだけ）
+  */
+  if (isTantrum.value || !isTimeOver.value) {
+    playDecisionSound();
   }
 
   resultMessage.value = '';
@@ -2175,6 +2390,13 @@ function goToGoal() {
     return;
   }
 
+  /* ゴール音「タタターン♪」
+
+     GAME OVERのときは、すぐ上の return でここまで来ないので鳴らない
+     また、ゴールでは通常の決定音を鳴らさない（ファンファーレが埋もれないように）
+  */
+  playGoalSound();
+
   resultMessage.value = '';
   statusChanges.value = null;
   addMinutes(10);
@@ -2187,6 +2409,11 @@ function goToGoal() {
 
 /* もう一度あそぶ */
 function resetGame() {
+  // 決定音「ポン♪」
+  // ※ AudioContext（作業台）はここでは作り直さない
+  //   ページを開いているあいだ、ずっと同じものを使い続ける
+  playDecisionSound();
+
   childEnergy.value = 100;
   childMood.value = 55;
   outingPoint.value = 0;
