@@ -25,22 +25,7 @@ const gameStarted = ref(false);
    fallDown       = こうちゃんがころぶ
    fountain       = 噴水が突然出る
 */
-type GameEvent =
-  | 'parkEntrance'
-  | 'slide'
-  | 'sandbox'
-  | 'acornArea'
-  | 'pond'
-  | 'hill'
-  | 'secretSpot'
-  | 'tantrum'
-  | 'goal'
-  | 'gameOver'
-  | 'emergencySiren'
-  | 'ladybug'
-  | 'dog'
-  | 'fallDown'
-  | 'fountain';
+type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'tantrum' | 'goal' | 'gameOver' | 'emergencySiren' | 'ladybug' | 'dog' | 'fallDown' | 'fountain';
 
 /* 現在いる場所
    最初は「公園入口」からスタート
@@ -624,18 +609,12 @@ const changeGroups = computed(() => {
       // 見出しがあるので、中のラベルは「体力」「機嫌」だけでよい
       name: 'こうちゃん',
       groupClass: 'change-group--child',
-      rows: [
-        makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy),
-        makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood),
-      ],
+      rows: [makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy), makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood)],
     },
     {
       name: '親',
       groupClass: 'change-group--parent',
-      rows: [
-        makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy),
-        makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm),
-      ],
+      rows: [makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy), makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm)],
     },
     {
       // こうちゃんでも親でもない「おでかけ全体」の情報
@@ -689,23 +668,15 @@ const lastActionGroups = computed(() => {
   return [
     {
       name: 'こうちゃん',
-      rows: [
-        makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy),
-        makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood),
-      ],
+      rows: [makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy), makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood)],
     },
     {
       name: '親',
-      rows: [
-        makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy),
-        makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm),
-      ],
+      rows: [makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy), makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm)],
     },
     {
       name: 'おでかけ',
-      rows: [
-        makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint),
-      ],
+      rows: [makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint)],
     },
   ];
 });
@@ -2447,7 +2418,6 @@ function moveEntranceDown() {
   selectedCommandIndex.value = goalIndex;
 }
 
-
 /* Enter / Space を押したときに、いま選んでいるコマンドを実行する
 
    やっていることは「マウスでクリックしたときと同じ関数を呼ぶ」だけ
@@ -2783,10 +2753,8 @@ onUnmounted(() => {
         <h1 class="title-card__name">{{ gameTitle }}</h1>
 
         <div class="title-card__rule">
-          <p>
-            冒険の舞台は9時から12時の公園です！      
-          </p>
-          
+          <p>冒険の舞台は9時から12時の公園です！</p>
+
           <p>
             どんな出会い、冒険があるかな。
             <br />
@@ -2836,32 +2804,32 @@ onUnmounted(() => {
                   体力
                 </span>
                 <span class="status-item__value">{{ childEnergy }}</span>
-            <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
-              {{ formatChange(statusChanges.childEnergy) }}
-            </span>
-            <span class="gauge">
-              <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
+                <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
+                  {{ formatChange(statusChanges.childEnergy) }}
+                </span>
+                <span class="gauge">
+                  <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
 
-              <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
-              <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
+                  <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
+                  <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
 
-              <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
-              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
-            </span>
+                  <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
+                  <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
+                </span>
               </li>
 
               <li class="status-item">
                 <span class="status-item__label">機嫌</span>
                 <span class="status-item__value">{{ childMood }}</span>
-            <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
-              {{ formatChange(statusChanges.childMood) }}
-            </span>
-            <span class="gauge">
-              <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
+                <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
+                  {{ formatChange(statusChanges.childMood) }}
+                </span>
+                <span class="gauge">
+                  <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
 
-              <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
-              <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
-            </span>
+                  <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
+                  <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
+                </span>
               </li>
             </ul>
           </section>
@@ -2876,15 +2844,15 @@ onUnmounted(() => {
                   体力
                 </span>
                 <span class="status-item__value">{{ parentEnergy }}</span>
-            <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
-              {{ formatChange(statusChanges.parentEnergy) }}
-            </span>
-            <span class="gauge">
-              <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
+                <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
+                  {{ formatChange(statusChanges.parentEnergy) }}
+                </span>
+                <span class="gauge">
+                  <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
 
-              <!-- 目もり：あぶないライン（親の体力20以下） -->
-              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
-            </span>
+                  <!-- 目もり：あぶないライン（親の体力20以下） -->
+                  <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
+                </span>
               </li>
 
               <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
@@ -2893,15 +2861,15 @@ onUnmounted(() => {
                   余裕
                 </span>
                 <span class="status-item__value">{{ parentCalm }}</span>
-            <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
-              {{ formatChange(statusChanges.parentCalm) }}
-            </span>
-            <span class="gauge">
-              <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
+                <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
+                  {{ formatChange(statusChanges.parentCalm) }}
+                </span>
+                <span class="gauge">
+                  <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
 
-              <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
-              <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
-            </span>
+                  <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
+                  <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
+                </span>
               </li>
             </ul>
           </section>
@@ -3043,7 +3011,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
@@ -3057,7 +3024,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3109,8 +3080,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3160,7 +3130,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
@@ -3174,7 +3143,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3226,8 +3199,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3276,7 +3248,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
@@ -3290,7 +3261,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3342,8 +3317,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3392,7 +3366,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
@@ -3406,7 +3379,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3458,8 +3435,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3508,7 +3484,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
@@ -3522,7 +3497,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3574,8 +3553,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3624,7 +3602,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
@@ -3638,7 +3615,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3690,8 +3671,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3738,10 +3718,7 @@ onUnmounted(() => {
                    だっこ・おやつ・待つ成功で いやいや が終わると、
                    画面は 'tantrum' のままでも isTantrum が false になるので、
                    その瞬間にバウンスが止まる -->
-            <article
-              class="place-card place-card--tantrum"
-              :class="{ 'place-card--tantrum-active': isTantrum }"
-            >
+            <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum }">
               <h2 class="place-card__title">いやいやタイム！</h2>
 
               <p class="place-card__text">
@@ -3756,7 +3733,6 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
                 <!-- 待つことに失敗して、まだいやいやが続いているときに出す -->
                 <p v-if="isTantrum" class="result-alert">まだ いやいや は続いています…</p>
@@ -3771,7 +3747,11 @@ onUnmounted(() => {
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3823,8 +3803,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
             <nav class="command-box">
@@ -3880,12 +3859,15 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <p class="result-card__text">{{ resultMessage }}</p>
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -3937,8 +3919,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
             <nav class="command-box">
@@ -3988,12 +3969,15 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <p class="result-card__text">{{ resultMessage }}</p>
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -4045,8 +4029,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
             <nav class="command-box">
@@ -4096,12 +4079,15 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <p class="result-card__text">{{ resultMessage }}</p>
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -4153,8 +4139,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
             <nav class="command-box">
@@ -4204,12 +4189,15 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <p class="result-card__text">{{ resultMessage }}</p>
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -4261,8 +4249,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
             <nav class="command-box">
@@ -4322,12 +4309,15 @@ onUnmounted(() => {
                    上の「結果」バッジ（h3）は外に置いてあるので、
                    スクロールしても切れずに残る -->
               <div class="result-card__body">
-
                 <p class="result-card__text">{{ resultMessage }}</p>
 
                 <!-- 見つけたものの文
                      アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                  「
+                  <b class="found-line__name">{{ item }}</b>
+                  」を見つけました！
+                </p>
 
                 <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                      地の文にまぎれないように、専用の枠と
@@ -4379,8 +4369,7 @@ onUnmounted(() => {
                   </div>
                 </div>
               </div>
-
-              </article>
+            </article>
 
             <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
             <nav class="command-box">
@@ -4545,7 +4534,11 @@ onUnmounted(() => {
 
               <!-- 見つけたものの文
                    アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">「<b class="found-line__name">{{ item }}</b>」を見つけました！</p>
+              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                「
+                <b class="found-line__name">{{ item }}</b>
+                」を見つけました！
+              </p>
 
               <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                    地の文にまぎれないように、専用の枠と
