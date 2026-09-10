@@ -4688,6 +4688,17 @@ onUnmounted(() => {
   --ink: #4e5860; /* 文字（まっ黒ではなく、やわらかい すみあお） */
   --ink-soft: #8d949b;
   --gold: #ffd166; /* パステルの黄色 */
+
+  /* 「いま選んでいるコマンド」を表す水色（シアン）＝ #67e8f9
+     ・金色 … ポイント／結果／特別な表示
+     ・赤系 … あぶない
+     ・緑系 … 良い変化
+     とすでに意味が決まっているので、「選択中」だけの専用色として水色を用意する
+
+     ※ 色そのもの（#67e8f9）ではなく「赤 緑 青」の3つの数字で持っておく。
+       こう書いておくと rgb(var(--command-selected) / 45%) のように、
+       透明度だけを変えながら、枠にも光にも同じ色を使い回せる */
+  --command-selected: 103 232 249;
   --child-energy: #96dfc4; /* ミント */
   --child-mood: #ffd98f; /* バターイエロー */
   --parent-energy: #93cff5; /* そらいろ */
@@ -6438,6 +6449,100 @@ onUnmounted(() => {
    大きなボタンには見せず、枠の中の「文字の行」に見えるようにする
    左の28pxは、マウスを乗せたときに出る「▶」の場所
 */
+/* ============================================================
+   【共通】いま選んでいるコマンドを、水色でふわっと光らせる演出
+
+   ねらい
+     キーボードで遊んでいるとき「いま Enter を押したら
+     どのボタンが実行されるのか」を一目で分かるようにする
+
+   仕組み
+     ボタンの上に ::after という「透明な板」を1枚だけ重ねて、
+     その板の box-shadow（内側の水色の枠＋外側の水色の光）だけを
+     ゆっくり強くしたり弱くしたりする。
+     ・板は透明なので、ボタン本来の色（紙／金／紫／緑）はそのまま残る
+     ・box-shadow は場所を取らないので、ボタンの幅や配置はズレない
+     ・pointer-events: none なので、クリックのじゃまもしない
+
+   対象
+     .cmd--selected              … 公園入口などで選んでいるボタン
+     .cmd--single                … ボタンが1つだけの画面（公園へ行く／もう一度あそぶ）
+     .command-box__item--selected … 各イベントの中で選んでいる行
+   ============================================================ */
+
+/* 水色の光の強さを 弱 → 少し強い → 弱 と往復させる
+   ※ transform（動き）はここでは一切さわらない。
+     hover や :active の translateY / translateX とケンカさせないため
+
+   影は3枚がさねになっている
+     1枚目 inset … ボタンのふちの内側に引く水色の線
+     2枚目 0 0 0 2px … ボタンのすぐ外に引く水色の線
+       ※ 水色は「紺色の下地」の上でいちばんよく見える（コントラスト4.25:1）。
+         紙のボタンや金色のボタンは色が明るく、内側の線だけでは見えにくいので、
+         紺色の下地に出るこの外側の線が「選択中」の目じるしの主役になる
+     3枚目 ぼかし … まわりへ広がる、ふんわりした光 */
+@keyframes command-selected-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 2px rgb(var(--command-selected) / 55%),
+      0 0 0 2px rgb(var(--command-selected) / 45%),
+      0 0 8px 2px rgb(var(--command-selected) / 25%);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgb(var(--command-selected) / 95%),
+      0 0 0 2px rgb(var(--command-selected) / 90%),
+      0 0 16px 3px rgb(var(--command-selected) / 55%);
+  }
+}
+
+.cmd--selected::after,
+.cmd--single::after,
+.command-box__item--selected::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+
+  /* クリックのじゃまをしない、透明な板にする */
+  pointer-events: none;
+
+  /* アニメーションが止まっているときに残る「水色の枠」
+     （動きを減らす設定のときは、光の強弱が無くなり、この枠だけが表示される） */
+  box-shadow:
+    inset 0 0 0 2px rgb(var(--command-selected) / 85%),
+    0 0 0 2px rgb(var(--command-selected) / 75%);
+
+  /* 1.4秒かけてゆっくり。点滅ではなく「ふわっと光っている」速さ */
+  animation: command-selected-glow 1.4s ease-in-out infinite;
+}
+
+/* .cmd は枠（上・左右2px／下だけ4px）を持っているので、
+   そのぶん外へ広げて、水色の線をボタンのふちにぴったり重ねる。
+   選択中はボタンのふちが水色に変わって見えるが、
+   ボタン本体の色（紙・金・紫・緑）はそのまま残る */
+.cmd--selected::after,
+.cmd--single::after {
+  inset: -2px -2px -4px;
+}
+
+/* 押している最中は光を止める
+   （光が強いままだと「押しこんだ」感じが分からなくなるため） */
+.cmd:active::after,
+.command-box__item:active::after {
+  animation: none;
+}
+
+/* 押せないボタンは光らせない（押せると勘ちがいさせないため）
+   ※ いまのゲームに disabled のボタンは無いが、
+     あとから増えたときのための保険として書いておく */
+.cmd:disabled::after,
+.command-box__item:disabled::after {
+  display: none;
+}
+
 .command-box__item {
   position: relative;
   display: flex;
@@ -6621,6 +6726,30 @@ onUnmounted(() => {
 .cmd:hover,
 .cmd--selected {
   transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+}
+
+/* 選択中は、ボタンの背景にうっすら水色を重ねる
+
+   background（背景色）は書きかえずに、inset の box-shadow で上から薄く塗る。
+   ・inset の影は「背景の上・文字の下」に描かれるので、文字は濁らない
+   ・background を書きかえないので、金色・紫・緑など
+     そのボタンが本来持っている色がそのまま残る
+   ・0 0 0 100px は「ボタン全体をおおえるくらい大きく広げる」という意味 */
+.cmd--selected,
+.cmd--single {
+  box-shadow:
+    0 4px 12px rgb(0 0 0 / 30%),
+    inset 0 0 0 100px rgb(var(--command-selected) / 12%);
+}
+
+/* 白い文字のボタン（秘密の場所・ゴール）だけは、水色を重ねない
+
+   背景が明るくなるほど、白い文字は読みにくくなるため。
+   この2つは「水色の枠」と「水色の光」だけで選択中を表し、
+   紫・緑の下地と白文字のコントラストは今までどおりに保つ */
+.cmd--secret.cmd--selected,
+.cmd--goal.cmd--selected {
   box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
 }
 
@@ -6913,6 +7042,15 @@ onUnmounted(() => {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* 選択中の水色の光は、強くなったり弱くなったりするのを完全に止める。
+     ただし ▶ ・背景・太字・水色の枠は残るので、
+     動きが無くても「いまここを選んでいる」ことは分かる */
+  .cmd--selected::after,
+  .cmd--single::after,
+  .command-box__item--selected::after {
+    animation: none !important;
   }
 }
 
