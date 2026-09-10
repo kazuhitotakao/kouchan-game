@@ -417,21 +417,22 @@ const dangerWarnings = computed(() => {
    Oscillator（音を出す）→ Gain（音量を調整）→ destination（スピーカー）
    ============================================================ */
 
-/* 効果音を鳴らすかどうか（プレイヤーの設定）
-   true  … 効果音ON（はじめてのときはこちら）
-   false … 効果音OFF
+/* ゲームの音を鳴らすかどうか（プレイヤーの設定）
+   効果音（ポン♪など）と公園BGMの両方をまとめて切り替える
+   true  … サウンドON（はじめてのときはこちら）
+   false … サウンドOFF
 
    ※ 体力や機嫌とちがって「ゲームのステータス」ではなく「設定」なので、
      resetGame（もう一度あそぶ）では初期値に戻さない
 */
 const soundEnabled = ref(true);
 
-/* 効果音の設定を保存しておく名前（localStorageのキー）
+/* サウンドの設定を保存しておく名前（localStorageのキー）
    同じブラウザの他のページと名前がぶつからないよう、ゲーム名を頭に付けている
 */
 const soundStorageKey = 'kouchan-game-sound-enabled';
 
-/* 効果音のON/OFFを切り替える
+/* サウンド（効果音＋BGM）のON/OFFを切り替える
 
    localStorage は、ブラウザに小さなメモを残しておける保存場所
    ページを閉じても消えないので、次に開いたときも設定を思い出せる
@@ -440,12 +441,29 @@ function toggleSound() {
   // ① まず切り替える（true なら false へ、false なら true へ）
   soundEnabled.value = !soundEnabled.value;
 
+  /* ② 公園BGMも合わせる
+       効果音は getAudioContext() が soundEnabled を見てくれるので何もしなくてよいが、
+       BGMは「いま鳴っている曲」なので、その場で止める・再開する必要がある
+
+       ONに戻したときは、公園を探検している最中だけ再開する
+       （タイトル・ゴール・GAME OVERの画面では、もともとBGMは鳴らない）
+       止めたところからの続きなので、playParkBgm() ではなく resumeParkBgm() を使う
+  */
+  if (soundEnabled.value) {
+    if (gameStarted.value && !isResultScene.value) {
+      resumeParkBgm();
+    }
+  } else {
+    // OFFのときは pause() だけ（どこまで再生したかを覚えておく）
+    pauseParkBgm();
+  }
+
   // サーバー側には localStorage が無いので、ここで終わり
   if (!import.meta.client) {
     return;
   }
 
-  // ② 次に開いたときのために保存しておく
+  // ③ 次に開いたときのために保存しておく
   try {
     localStorage.setItem(soundStorageKey, String(soundEnabled.value));
   } catch {
@@ -625,6 +643,149 @@ function playGoalSound() {
   playTone(659.25, start + 0.12, 0.14, 0.08, 'triangle'); // ミ
   playTone(783.99, start + 0.24, 0.14, 0.08, 'triangle'); // ソ
   playTone(1046.5, start + 0.38, 0.42, 0.09, 'triangle'); // 高いド
+}
+
+/* ============================================================
+   公園のBGM（HTML Audio）
+
+   効果音とBGMで、仕組みをわざと分けている
+   ・効果音 … 「ポン♪」のような短い音。決まった形の波を計算して作れるので
+              Web Audio API で その場で作る（音声ファイルは不要）
+   ・BGM   … 何十秒もある曲。計算では作れないので、
+              録音済みの park-bgm.mp3 を再生する
+
+   曲を再生するだけなら、音声ファイルを鳴らす専用の部品
+   HTMLAudioElement（new Audio）を使うのがいちばん簡単
+   ============================================================ */
+
+/* 公園BGMを入れておく箱
+
+   null は「まだ作っていない」という意味
+   ※ ここで new Audio(...) をしないのが大事
+     Nuxtはサーバー側でも一度このコードを読むが、
+     サーバーには Audio が無いのでエラーになってしまう
+*/
+let parkBgm: HTMLAudioElement | null = null;
+
+/* 公園BGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ ここでは soundEnabled を見ない
+     サウンドをOFFにした瞬間は soundEnabled が false になっているが、
+     そのとき「鳴っているBGMを止める」ために、この関数が必要になるため
+     （ここでnullを返すと、止めたいのに止められなくなってしまう）
+*/
+function getParkBgm() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!parkBgm) {
+      // public/audio/park-bgm.mp3 は、URLでは /audio/park-bgm.mp3 になる
+      parkBgm = new Audio('/audio/park-bgm.mp3');
+
+      // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+      parkBgm.loop = true;
+
+      // volume … 音の大きさ（0＝無音、1＝そのままの大きさ）
+      // BGMは後ろでずっと流れるものなので、効果音よりかなり小さくする
+      parkBgm.volume = 0.15;
+    }
+
+    return parkBgm;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* 公園BGMを「最初から」再生する（ゲームを始めたとき用）
+
+   currentTime は「いま曲のどこを再生しているか」を秒で表したもの
+   0 を入れると曲の先頭に戻る
+*/
+function playParkBgm() {
+  // サウンドOFFのときは、ここで終わり
+  // ※ getParkBgm() より先に見ることで、OFFのあいだは
+  //   mp3の読み込みそのものが起きないようにしている
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getParkBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.currentTime = 0; // 曲の先頭へ戻す
+    // play() は「再生できたかどうか」をあとから知らせる形（Promise）になっている
+    // 自動再生をブラウザに止められることがあるので、失敗しても何もしないでおく
+    bgm.play().catch(() => {});
+  } catch {
+    // BGMが鳴らなくても、ゲームは止めない
+  }
+}
+
+/* 公園BGMを「続きから」再生する（サウンドをONに戻したとき用）
+
+   playParkBgm() とのちがいは currentTime を 0 に戻さないこと
+   OFFにしたところから、そのまま続きを鳴らす
+*/
+function resumeParkBgm() {
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getParkBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.play().catch(() => {});
+  } catch {
+    // 何もしない
+  }
+}
+
+/* 公園BGMを一時停止する（どこまで再生したかは覚えたまま）
+
+   pause() は「その場で止める」だけなので、
+   もう一度 play() すると、止めたところから続きが鳴る
+*/
+function pauseParkBgm() {
+  if (!parkBgm) {
+    return;
+  }
+
+  try {
+    parkBgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
+/* 公園BGMを完全に止める（次はまた最初から鳴るようにする）
+
+   pause() で止めるだけだと、次に遊ぶとき曲の途中から始まってしまう
+   currentTime = 0 で先頭に戻しておく
+*/
+function stopParkBgm() {
+  if (!parkBgm) {
+    return;
+  }
+
+  try {
+    parkBgm.pause();
+    parkBgm.currentTime = 0;
+  } catch {
+    // 何もしない
+  }
 }
 
 /* 時間を進める共通処理 */
@@ -1209,11 +1370,16 @@ function checkGameOver() {
     return;
   }
 
+  /* ※ 下の3つは、あてはまった1つだけが実行されて return する
+       （いちばん上に「すでにGAME OVERなら return」もあるので、
+        公園BGMを止める stopParkBgm() が動くのは1回だけ） */
+
   // ① 親の体力が0以下
   if (parentEnergy.value <= 0) {
     gameOverTitle.value = '親の体力が限界！';
     gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
     currentEvent.value = 'gameOver';
+    stopParkBgm();
     return;
   }
 
@@ -1222,6 +1388,7 @@ function checkGameOver() {
     gameOverTitle.value = '親の余裕がなくなった！';
     gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
     currentEvent.value = 'gameOver';
+    stopParkBgm();
     return;
   }
 
@@ -1230,6 +1397,7 @@ function checkGameOver() {
     gameOverTitle.value = 'こうちゃん電池切れ！';
     gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
+    stopParkBgm();
     return;
   }
 }
@@ -1331,6 +1499,14 @@ function finishPlayAction(place: GameEvent) {
 function startGame() {
   // 決定音「ポン♪」（タイトルの「公園へ行く」）
   playDecisionSound();
+
+  /* 公園BGMを最初から鳴らしはじめる
+
+     ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがある
+     ここはプレイヤーが「公園へ行く」を決定した瞬間なので、
+     このタイミングで始めるのが確実
+  */
+  playParkBgm();
 
   gameStarted.value = true;
 
@@ -2435,6 +2611,10 @@ function goToGoal() {
     return;
   }
 
+  /* 公園BGMを止める（ゴールしたので公園での探検は終わり）
+     先に止めることで、このあとのファンファーレがBGMに埋もれない */
+  stopParkBgm();
+
   /* ゴール音「タタターン♪」
 
      GAME OVERのときは、すぐ上の return でここまで来ないので鳴らない
@@ -2458,6 +2638,11 @@ function resetGame() {
   // ※ AudioContext（作業台）はここでは作り直さない
   //   ページを開いているあいだ、ずっと同じものを使い続ける
   playDecisionSound();
+
+  /* 公園BGMを止めて、曲を先頭に戻しておく
+     このあとタイトル画面（無音）に戻り、
+     次に「公園へ行く」を押したときにまた最初から鳴る */
+  stopParkBgm();
 
   childEnergy.value = 100;
   childMood.value = 55;
@@ -2905,7 +3090,7 @@ function runSelectedCommand() {
    ③ Enter / Space なら、選択中のコマンドを実行する
 */
 function handleKeydown(event: KeyboardEvent) {
-  /* 効果音ボタンにフォーカスしているときは、ゲームのキー操作をしない
+  /* サウンドボタンにフォーカスしているときは、ゲームのキー操作をしない
 
      このゲームのキー操作は window 全体で受け取っているため、
      音ボタンを選んだ状態で Enter を押すと、
@@ -3024,7 +3209,7 @@ onMounted(() => {
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
-  /* 前回の効果音の設定を思い出す
+  /* 前回のサウンドの設定を思い出す
 
      localStorage には文字しか入らないので、'true' / 'false' という
      「文字」で戻ってくる。保存したことが無いときは null になる
@@ -3047,6 +3232,9 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('resize', updateEntranceColumns);
+
+  // 別のページへ移ったあともBGMが鳴り続けないように止めておく
+  pauseParkBgm();
 });
 </script>
 
@@ -3057,12 +3245,12 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!gameStarted" class="title-screen">
       <div class="title-card">
-        <!-- 設定（効果音ON/OFF）
+        <!-- 設定（サウンドON/OFF）
              「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく -->
         <div class="title-card__tools">
-          <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? '効果音をオフにする' : '効果音をオンにする'" @click="toggleSound">
+          <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-            <span class="sound-toggle__text">効果音</span>
+            <span class="sound-toggle__text">サウンド</span>
             <span class="sound-toggle__state">
                 <!-- ON と OFF を同じ場所に重ねて置いておく
                      使わないほうは「見えなくする」だけで場所は残るので、
@@ -3103,9 +3291,9 @@ onUnmounted(() => {
           <div class="status-area__titleRow">
             <span class="status-area__title">{{ gameTitle }}</span>
 
-            <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? '効果音をオフにする' : '効果音をオンにする'" @click="toggleSound">
+            <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
               <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-              <span class="sound-toggle__text">効果音</span>
+              <span class="sound-toggle__text">サウンド</span>
               <span class="sound-toggle__state">
                 <!-- ON と OFF を同じ場所に重ねて置いておく
                      使わないほうは「見えなくする」だけで場所は残るので、
@@ -5210,7 +5398,7 @@ onUnmounted(() => {
   gap: 10px;
 }
 
-/* ===== 効果音のON/OFFボタン（設定用の小さなボタン） =====
+/* ===== サウンドのON/OFFボタン（設定用の小さなボタン） =====
 
    これは「設定」なので、選択中コマンドの水色発光のようには目立たせない
    ONを緑・OFFを赤にはしない
@@ -5288,7 +5476,7 @@ onUnmounted(() => {
 }
 
 /* いま使わないほうを見えなくする（場所はそのまま残る）
-   aria-pressed は true = 効果音ON、false = 効果音OFF */
+   aria-pressed は true = サウンドON、false = サウンドOFF */
 .sound-toggle[aria-pressed='true'] .sound-toggle__stateText--off,
 .sound-toggle[aria-pressed='false'] .sound-toggle__stateText--on {
   visibility: hidden;
@@ -7567,10 +7755,10 @@ onUnmounted(() => {
     border-right: none;
   }
 
-  /* スマホでは「効果音」の文字を隠して「🔊 ON」だけの短い表示にする
+  /* スマホでは「サウンド」の文字を隠して「🔊 ON」だけの短い表示にする
      こうすると、せまい画面でもボタンがはみ出さない
      ※ aria-label は隠さないので、読み上げでは
-       「効果音をオフにする」と今までどおり伝わる */
+       「サウンドをオフにする」と今までどおり伝わる */
   .sound-toggle {
     gap: 4px;
     padding: 4px 8px;
