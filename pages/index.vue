@@ -856,7 +856,7 @@ function playParkBgm() {
 
 /* 公園BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
    1000 で1秒。ここだけ書きかえれば、間の長さを調整できる */
-const parkBgmStartDelay = 1000;
+const parkBgmStartDelay = 700;
 
 /* 「あとで鳴らす」の予約票
 
@@ -1055,6 +1055,59 @@ function playTitleBgm() {
   } catch {
     // BGMが鳴らなくても、ゲームは止めない
   }
+}
+
+/* タイトルBGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+   1000 で1秒。ここだけ書きかえれば、間の長さを調整できる */
+const titleBgmStartDelay = 700;
+
+/* 「あとで鳴らす」の予約票（公園BGMのものと同じ仕組み）
+
+   null は「予約していない」という意味
+   setTimeout() は予約すると番号を返してくれるので、それを取っておく
+   （あとで「やっぱり鳴らさない」と取り消すのに必要）
+*/
+let titleBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* タイトルBGMを「少し待ってから」最初から鳴らす
+
+   ボタンを押した瞬間にいきなり曲が始まると唐突に聞こえるので、
+   公園BGM（playParkBgmSoon）と同じように、少しだけ間を空ける
+
+   ※ 待たせるのは「音を鳴らすこと」だけ
+     画面の切り替えやゲームの処理は、いつもどおりすぐ進む
+*/
+function playTitleBgmSoon() {
+  // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+  cancelTitleBgmStart();
+
+  // サーバー側では音を鳴らさないので、予約もしない
+  if (!import.meta.client) {
+    return;
+  }
+
+  titleBgmTimer = setTimeout(() => {
+    titleBgmTimer = null;
+
+    /* 待っているあいだに画面が変わっていたら、もう鳴らさない
+       （待ち時間のうちに「公園へ行く」を押して、
+         ゲームが始まってしまった場合） */
+    if (gameStarted.value) {
+      return;
+    }
+
+    playTitleBgm();
+  }, titleBgmStartDelay);
+}
+
+/* 「あとで鳴らす」の予約を取り消す */
+function cancelTitleBgmStart() {
+  if (titleBgmTimer === null) {
+    return;
+  }
+
+  clearTimeout(titleBgmTimer);
+  titleBgmTimer = null;
 }
 
 /* タイトルBGMを「続きから」再生する（サウンドをONに戻したとき用） */
@@ -1826,12 +1879,14 @@ function finishPlayAction(place: GameEvent) {
    ボタンを1回押してもらい、その操作をきっかけに鳴らしはじめる
 
    ※ ここでは決定音を鳴らさない
-     タイトルBGMが鳴りはじめるのと同時になると、
-     決定音がかき消されて聞こえないため
      （曲が鳴りはじめること自体が、押せたことの合図になる）
+
+   曲は少しだけ間を空けてから鳴らしはじめる
+   押した瞬間にいきなり始まると唐突に聞こえるため
+   （待つのは音だけで、画面の切り替えはこのあとすぐ行う）
 */
 function enterTitle() {
-  playTitleBgm();
+  playTitleBgmSoon();
 
   titleEntered.value = true;
 }
@@ -2997,10 +3052,14 @@ function resetGame() {
      公園BGMは先頭に戻しておくので、
      次に「公園へ行く」を押したときにまた最初から鳴る
 
+     タイトルBGMは少しだけ間を空けてから鳴らしはじめる
+     すぐ鳴らすと、決定音「ポン♪」が曲にかき消されてしまうため
+     （待つのは音だけで、画面の切り替えはこのあとすぐ行う）
+
      ※ ここは「もう一度あそぶ」を押した直後＝ユーザーが操作したあとなので、
        自動再生を止められることなくタイトルBGMを鳴らせる */
   stopParkBgm();
-  playTitleBgm();
+  playTitleBgmSoon();
 
   childEnergy.value = 100;
   childMood.value = 55;
@@ -3606,6 +3665,7 @@ onUnmounted(() => {
 
   // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
   // 残っていると、ページを離れたあとも動きつづけてしまう
+  cancelTitleBgmStart();
   cancelParkBgmStart();
   cancelBgmFade();
 });
