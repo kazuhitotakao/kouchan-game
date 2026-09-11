@@ -1430,50 +1430,6 @@ const changeGroups = computed(() => {
   ];
 });
 
-/* GAME OVER画面に出す「最後の行動」の内訳
-
-   中央の changeGroups と同じく、こうちゃん／親／おでかけ の3つに分けている
-   「親の体力 10 → 0（-15）」のように行動前の値も出すので、
-   どのステータスが限界になってGAME OVERになったのかが分かる
-
-   ※ こちらには時間を入れていないので、おでかけのまとまりは
-     おでかけポイントの1つだけになる
-*/
-const lastActionGroups = computed(() => {
-  const changes = statusChanges.value;
-
-  // 直前の行動の結果がないときは、からっぽにする
-  if (changes === null) {
-    return [];
-  }
-
-  const before = statusBefore.value;
-
-  // 中央の changeGroups と同じ作りかた（1行ぶんを作る道具）
-  const makeRow = (label: string, statusName: string, beforeValue: number, afterValue: number, amount: number) => ({
-    label,
-    before: beforeValue,
-    after: afterValue,
-    text: formatChange(amount),
-    className: changeClass(statusName, amount),
-  });
-
-  return [
-    {
-      name: 'こうちゃん',
-      rows: [makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy), makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood)],
-    },
-    {
-      name: '親',
-      rows: [makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy), makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm)],
-    },
-    {
-      name: 'おでかけ',
-      rows: [makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint)],
-    },
-  ];
-});
-
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
   return visitedPlaces.value.includes(place);
@@ -1823,7 +1779,11 @@ function checkGameOver() {
 
   /* ※ 下の3つは、あてはまった1つだけが実行されて return する
        （いちばん上に「すでにGAME OVERなら return」もあるので、
-        公園BGMを止める stopParkBgm() が動くのは1回だけ） */
+        公園BGMを止める stopParkBgm() が動くのは1回だけ）
+
+     どの理由でも、いやいや発生の演出（hideTantrumAlert）は必ず消す
+     いやいやが起きた行動でそのままGAME OVERになることがあり、
+     消さないとGAME OVER画面の上に「イヤイヤ発生！」が重なって残ってしまう */
 
   // ① 親の体力が0以下
   if (parentEnergy.value <= 0) {
@@ -1831,6 +1791,7 @@ function checkGameOver() {
     gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    hideTantrumAlert();
     return;
   }
 
@@ -1840,6 +1801,7 @@ function checkGameOver() {
     gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    hideTantrumAlert();
     return;
   }
 
@@ -1849,6 +1811,7 @@ function checkGameOver() {
     gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    hideTantrumAlert();
     return;
   }
 }
@@ -5597,62 +5560,6 @@ onUnmounted(() => {
               <p class="gameover-card__text">{{ gameOverMessage }}</p>
             </article>
 
-            <!-- 最後に選んだ行動で、何がどれだけ変わったか
-                 「親の体力 10 → 0（-15）」のように、限界になった理由が分かる -->
-            <article v-if="statusChanges" class="result-card result-card--gameover">
-              <h3 class="result-card__title">最後の行動</h3>
-
-              <p class="result-card__text">{{ resultMessage }}</p>
-
-              <!-- 見つけたものの文
-                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                「
-                <b class="found-line__name">{{ item }}</b>
-                」を見つけました！
-              </p>
-
-              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                   地の文にまぎれないように、専用の枠と
-                   色つきのしるし（おでかけポイント +5 など）で出す -->
-              <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ちいさなできごと！</p>
-
-                <p class="event-flash__text">{{ randomEventText }}</p>
-
-                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                    <span class="event-flash__item-label">{{ effect.label }}</span>
-                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                  </li>
-                </ul>
-              </div>
-
-              <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                   読めるように、いちばん最後に置く -->
-              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-              <div class="change-box">
-                <p class="change-box__title">この行動での変化</p>
-
-                <!-- 中央の「今回の変化」と同じく、誰の情報かで3つに分ける -->
-                <div class="last-action-groups">
-                  <section v-for="group in lastActionGroups" :key="group.name" class="last-action-group">
-                    <p class="last-action-group__name">{{ group.name }}</p>
-
-                    <ul class="last-action-list">
-                      <li v-for="row in group.rows" :key="row.label" class="last-action-item">
-                        <span class="last-action-item__label">{{ row.label }}</span>
-                        <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
-                        <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
-                      </li>
-                    </ul>
-                  </section>
-                </div>
-              </div>
-            </article>
-
             <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
             <div class="record-grid">
               <article class="record-card">
@@ -6605,13 +6512,14 @@ onUnmounted(() => {
 .place-card__subtitle {
   margin: 0 0 8px;
   color: var(--navy);
-  font-size: 16px;
+  font-size: 17px;
   letter-spacing: 0.12em;
 }
 
 .place-card__text {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 /* 秘密の場所 */
@@ -6739,7 +6647,8 @@ onUnmounted(() => {
 
 .result-card__text {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 17px;
+  line-height: 1.8;
   white-space: pre-line;
 }
 
@@ -6987,7 +6896,8 @@ onUnmounted(() => {
 .ending-card__text {
   max-width: 640px;
   margin: 0 auto;
-  font-size: 14.5px;
+  font-size: 16.5px;
+  line-height: 1.8;
 }
 
 /* 総合スコア（エンディングカードのいちばん上に大きく出す） */
@@ -7052,7 +6962,7 @@ onUnmounted(() => {
   gap: 12px;
   padding: 4px 0;
   border-bottom: 1px dotted #ece2cd;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .score-item:last-child {
@@ -7111,83 +7021,8 @@ onUnmounted(() => {
 .gameover-card__text {
   max-width: 640px;
   margin: 0 auto;
-  font-size: 14.5px;
-}
-
-/* GAME OVER画面の「最後の行動」 */
-.result-card--gameover {
-  border-color: #e8b3a8;
-}
-
-/* GAME OVERの「最後の行動」も、こうちゃん／親／おでかけ の3つに分けて横に並べる */
-.last-action-groups {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 18px;
-}
-
-/* GAME OVERの「最後の行動」の見出しも、中央の「今回の変化」と同じ見た目にそろえる */
-.last-action-group__name {
-  display: inline-block;
-  margin: 0 0 3px;
-  padding: 1px 10px;
-  border-radius: 999px;
-  background: rgb(42 118 143 / 13%);
-  color: var(--navy);
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.5;
-}
-
-.last-action-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.last-action-item {
-  /* ラベル ／ 行動前→行動後 ／ 増減 の3列 */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
-  column-gap: 10px;
-  padding: 3px 0;
-  border-bottom: 1px dotted #f0e7d8;
-  font-size: 13.5px;
-}
-
-.last-action-item__label {
-  overflow: hidden;
-  color: var(--ink-soft);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.last-action-item__flow {
-  color: var(--navy);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.last-action-item__value {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.last-action-item__value.change--good {
-  color: var(--good);
-}
-
-.last-action-item__value.change--bad {
-  color: var(--bad);
-}
-
-.last-action-item__value.change--neutral {
-  color: var(--ink-soft);
+  font-size: 16.5px;
+  line-height: 1.8;
 }
 
 /* 今日の記録／見つけたもの（2枚を横並び） */
@@ -7216,7 +7051,7 @@ onUnmounted(() => {
 .record-card__empty {
   margin: 0;
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .record-list {
@@ -7232,7 +7067,7 @@ onUnmounted(() => {
   gap: 12px;
   padding: 4px 0;
   border-bottom: 1px dotted #dfe6ef;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .record-item:last-child {
@@ -7496,7 +7331,7 @@ onUnmounted(() => {
 
 .found-flash__label {
   color: #8a5a00;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -7506,7 +7341,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--gold);
   color: #4a3208;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -7516,7 +7351,8 @@ onUnmounted(() => {
 */
 .found-line {
   margin: 10px 0 0;
-  font-size: 15.5px;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 .found-line__name {
@@ -7553,15 +7389,15 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--navy);
   color: #fff;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
 
 .event-flash__text {
   margin: 0;
-  font-size: 14.5px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 /* ステータスの増減のしるし（おでかけポイント +5 など） */
@@ -7586,7 +7422,7 @@ onUnmounted(() => {
 
 .event-flash__item-label {
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* 増減の数字（色は結果カードの「今回の変化」と同じ考えかた）
@@ -7621,8 +7457,8 @@ onUnmounted(() => {
   border-radius: 6px;
   background: #fff5f3;
   color: #a33a29;
-  font-size: 14.5px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 /* --- 危険なステータスのゆっくりした点滅 --- */
@@ -7749,7 +7585,7 @@ onUnmounted(() => {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--navy-line);
   color: #dcf0f9;
-  font-size: 12px;
+  font-size: 13.5px;
   letter-spacing: 0.1em;
 }
 
@@ -7864,8 +7700,8 @@ onUnmounted(() => {
   background: transparent;
   color: #fff;
   font-family: inherit;
-  font-size: 15.5px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.6;
   text-align: left;
   cursor: pointer;
   transition:
@@ -7923,14 +7759,14 @@ onUnmounted(() => {
 .command-box__badge {
   flex: none;
   color: #ffd9a0;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 400;
 }
 
 /* 「べつの場所へ行く」は少し控えめにする */
 .command-box__item--sub {
   color: #b9cbe6;
-  font-size: 14.5px;
+  font-size: 15.5px;
 }
 
 /* おやつを食べきったときのお知らせ */
@@ -7938,7 +7774,7 @@ onUnmounted(() => {
   margin: 0;
   padding: 6px 10px 6px 28px;
   color: #b8dfef;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -7964,7 +7800,7 @@ onUnmounted(() => {
   grid-column: 1 / -1;
   margin: 0;
   color: #dcf0f9;
-  font-size: 12px;
+  font-size: 13.5px;
   letter-spacing: 0.1em;
 }
 
@@ -7975,7 +7811,7 @@ onUnmounted(() => {
   border: 1px dashed var(--navy-line);
   border-radius: 10px;
   color: #b8dfef;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* コマンドボタン */
@@ -7993,9 +7829,9 @@ onUnmounted(() => {
   background: var(--paper);
   color: var(--navy);
   font-family: inherit;
-  font-size: 15.5px;
+  font-size: 17px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.5;
   text-align: left;
   cursor: pointer;
   transition:
@@ -8097,7 +7933,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: #e7edf6;
   color: #63758d;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 400;
 }
 
@@ -8106,7 +7942,7 @@ onUnmounted(() => {
   border-color: var(--navy-line);
   background: rgb(255 255 255 / 8%);
   color: #d5e2f5;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 400;
 }
 
@@ -8167,7 +8003,7 @@ onUnmounted(() => {
   border-color: #e8b23c;
   background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
   color: #4a3208;
-  font-size: 18px;
+  font-size: 19px;
 }
 
 /* 金色のボタン（公園へ行く／もう一度あそぶ）も、文字と同じ濃い茶色にする
@@ -8226,13 +8062,15 @@ onUnmounted(() => {
     padding: 3px 9px 5px;
   }
 
+  /* 本文を大きくしたぶんは、カードの余白をつめてかせぐ
+     （文字を小さくするより、余白を減らすほうを先にする） */
   .stage {
-    gap: 12px;
-    padding: 18px 28px 20px;
+    gap: 10px;
+    padding: 16px 28px 18px;
   }
 
   .place-card {
-    padding: 16px 24px;
+    padding: 14px 22px;
   }
 
   .place-card__title {
@@ -8282,12 +8120,24 @@ onUnmounted(() => {
 
   .command-box__item {
     padding: 4px 10px 4px 28px;
+    font-size: 16px;
   }
 
   /* ちいさなできごとの枠も、背の低い画面では少しつめる */
   .event-flash {
     margin-top: 10px;
     padding: 10px 14px 11px;
+  }
+
+  /* 本文は 17px → 16px までにとどめる
+     高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ */
+  .place-card__text,
+  .result-card__text,
+  .found-line,
+  .event-flash__text,
+  .tantrum-line {
+    font-size: 16px;
+    line-height: 1.75;
   }
 
   /* ゴールの結果カードも、たてにつめて1画面におさめる
@@ -8306,8 +8156,9 @@ onUnmounted(() => {
     font-size: clamp(27px, 2.6vw, 31px);
   }
 
-  .event-flash__text {
-    font-size: 14px;
+  .ending-card__text,
+  .gameover-card__text {
+    font-size: 15.5px;
   }
 
   /* 「前 → 後」で1行ふえたので、背の低い画面では余白と文字を少しつめて
@@ -8334,7 +8185,8 @@ onUnmounted(() => {
   }
 
   .cmd {
-    padding: 10px 16px 10px 32px;
+    padding: 9px 16px 9px 32px;
+    font-size: 16px;
   }
 }
 
@@ -8377,10 +8229,6 @@ onUnmounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .last-action-groups {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .status-area {
     gap: 8px 18px;
     padding: 10px 18px 12px;
@@ -8398,7 +8246,7 @@ onUnmounted(() => {
     min-height: 100vh;
     min-height: 100dvh;
     overflow: visible;
-    font-size: 15px;
+    font-size: 16px;
   }
 
   /* ステータスとコマンドはスクロールしても画面に残す */
@@ -8477,12 +8325,23 @@ onUnmounted(() => {
   }
 
   .place-card__title {
-    font-size: 19px;
+    font-size: 20px;
   }
 
+  /* 本文はスマホでも16pxを下まわらないようにする
+     （画面がせまいぶん、行間は1.8のままゆったり取る） */
   .place-card__text,
-  .result-card__text {
-    font-size: 14px;
+  .result-card__text,
+  .found-line,
+  .event-flash__text,
+  .tantrum-line {
+    font-size: 16px;
+    line-height: 1.8;
+  }
+
+  .ending-card__text,
+  .gameover-card__text {
+    font-size: 15.5px;
   }
 
   .result-card {
@@ -8494,16 +8353,8 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .last-action-groups {
-    grid-template-columns: 1fr;
-  }
-
   /* 上部ステータスも、こうちゃん と 親 を上下に積む */
   .status-groups {
-    grid-template-columns: 1fr;
-  }
-
-  .last-action-list {
     grid-template-columns: 1fr;
   }
 
@@ -8567,6 +8418,15 @@ onUnmounted(() => {
 
   .cmd {
     padding: 11px 14px 11px 30px;
+    font-size: 16px;
+  }
+
+  /* 各場所の「どうする？」も、せまい画面では1つ下のサイズにそろえる */
+  .command-box__item {
+    font-size: 16px;
+  }
+
+  .command-box__item--sub {
     font-size: 15px;
   }
 
