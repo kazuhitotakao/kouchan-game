@@ -662,6 +662,7 @@ function toggleSound() {
        ・タイトル画面              … タイトルBGM
        ・いやいやタイム            … いやいやBGM
        ・いやいや発生の結果を読んでいる最中 … どれも鳴らさない（わざと無音にしている画面）
+       ・秘密の場所                … 秘密の場所BGM
        ・公園を探検している最中     … 公園BGM（10:30より前ならBGM1、10:30以降ならBGM2）
        ・ゴール（通常のおしまい）   … リザルトBGM
        ・GAME OVER                 … どれも鳴らさない（もともと無音の画面）
@@ -685,6 +686,19 @@ function toggleSound() {
          currentEvent がまだ場所（すべり台など）のままで、
          isTantrum だけが true になっている状態
          ここでONに戻しても、わざと作った無音をこわさないように何も鳴らさない
+
+       ※ 秘密の場所を、公園BGMより先に置くのが大事
+         秘密の場所も「ゲーム中で、結果画面ではない」に当てはまってしまうので、
+         あとに置くと、秘密の場所なのに公園BGMが鳴りだしてしまう
+         （そのうえ、あとから秘密の場所BGMも鳴ると2曲が重なってしまう）
+
+       ※ 秘密の場所から出たあとにONへ戻したときは、
+         currentEvent がもう 'secretSpot' ではないので公園BGMのほうへ進む
+         秘密の場所BGMが勝手に鳴りなおすことはない
+
+       ※ サウンドOFFのまま秘密の場所へ入って、そこでONに戻したときは、
+         まだ曲を一度も作っていないので、resumeSecretBgm() の中で
+         新しく作って先頭から鳴りはじめる（公園BGMは鳴らない）
   */
   if (soundEnabled.value) {
     if (titleEntered.value && !gameStarted.value) {
@@ -695,6 +709,8 @@ function toggleSound() {
       resumeTantrumBgm();
     } else if (gameStarted.value && isTantrum.value) {
       // いやいや発生の結果カードを読んでいる最中（わざと無音）なので、何も鳴らさない
+    } else if (gameStarted.value && currentEvent.value === 'secretSpot') {
+      resumeSecretBgm();
     } else if (gameStarted.value && !isResultScene.value) {
       resumeParkBgm();
     }
@@ -704,6 +720,7 @@ function toggleSound() {
     // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
     pauseTitleBgm();
     pauseParkBgm();
+    pauseSecretBgm();
     pauseTantrumBgm();
     pauseResultBgm();
   }
@@ -914,7 +931,7 @@ function playGoalSound() {
    同じ数字にしても、録音そのものが大きい曲は大きく聞こえてしまう
    公園BGMがタイトルBGMより大きく聞こえたので、
    耳で聞いてそろうように、曲ごとに数字を分けている
-   （音を差しかえたときは、ここの2つで調整する）
+   （音を差しかえたときは、下に並んでいる曲ごとの数字で調整する）
 
    ※ 効果音（0.05〜0.09あたり）とは仕組みがちがうので、数字の見え方も別もの
      効果音は一瞬だけ鳴るが、BGMはずっと後ろで流れ続けるため、
@@ -941,6 +958,13 @@ const tantrumBgmVolume = 0.17;
 /* リザルトBGMの音量（ひとまず公園BGMと同じにしてある）
    大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
 const resultBgmVolume = 0.17;
+
+/* 秘密の場所BGMの音量
+
+   音源そのものの録音の大きさがちがうので、公園BGMとは別の数字にしてある
+   （ひとまず公園BGMと同じ 0.16 にしてあるが、
+     聞きくらべて大きい・小さいと感じたら、ここだけ書きかえればよい） */
+const secretBgmVolume = 0.16;
 
 /* 公園BGMを入れておく箱
 
@@ -1099,7 +1123,8 @@ let fadingBgmVolume = 0;
    いきなり ふだんの音量で始まると唐突に聞こえるので、
    すっと入ってくるようにするための演出
 
-   ※ タイトルBGMと公園BGMのどちらにも使える
+   ※ タイトルBGM・公園BGM・秘密の場所BGM・いやいやBGM・リザルトBGMの
+     どれにも使える
      2曲が同時に鳴ることはない（切り替えるときは必ず前の曲を止める）ので、
      フェインの係は1つだけ用意しておけば足りる
 
@@ -1997,6 +2022,241 @@ function stopResultBgm() {
   }
 }
 
+/* ============================================================
+   秘密の場所のBGM
+
+   作りは公園BGM・タイトルBGM・いやいやBGM・リザルトBGMとまったく同じで、
+   鳴らす場面だけがちがう
+   ・秘密の場所BGM … 秘密の場所にいるあいだ（currentEvent === 'secretSpot'）
+
+   ここだけ曲を変える理由は「特別な場所に来た」と分かるようにするため
+   公園入口・すべり台・砂場などは、ぜんぶ同じ公園のつづきなので公園BGMのまま
+   秘密の場所は、たくさん遊んだ人だけが入れる特別な場所なので、曲も変える
+
+   ※ 公園BGMとは必ず「入れかえ」にする（重ねない）
+     秘密の場所へ入るときは公園BGMを止めてから、
+     出るときは秘密の場所BGMを止めてから、次の曲を鳴らす
+     2曲が同時に鳴ると、どちらもにごって聞こえてしまうため
+
+   ※ 秘密の場所を出たら、公園BGM1・BGM2のどちらへ戻るかは時計が決める
+     戻る先を park-bgm.mp3 に決め打ちしないこと
+     10:40に秘密の場所を出たのに午前前半のBGM1へ戻ると、
+     時間帯で曲を変えている仕組み（shouldUseParkBgm2）がこわれてしまう
+     曲を選ぶ仕事は playParkBgmSoon() → playParkBgm() にまかせる
+   ============================================================ */
+
+/* 秘密の場所BGMを入れておく箱
+   ほかの4曲と同じく、サーバー側では作れないので null から始める */
+let secretBgm: HTMLAudioElement | null = null;
+
+/* 秘密の場所BGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ ほかの4曲と同じく、ここでは soundEnabled を見ない
+     OFFにした瞬間に「鳴っている曲を止める」ために必要になるため
+*/
+function getSecretBgm() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!secretBgm) {
+      // public/audio/secret-bgm.mp3 は、URLでは /audio/secret-bgm.mp3 になる
+      secretBgm = new Audio('/audio/secret-bgm.mp3');
+
+      // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+      // （秘密の場所で何回も遊んで長くいても、曲が途切れないようにするため）
+      secretBgm.loop = true;
+
+      // volume … 音の大きさ（上の secretBgmVolume で決めている）
+      secretBgm.volume = secretBgmVolume;
+    }
+
+    return secretBgm;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* 秘密の場所BGMを「最初から」再生する（秘密の場所へ入ったとき用）
+
+   ※ currentTime = 0 で必ず曲の先頭に戻す
+     一度出てからまた秘密の場所へ入ったときも、前回の続きではなく
+     頭から鳴らしたいため（入るたびに同じ始まりかたにそろえる）
+*/
+function playSecretBgm() {
+  // サウンドOFFのときは、ここで終わり
+  // ※ getSecretBgm() より先に見ることで、OFFのあいだは
+  //   mp3の読み込みそのものが起きないようにしている
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getSecretBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.currentTime = 0; // 曲の先頭へ戻す
+
+    /* 無音から少しずつ大きくしていく
+
+       ※ フェードインの係（startBgmFadeIn / cancelBgmFade）は
+         ほかの4曲と共用で問題ない
+         5曲が同時に鳴ることはなく、切り替えるときは必ず前の曲を止めており、
+         startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
+    startBgmFadeIn(bgm, secretBgmVolume);
+
+    bgm.play().catch(() => {});
+  } catch {
+    // BGMが鳴らなくても、ゲームは止めない
+  }
+}
+
+/* 秘密の場所BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+   700 で0.7秒。ここだけ書きかえれば、間の長さを調整できる
+
+   待つ理由は2つ
+   ・「秘密の場所へ行く」の決定音「ポン♪」が、曲の鳴りはじめにかき消されないため
+   ・公園BGMが止まったあと、いったん静かな時間を作るため
+     この「しん」とする一瞬があることで、
+     「いつもの公園から、特別な場所へ入った」という感じが出る
+   （公園BGM・タイトルBGMと同じ 700ms にそろえてある） */
+const secretBgmStartDelay = 700;
+
+/* 「あとで鳴らす」の予約票（ほかの曲のものと同じ仕組み）
+
+   null は「予約していない」という意味
+   setTimeout() は予約すると番号を返してくれるので、それを取っておく
+   （あとで「やっぱり鳴らさない」と取り消すのに必要）
+*/
+let secretBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* 秘密の場所BGMを「少し待ってから」最初から鳴らす
+
+   ※ 待たせるのは「音を鳴らすこと」だけ
+     秘密の場所の画面は、いつもどおりすぐ表示される
+*/
+function playSecretBgmSoon() {
+  // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+  cancelSecretBgmStart();
+
+  // サーバー側では音を鳴らさないので、予約もしない
+  if (!import.meta.client) {
+    return;
+  }
+
+  secretBgmTimer = setTimeout(() => {
+    secretBgmTimer = null;
+
+    /* 待っている0.7秒のあいだに画面が変わっていたら、もう鳴らさない
+       （秘密の場所を出た、いやいやになった、GAME OVERになった、
+         ゴールした、「もう一度あそぶ」でタイトルへ戻った、などの場合）
+
+       まだ秘密の場所にいるときだけ鳴らす、という確かめかたにしてあるので、
+       行き先がどこであっても「あとから鳴りだす」ことがない */
+    if (currentEvent.value !== 'secretSpot') {
+      return;
+    }
+
+    playSecretBgm();
+  }, secretBgmStartDelay);
+}
+
+/* 「あとで鳴らす」の予約を取り消す */
+function cancelSecretBgmStart() {
+  if (secretBgmTimer === null) {
+    return;
+  }
+
+  clearTimeout(secretBgmTimer);
+  secretBgmTimer = null;
+}
+
+/* 秘密の場所BGMを「続きから」再生する（サウンドをONに戻したとき用）
+
+   playSecretBgm() とのちがいは currentTime を 0 に戻さないこと
+   OFFにしたところから、そのまま続きを鳴らす
+
+   ※ サウンドOFFのまま秘密の場所へ入って、そこでONに戻したときは、
+     まだ曲を一度も作っていない（secretBgm が null）
+     その場合は getSecretBgm() が新しく作り、先頭から鳴りはじめる
+*/
+function resumeSecretBgm() {
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getSecretBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.play().catch(() => {});
+  } catch {
+    // 何もしない
+  }
+}
+
+/* 秘密の場所BGMを一時停止する（どこまで再生したかは覚えたまま）
+   サウンドをOFFにしたときと、ページを離れるときに使う
+
+   ※ currentTime（どこまで鳴らしたか）はリセットしない
+     サウンドをONに戻したとき、止めた位置から続けられるようにするため
+*/
+function pauseSecretBgm() {
+  // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
+  // （こうしないと、次に再開したとき小さい音のままになる）
+  cancelBgmFade();
+
+  if (!secretBgm) {
+    return;
+  }
+
+  try {
+    secretBgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
+/* 秘密の場所BGMを完全に止める（次はまた最初から鳴るようにする）
+
+   秘密の場所から出るとき・いやいや発生・GAME OVER・ゴール・
+   「もう一度あそぶ」で使う
+*/
+function stopSecretBgm() {
+  /* 「あとで鳴らす」の予約も取り消す
+
+     ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
+       秘密の場所へ入った直後（＝まだ0.7秒待っている最中）に
+       すぐ出る・いやいやになる・GAME OVERになることがあり、
+       そのときは予約だけして、まだ曲を作っていない状態になっている
+       あとに置くと、取り消せずに別の画面で鳴りだしてしまう */
+  cancelSecretBgmStart();
+
+  // フェードインの途中で止めることもあるので、音量も戻しておく
+  cancelBgmFade();
+
+  if (!secretBgm) {
+    return;
+  }
+
+  try {
+    secretBgm.pause();
+    secretBgm.currentTime = 0; // 次に入ったときは、また曲の先頭から
+  } catch {
+    // 何もしない
+  }
+}
+
 /* 時間を進める共通処理 */
 function addMinutes(minutes: number) {
   const [hour, minute] = currentTime.value.split(':').map(Number);
@@ -2571,18 +2831,29 @@ function checkTantrum() {
   // ※ 見た目だけの追加なので、このあとの処理はいつもどおりすぐ進む
   showTantrumAlert();
 
-  /* 公園BGMを止めて、いやいや発生の結果カードを「無音」にする
+  /* BGMを止めて、いやいや発生の結果カードを「無音」にする
 
      こうちゃんが泣きだした場面なので、
-     結果を読んでいるあいだは楽しい公園BGMを流さず、
+     結果を読んでいるあいだは楽しいBGMを流さず、
      しんと静かにして「たいへんなことが起きた」を伝える
 
      ※ pause ではなく stop（先頭へ戻す）にしている
        いやいやが終わって公園へ戻るときは、曲の続きからではなく
        また最初から鳴らしたいため
        （いやいやをはさんで場面が変わったので、
-         曲も「仕切りなおし」にしたほうが切りかわった感じが出る） */
+         曲も「仕切りなおし」にしたほうが切りかわった感じが出る）
+
+     ※ 公園BGMと秘密の場所BGMの両方に声をかける
+       いやいやは、どの場所で行動しても起こる
+       すべり台なら公園BGMが、秘密の場所なら秘密の場所BGMが鳴っているので、
+       「いま鳴っているほう」を調べなくてよいように、両方止めてしまう
+       （鳴っていない曲に stop を呼んでも、何も起きないだけなので安全）
+
+       秘密の場所も、いやいやが起きたときだけは特別あつかいしない
+       泣きだした場面で楽しい曲が流れつづけると、
+       「たいへんなことが起きた」が伝わらなくなってしまうため */
   stopParkBgm();
+  stopSecretBgm();
 
   childMood.value -= 15;
   parentCalm.value -= 12;
@@ -2614,8 +2885,10 @@ function checkGameOver() {
        （いちばん上に「すでにGAME OVERなら return」もあるので、
         BGMを止める処理が動くのも1回だけ）
 
-     BGMは公園・いやいやの2曲とも止める
+     BGMは公園・秘密の場所・いやいやの3曲とも止める
      いやいやタイム中でも、だっこで親の体力が0になるなどでGAME OVERになるため
+     秘密の場所で親の体力が0になることもあり、そのときGAME OVER画面へ移ったあとも
+     秘密の場所BGMが鳴りつづけないようにする
      （鳴っていない曲に stop を呼んでも、何も起きないだけなので安全）
 
      どの理由でも、いやいや発生の演出（hideTantrumAlert）は必ず消す
@@ -2628,6 +2901,7 @@ function checkGameOver() {
     gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    stopSecretBgm();
     stopTantrumBgm();
     hideTantrumAlert();
     return;
@@ -2639,6 +2913,7 @@ function checkGameOver() {
     gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    stopSecretBgm();
     stopTantrumBgm();
     hideTantrumAlert();
     return;
@@ -2650,6 +2925,7 @@ function checkGameOver() {
     gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    stopSecretBgm();
     stopTantrumBgm();
     hideTantrumAlert();
     return;
@@ -2803,6 +3079,10 @@ function startGame() {
 
 /* 場所を移動する
    移動すると前の結果メッセージと変化量の表示は消す
+
+   ※ BGMが変わるのは、秘密の場所へ行くときだけ
+     すべり台・砂場・どんぐり・池・丘は、ぜんぶ同じ公園のつづきなので
+     公園BGMを鳴らしたままにする（場所を移るたびに曲が鳴りなおすと落ち着かない）
 */
 function goToPlace(place: GameEvent) {
   // 決定音「ポン♪」（公園入口から各場所へ移動するとき）
@@ -2817,6 +3097,28 @@ function goToPlace(place: GameEvent) {
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
+
+  /* 秘密の場所へ入るときだけ、公園BGMから秘密の場所BGMへ入れかえる
+
+     かならず「公園BGMを止める → 秘密の場所BGMを鳴らす」の順番にする
+     先に止めておかないと、待っている0.7秒のあいだ公園BGMが鳴りつづけ、
+     2曲が重なってどちらもにごって聞こえてしまう
+
+     stopParkBgm() は公園BGM1・BGM2の両方を止めてくれるので、
+     いまどちらの時間帯かを気にしなくてよい
+
+     秘密の場所BGMは playSecretBgmSoon() で少し間を空けてから鳴らしはじめる
+     ・決定音「ポン♪」が、曲の鳴りはじめにかき消されない
+     ・いったん静かになるので「特別な場所へ入った」という感じが出る
+     （待つのは音だけで、画面はこの上の行ですでに切りかわっている）
+
+     ※ currentEvent を place にしたあとで呼ぶこと
+       playSecretBgmSoon() は、鳴らす直前に
+       「まだ秘密の場所にいるか」を currentEvent で確かめているため */
+  if (place === 'secretSpot') {
+    stopParkBgm();
+    playSecretBgmSoon();
+  }
 }
 
 /* 次の場所を選びに行く
@@ -2826,16 +3128,17 @@ function goToPlace(place: GameEvent) {
    ② いやいや中なら、まずはなだめる場面へ
    ③ いやいやが終わった直後なら、いまの時間に合う公園BGMへ戻す
    ④ 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
-   ⑤ 10:30を過ぎているのにBGM1のままなら、午前後半のBGM2へ切り替える
-   ⑥ 突然イベントの予定があれば、その専用画面へ
-   ⑦ 何もなければ、いつもどおり公園入口へ
+   ⑤ 秘密の場所から出てきたなら、いまの時間に合う公園BGMへ戻す
+   ⑥ 10:30を過ぎているのにBGM1のままなら、午前後半のBGM2へ切り替える
+   ⑦ 突然イベントの予定があれば、その専用画面へ
+   ⑧ 何もなければ、いつもどおり公園入口へ
 
-   ⑥が④より下にあるのがポイント
+   ⑦が④より下にあるのがポイント
    お昼を過ぎているのに突然イベントを始めてしまうと、
    「12:00までに帰る」というルールが崩れてしまう
 
-   ⑤も④より下に置くのが大事
-   ゴールする直前（＝すぐ公園BGMを止める）のにBGM2へ切り替えると、
+   ⑤⑥も④より下に置くのが大事
+   ゴールする直前（＝すぐ公園BGMを止める）のに公園BGMを鳴らしはじめると、
    一瞬だけ鳴って消える不自然な音になってしまう
 */
 function goToNextPlace() {
@@ -2844,11 +3147,21 @@ function goToNextPlace() {
     return;
   }
 
+  /* いま出ようとしている画面が「秘密の場所」だったかを、先に覚えておく
+
+     このあと currentEvent を書きかえてしまうと、
+     「さっきまで秘密の場所にいた」ことが分からなくなる
+     秘密の場所BGMを止めるのも、公園BGMへ戻すのも、この印を見て決める
+
+     ※ 「べつの場所へ行く」でも「次の場所を選ぶ」でも、
+       秘密の場所から出る道はこの関数1本だけなので、ここで覚えれば足りる */
+  const leavingSecretSpot = currentEvent.value === 'secretSpot';
+
   /* 決定音「ポン♪」（次の場所を選ぶ／べつの場所へ行く／次へ）
 
-     ただし、このあと ③ でゴールへ向かうときは鳴らさない
+     ただし、このあと ④ でゴールへ向かうときは鳴らさない
      ゴールではファンファーレだけを聞かせたいので、決定音を重ねない
-     （③に進むのは「いやいや中ではない」かつ「12:00を過ぎている」ときだけ）
+     （④に進むのは「いやいや中ではない」かつ「12:00を過ぎている」ときだけ）
   */
   if (isTantrum.value || !isTimeOver.value) {
     playDecisionSound();
@@ -2864,18 +3177,40 @@ function goToNextPlace() {
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
 
+  /* 秘密の場所から出るので、秘密の場所BGMを止める
+
+     行き先（いやいやタイム・ゴール・突然イベント・公園入口）に関わらず、
+     秘密の場所の画面を離れる時点で、この曲の出番は終わり
+     ここでまとめて止めておくと、行き先ごとに止め忘れることがない
+
+     ※ pause ではなく stop（先頭へ戻す）にしている
+       もう一度秘密の場所へ来たときは、前回の続きではなく
+       また曲の頭から鳴らしたいため
+
+     ※ 「次に何を鳴らすか」は、このあと行き先が決まってから
+       いやいやなら いやいやBGM、公園へ戻るなら時間に合った公園BGM、
+       ゴールなら リザルトBGM と、行き先ごとにちがうため */
+  if (leavingSecretSpot) {
+    stopSecretBgm();
+  }
+
   /* ② いやいや中なら、いやいやタイムの画面へ
 
      ここでいやいやBGMを先頭から鳴らしはじめる（フェードイン付き）
 
-     公園BGMは、いやいやが発生した瞬間（checkTantrum）にすでに
-     stop して無音にしてあるので、ここでは止まったまま
+     公園BGMと秘密の場所BGMは、いやいやが発生した瞬間（checkTantrum）に
+     すでに stop して無音にしてあるので、ここでは止まったまま
      それでも念のためもう一度 stop を呼んでおく
      （いやいやタイムへ来る道はここ1本だが、
        万一どこかで鳴っていても、2曲が重ならないようにするため）
+
+     ※ 秘密の場所で始まったいやいやでも、鳴らすのは いやいやBGM
+       いやいやは「こうちゃんが泣いている場面」なので、
+       どの場所で起きても同じ曲・同じ聞こえかたにそろえる
   */
   if (isTantrum.value) {
     stopParkBgm();
+    stopSecretBgm();
     playTantrumBgm();
 
     currentEvent.value = 'tantrum';
@@ -2920,7 +3255,42 @@ function goToNextPlace() {
     return;
   }
 
-  /* 10:30を過ぎていて、まだ午前前半のBGM1を鳴らしているなら、
+  /* ⑤ 秘密の場所から、ふつうの公園へ戻ってきた
+
+     ここまで来たということは
+     ・いやいやではない（上の②で分かれている）
+     ・12:00も過ぎていない（すぐ上の④で分かれている）
+     ＝ これからも公園の探検が続く、ということ
+     なので、秘密の場所BGMから公園BGMへ戻す
+
+     鳴らしかたは playParkBgmSoon()＝「公園へ行く」を押したときと同じ
+     ・秘密の場所BGMは、この関数の上のほうですでに止めてある
+     ・少し間（700ms）を空けてから鳴らしはじめる
+       → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
+       → いったん静かになるので「秘密の場所から出てきた」感じが出る
+     ・そのあと無音からフェードインする
+
+     ※ どちらの公園BGMへ戻るかは、playParkBgmSoon() にまかせる
+       ここで park-bgm.mp3 に決め打ちしてはいけない
+       実際に鳴らす playParkBgm() が、700ms後にそのときの時計を見て
+       ・10:30より前  … park-bgm.mp3  （BGM1）
+       ・10:30以降    … park-bgm2.mp3 （BGM2）
+       を選んでくれる
+       たとえば10:10に秘密の場所へ入って、中で20分遊んで10:30を過ぎていたら、
+       出てきたときに鳴るのはBGM1ではなくBGM2になる
+
+     ※ 12:00を過ぎているときは、ここまで来ない（すぐ上の④でゴールへ行く）
+       ゴール直前に公園BGMを鳴らすと、
+       一瞬だけ鳴って消える不自然な音になってしまうため
+
+     ※ 突然イベントの予定があるときも、ここを通ってよい
+       救急車・てんとう虫・犬などは、どれも「ふつうの公園での出来事」なので、
+       秘密の場所BGMのままではなく公園BGMへ戻すのが自然 */
+  if (leavingSecretSpot) {
+    playParkBgmSoon();
+  }
+
+  /* ⑥ 10:30を過ぎていて、まだ午前前半のBGM1を鳴らしているなら、
      ここで午前後半のBGM2へ切り替える
 
      「10:30になった瞬間」ではなく、この
@@ -2931,7 +3301,13 @@ function goToNextPlace() {
 
      すでにBGM2になっているときは、中で何もしないで戻ってくるので、
      押すたびに曲が頭から鳴りなおすことはない
-     （突然イベントへ進むときも、ここを通ってからなので公園BGM2が鳴る） */
+     （突然イベントへ進むときも、ここを通ってからなので公園BGM2が鳴る）
+
+     ※ すぐ上の⑤（秘密の場所から出てきた）を通ったときは、ここは何もしない
+       秘密の場所へ入るときに公園BGMを止めてあり、
+       「いま鳴らしている公園BGM」（activeParkBgm）が無い状態になっているため
+       曲を選ぶのは⑤で予約した playParkBgmSoon() の役目なので、
+       ここで二重に鳴らしはじめてしまうことはない */
   switchParkBgmForCurrentTime();
 
   // 突然イベントの予定があれば、その画面へ移動する
@@ -4163,8 +4539,19 @@ function goToGoal() {
 
      ※ いやいやBGMも止めておく
        いやいや対応中に12:00を過ぎると、いやいやタイムからそのまま
-       ここへ来ることがあるため */
+       ここへ来ることがあるため
+
+     ※ 秘密の場所BGMも止めておく
+       秘密の場所で遊んでいるうちに12:00を過ぎることがある
+       （11:50に入って20分遊ぶと12:10）
+       そのときは、結果カードを読んでいるあいだは秘密の場所BGMのままにして、
+       「次の場所を選ぶ」を押したこのタイミングで止める
+
+       この場合、公園BGMは一瞬も鳴らさない
+       goToNextPlace() では「12:00を過ぎていたら公園BGMを鳴らさない」ように
+       分かれているので、秘密の場所BGM → そのままリザルトBGM、となる */
   stopParkBgm();
+  stopSecretBgm();
   stopTantrumBgm();
 
   /* ゴール音「タタターン♪」
@@ -4226,8 +4613,13 @@ function resetGame() {
      リザルトBGMも stop で止める
      stopResultBgm() は「あとで鳴らす」の予約も取り消すので、
      ゴール音が鳴っているあいだに「もう一度あそぶ」を押しても、
-     あとからタイトル画面でリザルトBGMが鳴りだすことはない */
+     あとからタイトル画面でリザルトBGMが鳴りだすことはない
+
+     秘密の場所BGMも stop で先頭に戻しておく
+     GAME OVERになった画面から「もう一度あそぶ」を押すこともあるので、
+     再生位置も0に戻して、次に秘密の場所へ入ったときは必ず頭から鳴らす */
   stopParkBgm();
+  stopSecretBgm();
   stopTantrumBgm();
   stopResultBgm();
   playTitleBgmSoon();
@@ -4970,6 +5362,7 @@ onUnmounted(() => {
   // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
   pauseTitleBgm();
   pauseParkBgm();
+  pauseSecretBgm();
   pauseTantrumBgm();
   pauseResultBgm();
 
@@ -4977,6 +5370,7 @@ onUnmounted(() => {
   // 残っていると、ページを離れたあとも動きつづけてしまう
   cancelTitleBgmStart();
   cancelParkBgmStart();
+  cancelSecretBgmStart();
   cancelResultBgmStart();
   cancelBgmFade();
 
