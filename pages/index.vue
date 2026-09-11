@@ -4083,8 +4083,7 @@ function hugAfterFall() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value =
-    'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。びっくりした気持ちは、ころぶ前と同じところまで戻ったようです。ひざはまだ少しひりひりします。';
+  resultMessage.value = 'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。びっくりした気持ちは、ころぶ前と同じところまで戻ったようです。ひざはまだ少しひりひりします。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -5465,12 +5464,12 @@ onUnmounted(() => {
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
             <span class="sound-toggle__text">サウンド</span>
             <span class="sound-toggle__state">
-                <!-- ON と OFF を同じ場所に重ねて置いておく
+              <!-- ON と OFF を同じ場所に重ねて置いておく
                      使わないほうは「見えなくする」だけで場所は残るので、
                      ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
-              </span>
+              <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+              <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+            </span>
           </button>
         </div>
 
@@ -5875,11 +5874,7 @@ onUnmounted(() => {
                 <aside v-if="isCareMenuVisible" class="care-menu">
                   <p class="care-menu__label">☕ ひとやすみ</p>
 
-                  <button
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
-                    @click="takeCommonBreak"
-                    @mouseenter="selectedCareCommandIndex = 0">
+                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
                     <span class="care-menu__text">休憩する</span>
                   </button>
 
@@ -6069,11 +6064,7 @@ onUnmounted(() => {
                 <aside v-if="isCareMenuVisible" class="care-menu">
                   <p class="care-menu__label">☕ ひとやすみ</p>
 
-                  <button
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
-                    @click="takeCommonBreak"
-                    @mouseenter="selectedCareCommandIndex = 0">
+                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
                     <span class="care-menu__text">休憩する</span>
                   </button>
 
@@ -6263,11 +6254,7 @@ onUnmounted(() => {
                 <aside v-if="isCareMenuVisible" class="care-menu">
                   <p class="care-menu__label">☕ ひとやすみ</p>
 
-                  <button
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
-                    @click="takeCommonBreak"
-                    @mouseenter="selectedCareCommandIndex = 0">
+                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
                     <span class="care-menu__text">休憩する</span>
                   </button>
 
@@ -6457,11 +6444,7 @@ onUnmounted(() => {
                 <aside v-if="isCareMenuVisible" class="care-menu">
                   <p class="care-menu__label">☕ ひとやすみ</p>
 
-                  <button
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
-                    @click="takeCommonBreak"
-                    @mouseenter="selectedCareCommandIndex = 0">
+                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
                     <span class="care-menu__text">休憩する</span>
                   </button>
 
@@ -6651,11 +6634,7 @@ onUnmounted(() => {
                 <aside v-if="isCareMenuVisible" class="care-menu">
                   <p class="care-menu__label">☕ ひとやすみ</p>
 
-                  <button
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
-                    @click="takeCommonBreak"
-                    @mouseenter="selectedCareCommandIndex = 0">
+                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
                     <span class="care-menu__text">休憩する</span>
                   </button>
 
@@ -6845,11 +6824,7 @@ onUnmounted(() => {
                 <aside v-if="isCareMenuVisible" class="care-menu">
                   <p class="care-menu__label">☕ ひとやすみ</p>
 
-                  <button
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
-                    @click="takeCommonBreak"
-                    @mouseenter="selectedCareCommandIndex = 0">
+                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
                     <span class="care-menu__text">休憩する</span>
                   </button>
 
