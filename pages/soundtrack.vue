@@ -115,6 +115,18 @@ const tracks: SoundtrackTrack[] = [
 */
 let soundtrackAudio: HTMLAudioElement | null = null;
 
+/* いま何回目の再生指示かを数える番号（「⏭ 次のトラックへ」の連打への備え）
+
+   曲を鳴らすお願い（play）は、お願いしたしゅんかんに終わるわけではない
+   そのため、連打してどんどん次の曲へ切りかえると、
+   前の曲の play() から「鳴らせませんでした」という知らせが、
+   あとから遅れて届くことがある（新しい曲へ切りかえたことで中断されたため）
+
+   その古い知らせで、いま鳴っている新しい曲の表示を
+   「停止中」に戻してしまわないよう、指示ごとに番号を付けておき、
+   いちばん新しい指示のときだけ表示を戻すようにしている */
+let playRequestId = 0;
+
 /* いま選んでいる曲の番号（どれも選んでいないときは null）
    「どの曲を再生しているのか」は、この2つを見れば分かる */
 const playingTrackId = ref<number | null>(null);
@@ -144,6 +156,11 @@ const duration = ref(0);
    曲順は開始曲から後ろへ進み、最後まで行ったら先頭へ回り込む
    （例：03開始 → 03 04 05 06 01 02）
    6曲を1回ずつ鳴らし終えたら止まる。01へ無限ループはしない
+
+   次の曲へ進むのは、つぎの2つのとき（どちらも同じ関数を使う）
+   ・曲が最後まで流れきったとき
+   ・「⏭ 次のトラックへ」を押して、いまの曲を飛ばしたとき
+   → playNextPlaylistTrack() を見ること
    ============================================================ */
 
 /* 全曲再生の開始曲（はじめは1曲目。トラック番号を押すと変わる） */
@@ -200,6 +217,7 @@ function handleLoadedMetadata() {
 /* 曲が最後まで流れきったときに呼ばれる
 
    ・全曲再生の途中なら、次の曲へ進む（最後まで来たら止まる）
+     → 「⏭ 次のトラックへ」を押したときと同じ playNextPlaylistTrack() を使う
    ・そうでなければ（1曲だけの再生なら）、そこで停止する
 */
 function handleTrackEnded() {
@@ -213,9 +231,12 @@ function handleTrackEnded() {
     return;
   }
 
-  // 全曲再生の途中なら、次の曲へ
+  /* 全曲再生の途中なら、次の曲へ
+
+     ボタンで飛ばしたときと、まったく同じ関数を呼んでいる
+     （「次の曲へ進む」書きかたを2か所に分けて持たないようにするため） */
   if (isPlaylistPlaying.value) {
-    advancePlaylist();
+    playNextPlaylistTrack();
 
     return;
   }
@@ -260,6 +281,11 @@ function getSoundtrackAudio() {
 
 /* 曲を鳴らしはじめる（再生できなかったときは、表示を停止中へ戻す） */
 function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
+  // この再生指示の番号を取っておく（あとで「まだ最新の指示か」を見分けるため）
+  playRequestId += 1;
+
+  const requestId = playRequestId;
+
   playingTrackId.value = track.id;
   isPlaying.value = true;
 
@@ -267,16 +293,18 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
     audio.play().catch(() => {
       /* 再生できなかったとき（対応していない形式など）は、表示を元に戻す
 
-         ただし、待っているあいだに別の曲のボタンが押されていたら、
-         そちらの表示は消さない（だから、同じ曲のときだけ戻している） */
-      if (playingTrackId.value === track.id) {
+         ただし、待っているあいだに別の曲へ切りかわっていたら、
+         そちらの表示は消さない（だから、最新の指示のときだけ戻している） */
+      if (requestId === playRequestId) {
         playingTrackId.value = null;
         isPlaying.value = false;
       }
     });
   } catch {
-    playingTrackId.value = null;
-    isPlaying.value = false;
+    if (requestId === playRequestId) {
+      playingTrackId.value = null;
+      isPlaying.value = false;
+    }
   }
 }
 
@@ -366,21 +394,65 @@ function startPlaylist() {
   playTrackAudio(audio, firstTrack);
 }
 
-/* 全曲再生中に1曲終わったら、次の曲へ進む
+/* 全曲再生を終わりにする
 
-   まだ残りがあれば次の曲を先頭から鳴らす
-   6曲すべてを1回ずつ鳴らし終えたら、そこで止まる（01へ戻らない）
+   ここへ来るのは、つぎの2つのとき
+   ・1周ぶん（6曲）を鳴らし終えたとき
+   ・最後の曲で「⏭ 次のトラックへ」を押したとき
+
+   鳴っている曲を止めて、全曲再生のための覚えごとをまっさらに戻す
+   playlistTracks も空にするので、
+   次にもう一度「▶ 全曲再生」を押したときは、曲順をあらためて作りなおす
+   （開始曲の選択（selectedStartTrackId）は変えないので、そのまま残る）
 */
-function advancePlaylist() {
+function finishPlaylist() {
+  if (soundtrackAudio) {
+    try {
+      soundtrackAudio.pause();
+      soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+    } catch {
+      // 止められなくても、表示だけはそろえる
+    }
+  }
+
+  playingTrackId.value = null;
+  isPlaying.value = false;
+  isPlaylistPlaying.value = false;
+  playlistTracks.value = [];
+  playlistIndex.value = 0;
+
+  // 再生バーの表示も、まっさらに戻す
+  currentTime.value = 0;
+  duration.value = 0;
+}
+
+/* 全曲再生中に、次の曲へ進む
+
+   この関数は2つの場面から呼ばれる（次の曲へ進む中身は、ここ1か所だけ）
+   ① 曲が最後まで流れきったとき      … handleTrackEnded() から
+   ② 「⏭ 次のトラックへ」を押したとき … 画面のボタンから
+
+   どちらの場合も、やることは同じ
+   「playlistIndex を1つだけ進めて、その曲を先頭から鳴らす」
+
+   ※ playlistTracks（今回の曲順）は作りなおさない
+     「▶ 全曲再生」を押したときに作った曲順を、最後までそのまま使う
+
+   1周ぶんを鳴らし終えていたら、そこで全曲再生を終わりにする
+   （開始曲へは戻らない。ぐるぐる無限に鳴りつづけることはない）
+*/
+function playNextPlaylistTrack() {
+  /* 全曲再生中でなければ、何もしない
+     （1曲だけの再生のときは、曲が終わっても次へは進まない） */
+  if (!isPlaylistPlaying.value) {
+    return;
+  }
+
   const nextIndex = playlistIndex.value + 1;
 
-  // 1周ぶんを鳴らし終えた → 停止（無限ループしない）
+  // 1周ぶんを鳴らし終えた → 全曲再生はここで終わり（無限ループしない）
   if (nextIndex >= playlistTracks.value.length) {
-    isPlaylistPlaying.value = false;
-    playingTrackId.value = null;
-    isPlaying.value = false;
-    currentTime.value = 0;
-    duration.value = 0;
+    finishPlaylist();
 
     return;
   }
@@ -389,29 +461,51 @@ function advancePlaylist() {
 
   if (!audio) {
     // 音が使えなくなったら、全曲再生も終わりにする
-    isPlaylistPlaying.value = false;
-    playingTrackId.value = null;
-    isPlaying.value = false;
+    finishPlaylist();
 
     return;
   }
 
+  /* 先に「何曲目か」を1つ進める
+     こうしておくと、「2 / 6」の表示のまま音だけ次の曲になる、ということが起きない
+     曲名やトラック番号の表示も、この番号を見ているので一緒に切りかわる */
   playlistIndex.value = nextIndex;
 
   const nextTrack = playlistTracks.value[nextIndex];
 
-  // 次の曲を先頭から鳴らすので、再生バーもリセットする
+  /* 次の曲を先頭から鳴らすので、再生バーの表示もいったん最初の状態に戻す
+
+     曲の長さ（duration）は、新しいmp3を読み込むまで分からない
+     前の曲の長さが残っているとバーの目盛りがずれるので 0 に戻し、
+     handleLoadedMetadata() が新しい長さを入れなおすのを待つ */
   currentTime.value = 0;
   duration.value = 0;
 
+  /* いまの曲を完全に止める（＝その場で終了）
+
+     currentTime を 0 に戻すので、どこまで聴いたかは覚えない
+     あとでその曲へ戻ってきても「続きから」ではなく、先頭から鳴る */
   try {
-    audio.src = nextTrack.src;
-    audio.volume = nextTrack.volume;
+    audio.pause();
     audio.currentTime = 0;
   } catch {
     // 何もしない
   }
 
+  /* 鳴らすファイルを次の曲へ差しかえる
+
+     Audioは1つだけを使いまわしているので、
+     「止める → 差しかえる → 鳴らす」の順番を守れば、
+     2曲が同時に鳴ることは仕組みのうえで起こらない（連打しても同じ） */
+  try {
+    audio.src = nextTrack.src;
+    audio.volume = nextTrack.volume;
+    audio.currentTime = 0; // 次の曲も先頭から
+  } catch {
+    // 何もしない
+  }
+
+  // 次の曲を鳴らす（一時停止中に押したときも、ここで自動的に鳴りはじめる）
   playTrackAudio(audio, nextTrack);
 }
 
@@ -422,10 +516,13 @@ function advancePlaylist() {
    ① いま選んでいるのと同じ曲を押したとき
       ・再生中     → 一時停止（どこまで聴いたかは覚えたまま）
       ・一時停止中 → 続きから再生
+      このときは、全曲再生モードのままにしておく
+      （全曲再生中に一時停止しても「⏭ 次のトラックへ」が使えるようにするため）
 
    ② ちがう曲を押したとき
       いまの曲を完全に止めてから、新しい曲を先頭から鳴らす
       （2曲が重ならないように、かならずこの順番で行う）
+      このときは全曲再生モードから抜けて、1曲だけの再生としてあつかう
 */
 function toggleTrack(track: SoundtrackTrack) {
   const audio = getSoundtrackAudio();
@@ -434,11 +531,7 @@ function toggleTrack(track: SoundtrackTrack) {
     return;
   }
 
-  /* 個別の「▶ 再生」を押したら、全曲再生モードからは抜ける
-     （ここからは1曲だけの再生として扱う） */
-  isPlaylistPlaying.value = false;
-
-  // ① 同じ曲を押したとき
+  // ① 同じ曲を押したとき（一時停止 / 続きから）
   if (playingTrackId.value === track.id) {
     if (isPlaying.value) {
       // 再生中 → 一時停止
@@ -458,7 +551,12 @@ function toggleTrack(track: SoundtrackTrack) {
   }
 
   // ② ちがう曲を押したとき
-  //    まず、いまの曲を完全に止める
+
+  /* ちがう曲の「▶ 再生」を押したら、全曲再生モードからは抜ける
+     （ここからは1曲だけの再生として扱うので、曲が終わっても次へは進まない） */
+  isPlaylistPlaying.value = false;
+
+  // まず、いまの曲を完全に止める
   try {
     audio.pause();
     audio.currentTime = 0;
@@ -612,6 +710,10 @@ onUnmounted(() => {
          「▶ 全曲再生」を押すと、開始曲から6曲を続けて鳴らす
          開始曲は、下の一覧でトラック番号を押して選ぶ
          最後まで行くと先頭へ回り込み、6曲を1回ずつ鳴らして止まる
+
+         全曲再生中だけ、下に2つのボタンが出る
+         ・⏭ 次のトラックへ  … いまの曲を飛ばして、次の曲を先頭から鳴らす
+         ・■ 全曲再生を停止  … 全曲再生をやめる
          ============================================================ -->
     <section class="st-playall">
       <div class="st-playall__row">
@@ -622,19 +724,37 @@ onUnmounted(() => {
         </p>
 
         <button v-if="!isPlaylistPlaying" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
-
-        <button v-else type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">■ 停止</button>
       </div>
 
-      <!-- だどの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える） -->
+      <!-- どの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える） -->
       <p v-if="!isPlaylistPlaying" class="st-playall__hint">下の一覧で番号を押すと、始める曲を選べます</p>
 
-      <!-- 全曲再生中は、今回の曲順の何曲目か＋実際のトラック番号を出す -->
-      <p v-else-if="currentPlaylistTrack" class="st-playall__status" aria-live="polite">
-        <span class="st-playall__badge">♪ 全曲再生中</span>
-        <span class="st-playall__count">{{ playlistIndex + 1 }} / {{ playlistTracks.length }}</span>
-        <span class="st-playall__track">{{ formatTrackNumber(currentPlaylistTrack.id) }} {{ currentPlaylistTrack.title }}</span>
-      </p>
+      <!-- ここから下は、全曲再生中だけ出す（1曲だけの再生中は出さない） -->
+      <template v-else>
+        <!-- いま曲順の何曲目か＋実際のトラック番号と曲名 -->
+        <p v-if="currentPlaylistTrack" class="st-playall__status" aria-live="polite">
+          <span class="st-playall__badge">♪ 全曲再生中</span>
+          <span class="st-playall__count">{{ playlistIndex + 1 }} / {{ playlistTracks.length }}</span>
+          <span class="st-playall__track">{{ formatTrackNumber(currentPlaylistTrack.id) }} {{ currentPlaylistTrack.title }}</span>
+        </p>
+
+        <!-- 全曲再生中の操作
+
+             よく押す「⏭ 次のトラックへ」を先（PCでは左、スマホでは上）に置き、
+             幅も広くとって押しやすくしている
+             一時停止中でも押せて、そのときは次の曲が自動的に鳴りはじめる -->
+        <div class="st-playall__actions">
+          <button
+            type="button"
+            class="st-playall__button st-playall__button--next"
+            aria-label="現在の曲を飛ばして次のトラックを再生する"
+            @click="playNextPlaylistTrack">
+            ⏭ 次のトラックへ
+          </button>
+
+          <button type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">■ 全曲再生を停止</button>
+        </div>
+      </template>
     </section>
 
     <!-- ============================================================
@@ -875,6 +995,20 @@ onUnmounted(() => {
   color: #fff;
 }
 
+/* 「⏭ 次のトラックへ」は、白〜水色＋紺色の文字にする
+   紺色でぬりつぶした「■ 全曲再生を停止」より軽い見た目にして、
+   まちがえて止めてしまわないように見分けやすくしている */
+.st-playall__button--next {
+  /* 横いっぱいには広げず、文字がおさまるぶんの大きさにする
+     （min-width をここだけ外して、停止ボタンより少し小さくしている） */
+  min-width: 0;
+  padding: 9px 16px;
+  border-color: var(--navy);
+  background: linear-gradient(180deg, #fff 0%, #d6f0fb 100%);
+  color: var(--navy-deep);
+  font-size: 15px;
+}
+
 .st-playall__button:hover {
   transform: translateY(-2px);
   box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
@@ -930,6 +1064,20 @@ onUnmounted(() => {
 .st-playall__track {
   color: var(--ink);
   font-weight: 700;
+}
+
+/* 全曲再生中の操作ボタンの並び（⏭ 次のトラックへ ／ ■ 全曲再生を停止）
+
+   よく押す「⏭ 次のトラックへ」を先（左）に置く
+   どちらも文字がおさまるぶんの大きさにして、横に並べ、真ん中へ寄せる
+   幅が足りないときは、下のスマホ用の指定で縦に積み直す */
+.st-playall__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: center;
+  gap: 10px;
+  margin: 10px 0 0;
 }
 
 /* ============================================================
@@ -1372,6 +1520,12 @@ onUnmounted(() => {
 
   .st-playall__button {
     width: 100%;
+  }
+
+  /* 横に並べる幅が足りないので、1列にして縦に積み直す
+     （ボタンは上の .st-playall__button で横いっぱいになり、押しやすくなる） */
+  .st-playall__actions {
+    flex-direction: column;
   }
 
   .st-head {
