@@ -3048,6 +3048,25 @@ function enterTitle() {
   titleEntered.value = true;
 }
 
+/* B画面（タイトル画面）から、A画面（起動画面）へ戻る
+
+   B画面ではタイトルBGMが鳴っているので、戻る前にかならず止める
+   （A画面は「まだ音を鳴らしていない」画面なので、鳴ったまま戻ると不自然）
+   cancelTitleBgmStart() … 「あとで鳴らす」の予約が残っていても取り消す
+
+   titleEntered を false に戻すと、A画面（起動画面）が表示される
+   もう一度「はじめる」を押せば、enterTitle() でまたタイトルBGMが鳴る
+*/
+function goBackToBoot() {
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  cancelTitleBgmStart();
+  stopTitleBgm();
+
+  titleEntered.value = false;
+}
+
 /* ゲーム開始 */
 function startGame() {
   // 決定音「ポン♪」（タイトルの「公園へ行く」）
@@ -3079,19 +3098,13 @@ function startGame() {
 
 /* サウンドトラックのページ（/soundtrack）へ移動する
 
-   タイトル画面ではタイトルBGMが鳴っているので、
-   移動する前に、かならずここで止めておく
+   このボタンは起動画面（A画面）にある。まだ「はじめる」を押していないので、
+   タイトルBGMは鳴っていないし、鳴らす予約（playTitleBgmSoon）もされていない
+   ＝ enterTitle() は呼ばない・タイトルBGMも鳴らさない、まま /soundtrack へ移る
 
-   止めないままページを移ると、サントラの曲を再生したときに
-   タイトルBGMと重なって2曲同時に鳴ってしまう
-
-   止める前に cancelTitleBgmStart() を呼んでいるのは、
-   「あとで鳴らす」の予約（playTitleBgmSoon）がまだ残っているかもしれないため
-   予約を消さずに stopTitleBgm() だけをすると、
-   ページを移ったあとに予約のほうが動いて、曲が鳴りだしてしまう
-
-   ※ このあと onUnmounted() も走ってBGMを止めてくれるが、
-     押した時点で確実に止めておきたいので、ここでも止めている
+   念のため cancelTitleBgmStart() と stopTitleBgm() も呼んでいるが、
+   A画面ではどちらも「鳴っていないものを止める」だけの空振り
+   （将来ほかの画面からも呼んだときの保険として残してある）
 */
 function goToSoundtrack() {
   // 決定音「ポン♪」（ほかのボタンと同じ）
@@ -5186,12 +5199,9 @@ function handleKeydown(event: KeyboardEvent) {
 
      ここで抜けるボタン
      ・.sound-toggle … サウンドのON/OFF
-     ・.title-link   … タイトル画面の「♪ サウンドトラック」
 
-     「♪ サウンドトラック」も同じ理由で入れてある
-     Tabキーで選んだ状態で Enter を押したとき、ここで抜けないと
-     「サントラページへ移動」と「公園へ行く（startGame）」の
-     両方が同時に起きてしまう
+     （タイトル画面の「♪ サウンドトラック」は、ボタン側で @keydown.stop して
+       いるので、そもそもこの window のハンドラまでキー操作が伝わってこない）
 
      ※ event.preventDefault() は呼ばない
        呼ばずに return することで、button本来の Enter / Space による
@@ -5202,7 +5212,7 @@ function handleKeydown(event: KeyboardEvent) {
   */
   const target = event.target as HTMLElement | null;
 
-  if (target?.closest?.('.sound-toggle, .title-link')) {
+  if (target?.closest?.('.sound-toggle')) {
     return;
   }
 
@@ -5428,9 +5438,17 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!titleEntered" class="title-screen">
       <div class="title-card title-card--boot">
-        <!-- 設定（サウンドON/OFF）
-             「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく -->
+        <!-- 上のツールバー
+             左：サウンドトラック（/soundtrack）への入口
+             右：サウンドON/OFF（「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく） -->
         <div class="title-card__tools">
+          <!-- サウンドトラックへの入口（左上）
+               目立たせず、右のサウンドON/OFFとそろえた小さなボタンにしている
+               押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに /soundtrack へ移る
+               @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
+               enterTitle() が二重に走るのを止める（preventDefault はしない） -->
+          <button type="button" class="title-card__soundtrack" @click="goToSoundtrack" @keydown.stop>♪ サウンドトラック</button>
+
           <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
             <span class="sound-toggle__text">サウンド</span>
@@ -5457,9 +5475,16 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-else-if="!gameStarted" class="title-screen">
       <div class="title-card">
-        <!-- 設定（サウンドON/OFF）
-             「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく -->
+        <!-- 上のツールバー
+             左：はじめの画面（起動画面）へ戻る
+             右：サウンドON/OFF（「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
         <div class="title-card__tools">
+          <!-- はじめの画面へ戻る（左上の小さな補助操作）
+               目立たせず、右のサウンドON/OFFとそろえた小さなボタンにしている
+               @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
+               startGame() が二重に走るのを止める（preventDefault はしない） -->
+          <button type="button" class="title-card__back" @click="goBackToBoot" @keydown.stop>← はじめの画面へ戻る</button>
+
           <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
             <span class="sound-toggle__text">サウンド</span>
@@ -5486,19 +5511,6 @@ onUnmounted(() => {
         </div>
 
         <button class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
-
-        <!-- サウンドトラックのページ（/soundtrack）への入口
-
-             メインの操作は「公園へ行く」なので、同じ大きさのボタンにはせず、
-             サブメニュー（リンク）のように見える控えめな見た目にしてある
-             ただし、小さすぎて押しにくくならないよう、余白は広めにとっている
-
-             ※ 起動画面（▶ はじめる）のほうには出さない
-               あちらは「音を鳴らせるようにするための1枚」なので、
-               ボタンは1つだけのままにしておく -->
-        <div class="title-card__sub">
-          <button type="button" class="title-link" @click="goToSoundtrack">♪ サウンドトラック</button>
-        </div>
       </div>
     </div>
 
@@ -7938,9 +7950,12 @@ onUnmounted(() => {
 }
 
 .title-card {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 620px;
-  padding: 40px 44px;
+  min-height: 400px;
+  padding: 44px 44px;
   border: 3px solid var(--navy);
   border-radius: 20px;
   background: var(--paper);
@@ -7960,23 +7975,23 @@ onUnmounted(() => {
 }
 
 .title-card__name {
-  margin: 0 0 16px;
+  margin: auto 0 16px;
   color: var(--navy);
   font-size: 36px;
   line-height: 1.35;
 }
 
-/* 起動画面のカード
-   出すのはタイトルと「▶ はじめる」だけなので、
-   説明文が入るタイトル画面より、ゆったりした余白にする
-   ※ せまい画面（700px以下）では、下のメディアクエリの
-     .title-card の余白が後ろに書いてあるぶん優先される */
-.title-card--boot {
-  padding: 56px 44px;
+/* カードを縦に大きくしたぶん、メインの中身（タイトル・説明・開始ボタン）を
+   上下の余白で中央寄りに置く。左上のツールバーは上にそのまま残す
+   （name の margin-top: auto と、開始ボタンの margin-bottom: auto で上下を均す） */
+.title-card .cmd--start {
+  margin-bottom: auto;
 }
 
+/* 起動画面のカードも、タイトル画面と同じ余白・同じ min-height を使う
+   （A→B で切り替えたときに、カードの外枠サイズがそろうようにする） */
 .title-card--boot .title-card__name {
-  margin: 0 0 28px;
+  margin: auto 0 28px;
 }
 
 .title-card__lead {
@@ -8008,48 +8023,90 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* タイトル画面のサブメニュー（♪ サウンドトラック）の置き場所
-   メインの「公園へ行く」の下に、少しだけ間を空けて置く */
-.title-card__sub {
-  margin-top: 16px;
-}
+/* サウンドトラックへの入口ボタン（起動画面の左上）
 
-/* サブメニューのリンク（♪ サウンドトラック）
-
-   メインの「公園へ行く」（金色の大きなボタン）より控えめに見せるため、
-   ・背景を塗らない
-   ・枠線も出さない
-   ・文字も少し小さめ
-   にして、ボタンではなくリンクのように見せている
-
-   ただし、小さすぎると押しにくくなるので、
-   上下左右の余白を広めにとって、指でも押せる大きさは残してある
+   右のサウンドON/OFF（.sound-toggle）とそろえた、小さく控えめなpill
+   目立たせない・ふつうのテキストリンクには見せない（下線なし）ためのもの
 */
-.title-link {
-  padding: 10px 20px;
-  border: none;
+.title-card__soundtrack {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid var(--navy-line);
   border-radius: 999px;
-  background: none;
+  background: rgb(255 255 255 / 55%);
   color: var(--navy);
   font-family: inherit;
-  font-size: 15px;
+  font-size: 11.5px;
   font-weight: 700;
-  line-height: 1.6;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-decoration: none;
   cursor: pointer;
   transition:
     background-color 0.15s ease,
-    color 0.15s ease;
+    border-color 0.15s ease,
+    transform 0.1s ease;
 }
 
-.title-link:hover {
-  background: rgb(42 118 143 / 8%);
+.title-card__soundtrack:hover {
+  border-color: var(--navy);
+  background: rgb(255 255 255 / 85%);
+}
+
+.title-card__soundtrack:active {
+  transform: translateY(1px);
+}
+
+.title-card__soundtrack:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* 「← はじめの画面へ戻る」ボタン（タイトル画面の左上）
+
+   A画面の「♪ サウンドトラック」とそろえた、小さく控えめなpill
+   「公園へ行く」が主役なので、戻る操作は目立たせない（下線なし）
+*/
+.title-card__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border: 1px solid var(--navy-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 55%);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
+}
+
+/* PCでカーソルを当てたときだけ、うすい水色になって少し上へ動く（派手にしない） */
+.title-card__back:hover {
+  border-color: var(--navy);
+  background: #e3f2fb;
   color: var(--navy-deep);
+  transform: translateY(-1px);
 }
 
-/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
-.title-link:focus-visible {
+.title-card__back:active {
+  transform: translateY(1px);
+}
+
+.title-card__back:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
 }
@@ -8208,24 +8265,28 @@ onUnmounted(() => {
   outline-color: #eef9ff;
 }
 
-/* タイトル画面：カードの右上へ小さく置く
+/* タイトル画面：カードの上部に、左の補助操作と右のサウンドON/OFFを分けて置く
    上のよぶんな余白へ食い込ませて、カードの高さがほとんど変わらないようにする */
 .title-card__tools {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
   margin: -16px 0 10px;
 }
 
-/* 起動画面だけ、さらに右上のすみへ寄せる
+/* 起動画面だけ、左右のすみへ寄せる
+   左に「♪ サウンドトラック」、右に「サウンド ON/OFF」を置く
 
    この画面はタイトルと「▶ はじめる」しか出ないので、
    カードの余白（padding: 56px 44px）がとても広い
    マイナスの余白でその余白へ食い込ませて、
-   カードの角から 22px のところへボタンを置く
+   カードの角ちかくへ小さく置く
 
    ※ マイナスの余白は「その分だけ外側へはみ出す」という意味
      はみ出す先はカードの内側の余白なので、外へは出ない */
 .title-card--boot .title-card__tools {
+  justify-content: space-between;
+  align-items: center;
   margin: -34px -22px 12px;
 }
 
@@ -10930,7 +10991,8 @@ onUnmounted(() => {
   }
 
   .title-card {
-    padding: 24px 20px;
+    min-height: 340px;
+    padding: 28px 20px;
   }
 
   /* せまい画面ではカードの余白そのものが小さくなる（上 24px / 横 20px）ので、

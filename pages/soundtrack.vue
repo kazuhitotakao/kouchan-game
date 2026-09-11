@@ -30,6 +30,7 @@ type SoundtrackTrack = {
   description: string;
   src: string;
   volume: number;
+  credit: string;
 };
 
 /* 曲の一覧
@@ -47,9 +48,10 @@ const tracks: SoundtrackTrack[] = [
   {
     id: 1,
     title: 'こうちゃんの大冒険',
-    description: 'タイトル画面BGM',
+    description: 'はじまりのBGM',
     src: '/audio/title-bgm.mp3',
     volume: 0.55,
+    credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
   },
   {
     id: 2,
@@ -57,6 +59,7 @@ const tracks: SoundtrackTrack[] = [
     description: '公園での探検BGM 前半',
     src: '/audio/park-bgm.mp3',
     volume: 0.4,
+    credit: '音楽生成：Sunoを使用',
   },
   {
     id: 3,
@@ -64,6 +67,7 @@ const tracks: SoundtrackTrack[] = [
     description: '公園での探検BGM 後半',
     src: '/audio/park-bgm2.mp3',
     volume: 0.4,
+    credit: '音楽生成：Sunoを使用',
   },
   {
     id: 4,
@@ -71,6 +75,7 @@ const tracks: SoundtrackTrack[] = [
     description: '秘密の場所BGM',
     src: '/audio/secret-bgm.mp3',
     volume: 0.4,
+    credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
   },
   {
     id: 5,
@@ -78,6 +83,7 @@ const tracks: SoundtrackTrack[] = [
     description: 'イヤイヤタイムBGM',
     src: '/audio/tantrum-bgm.mp3',
     volume: 0.43,
+    credit: '音楽生成：Sunoを使用',
   },
   {
     id: 6,
@@ -85,6 +91,7 @@ const tracks: SoundtrackTrack[] = [
     description: 'リザルト画面BGM',
     src: '/audio/result-bgm.mp3',
     volume: 0.43,
+    credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
   },
 ];
 
@@ -160,6 +167,10 @@ const selectedStartTrackTitle = computed(() => {
 
 /* いま全曲再生で鳴らしている曲（案内の「N / 6　01 タイトル」に使う） */
 const currentPlaylistTrack = computed(() => playlistTracks.value[playlistIndex.value] ?? null);
+
+/* いま制作情報（ⓘ）の吹き出しを開いているトラック（どれも開いていなければ null）
+   PCのhover/focusはCSSだけで出す。これはスマホのタップ開閉のための状態 */
+const openedCreditTrackId = ref<number | null>(null);
 
 /* 曲が何秒目まで進んだかを、ブラウザから教えてもらう
    再生中は1秒に4回くらい呼ばれる */
@@ -297,6 +308,16 @@ function stopSoundtrack() {
 */
 function selectStartTrack(track: SoundtrackTrack) {
   selectedStartTrackId.value = track.id;
+}
+
+/* ⓘ（制作情報）の吹き出しを開け閉めする（スマホのタップ用）
+
+   ・同じⓘをもう一度押したら閉じる
+   ・別のⓘを押したら、前のを閉じて新しいほうを開く
+   再生や開始トラックの選択には、いっさい影響しない（表示だけ）
+*/
+function toggleCredit(trackId: number) {
+  openedCreditTrackId.value = openedCreditTrackId.value === trackId ? null : trackId;
 }
 
 /* 「▶ 全曲再生」を押したとき
@@ -538,7 +559,7 @@ function formatTrackNumber(id: number) {
   return String(id).padStart(2, '0');
 }
 
-/* 「← タイトルへ戻る」
+/* 「← はじめの画面へ戻る」
 
    戻る前に、鳴っている曲をかならず止める
    （移動したあとに、サントラの曲だけが鳴り続けないようにするため）
@@ -554,7 +575,7 @@ function goToTitle() {
 
 /* このページから離れるときの後始末
 
-   ・「← タイトルへ戻る」を押したとき
+   ・「← はじめの画面へ戻る」を押したとき
    ・ブラウザの戻るボタンで出ていったとき
    のどちらでも、かならずここを通る
 
@@ -641,6 +662,20 @@ onUnmounted(() => {
 
             <!-- いま鳴っている曲にだけ出す目印 -->
             <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
+
+            <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
+                 PCはhover/focusでCSS表示、スマホは@clickでtoggleCreditして表示 -->
+            <span class="track__info">
+              <button
+                type="button"
+                class="track__infoBtn"
+                :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
+                :aria-label="track.title + 'の制作情報を表示'"
+                :aria-expanded="openedCreditTrackId === track.id"
+                @click.stop="toggleCredit(track.id)"></button>
+
+              <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+            </span>
           </p>
 
           <p class="track__description">{{ track.description }}</p>
@@ -685,10 +720,10 @@ onUnmounted(() => {
     </ol>
 
     <!-- ============================================================
-         タイトルへ戻る
+         はじめの画面へ戻る
          ============================================================ -->
     <div class="st-foot">
-      <button type="button" class="st-back" @click="goToTitle">← タイトルへ戻る</button>
+      <button type="button" class="st-back" @click="goToTitle">← はじめの画面へ戻る</button>
     </div>
   </main>
 </template>
@@ -1005,6 +1040,107 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* ============================================================
+   ⓘ 制作情報（曲名の右の小さな丸ボタン＋吹き出し）
+   ============================================================ */
+
+/* ⓘ と吹き出しの入れもの。吹き出しは、この中で position: absolute で浮かせる */
+.track__info {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ⓘ ボタン（再生ボタンほど目立たせない、小さな丸） */
+.track__infoBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--navy);
+  border-radius: 50%;
+  background: #eef6fb;
+  color: var(--navy-deep);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  font-style: normal;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+/* 「i」は ::before で出す
+   要素の中に文字を直接書くと、前後の改行・余白のぶんだけ中央からずれるため */
+.track__infoBtn::before {
+  content: 'i';
+}
+
+/* hover / 開いているときだけ、背景を少し濃くする */
+.track__infoBtn:hover,
+.track__infoBtn--open {
+  background: #d7ebf7;
+}
+
+/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
+.track__infoBtn:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* 吹き出し（ツールチップ）
+   曲名＋ⓘの下に、レイアウトを押し下げずに浮かせて出す
+   ・ふだんは見えない（opacity 0・visibility hidden）
+   ・PCは .track__info:hover / :focus-within で出す
+   ・スマホは .track__tooltip--open（タップ）で出す */
+.track__tooltip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  z-index: 5;
+  width: max-content;
+  max-width: min(220px, calc(100vw - 40px));
+  padding: 8px 12px;
+  transform: translateX(-50%);
+  border: 2px solid var(--navy);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 16px rgb(35 57 94 / 22%);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.12s ease;
+}
+
+/* 吹き出しの上に、ⓘを指す小さな三角 */
+.track__tooltip::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-bottom-color: var(--navy);
+}
+
+/* PC：ⓘにマウスを乗せたとき／Tabでフォーカスしたとき
+   スマホ：ⓘをタップして開いたとき */
+.track__info:hover .track__tooltip,
+.track__info:focus-within .track__tooltip,
+.track__tooltip--open {
+  opacity: 1;
+  visibility: visible;
+}
+
 .track__description {
   margin: 0;
   color: var(--ink-soft);
@@ -1171,7 +1307,7 @@ onUnmounted(() => {
 }
 
 /* ============================================================
-   タイトルへ戻る
+   はじめの画面へ戻る
    ============================================================ */
 .st-foot {
   max-width: 760px;
