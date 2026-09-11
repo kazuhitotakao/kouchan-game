@@ -4305,9 +4305,20 @@ onUnmounted(() => {
 
             <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
             <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
-              <h3 class="place-card__subtitle">秘密の場所を発見！</h3>
+              <!-- 探検済みかどうかで文言を切り替える
+                   まだ行っていない → はじめて見つけたときの案内
+                   もう行った → また行ってみようという案内 -->
+              <template v-if="isVisited('secretSpot')">
+                <h2 class="place-card__title">秘密の場所</h2>
 
-              <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
+                <p class="place-card__text">こうちゃんは、あの秘密の道を覚えているようです。また行ってみよう！</p>
+              </template>
+
+              <template v-else>
+                <h2 class="place-card__title">秘密の場所を発見！</h2>
+
+                <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
+              </template>
             </article>
           </section>
 
@@ -6834,13 +6845,6 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
-.place-card__subtitle {
-  margin: 0 0 8px;
-  color: var(--navy);
-  font-size: 17px;
-  letter-spacing: 0.12em;
-}
-
 .place-card__text {
   margin: 0;
   font-size: 17px;
@@ -6854,8 +6858,7 @@ onUnmounted(() => {
   background: #f9f4ff;
 }
 
-.place-card--secret .place-card__title,
-.place-card--secret .place-card__subtitle {
+.place-card--secret .place-card__title {
   color: #7f5cc8;
 }
 
