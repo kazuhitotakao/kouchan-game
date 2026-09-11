@@ -5170,6 +5170,19 @@ onUnmounted(() => {
                     <span class="command-box__text">下で見守る</span>
                   </button>
 
+                  <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                       上の2つ … その場所ならではの遊び（すべる・見守る など）
+                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                       同じ枠の中にならんでいても種類がちがうので、
+                       あいだに細い線と小さな見出しを入れて、
+                       ひとめで「ここからは別のなかま」と分かるようにする
+
+                       ※ ボタンではなくただの見出しなので、
+                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                  <p class="command-box__divider">そのほか</p>
+
                   <!-- サブメニューを開け閉めするコマンド
                        aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
                   <button
@@ -5350,6 +5363,19 @@ onUnmounted(() => {
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1">
                     <span class="command-box__text">砂のトンネルを作る</span>
                   </button>
+
+                  <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                       上の2つ … その場所ならではの遊び（すべる・見守る など）
+                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                       同じ枠の中にならんでいても種類がちがうので、
+                       あいだに細い線と小さな見出しを入れて、
+                       ひとめで「ここからは別のなかま」と分かるようにする
+
+                       ※ ボタンではなくただの見出しなので、
+                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                  <p class="command-box__divider">そのほか</p>
 
                   <!-- サブメニューを開け閉めするコマンド
                        aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
@@ -5532,6 +5558,19 @@ onUnmounted(() => {
                     <span class="command-box__text">どんぐりをころがして遊ぶ</span>
                   </button>
 
+                  <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                       上の2つ … その場所ならではの遊び（すべる・見守る など）
+                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                       同じ枠の中にならんでいても種類がちがうので、
+                       あいだに細い線と小さな見出しを入れて、
+                       ひとめで「ここからは別のなかま」と分かるようにする
+
+                       ※ ボタンではなくただの見出しなので、
+                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                  <p class="command-box__divider">そのほか</p>
+
                   <!-- サブメニューを開け閉めするコマンド
                        aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
                   <button
@@ -5712,6 +5751,19 @@ onUnmounted(() => {
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
                     <span class="command-box__text">少し離れて見る</span>
                   </button>
+
+                  <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                       上の2つ … その場所ならではの遊び（すべる・見守る など）
+                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                       同じ枠の中にならんでいても種類がちがうので、
+                       あいだに細い線と小さな見出しを入れて、
+                       ひとめで「ここからは別のなかま」と分かるようにする
+
+                       ※ ボタンではなくただの見出しなので、
+                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                  <p class="command-box__divider">そのほか</p>
 
                   <!-- サブメニューを開け閉めするコマンド
                        aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
@@ -5894,6 +5946,19 @@ onUnmounted(() => {
                     <span class="command-box__text">ゆっくり歩いてのぼる</span>
                   </button>
 
+                  <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                       上の2つ … その場所ならではの遊び（すべる・見守る など）
+                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                       同じ枠の中にならんでいても種類がちがうので、
+                       あいだに細い線と小さな見出しを入れて、
+                       ひとめで「ここからは別のなかま」と分かるようにする
+
+                       ※ ボタンではなくただの見出しなので、
+                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                  <p class="command-box__divider">そのほか</p>
+
                   <!-- サブメニューを開け閉めするコマンド
                        aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
                   <button
@@ -6074,6 +6139,19 @@ onUnmounted(() => {
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreSecretPath" @mouseenter="selectedCommandIndex = 1">
                     <span class="command-box__text">秘密の道をもう少し探検する</span>
                   </button>
+
+                  <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                       上の2つ … その場所ならではの遊び（すべる・見守る など）
+                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                       同じ枠の中にならんでいても種類がちがうので、
+                       あいだに細い線と小さな見出しを入れて、
+                       ひとめで「ここからは別のなかま」と分かるようにする
+
+                       ※ ボタンではなくただの見出しなので、
+                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                  <p class="command-box__divider">そのほか</p>
 
                   <!-- サブメニューを開け閉めするコマンド
                        aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
@@ -9165,6 +9243,60 @@ onUnmounted(() => {
   line-height: 1.7;
 }
 
+/* 「その場所ならではの遊び」と「どこでも同じコマンド」の区切り
+
+   同じ「どうする？」の枠の中にならんでいても、
+   上の2つ（すべる・見守る など）と
+   下の2つ（休憩・おやつ／べつの場所へ行く）は種類がちがう
+
+   そこで、あいだに細い線と「そのほか」という小さな見出しを入れて、
+   ひとめで「ここからは別のなかま」と分かるようにしている
+
+   「そのほか」の文字は左寄せにして、上下のコマンドの文字と
+   左はしをそろえてある
+   ・左の線 … 10px の短いちょこんとした線
+   ・左の余白10px ＋ 線10px ＋ すきま8px ＝ 28px
+     （コマンドの文字も、カーソル「▶」のぶんだけ左に28px空いている） */
+.command-box__divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 4px 10px;
+  color: #a9d6e8;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+
+  /* 見出しなので、コマンドとまちがえて押されないようにする
+     （もともとボタンではないが、指やマウスの反応も消しておく） */
+  pointer-events: none;
+}
+
+/* 「そのほか」の左右にのばす細い線
+
+   文字のそばを濃く、外側へいくほど薄くしている
+   見出しの下の線（command-box__label の border-bottom）より
+   目立たせないための工夫で、区切りだと分かるだけの細さにとどめる */
+.command-box__divider::before,
+.command-box__divider::after {
+  height: 1px;
+  content: '';
+}
+
+/* 左の線は、のばさずに10pxのまま
+   （flex: none なので、あまった幅は右の線だけが受け取る
+     ＝「そのほか」の文字が左に寄る） */
+.command-box__divider::before {
+  flex: none;
+  width: 10px;
+  background: linear-gradient(90deg, rgb(134 198 221 / 0%) 0%, rgb(134 198 221 / 55%) 100%);
+}
+
+/* 右の線が、残りの幅をぜんぶ使って右はしまでのびる */
+.command-box__divider::after {
+  flex: 1;
+  background: linear-gradient(90deg, rgb(134 198 221 / 55%) 0%, rgb(134 198 221 / 0%) 100%);
+}
+
 /* ============================================================
    コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -9714,6 +9846,12 @@ onUnmounted(() => {
   .command-box__item {
     padding: 4px 10px 4px 28px;
     font-size: 16px;
+  }
+
+  /* 区切りもつめる（線と文字は残したまま、上下の余白だけ減らす） */
+  .command-box__divider {
+    margin: 5px 10px 3px;
+    font-size: 11px;
   }
 
   /* サブメニューも同じだけつめる
