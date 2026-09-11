@@ -249,6 +249,44 @@ const isTimeOver = computed(() => currentMinutes.value >= 12 * 60);
 /* そろそろお昼（11:30以降）かどうか */
 const isAlmostNoon = computed(() => currentMinutes.value >= 11 * 60 + 30 && !isTimeOver.value);
 
+/* 公園に着いたばかりかどうか
+
+   公園で何かをすると、かならず時計が進む
+   逆にいうと、時計が 09:00 のままなら「まだ何もしていない＝着いたばかり」ということ
+   （「もう一度あそぶ」で 09:00 に戻したときも、また着いたばかりに戻る）
+*/
+const isJustArrivedAtPark = computed(() => currentTime.value === '09:00');
+
+/* 公園入口のあいさつ文（3段階で切り替える）
+
+   公園入口には、行動のたびに何度も戻ってくる
+   そのため「やってきました」のままだと、2回目からは少しちぐはぐに聞こえる
+   そこで、いまがどの場面かで言いかたを変えている
+
+   ① 着いたばかり（時計がまだ09:00） … はじめてのあいさつ
+   ② 午前前半のおかえり（〜10:29）   … 入口へもどってきたときの言いかた
+   ③ 午前後半（10:30〜）             … お昼が近づいてきたことを伝える
+
+   ③の境目は、公園BGMがBGM2に変わる時刻とわざと同じにしてある
+   （shouldUseParkBgm2 を使いまわしているので、境目の数字は1か所だけ）
+   曲と文言がいっしょに変わることで、
+   「午前前半の章 → 午前後半の章」へ進んだ感じが出る
+*/
+const parkEntranceText = computed(() => {
+  // ① 着いたばかり
+  if (isJustArrivedAtPark.value) {
+    return 'こうちゃんと公園にやってきました。どこへ探検に行こう？';
+  }
+
+  // ③ 午前後半（10:30以降）
+  if (shouldUseParkBgm2()) {
+    return 'お日さまが高くなってきました。おひるまで、のこりすこし。どこへ探検に行こう？';
+  }
+
+  // ② 午前前半で、入口へもどってきたとき
+  return '公園入口にもどってきました。つぎはどこへ探検に行く？';
+});
+
 /* 秘密の場所へ行ける条件
    ・おでかけポイントが20以上
    ・見つけたものが3種類以上
@@ -624,7 +662,7 @@ function toggleSound() {
        ・タイトル画面              … タイトルBGM
        ・いやいやタイム            … いやいやBGM
        ・いやいや発生の結果を読んでいる最中 … どれも鳴らさない（わざと無音にしている画面）
-       ・公園を探検している最中     … 公園BGM
+       ・公園を探検している最中     … 公園BGM（10:30より前ならBGM1、10:30以降ならBGM2）
        ・ゴール（通常のおしまい）   … リザルトBGM
        ・GAME OVER                 … どれも鳴らさない（もともと無音の画面）
 
@@ -662,7 +700,8 @@ function toggleSound() {
     }
   } else {
     // OFFのときは pause() だけ（どこまで再生したかを覚えておく）
-    // どの画面でも止まるように、4曲ぜんぶに声をかける
+    // どの画面でも止まるように、ぜんぶの曲に声をかける
+    // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
     pauseTitleBgm();
     pauseParkBgm();
     pauseTantrumBgm();
@@ -888,6 +927,13 @@ const titleBgmVolume = 0.22;
 /* 公園BGMの音量（タイトルBGMより録音が大きいので、少し下げてそろえる） */
 const parkBgmVolume = 0.16;
 
+/* 午前後半（10:30以降）の公園BGMの音量
+
+   音源そのものの録音の大きさがちがうので、BGM1とは別の数字にしてある
+   （ひとまずBGM1と同じ 0.16 にしてあるが、
+     聞きくらべて大きい・小さいと感じたら、ここだけ書きかえればよい） */
+const parkBgm2Volume = 0.16;
+
 /* いやいやBGMの音量（ひとまず公園BGMと同じにしてある）
    大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
 const tantrumBgmVolume = 0.17;
@@ -937,6 +983,97 @@ function getParkBgm() {
     return null;
   }
 }
+
+/* 午前後半（10:30以降）の公園BGMを入れておく箱
+
+   つくりは上の公園BGM（parkBgm）とまったく同じで、鳴らす曲だけがちがう
+   null は「まだ作っていない」という意味
+*/
+let parkBgm2: HTMLAudioElement | null = null;
+
+/* 午前後半の公園BGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ getParkBgm() と同じ作りにしてある
+     ここでも soundEnabled は見ない
+     （OFFにした瞬間に「鳴っている曲を止める」ために必要になるため）
+*/
+function getParkBgm2() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!parkBgm2) {
+      // public/audio/park-bgm2.mp3 は、URLでは /audio/park-bgm2.mp3 になる
+      parkBgm2 = new Audio('/audio/park-bgm2.mp3');
+
+      // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+      parkBgm2.loop = true;
+
+      // volume … 音の大きさ（上の parkBgm2Volume で決めている）
+      parkBgm2.volume = parkBgm2Volume;
+    }
+
+    return parkBgm2;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* 公園BGMが「午前後半の曲」に変わる時刻（分に直したもの）
+
+   10 * 60 + 30 ＝ 630 で、ゲーム内時間の 10:30 のこと
+   （currentMinutes と同じ「分」のものさしにそろえてある）
+   切り替わる時刻を変えたくなったら、ここの数字だけを書きかえればよい
+*/
+const parkBgm2StartMinutes = 10 * 60 + 30;
+
+/* いまは「午前後半の曲（BGM2）」を使う時間かどうか
+
+   ゲーム内の時計を見て、10:30を過ぎていたら true（＝BGM2）
+   まだ10:30より前なら false（＝BGM1）
+
+   ※ 12:00を過ぎるとゴールで、公園BGMはどちらも鳴らさない
+     （goToGoal() で止める）ので、ここでは12:00のことを考えなくてよい
+*/
+function shouldUseParkBgm2() {
+  return currentMinutes.value >= parkBgm2StartMinutes;
+}
+
+/* いまの時間に合う公園BGMを返す
+   ＝「時計を見て、どちらの曲を使うかを選んでいる」ところ
+
+   09:00〜10:29 … park-bgm.mp3  （午前前半）
+   10:30〜      … park-bgm2.mp3 （午前後半）
+
+   曲を選ぶ仕事をこの1か所にまとめてあるので、
+   呼ぶ側（playParkBgm など）は、どちらの曲かを気にしなくてよい
+*/
+function getCurrentParkBgm() {
+  return shouldUseParkBgm2() ? getParkBgm2() : getParkBgm();
+}
+
+/* いまの時間に合う公園BGMの音量を返す
+
+   曲ごとに録音の大きさがちがうので、
+   「どの曲を鳴らすか」と「どの音量で鳴らすか」は、いつもセットで選ぶ
+*/
+function getCurrentParkBgmVolume() {
+  return shouldUseParkBgm2() ? parkBgm2Volume : parkBgmVolume;
+}
+
+/* いま鳴らしている公園BGM（鳴らしていないときは null）
+
+   「BGM1・BGM2のどちらを鳴らしているか」を覚えておくための箱
+   これがあると、10:30を過ぎたときに
+   ・まだBGM1のまま → BGM2へ切り替える
+   ・すでにBGM2     → 何もしない（押すたびに曲が頭から鳴りなおさない）
+   を見わけられる
+*/
+let activeParkBgm: HTMLAudioElement | null = null;
 
 /* BGMがフェードインしきるまでの長さ（ミリ秒）
    1000 で1秒かけて、無音から ふだんの音量まで上がる
@@ -1029,30 +1166,42 @@ function cancelBgmFade() {
   }
 }
 
-/* 公園BGMを「最初から」再生する（ゲームを始めたとき用）
+/* 「いまの時間に合う公園BGM」を最初から再生する（ゲームを始めたとき用）
+
+   どちらの曲を鳴らすかは、そのときのゲーム内時間で決まる
+   ・10:30より前 … park-bgm.mp3  （BGM1）
+   ・10:30以降   … park-bgm2.mp3 （BGM2）
 
    currentTime は「いま曲のどこを再生しているか」を秒で表したもの
    0 を入れると曲の先頭に戻る
 */
 function playParkBgm() {
   // サウンドOFFのときは、ここで終わり
-  // ※ getParkBgm() より先に見ることで、OFFのあいだは
+  // ※ getCurrentParkBgm() より先に見ることで、OFFのあいだは
   //   mp3の読み込みそのものが起きないようにしている
   if (!soundEnabled.value) {
     return;
   }
 
-  const bgm = getParkBgm();
+  // 時計を見て、いま鳴らすべき公園BGMを選ぶ
+  const bgm = getCurrentParkBgm();
 
   if (!bgm) {
     return;
   }
 
+  /* BGM1とBGM2が重なって鳴らないように、いったん両方止めてから始める
+     （鳴っていない曲に「止めて」と言っても、何も起きないだけなので安全） */
+  stopParkBgm();
+
   try {
     bgm.currentTime = 0; // 曲の先頭へ戻す
 
-    // 無音から少しずつ大きくしていく
-    startBgmFadeIn(bgm, parkBgmVolume);
+    // いま鳴らしている曲として覚えておく（10:30の切り替え判定に使う）
+    activeParkBgm = bgm;
+
+    // 無音から少しずつ大きくしていく（音量も、選んだ曲に合わせる）
+    startBgmFadeIn(bgm, getCurrentParkBgmVolume());
     // play() は「再生できたかどうか」をあとから知らせる形（Promise）になっている
     // 自動再生をブラウザに止められることがあるので、失敗しても何もしないでおく
     bgm.play().catch(() => {});
@@ -1082,6 +1231,10 @@ let parkBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
    ※ 待たせるのは「音を鳴らすこと」だけ
      画面の切り替えやゲームの処理は、いつもどおりすぐ進む
+
+   ※ BGM1とBGM2のどちらを鳴らすかは、待ち時間が終わったとき（700ms後）に決まる
+     実際に鳴らす playParkBgm() が、そのときの時計を見て選ぶため
+     たとえば、いやいやが終わったのが10:40なら、BGM1ではなくBGM2から始まる
 */
 function playParkBgmSoon() {
   // 前の予約が残っていたら取り消す（二重に鳴らさないため）
@@ -1120,15 +1273,31 @@ function cancelParkBgmStart() {
 
    playParkBgm() とのちがいは currentTime を 0 に戻さないこと
    OFFにしたところから、そのまま続きを鳴らす
+
+   ※ ここでも「いまの時間に合う曲」を選びなおす
+     10:20でサウンドOFFにして、音を消したまま10:40まで進めてからONに戻したときは、
+     BGM1の続きではなく、BGM2を先頭から鳴らす
+     （音を消しているあいだに、午前後半に入っているため）
 */
 function resumeParkBgm() {
   if (!soundEnabled.value) {
     return;
   }
 
-  const bgm = getParkBgm();
+  // 時計を見て、いま鳴らすべき公園BGMを選ぶ
+  const bgm = getCurrentParkBgm();
 
   if (!bgm) {
+    return;
+  }
+
+  /* OFFにする前と曲が変わっているときは、「続き」ではなく最初から鳴らす
+     （曲を選んで先頭から鳴らす仕事は playParkBgm() にまかせる）
+
+     ※ activeParkBgm が null のとき（その曲をまだ一度も鳴らしていない）も、こちら
+     ※ 同じ曲のままのときは下へ進み、止めた位置からそのまま続きが鳴る */
+  if (activeParkBgm !== bgm) {
+    playParkBgm();
     return;
   }
 
@@ -1139,22 +1308,55 @@ function resumeParkBgm() {
   }
 }
 
+/* 公園BGMを1曲だけ一時停止する（下の pauseParkBgm() の中身）
+
+   まだ作っていない（null＝一度も鳴らしていない）曲には、何もしなくてよい
+*/
+function pauseOneParkBgm(bgm: HTMLAudioElement | null) {
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
 /* 公園BGMを一時停止する（どこまで再生したかは覚えたまま）
 
    pause() は「その場で止める」だけなので、
    もう一度 play() すると、止めたところから続きが鳴る
+
+   ※ BGM1・BGM2の両方に声をかける
+     どちらの曲が鳴っている時間帯でも、サウンドOFFで確実に止まるようにするため
+
+   ※ currentTime（どこまで鳴らしたか）はリセットしない
+     activeParkBgm も、そのまま覚えておく
+     サウンドをONに戻したとき、同じ曲なら止めた位置から続けられるようにするため
 */
 function pauseParkBgm() {
   // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
   // （こうしないと、次に再開したとき小さい音のままになる）
   cancelBgmFade();
 
-  if (!parkBgm) {
+  pauseOneParkBgm(parkBgm);
+  pauseOneParkBgm(parkBgm2);
+}
+
+/* 公園BGMを1曲だけ完全に止める（下の stopParkBgm() の中身）
+
+   まだ作っていない（null＝一度も鳴らしていない）曲には、何もしなくてよい
+*/
+function stopOneParkBgm(bgm: HTMLAudioElement | null) {
+  if (!bgm) {
     return;
   }
 
   try {
-    parkBgm.pause();
+    bgm.pause();
+    bgm.currentTime = 0;
   } catch {
     // 何もしない
   }
@@ -1164,11 +1366,15 @@ function pauseParkBgm() {
 
    pause() で止めるだけだと、次に遊ぶとき曲の途中から始まってしまう
    currentTime = 0 で先頭に戻しておく
+
+   ※ BGM1・BGM2の両方を止める
+     ゴール・GAME OVER・もう一度あそぶ・いやいや発生のどれでも、
+     そのときどちらの曲が鳴っていても、確実に止まってほしいため
 */
 function stopParkBgm() {
   /* 「あとで鳴らす」の予約も取り消す
 
-     ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
+     ※ かならず曲を止める処理より前に置くこと
        予約だけして、まだ曲を作っていない状態のことがあるため
        （公園へ行った直後にゴールした、など）
        あとに置くと、取り消せずに あとから鳴りだしてしまう */
@@ -1177,16 +1383,64 @@ function stopParkBgm() {
   // フェードインの途中で止めることもあるので、音量も戻しておく
   cancelBgmFade();
 
-  if (!parkBgm) {
+  stopOneParkBgm(parkBgm);
+  stopOneParkBgm(parkBgm2);
+
+  // 「いま鳴らしている曲」も無し（null）に戻す
+  activeParkBgm = null;
+}
+
+/* 時間に合わせて、公園BGMをBGM1からBGM2へ切り替える
+
+   「次の場所を選ぶ」を押したとき（goToNextPlace）に呼ぶ
+
+   わざと「10:30になった瞬間」ではなく、
+   「10:30を過ぎたあと、次の場面へ進むとき」に切り替えている
+   結果カードを読んでいる途中で曲が変わると唐突に感じるので、
+     午前前半の章 → 行動の結果 → 午前後半の章
+   という自然な流れになるようにするため
+
+   やることは3つだけ
+   ・まだ10:30より前         → 何もしない（BGM1のまま）
+   ・すでにBGM2を鳴らしている → 何もしない（押すたびに頭から鳴りなおさない）
+   ・10:30を過ぎたのにBGM1    → BGM1を止めて、少し間を空けてからBGM2へ
+*/
+function switchParkBgmForCurrentTime() {
+  // まだ午前前半（10:30より前）なら、BGM1のままでよい
+  if (!shouldUseParkBgm2()) {
     return;
   }
 
-  try {
-    parkBgm.pause();
-    parkBgm.currentTime = 0;
-  } catch {
-    // 何もしない
+  /* いまBGM1を鳴らしているときだけ、切り替えの出番
+
+     ・activeParkBgm が parkBgm2 … すでに切り替え済みなので何もしない
+       （これが無いと「次の場所を選ぶ」を押すたびにBGM2が頭から鳴りなおしてしまう）
+     ・activeParkBgm が null     … いま公園BGMは鳴っていない
+       （サウンドOFF中、いやいやが終わって playParkBgmSoon() の順番待ち中など）
+       この場合は、あとで鳴らすときに時間を見て選びなおされるので、ここでは何もしない */
+  if (activeParkBgm !== parkBgm) {
+    return;
   }
+
+  /* BGM1を止めて、少し間を空けてからBGM2を最初から鳴らす
+
+     ① stopParkBgm()     … BGM1をその場で止める（いったん無音になる）
+     ② playParkBgmSoon() … 700ms待ってから、いまの時間に合う曲＝BGM2を
+                           先頭からフェードインで鳴らしはじめる
+
+     ②で playParkBgm() を直接呼ばず「Soon」のほうを使うのがポイント
+     ・決定音「ポン♪」が、鳴りはじめの曲にかき消されない
+     ・いったん無音をはさむので「章が変わった」感じが出る
+     ・ゲームを始めたときや、いやいやが終わって公園へ戻るときと
+       まったく同じ聞こえかたにそろう
+
+     ※ ①を先にやるのが大事
+       先に止めておかないと、待っている700msのあいだBGM1が鳴り続けて、
+       そのあと急にぶつ切りになってしまう
+
+     （今回はこみいったクロスフェードまではせず、ふわっと入ってくれば十分） */
+  stopParkBgm();
+  playParkBgmSoon();
 }
 
 /* ============================================================
@@ -2570,13 +2824,19 @@ function goToPlace(place: GameEvent) {
    上から順番に見て、あてはまった時点で行き先が決まる
    ① GAME OVER中なら、どこへも動かさない
    ② いやいや中なら、まずはなだめる場面へ
-   ③ 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
-   ④ 突然イベントの予定があれば、その専用画面へ
-   ⑤ 何もなければ、いつもどおり公園入口へ
+   ③ いやいやが終わった直後なら、いまの時間に合う公園BGMへ戻す
+   ④ 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
+   ⑤ 10:30を過ぎているのにBGM1のままなら、午前後半のBGM2へ切り替える
+   ⑥ 突然イベントの予定があれば、その専用画面へ
+   ⑦ 何もなければ、いつもどおり公園入口へ
 
-   ④が③より下にあるのがポイント
+   ⑥が④より下にあるのがポイント
    お昼を過ぎているのに突然イベントを始めてしまうと、
    「12:00までに帰る」というルールが崩れてしまう
+
+   ⑤も④より下に置くのが大事
+   ゴールする直前（＝すぐ公園BGMを止める）のにBGM2へ切り替えると、
+   一瞬だけ鳴って消える不自然な音になってしまう
 */
 function goToNextPlace() {
   // GAME OVER後にうっかり別の画面へ動いてしまわないようにする
@@ -2659,6 +2919,20 @@ function goToNextPlace() {
     goToGoal();
     return;
   }
+
+  /* 10:30を過ぎていて、まだ午前前半のBGM1を鳴らしているなら、
+     ここで午前後半のBGM2へ切り替える
+
+     「10:30になった瞬間」ではなく、この
+     「行動の結果を確認して、次へ進むタイミング」で切り替えるのがポイント
+     たとえば10:15に20分かかる行動をして10:35になっても、
+     結果カードを読んでいるあいだはBGM1のまま
+     この「次の場所を選ぶ」を押したところで、BGM2へ変わる
+
+     すでにBGM2になっているときは、中で何もしないで戻ってくるので、
+     押すたびに曲が頭から鳴りなおすことはない
+     （突然イベントへ進むときも、ここを通ってからなので公園BGM2が鳴る） */
+  switchParkBgmForCurrentTime();
 
   // 突然イベントの予定があれば、その画面へ移動する
   // 移動したら予定表は空（null）に戻す
@@ -4692,7 +4966,8 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('resize', updateEntranceColumns);
 
-  // 別のページへ移ったあともBGMが鳴り続けないように、4曲とも止めておく
+  // 別のページへ移ったあともBGMが鳴り続けないように、ぜんぶの曲を止めておく
+  // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
   pauseTitleBgm();
   pauseParkBgm();
   pauseTantrumBgm();
@@ -4983,7 +5258,9 @@ onUnmounted(() => {
             <article class="place-card">
               <h2 class="place-card__title">公園入口</h2>
 
-              <p class="place-card__text">こうちゃんと公園にやってきました。どこへ探検に行こう？</p>
+              <!-- あいさつ文は3段階（着いたばかり／前半のおかえり／午前後半）
+                   どの文にするかは、上の parkEntranceText で決めている -->
+              <p class="place-card__text">{{ parkEntranceText }}</p>
             </article>
 
             <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
