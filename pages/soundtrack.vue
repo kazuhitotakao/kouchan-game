@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
 /* ============================================================
    サウンドトラックページ（/soundtrack）
@@ -59,7 +59,7 @@ const tracks: SoundtrackTrack[] = [
     description: '公園での探検BGM 前半',
     src: '/audio/park-bgm.mp3',
     volume: 0.4,
-    credit: '音楽生成：Sunoを使用',
+    credit: '音楽生成：Suno',
   },
   {
     id: 3,
@@ -67,7 +67,7 @@ const tracks: SoundtrackTrack[] = [
     description: '公園での探検BGM 後半',
     src: '/audio/park-bgm2.mp3',
     volume: 0.4,
-    credit: '音楽生成：Sunoを使用',
+    credit: '音楽生成：Suno',
   },
   {
     id: 4,
@@ -83,7 +83,7 @@ const tracks: SoundtrackTrack[] = [
     description: 'イヤイヤタイムBGM',
     src: '/audio/tantrum-bgm.mp3',
     volume: 0.43,
-    credit: '音楽生成：Sunoを使用',
+    credit: '音楽生成：Suno',
   },
   {
     id: 6,
@@ -146,6 +146,43 @@ const currentTime = ref(0);
 const duration = ref(0);
 
 /* ============================================================
+   音量のしくみ（このページだけの設定）
+
+   音量には、性質のちがう2つがある
+
+   ① track.volume（曲ごとの基準音量）
+      音源そのものの録音の大きさがちがうので、
+      曲ごとに「これくらいなら同じ大きさに聞こえる」という数字を決めてある
+      （01は0.55、02は0.4 など）
+      ここはユーザーにはさわらせない。書きかえない
+
+   ② masterVolume（ページ全体の音量つまみ）
+      聴いている人が「ぜんぶ少し小さく」と決められる割合
+      1＝100％、0.5＝50％、0＝無音
+
+   実際にAudioへ入れる音量は、この2つのかけ算
+      track.volume × masterVolume
+
+   こうすると、全体を小さくしても、
+   曲どうしの音量バランス（①）はくずれない
+   ============================================================ */
+
+/* ページ全体の音量（0〜1）。はじめは100％＝今までと同じ音量 */
+const masterVolume = ref(1);
+
+/* 画面に出す「70%」などの数字（0〜1 を 0〜100 に直したもの） */
+const masterVolumePercent = computed(() => Math.round(masterVolume.value * 100));
+
+/* その曲を実際に鳴らす音量を計算する
+
+   Audioへ音量を入れるところは何か所かあるが、
+   計算のしかたはこの1か所にまとめてある
+   （全曲再生でも、個別再生でも、次のトラックへでも、かならずここを通る） */
+function getTrackVolume(track: SoundtrackTrack) {
+  return track.volume * masterVolume.value;
+}
+
+/* ============================================================
    全曲再生（6曲を1周ぶん、続けて鳴らす）のしくみ
 
    ・selectedStartTrackId … どの曲から1周を始めるか（トラック番号を押して選ぶ）
@@ -185,9 +222,27 @@ const selectedStartTrackTitle = computed(() => {
 /* いま全曲再生で鳴らしている曲（案内の「N / 6　01 タイトル」に使う） */
 const currentPlaylistTrack = computed(() => playlistTracks.value[playlistIndex.value] ?? null);
 
-/* いま制作情報（ⓘ）の吹き出しを開いているトラック（どれも開いていなければ null）
-   PCのhover/focusはCSSだけで出す。これはスマホのタップ開閉のための状態 */
+/* 制作情報（ⓘ）の吹き出しについての、2つの覚えごと
+
+   ① openedCreditTrackId
+      「クリック（タップ）して開いたままにしている」トラック
+      null … 開いたままにしているものは無い
+      4    … 04の吹き出しを開いたままにしている
+      同時に2つ開かないよう、1つぶんしか覚えない
+
+   ② suppressedCreditHoverTrackId
+      「いま閉じたばかりなので、マウスを乗せていても出さない」トラック
+
+      同じⓘをもう一度クリックして閉じたとき、
+      マウスはまだⓘの上に乗ったままなので、
+      そのままだとCSSのhoverで、すぐにまた出てきてしまう
+      そこで「このトラックは出さない」と覚えておき、
+      ⓘからマウスが離れたとき（または ⓘ からフォーカスが外れたとき）に忘れる
+
+   ※ マウスを乗せただけ（hover）の一時的な表示はCSSにまかせる
+     ここで覚えるのは「クリックで開いたまま」と「閉じたばかり」の2つだけ */
 const openedCreditTrackId = ref<number | null>(null);
+const suppressedCreditHoverTrackId = ref<number | null>(null);
 
 /* 曲が何秒目まで進んだかを、ブラウザから教えてもらう
    再生中は1秒に4回くらい呼ばれる */
@@ -338,14 +393,67 @@ function selectStartTrack(track: SoundtrackTrack) {
   selectedStartTrackId.value = track.id;
 }
 
-/* ⓘ（制作情報）の吹き出しを開け閉めする（スマホのタップ用）
+/* ⓘ（制作情報）の吹き出しを開け閉めする
+
+   クリック・タップ・Enter・Space のどれで押しても、ここを通る
 
    ・同じⓘをもう一度押したら閉じる
+     このとき「閉じたばかり」を覚えて、
+     マウスが乗ったままでも、すぐ出てこないようにする
    ・別のⓘを押したら、前のを閉じて新しいほうを開く
+     （覚えているのは1つだけなので、2つ同時に開くことはない）
+
    再生や開始トラックの選択には、いっさい影響しない（表示だけ）
 */
 function toggleCredit(trackId: number) {
-  openedCreditTrackId.value = openedCreditTrackId.value === trackId ? null : trackId;
+  // すでに開いているⓘを押した → 閉じる
+  if (openedCreditTrackId.value === trackId) {
+    openedCreditTrackId.value = null;
+    suppressedCreditHoverTrackId.value = trackId;
+
+    return;
+  }
+
+  // それ以外（閉じている／別の曲のⓘ）→ そのⓘだけを開く
+  openedCreditTrackId.value = trackId;
+  suppressedCreditHoverTrackId.value = null;
+}
+
+/* 「閉じたばかりなので出さない」の覚えごとを忘れる
+
+   呼ばれるのは、つぎの2つのとき（どちらも「ⓘから離れた」という意味）
+   ・ⓘ（と吹き出し）から、マウス・指が離れたとき（pointerleave）
+   ・ⓘから、フォーカスが外れたとき（blur）
+     キーボードだけで操作している人はマウスを離さないので、こちらも見ている
+
+   これで、もう一度マウスを乗せたりTabで戻ってくれば、ふつうに表示へ戻る
+*/
+function releaseCreditHoverSuppression(trackId: number) {
+  if (suppressedCreditHoverTrackId.value === trackId) {
+    suppressedCreditHoverTrackId.value = null;
+  }
+}
+
+/* ⓘ・吹き出し以外の場所が押されたとき、開いたままの吹き出しを閉じる
+
+   pointerdown は、マウスのクリックも指のタップも、まとめて受け取れる
+   （click と touchstart を別々に書かなくてよい）
+
+   ここでは「閉じる」だけを行い、preventDefault も stopPropagation もしない
+   そのため、押した先が「▶ 再生」や「▶ 全曲再生」なら、
+   吹き出しが閉じたうえで、そのボタン本来の処理もふつうに動く
+*/
+function handleOutsideCreditPointerDown(event: PointerEvent) {
+  const target = event.target;
+
+  // ⓘ や吹き出しの中を押したときは、ここでは何もしない
+  // （開け閉めは、ⓘ の @click（toggleCredit）にまかせる）
+  if (target instanceof Element && target.closest('.track__info')) {
+    return;
+  }
+
+  openedCreditTrackId.value = null;
+  suppressedCreditHoverTrackId.value = null;
 }
 
 /* 「▶ 全曲再生」を押したとき
@@ -385,7 +493,7 @@ function startPlaylist() {
   // 1周の1曲目を設定する
   try {
     audio.src = firstTrack.src;
-    audio.volume = firstTrack.volume;
+    audio.volume = getTrackVolume(firstTrack);
     audio.currentTime = 0;
   } catch {
     // 何もしない
@@ -499,7 +607,7 @@ function playNextPlaylistTrack() {
      2曲が同時に鳴ることは仕組みのうえで起こらない（連打しても同じ） */
   try {
     audio.src = nextTrack.src;
-    audio.volume = nextTrack.volume;
+    audio.volume = getTrackVolume(nextTrack);
     audio.currentTime = 0; // 次の曲も先頭から
   } catch {
     // 何もしない
@@ -575,7 +683,7 @@ function toggleTrack(track: SoundtrackTrack) {
   // 新しい曲を設定する
   try {
     audio.src = track.src;
-    audio.volume = track.volume;
+    audio.volume = getTrackVolume(track);
     audio.currentTime = 0; // 新しい曲を先頭から鳴らす
   } catch {
     // 何もしない
@@ -609,6 +717,40 @@ function seekTrack(event: Event) {
 
   // 画面の表示も、待たずにその場で合わせる
   currentTime.value = seconds;
+}
+
+/* 音量スライダーを動かして、全体の音量を変える
+
+   スライダーは 0〜100 で動かし、Audioは 0〜1 で受け取るので、100で割る
+
+   大事なのは「鳴っている曲はそのまま」ということ
+   ここでは volume の数字を入れかえるだけで、
+   pause も play も src の差しかえもしない
+   だから、再生中に動かしても、曲は止まらず、最初へも戻らず、
+   その場で音の大きさだけが変わる
+
+   一時停止中でも playingTrackId は残っているので、ここで音量を入れておける
+   （そのあと「▶ 続きから」を押すと、変えたあとの音量で鳴る） */
+function changeMasterVolume(event: Event) {
+  const slider = event.target as HTMLInputElement;
+  const percent = Number(slider.value);
+
+  if (!Number.isFinite(percent)) {
+    return;
+  }
+
+  masterVolume.value = percent / 100;
+
+  // いま選んでいる曲（再生中・一時停止中）があれば、その場で音量だけ変える
+  const playingTrack = tracks.find((track) => track.id === playingTrackId.value);
+
+  if (soundtrackAudio && playingTrack) {
+    try {
+      soundtrackAudio.volume = getTrackVolume(playingTrack);
+    } catch {
+      // 何もしない（次に曲を鳴らすときに、あらためて設定される）
+    }
+  }
 }
 
 /* 再生バーの「聴き終わったところ」の割合（0〜100）
@@ -671,6 +813,16 @@ function goToTitle() {
   navigateTo('/');
 }
 
+/* ページが表示されたときの準備
+
+   ⓘ・吹き出し以外が押されたら、開いたままの吹き出しを閉じたいので、
+   ページ全体（document）で「押された」を見張ってもらう
+   ※ onMounted はブラウザでだけ動くので、document を安心して使える
+*/
+onMounted(() => {
+  document.addEventListener('pointerdown', handleOutsideCreditPointerDown);
+});
+
 /* このページから離れるときの後始末
 
    ・「← はじめの画面へ戻る」を押したとき
@@ -680,6 +832,9 @@ function goToTitle() {
    曲を止めて、使いまわしていたAudioも手放しておく
 */
 onUnmounted(() => {
+  // ページ全体の見張りをやめる（付けっぱなしにしない）
+  document.removeEventListener('pointerdown', handleOutsideCreditPointerDown);
+
   stopSoundtrack();
 
   if (soundtrackAudio) {
@@ -755,6 +910,34 @@ onUnmounted(() => {
           <button type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">■ 全曲再生を停止</button>
         </div>
       </template>
+
+      <!-- 音量（このページで鳴らす曲すべての大きさ）
+
+           「どの曲を・どこから鳴らすか」を決めるこの箱の中に、
+           「どのくらいの大きさで鳴らすか」もまとめて置いてある
+
+           曲カードの中にある再生バーとは役わりがちがうので、
+           見まちがえないように「🔊 音量」の文字と、
+           いまの大きさ（％）をかならずそえておく
+           ・再生バー … 曲の「どこ」を鳴らすか（時間）
+           ・音量バー … 「どのくらいの大きさ」で鳴らすか -->
+      <div class="st-volume">
+        <p class="st-volume__label">🔊 音量</p>
+
+        <input
+          type="range"
+          class="st-volume__slider"
+          min="0"
+          max="100"
+          step="1"
+          :value="masterVolumePercent"
+          :style="{ '--volume-progress': masterVolumePercent + '%' }"
+          aria-label="サウンドトラックの音量"
+          :aria-valuetext="masterVolumePercent + 'パーセント'"
+          @input="changeMasterVolume" />
+
+        <span class="st-volume__value">{{ masterVolumePercent }}%</span>
+      </div>
     </section>
 
     <!-- ============================================================
@@ -784,15 +967,29 @@ onUnmounted(() => {
             <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
 
             <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
-                 PCはhover/focusでCSS表示、スマホは@clickでtoggleCreditして表示 -->
-            <span class="track__info">
+
+                 出しかたは3とおり
+                 ・マウスを乗せているあいだだけ出す       … CSSの :hover
+                 ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
+                 ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
+
+                 @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
+                 （曲のカードに、あとから押したときの処理が増えても、
+                   ⓘを押しただけで曲が動いてしまわないようにしておく）
+
+                 pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
+            <span
+              class="track__info"
+              :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }"
+              @pointerleave="releaseCreditHoverSuppression(track.id)">
               <button
                 type="button"
                 class="track__infoBtn"
                 :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
                 :aria-label="track.title + 'の制作情報を表示'"
                 :aria-expanded="openedCreditTrackId === track.id"
-                @click.stop="toggleCredit(track.id)"></button>
+                @click.stop="toggleCredit(track.id)"
+                @blur="releaseCreditHoverSuppression(track.id)"></button>
 
               <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
             </span>
@@ -933,6 +1130,116 @@ onUnmounted(() => {
   margin: 0;
   font-size: 17px;
   font-weight: 700;
+}
+
+/* ============================================================
+   音量バー（全曲再生の箱の中、いちばん下の1行）
+
+   音量だけのために箱をもう1つ増やすとページが長くなるので、
+   同じ「再生まわりの操作」として、この箱の中へ入れてある
+   上の行とは、全曲再生中の案内と同じ点線で区切る
+   PCでは「🔊 音量 ／ スライダー ／ 70%」が1行に並ぶ
+   ============================================================ */
+.st-volume {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 2px dashed #c8d4e6;
+}
+
+.st-volume__label {
+  margin: 0;
+  color: var(--navy-deep);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* いまの大きさ（％）
+   数字が変わっても場所が動かないように、
+   min-width で場所を取り、tabular-nums で数字の幅をそろえる */
+.st-volume__value {
+  min-width: 52px;
+  color: var(--navy-deep);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* スライダー本体
+
+   作りかたは曲の再生バー（.track__seek）と同じで、
+   ・レールとつまみを、ブラウザごとに別々に指定する
+   ・左（小さい側）だけ色を変えるために、下地のグラデーションを使う
+     境目の位置は、画面から --volume-progress で渡している
+   指でもつまみやすいように、細くしすぎない */
+.st-volume__slider {
+  flex: 1;
+  min-width: 180px;
+  height: 24px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* レール（Chrome / Safari / Edge） */
+.st-volume__slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--navy) var(--volume-progress, 100%), #d7e4f0 var(--volume-progress, 100%));
+}
+
+/* つまみ（Chrome / Safari / Edge）
+   （つまみ18px − レール6px）÷ 2 = 6px ぶん、上へずらして真ん中にそろえる */
+.st-volume__slider::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--navy);
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* レール（Firefox） */
+.st-volume__slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: #d7e4f0;
+}
+
+/* 小さい側（Firefox は、はじめから塗り分ける機能がある） */
+.st-volume__slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--navy);
+}
+
+/* つまみ（Firefox） */
+.st-volume__slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--navy);
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+}
+
+/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
+.st-volume__slider:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 4px;
 }
 
 /* ============================================================
@@ -1250,8 +1557,11 @@ onUnmounted(() => {
   top: calc(100% + 8px);
   left: 50%;
   z-index: 5;
+  /* 制作情報は、途中で折り返さずに1行で読めるようにする
+     ・width: max-content … 文字の量に合わせて、横幅がちょうどのびる
+     ・max-width: none    … 幅の上限で、むりやり折り返させない */
   width: max-content;
-  max-width: min(220px, calc(100vw - 40px));
+  max-width: none;
   padding: 8px 12px;
   transform: translateX(-50%);
   border: 2px solid var(--navy);
@@ -1263,7 +1573,8 @@ onUnmounted(() => {
   font-weight: 700;
   line-height: 1.6;
   text-align: center;
-  white-space: normal;
+  /* 文の途中で改行せず、かならず1行で見せる */
+  white-space: nowrap;
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.12s ease;
@@ -1280,11 +1591,41 @@ onUnmounted(() => {
   border-bottom-color: var(--navy);
 }
 
-/* PC：ⓘにマウスを乗せたとき／Tabでフォーカスしたとき
-   スマホ：ⓘをタップして開いたとき */
-.track__info:hover .track__tooltip,
-.track__info:focus-within .track__tooltip,
+/* 吹き出しを出す条件は、3つに分けてある
+
+   ① クリック・タップで開いたまま（--open）… いつでも出す
+   ② マウスを乗せているあいだ（hover）    … 一時的に出す
+   ③ Tabキーで移動してきたあいだ（focus-visible）… 一時的に出す
+
+   ②③は「閉じたばかり」（--suppress-hover）のあいだは出さない
+   こうしないと、同じⓘをもう一度押して閉じても、
+   マウスが乗ったまま・フォーカスが残ったままなので、すぐまた出てきてしまう */
+
+/* ① クリック・タップで開いたまま */
 .track__tooltip--open {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ② マウスを乗せているあいだ（PCなど、マウスが使える機械だけ）
+
+   スマホは、タップした場所に hover がしばらく残ってしまう機械があるので、
+   hover では出さず、タップ（--open）だけで出し入れする */
+@media (hover: hover) {
+  .track__info:not(.track__info--suppress-hover):hover .track__tooltip {
+    opacity: 1;
+    visibility: visible;
+  }
+}
+
+/* ③ Tabキーでⓘへ移動してきたあいだ
+
+   :focus-within（中のどこかにフォーカスがあれば、の意味）ではなく、
+   :focus-visible（キーボードで移動してきたときだけ付く）を使う
+   マウスでクリックしたあとに残るフォーカスでは出さないためで、
+   これにより「閉じたのに、フォーカスのせいで出たまま」が起きない
+   （＋ は「すぐ次のきょうだい」の意味。ⓘボタンの次が吹き出し） */
+.track__info:not(.track__info--suppress-hover) .track__infoBtn:focus-visible + .track__tooltip {
   opacity: 1;
   visibility: visible;
 }
@@ -1518,6 +1859,25 @@ onUnmounted(() => {
     padding: 16px 18px;
   }
 
+  /* 音量バーは2行に分ける
+     1行目 … 🔊 音量　　　70%
+     2行目 … スライダー（横いっぱいで、指でも動かしやすい）
+
+     order で、スライダーだけを最後（下の行）へ回している */
+  .st-volume {
+    gap: 8px 12px;
+  }
+
+  .st-volume__label {
+    flex: 1;
+  }
+
+  .st-volume__slider {
+    flex-basis: 100%;
+    order: 1;
+    min-width: 0;
+  }
+
   .st-playall__button {
     width: 100%;
   }
@@ -1551,13 +1911,52 @@ onUnmounted(() => {
     font-size: 20px;
   }
 
+  /* position: relative は、下の ⓘ の吹き出しを
+     「曲名の行」を基準に出すためのもの */
   .track__title {
+    position: relative;
     font-size: 17px;
   }
 
   /* ボタンは横いっぱいに広げて、押しやすくする */
   .track__button {
     width: 100%;
+  }
+
+  /* ⓘ の吹き出し（制作情報）
+     スマホでは1行のままだと横幅が広いので、
+     「ⓘ の真下に中央ぞろえ」だと画面の左右へはみ出してしまう。
+     そこで基準を ⓘ から「曲名の行」（上の .track__title）に変えて、
+     カードの左はしにそろえて出す。
+     こうすると曲名の長さや ⓘ の位置に関係なく、
+     いつもカードの中に収まり、画面の外へ大きくはみ出さない */
+  .track__info {
+    position: static;
+  }
+
+  .track__tooltip {
+    left: 0;
+    max-width: calc(100vw - 40px);
+    transform: none;
+  }
+
+  /* 三角は、曲名の行の左寄り（ⓘ のだいたいの位置）を指すようにする */
+  .track__tooltip::before {
+    left: 24px;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   とても狭い画面（幅 360px 未満の古いスマホなど）
+   1行のままではカードに収まりきらないので、
+   吹き出しの文字と余白だけを少し小さくして収める
+   ※ 文字は折り返さない（1行のまま）
+   ============================================================ */
+@media (max-width: 359px) {
+  .track__tooltip {
+    padding: 7px 10px;
+    font-size: 12px;
   }
 }
 </style>
