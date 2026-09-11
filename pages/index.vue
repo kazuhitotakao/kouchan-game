@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 
 const gameTitle: string = 'こうちゃんの大冒険';
 
@@ -20,6 +20,27 @@ const gameTitle: string = 'こうちゃんの大冒険';
 const titleEntered = ref(false);
 
 const gameStarted = ref(false);
+
+/* ============================================================
+   A画面・B画面のボタンを覚えておく箱（キーボード操作用）
+
+   ref="〜" と書いたボタンが、そのままここに入ってくる
+   （画面に出ていないときは null）
+
+   この箱を使ってやることは2つ
+   ・画面が切りかわったとき、メインのボタンへフォーカスを当てる
+   ・↑↓←→ で、3つのボタンをぐるぐる選べるようにする
+
+   A画面  … はじめる／♪ サウンドトラック／サウンドON・OFF
+   B画面  … 公園へ行く／はじめの画面へ戻る／サウンドON・OFF
+   ※ サウンドON/OFFはA画面とB画面のどちらか一方しか画面に出ないので、
+     箱は1つだけで足りる
+   ============================================================ */
+const startButtonRef = ref<HTMLButtonElement | null>(null);
+const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
+const goParkButtonRef = ref<HTMLButtonElement | null>(null);
+const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
+const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
 
 /* 今いる場所を管理する型
    parkEntrance = 公園入口
@@ -296,29 +317,10 @@ const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedIt
 
 /* ===== キーボード操作（「どうする？」コマンドボックス）用の計算 ===== */
 
-/* いま ↑↓←→ でコマンドを「選ぶ」画面かどうか
-
-   ・起動画面・タイトル画面（ゲーム開始前）… ボタンは1つだけ
-     （「▶ はじめる」「公園へ行く」）
-
-   えらぶものが無いので false にする
-   ※ ゴール／GAME OVER画面は、ボタンが2つ（もう一度あそぶ／はじめの画面へ戻る）
-     あるので true のまま。↑↓で行き来して、Enter / Space で押す
-   （false の画面では矢印キーをそのままにして、ページのスクロールをじゃましない。
-     ただし Enter / Space だけは、その1つのボタンを押す代わりに使える）
-*/
-const isCommandKeyboardActive = computed(() => {
-  // ゲーム開始前（起動画面・タイトル画面）
-  // どちらもボタンは1つだけなので、えらぶ操作は要らない
-  if (!gameStarted.value) {
-    return false;
-  }
-
-  /* ゴール・GAME OVER画面は、ボタンが2つ（もう一度あそぶ／はじめの画面へ戻る）
-     えらべるので、ここでは false にしない（↑↓で行き来できる） */
-
-  return true;
-});
+/* ※ 画面ごとのキー操作の分けかたは handleKeydown() にまとめてある
+     ・起動画面（A）・タイトル画面（B） … handleTitleKeydown()（ボタン3つを選ぶ）
+     ・ゲーム本編                        … そのまま handleKeydown() の続き
+       （ゴール・GAME OVER画面も、ボタン2つを ↑↓ で選ぶ同じしくみで動く） */
 
 /* いま「いやいやが続いている状態」かどうか
    ・いやいやタイムの画面にいる（currentEvent === 'tantrum'）
@@ -3068,6 +3070,10 @@ function enterTitle() {
   playTitleBgmSoon();
 
   titleEntered.value = true;
+
+  // B画面のメインのボタン「公園へ行く」へフォーカスを移す
+  // （キーボードだけでも、そのまま Enter で先へ進める）
+  focusTitleMainButton();
 }
 
 /* B画面（タイトル画面）から、A画面（起動画面）へ戻る
@@ -3087,6 +3093,9 @@ function goBackToBoot() {
   stopTitleBgm();
 
   titleEntered.value = false;
+
+  // A画面のメインのボタン「はじめる」へフォーカスを戻す
+  focusTitleMainButton();
 }
 
 /* ゲーム開始 */
@@ -4773,6 +4782,9 @@ function goBackToBootFromResult() {
   stopTitleBgm();
 
   titleEntered.value = false;
+
+  // A画面のメインのボタン「はじめる」へフォーカスを移す（B→Aへ戻るときと同じ）
+  focusTitleMainButton();
 }
 
 /* ============================================================
@@ -5249,6 +5261,206 @@ function runSelectedCommand() {
   }
 }
 
+/* ============================================================
+   起動画面（A）・タイトル画面（B）のキーボード操作
+
+   この2つの画面で操作するものは、どちらも3つだけ
+     A … ① はじめる    ② ♪ サウンドトラック ③ サウンドON/OFF
+     B … ① 公園へ行く  ② はじめの画面へ戻る  ③ サウンドON/OFF
+
+   ①がその画面のメインのボタン
+   画面が出たときは、いつも①にフォーカスが当たるようにしてある
+
+   ・Tab / Shift+Tab … ブラウザのふつうの移動
+                       （はしまで来たら、反対のはしへ回りこませる）
+   ・↑ ← ↓ →        … 画面の並びのとおりに動かす、補助の操作
+                       （↑で上の行へ、↓でメインのボタンへ、←→で上の行の左右）
+   ・Enter / Space   … 選んでいるボタンを実行する
+
+   ここに書いてあるのはA画面・B画面のことだけで、
+   ゲームが始まったあと（gameStarted）の操作には、いっさい関係しない
+   ============================================================ */
+
+/* いまの画面で選べるボタンを、選ぶ順番どおりに取り出す
+
+   画面に出ていないボタンは null が入っているので、取りのぞいてから返す
+   ゲームが始まったあとは、この操作じたいを使わないので空っぽを返す */
+function getTitleFocusItems(): HTMLButtonElement[] {
+  if (gameStarted.value) {
+    return [];
+  }
+
+  const items = titleEntered.value
+    ? [goParkButtonRef.value, backToBootButtonRef.value, soundToggleButtonRef.value] // B画面
+    : [startButtonRef.value, soundtrackButtonRef.value, soundToggleButtonRef.value]; // A画面
+
+  return items.filter((item): item is HTMLButtonElement => item !== null);
+}
+
+/* ↑↓←→ でフォーカスを動かす
+
+   ボタンは画面の上でこう並んでいるので、その並びのとおりに動かす
+
+     [ 左上のボタン ]        [ 右上のサウンドON/OFF ]
+            （A画面＝♪ サウンドトラック／B画面＝はじめの画面へ戻る）
+
+              [ メインのボタン（はじめる／公園へ行く） ]
+
+   ・↑ ↓ … メインのボタンと、上の行を行き来する
+            （メインで↑を押したら、真上にある左のボタンへ）
+   ・← → … 上の行の2つを行き来する
+            （メインにいるときは、←で左上・→で右上へ）
+
+   どのキーもかならずどこかへ動くので、
+   3つのボタンを矢印キーだけで選べる */
+function moveTitleFocusByArrow(key: string) {
+  const items = getTitleFocusItems();
+
+  // 3つそろっていないときは何もしない（画面の切りかわり中など）
+  if (items.length < 3) {
+    return;
+  }
+
+  // getTitleFocusItems() の並びは「メイン → 左上 → 右上」
+  const [mainButton, leftButton, soundButton] = items;
+  const active = document.activeElement;
+
+  // ↑ ↓：メインのボタン ⇔ 上の行
+  if (key === 'ArrowUp' || key === 'ArrowDown') {
+    if (active === mainButton) {
+      // 真上にある左のボタンへ（A画面なら ♪ サウンドトラック）
+      leftButton.focus();
+    } else {
+      // 上の行にいるときは、下のメインのボタンへ戻る
+      mainButton.focus();
+    }
+
+    return;
+  }
+
+  // ←：左上のボタンへ（すでに左上にいるときは、反対がわの右上へ回りこむ）
+  if (key === 'ArrowLeft') {
+    if (active === leftButton) {
+      soundButton.focus();
+    } else {
+      leftButton.focus();
+    }
+
+    return;
+  }
+
+  // →：右上のサウンドON/OFFへ（すでに右上にいるときは、左上へ回りこむ）
+  if (active === soundButton) {
+    leftButton.focus();
+  } else {
+    soundButton.focus();
+  }
+}
+
+/* その画面のメインのボタン（はじめる／公園へ行く）へフォーカスを当てる
+
+   画面が切りかわった直後は、新しいボタンがまだ作られていない
+   そこで nextTick()（画面の書きかえが終わるのを待つ）をはさんでからフォーカスする */
+async function focusTitleMainButton() {
+  await nextTick();
+
+  const items = getTitleFocusItems();
+
+  // 先頭が、その画面のメインのボタン
+  items[0]?.focus();
+}
+
+/* A画面・B画面でキーを押したときの処理（ゲーム本編とは分けてある） */
+function handleTitleKeydown(event: KeyboardEvent) {
+  const items = getTitleFocusItems();
+
+  if (items.length === 0) {
+    return;
+  }
+
+  // ①② ↑ ↓ ← →：画面の並びのとおりにフォーカスを動かす
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    // 矢印キーでページがスクロールしてしまわないようにする
+    event.preventDefault();
+    moveTitleFocusByArrow(event.key);
+    return;
+  }
+
+  /* ③ Tab：ふだんはブラウザにまかせる（＝いつもどおりの移動）
+
+     ただし、いちばん後ろのボタンで Tab を押すと、
+     フォーカスが画面の外（ブラウザの上のほう）へ出ていってしまう
+     そこで、はしに来たときだけ反対のはしへ回りこませる
+     こうすると Tab でも3つをぐるぐる回れる */
+  if (event.key === 'Tab') {
+    const first = items[0];
+    const last = items[items.length - 1];
+
+    if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+      return;
+    }
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    }
+
+    return;
+  }
+
+  // ④ Enter / Space：選んでいるボタンを実行する
+  const isDecideKey = event.key === 'Enter' || event.key === ' ';
+
+  if (!isDecideKey) {
+    return;
+  }
+
+  /* 押しっぱなし（長押し）のときは、2回目以降をここで止める
+
+     Enterを押しっぱなしにすると、キーの自動リピートで
+     「はじめる」を押す → B画面へ進む → そのまま「公園へ行く」も押される、
+     と続けて進んでしまうため、preventDefault で先へ行かせない */
+  if (event.repeat) {
+    event.preventDefault();
+    return;
+  }
+
+  /* ボタンなどにフォーカスが当たっているときは、ここでは何もしない
+
+     そのボタンを「押す」のはブラウザがやってくれるので、
+     ここで「はじめる」「公園へ行く」まで動かしてしまうと、
+     1回押しただけで2つのことが起きてしまう
+     （例：サウンドON/OFFでSpaceを押すと、切り替えと同時に画面が進んでしまう）
+
+     preventDefault を呼ばずに return するのが大事
+     呼んでしまうと、フォーカスしているボタン自身が押せなくなる */
+  const active = document.activeElement;
+
+  if (
+    active instanceof HTMLButtonElement ||
+    active instanceof HTMLAnchorElement ||
+    active instanceof HTMLInputElement ||
+    active instanceof HTMLSelectElement ||
+    active instanceof HTMLTextAreaElement
+  ) {
+    return;
+  }
+
+  /* どこも選んでいない（body など）ときは、
+     今までどおり、その画面のメインのボタンを押したことにする */
+
+  // Spaceでページが下にスクロールするのを防ぐ
+  event.preventDefault();
+
+  if (!titleEntered.value) {
+    enterTitle(); // A画面の「▶ はじめる」
+  } else {
+    startGame(); // B画面の「公園へ行く」
+  }
+}
+
 /* キーボードのキーが押されたときの処理
 
    ここが今回のキーボード操作の入口
@@ -5257,25 +5469,33 @@ function runSelectedCommand() {
    ③ Enter / Space なら、選択中のコマンドを実行する
 */
 function handleKeydown(event: KeyboardEvent) {
+  /* ⓪ 起動画面（A）・タイトル画面（B）
+
+     この2画面は、操作するものが「ボタン3つ」だけで、
+     ゲーム本編とは考えかたがちがう
+     そのため、いちばん最初にここで分けて、専用の関数にまかせる
+     （キーの受付は window の1か所のままなので、
+       同じようなリスナーが2つに増えることはない） */
+  if (!gameStarted.value) {
+    handleTitleKeydown(event);
+    return;
+  }
+
+  /* ここから下は、ゲーム本編（gameStarted === true）だけの処理 */
+
   /* 画面の中のボタンにフォーカスしているときは、ゲームのキー操作をしない
 
      このゲームのキー操作は window 全体で受け取っているため、
      音ボタンを選んだ状態で Enter を押すと、
-     「音のON/OFF」と「ゲームの決定（公園へ行く など）」が同時に起きてしまう
-     それを防ぐために、いちばん最初にここで抜ける
+     「音のON/OFF」と「ゲームの決定（次の場所を選ぶ など）」が同時に起きてしまう
+     それを防ぐために、ここで抜ける
 
      ここで抜けるボタン
-     ・.sound-toggle … サウンドのON/OFF
-
-     （タイトル画面の「♪ サウンドトラック」は、ボタン側で @keydown.stop して
-       いるので、そもそもこの window のハンドラまでキー操作が伝わってこない）
+     ・.sound-toggle … サウンドのON/OFF（上部バーにあるもの）
 
      ※ event.preventDefault() は呼ばない
        呼ばずに return することで、button本来の Enter / Space による
        クリック動作はブラウザにそのまま任せられる
-
-     ※ 何もフォーカスしていないときの Enter / Space は、これまでどおり
-       「公園へ行く」になる（そのときの target はボタンではないので、ここは通らない）
   */
   const target = event.target as HTMLElement | null;
 
@@ -5286,31 +5506,6 @@ function handleKeydown(event: KeyboardEvent) {
   // Enter と Space は、どちらも同じ「決定」として扱う
   // Space は event.key では ' '（半角スペース1文字）になる
   const isDecideKey = event.key === 'Enter' || event.key === ' ';
-
-  // ⓪ ボタンが1つしかない画面（起動画面・タイトル画面）
-  //    えらぶものが無いので ↑↓←→ は使わず、Enter / Space だけを受け取る
-  //    矢印キーはブラウザにまかせるので、ページのスクロールはじゃましない
-  //    ※ ゴール／GAME OVER画面はボタンが2つあるので、ここではなく
-  //      下の ①②④（↑↓と決定）で、ほかの画面と同じように扱う
-  if (!isCommandKeyboardActive.value) {
-    if (isDecideKey) {
-      // Spaceでページが下にスクロールするのを防ぐ
-      event.preventDefault();
-
-      // 押しっぱなしのときは、2回目以降を止める
-      if (event.repeat) {
-        return;
-      }
-
-      if (!titleEntered.value) {
-        enterTitle(); // 起動画面の「▶ はじめる」
-      } else {
-        startGame(); // タイトル画面の「公園へ行く」
-      }
-    }
-
-    return;
-  }
 
   /* ⓪-2 サブメニュー「☕ ひとやすみ」が開いているとき
 
@@ -5441,6 +5636,11 @@ onMounted(() => {
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
+  /* A画面のメインのボタン「はじめる」へフォーカスを当てておく
+     ページを開いたときのほか、/soundtrack から戻ってきたときもここを通る
+     （このページは、もう一度まっさらに作り直されるため） */
+  focusTitleMainButton();
+
   /* 前回のサウンドの設定を思い出す
 
      localStorage には文字しか入らないので、'true' / 'false' という
@@ -5505,6 +5705,15 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!titleEntered" class="title-screen">
       <div class="title-card title-card--boot">
+        <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
+             （「公園へ行く」「もう一度あそぶ」と同じ書き方）
+
+             ※ この画面のメインのボタンなので、HTMLではいちばん先に書いてある
+               Tabキーを押したときに「はじめる → サウンドトラック → サウンド」の
+               順で回れるようにするため（見た目の位置はCSSの order でいちばん下のまま）
+             ref … キーボード操作でフォーカスを当てるための目印 -->
+        <button ref="startButtonRef" class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
+
         <!-- 上のツールバー（B画面と同じ .title-card__tools を使う）
              左：サウンドトラック（/soundtrack）への入口
              右：サウンドON/OFF（「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく） -->
@@ -5513,11 +5722,13 @@ onUnmounted(() => {
                右のサウンドON/OFFと同じ高さ・同じ文字サイズのpillにそろえている
                （見た目のCSSは .title-card__tools のところにまとめてある）
                押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに /soundtrack へ移る
-               @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
-               enterTitle() が二重に走るのを止める（preventDefault はしない） -->
-          <button type="button" class="title-card__soundtrack" @click="goToSoundtrack" @keydown.stop>♪ サウンドトラック</button>
 
-          <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+               ※ Enter/Space を押したときに「はじめる」まで動いてしまわないのは、
+                 handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
+                 ようにしているため（ボタン側で止める必要はない） -->
+          <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" @click="goToSoundtrack">♪ サウンドトラック</button>
+
+          <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
             <span class="sound-toggle__text">サウンド</span>
             <span class="sound-toggle__state">
@@ -5531,10 +5742,6 @@ onUnmounted(() => {
         </div>
 
         <h1 class="title-card__name">{{ gameTitle }}</h1>
-
-        <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
-             （「公園へ行く」「もう一度あそぶ」と同じ書き方） -->
-        <button class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
       </div>
     </div>
 
@@ -5543,6 +5750,12 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-else-if="!gameStarted" class="title-screen">
       <div class="title-card">
+        <!-- この画面のメインのボタン
+             A画面と同じ理由で、HTMLではいちばん先に書いてある
+             （Tabで「公園へ行く → はじめの画面へ戻る → サウンド」と回れるようにするため。
+               見た目の位置はCSSの order でいちばん下のまま） -->
+        <button ref="goParkButtonRef" class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
+
         <!-- 上のツールバー（A画面と同じ .title-card__tools を使う）
              左：はじめの画面（起動画面）へ戻る
              右：サウンドON/OFF（「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
@@ -5550,11 +5763,13 @@ onUnmounted(() => {
           <!-- はじめの画面へ戻る（左上の補助操作）
                A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
                A→B で切り替えても、左側は文字だけが入れかわって見える
-               @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
-               startGame() が二重に走るのを止める（preventDefault はしない） -->
-          <button type="button" class="title-card__back" @click="goBackToBoot" @keydown.stop>はじめの画面へ戻る</button>
 
-          <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+               ※ Enter/Space で「公園へ行く」まで動いてしまわないのは、
+                 handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
+                 ようにしているため（ボタン側で止める必要はない） -->
+          <button ref="backToBootButtonRef" type="button" class="title-card__back" @click="goBackToBoot">はじめの画面へ戻る</button>
+
+          <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
             <span class="sound-toggle__text">サウンド</span>
             <span class="sound-toggle__state">
@@ -5578,8 +5793,6 @@ onUnmounted(() => {
             たくさん探索してみよう！
           </p>
         </div>
-
-        <button class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
       </div>
     </div>
 
@@ -8093,6 +8306,33 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* カードの中身を、見た目のうえで上から順に並べ直す
+
+   HTMLでは、Tabキーの順番をそろえるために
+   メインのボタン（はじめる／公園へ行く）をいちばん先に書いてある
+   そのぶん、見た目の位置はここで元どおりに並べ替える
+   （.title-card は display: flex なので、order で順番を決められる）
+
+     1 上のツールバー（サウンドトラック／戻る・サウンドON/OFF）
+     2 ゲームのタイトル
+     3 説明文（B画面だけ）
+     4 メインのボタン */
+.title-card__tools {
+  order: 1;
+}
+
+.title-card__name {
+  order: 2;
+}
+
+.title-card__rule {
+  order: 3;
+}
+
+.title-card .cmd--start {
+  order: 4;
+}
+
 .title-card__badge {
   display: inline-block;
   margin: 0 0 14px;
@@ -8116,6 +8356,17 @@ onUnmounted(() => {
    （name の margin-top: auto と、開始ボタンの margin-bottom: auto で上下を均す） */
 .title-card .cmd--start {
   margin-bottom: auto;
+}
+
+/* キーボードで「はじめる」「公園へ行く」を選んでいるとき
+
+   ふつうの .cmd のフォーカス枠は金色だが、このボタン自体が金色なので、
+   金色どうしでふちが見えなくなってしまう
+   ここだけ紺色の太めのふちにして、いま選んでいることがはっきり分かるようにする
+   （マウスで押しただけのときは出ない。:focus-visible ＝ キーボード操作のときだけ） */
+.title-card .cmd--start:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 3px;
 }
 
 /* 起動画面のカードも、タイトル画面と同じ余白・同じ min-height を使う
@@ -10569,12 +10820,22 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-/* ボタンが1つしかない画面のボタン（はじめる・公園へ行く）
-   えらぶものは無いが、Enter / Space で押せることが分かるように、
-   選択カーソル「▶」をいつも出しておく
-   ※ 浮き上がる動きはマウスを乗せたときだけのままにする
+/* 「はじめる」「公園へ行く」の選択カーソル「▶」
+
+   前は「このボタンを Enter で押せますよ」と伝えるために、いつも出していた
+   いまはキーボードで上のボタン（♪ サウンドトラック／はじめの画面へ戻る・
+   サウンドON/OFF）へも移動できるので、
+   ▶ は「いま選んでいるボタン」だけに出す
+   （そうしないと、上のボタンを選んでいるのに ▶ が下に出たままになってしまう）
+
+   :focus-visible ではなく :focus を使っているのは、
+   画面が出たときに、こちらからこのボタンへフォーカスを当てているため
+   キーボードをまだ1回も押していなくても、
+   「いまここが選ばれている」と分かるようにしておく
+
+   ※ 浮き上がる動きと、ふんわり光る演出（.cmd--single::after）は今までどおり
 */
-.cmd--single::before {
+.cmd--single:focus::before {
   opacity: 1;
 }
 
