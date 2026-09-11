@@ -167,8 +167,17 @@ const duration = ref(0);
    曲どうしの音量バランス（①）はくずれない
    ============================================================ */
 
-/* ページ全体の音量（0〜1）。はじめは100％＝今までと同じ音量 */
+/* ページ全体の音量（0〜1）。はじめは100％＝今までと同じ音量
+   （前に使ったときの音量があれば、下の onMounted で思い出して入れなおす） */
 const masterVolume = ref(1);
+
+/* 音量を保存しておく名前（localStorageのキー）
+
+   localStorage は、ブラウザに小さなメモを残しておける保存場所
+   ページを閉じても消えないので、次に開いたときも音量を思い出せる
+   同じブラウザの他のページと名前がぶつからないよう、ゲーム名を頭に付けている
+   （ゲーム本編のサウンドON/OFFとは別のメモなので、名前も別にしてある） */
+const masterVolumeStorageKey = 'kouchan-soundtrack-volume';
 
 /* 画面に出す「70%」などの数字（0〜1 を 0〜100 に直したもの） */
 const masterVolumePercent = computed(() => Math.round(masterVolume.value * 100));
@@ -751,6 +760,17 @@ function changeMasterVolume(event: Event) {
       // 何もしない（次に曲を鳴らすときに、あらためて設定される）
     }
   }
+
+  /* 次に開いたときのために、いまの音量を覚えておく
+
+     localStorage には文字しか入れられないので、
+     「70」のようなパーセントの数字を、文字にして入れている */
+  try {
+    localStorage.setItem(masterVolumeStorageKey, String(masterVolumePercent.value));
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 保存できなくても、このページを開いているあいだの音量調整は正常に動く
+  }
 }
 
 /* 再生バーの「聴き終わったところ」の割合（0〜100）
@@ -821,6 +841,24 @@ function goToTitle() {
 */
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideCreditPointerDown);
+
+  /* 前に使ったときの音量を思い出す
+
+     ・保存したことが無いときは null になるので、そのまま100％で始める
+     ・数字でないものが入っていたときも、100％のままにする（こわれたメモ対策）
+     ・0〜100 からはみ出していたら、その範囲へおさめる */
+  try {
+    const savedVolume = localStorage.getItem(masterVolumeStorageKey);
+    const savedPercent = Number(savedVolume);
+
+    if (savedVolume !== null && Number.isFinite(savedPercent)) {
+      const percent = Math.min(100, Math.max(0, Math.round(savedPercent)));
+
+      masterVolume.value = percent / 100;
+    }
+  } catch {
+    // 読み込めなくても、初期値の100％でふつうに聴ける
+  }
 });
 
 /* このページから離れるときの後始末
@@ -1944,6 +1982,29 @@ onUnmounted(() => {
   .track__tooltip::before {
     left: 24px;
     transform: none;
+  }
+}
+
+/* ============================================================
+   小さめのスマホ（iPhone SE くらいまで）
+
+   全曲再生中の案内は
+   「♪ 全曲再生中 ／ 6 / 6 ／ 06 きょうの大冒険、おしまい！」の3つ
+
+   この幅では、曲名が短い曲は1行に収まり、長い曲だけ折り返すので、
+   曲によって見え方がそろわない
+   そこで、曲名はいつも2行目へ落として、見え方を統一する
+
+     1行目 … ♪ 全曲再生中　6 / 6
+     2行目 … 06 きょうの大冒険、おしまい！
+
+   flex-basis: 100% は「1行まるごと使う」という意味
+   前の2つとは同じ行に入れないので、かならず改行される
+   （481px 以上なら、どの曲名でも1行に収まるので、そのまま横に並べる）
+   ============================================================ */
+@media (max-width: 480px) {
+  .st-playall__track {
+    flex-basis: 100%;
   }
 }
 

@@ -298,10 +298,12 @@ const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedIt
 
 /* いま ↑↓←→ でコマンドを「選ぶ」画面かどうか
 
-   ・タイトル画面（ゲーム開始前）… ボタンは「公園へ行く」の1つだけ
-   ・ゴール／GAME OVER画面        … ボタンは「もう一度あそぶ」の1つだけ
+   ・起動画面・タイトル画面（ゲーム開始前）… ボタンは1つだけ
+     （「▶ はじめる」「公園へ行く」）
 
-   この2つはえらぶものが無いので false にする
+   えらぶものが無いので false にする
+   ※ ゴール／GAME OVER画面は、ボタンが2つ（もう一度あそぶ／はじめの画面へ戻る）
+     あるので true のまま。↑↓で行き来して、Enter / Space で押す
    （false の画面では矢印キーをそのままにして、ページのスクロールをじゃましない。
      ただし Enter / Space だけは、その1つのボタンを押す代わりに使える）
 */
@@ -312,10 +314,8 @@ const isCommandKeyboardActive = computed(() => {
     return false;
   }
 
-  // ゴール・GAME OVER画面
-  if (currentEvent.value === 'goal' || currentEvent.value === 'gameOver') {
-    return false;
-  }
+  /* ゴール・GAME OVER画面は、ボタンが2つ（もう一度あそぶ／はじめの画面へ戻る）
+     えらべるので、ここでは false にしない（↑↓で行き来できる） */
 
   return true;
 });
@@ -448,6 +448,16 @@ function toggleCareMenu() {
    ↑↓キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
 */
 const commandCount = computed(() => {
+  /* ゴール・GAME OVER画面は2つ
+     0 もう一度あそぶ
+     1 ← はじめの画面へ戻る
+
+     ※ いちばん先に見るのが大事
+       下の「結果表示中は1つ」にも当てはまってしまうことがあるため */
+  if (currentEvent.value === 'goal' || currentEvent.value === 'gameOver') {
+    return 2;
+  }
+
   // 公園入口は「行き先6か所 ＋ ゴール」で7つ
   // 秘密の場所がまだ見つかっていないときは、その行が画面に無いので6つ
   if (currentEvent.value === 'parkEntrance') {
@@ -2904,6 +2914,10 @@ function checkGameOver() {
     stopSecretBgm();
     stopTantrumBgm();
     hideTantrumAlert();
+
+    // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+    // （行動の途中でGAME OVERになるので、前の画面で選んでいた番号が残っている）
+    selectedCommandIndex.value = 0;
     return;
   }
 
@@ -2916,6 +2930,10 @@ function checkGameOver() {
     stopSecretBgm();
     stopTantrumBgm();
     hideTantrumAlert();
+
+    // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+    // （行動の途中でGAME OVERになるので、前の画面で選んでいた番号が残っている）
+    selectedCommandIndex.value = 0;
     return;
   }
 
@@ -2928,6 +2946,10 @@ function checkGameOver() {
     stopSecretBgm();
     stopTantrumBgm();
     hideTantrumAlert();
+
+    // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+    // （行動の途中でGAME OVERになるので、前の画面で選んでいた番号が残っている）
+    selectedCommandIndex.value = 0;
     return;
   }
 }
@@ -4727,6 +4749,32 @@ function resetGame() {
   selectedCommandIndex.value = 0;
 }
 
+/* ゴール／GAME OVER画面から、A画面（起動画面）へ戻る
+
+   同じ画面にある「もう一度あそぶ」は、B画面（タイトル画面）まで戻って
+   すぐ次のおでかけを始められるようにするもの
+   こちらは、もう一つ手前のA画面（起動画面）まで戻る
+   （A画面には「♪ サウンドトラック」もあるので、曲を聴きにも行ける）
+
+   やることは2つだけ
+   ① resetGame()  … 決定音を鳴らして、ゲームの記録をぜんぶ最初の状態に戻す
+   ② タイトルBGMを止めて、titleEntered を false にする（＝A画面へ）
+
+   ※ ①の中でタイトルBGMを「少しあとで鳴らす」予約をしているので、
+     cancelTitleBgmStart() でかならず取り消すこと
+     A画面は「まだ音を鳴らしていない画面」なので、
+     戻ったとたんに曲が鳴りだすと不自然になる
+     （B画面からA画面へ戻る goBackToBoot() と、まったく同じ後始末）
+*/
+function goBackToBootFromResult() {
+  resetGame();
+
+  cancelTitleBgmStart();
+  stopTitleBgm();
+
+  titleEntered.value = false;
+}
+
 /* ============================================================
    キーボード操作（各場所の「どうする？」コマンドボックス）
 
@@ -4736,7 +4784,9 @@ function resetGame() {
    ・Space    Enterと同じく、選択中のコマンドを実行する
 
    これまでどおりマウスのクリックでも遊べる（クリック操作はそのまま）
-   ※ タイトル画面・公園入口・ゴール・GAME OVERは今回の対象外
+   ※ 起動画面・タイトル画面はボタンが1つだけなので、↑↓は使わず
+     Enter / Space だけで押せるようにしてある
+     （ゴール・GAME OVER画面はボタンが2つなので、↑↓で行き来できる）
    ============================================================ */
 
 /* ↑：1つ上のコマンドへ移動する
@@ -4941,6 +4991,23 @@ function moveEntranceDown() {
    どの関数を呼ぶかを決めている
 */
 function runSelectedCommand() {
+  /* ゴール・GAME OVER画面（ボタンは2つだけ）
+
+     0 もう一度あそぶ        → タイトル画面へ
+     1 ← はじめの画面へ戻る  → 起動画面へ
+
+     ※ いちばん先に見るのが大事
+       下の「結果表示中は…」にも当てはまってしまうことがあるため */
+  if (currentEvent.value === 'goal' || currentEvent.value === 'gameOver') {
+    if (selectedCommandIndex.value === 1) {
+      goBackToBootFromResult();
+      return;
+    }
+
+    resetGame();
+    return;
+  }
+
   // 結果表示中は「次の場所を選ぶ」しか出ていないので、それを実行する
   // ただし「少し待ってみる」に失敗していやいやが続いているときは、
   // 画面に出ているのは いやいや のコマンドなので、ここでは進めない
@@ -5220,9 +5287,11 @@ function handleKeydown(event: KeyboardEvent) {
   // Space は event.key では ' '（半角スペース1文字）になる
   const isDecideKey = event.key === 'Enter' || event.key === ' ';
 
-  // ⓪ ボタンが1つしかない画面（タイトル・ゴール・GAME OVER）
+  // ⓪ ボタンが1つしかない画面（起動画面・タイトル画面）
   //    えらぶものが無いので ↑↓←→ は使わず、Enter / Space だけを受け取る
   //    矢印キーはブラウザにまかせるので、ページのスクロールはじゃましない
+  //    ※ ゴール／GAME OVER画面はボタンが2つあるので、ここではなく
+  //      下の ①②④（↑↓と決定）で、ほかの画面と同じように扱う
   if (!isCommandKeyboardActive.value) {
     if (isDecideKey) {
       // Spaceでページが下にスクロールするのを防ぐ
@@ -5235,10 +5304,8 @@ function handleKeydown(event: KeyboardEvent) {
 
       if (!titleEntered.value) {
         enterTitle(); // 起動画面の「▶ はじめる」
-      } else if (!gameStarted.value) {
-        startGame(); // タイトル画面の「公園へ行く」
       } else {
-        resetGame(); // ゴール／GAME OVER画面の「もう一度あそぶ」
+        startGame(); // タイトル画面の「公園へ行く」
       }
     }
 
@@ -5485,7 +5552,7 @@ onUnmounted(() => {
                A→B で切り替えても、左側は文字だけが入れかわって見える
                @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
                startGame() が二重に走るのを止める（preventDefault はしない） -->
-          <button type="button" class="title-card__back" @click="goBackToBoot" @keydown.stop>← はじめの画面へ戻る</button>
+          <button type="button" class="title-card__back" @click="goBackToBoot" @keydown.stop>はじめの画面へ戻る</button>
 
           <button type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
             <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
@@ -7721,9 +7788,32 @@ onUnmounted(() => {
             </div>
           </section>
 
+          <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
+               Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
+               マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
           <nav class="command">
-            <button class="cmd cmd--next cmd--single" @click="resetGame">
+            <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
               <span class="cmd__text">もう一度あそぶ</span>
+            </button>
+
+            <!-- はじめの画面（起動画面）へ戻る
+
+                 主役は上の「もう一度あそぶ」なので、色は控えめにしてある
+                 （選ばれたときは、ほかのボタンと同じように「▶」と枠が付く）
+
+                 @keydown.enter.stop / @keydown.space.stop
+                 … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
+                   同じキーが window の handleKeydown にも伝わって、
+                   「選んでいるコマンド」まで実行されてしまうのを止める
+                   ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
+            <button
+              class="cmd cmd--sub cmd--back"
+              :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+              @click="goBackToBootFromResult"
+              @mouseenter="selectedCommandIndex = 1"
+              @keydown.enter.stop
+              @keydown.space.stop>
+              <span class="cmd__text">はじめの画面へ戻る</span>
             </button>
           </nav>
         </div>
@@ -7805,9 +7895,32 @@ onUnmounted(() => {
             </div>
           </section>
 
+          <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
+               Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
+               マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
           <nav class="command">
-            <button class="cmd cmd--next cmd--single" @click="resetGame">
+            <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
               <span class="cmd__text">もう一度あそぶ</span>
+            </button>
+
+            <!-- はじめの画面（起動画面）へ戻る
+
+                 主役は上の「もう一度あそぶ」なので、色は控えめにしてある
+                 （選ばれたときは、ほかのボタンと同じように「▶」と枠が付く）
+
+                 @keydown.enter.stop / @keydown.space.stop
+                 … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
+                   同じキーが window の handleKeydown にも伝わって、
+                   「選んでいるコマンド」まで実行されてしまうのを止める
+                   ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
+            <button
+              class="cmd cmd--sub cmd--back"
+              :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+              @click="goBackToBootFromResult"
+              @mouseenter="selectedCommandIndex = 1"
+              @keydown.enter.stop
+              @keydown.space.stop>
+              <span class="cmd__text">はじめの画面へ戻る</span>
             </button>
           </nav>
         </div>
@@ -9894,7 +10007,7 @@ onUnmounted(() => {
 
    対象
      .cmd--selected              … 公園入口などで選んでいるボタン
-     .cmd--single                … ボタンが1つだけの画面（公園へ行く／もう一度あそぶ）
+     .cmd--single                … ボタンが1つだけの画面のボタン（はじめる／公園へ行く）
      .command-box__item--selected … 各イベントの中で選んでいる行
    ============================================================ */
 
@@ -10399,6 +10512,7 @@ onUnmounted(() => {
    ・紫のボタン（秘密の場所）          … 白       ← .cmd--secret::before
    ・緑のボタン（ゴール）              … 白       ← .cmd--goal::before
    ・金色のボタン（公園へ行く など）    … 濃い茶色 ← .cmd--start / --next::before
+   ・うすい青のボタン（はじめの画面へ戻る）… 白    ← .cmd--back::before
 
    ※ 以前は全部このgold（金色）だったが、白い下地では 1.6:1 しかなく、
      緑の下地では 1.4:1 とほとんど見えなかった
@@ -10455,7 +10569,7 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-/* ボタンが1つしかない画面（タイトル・ゴール・GAME OVER）
+/* ボタンが1つしかない画面のボタン（はじめる・公園へ行く）
    えらぶものは無いが、Enter / Space で押せることが分かるように、
    選択カーソル「▶」をいつも出しておく
    ※ 浮き上がる動きはマウスを乗せたときだけのままにする
@@ -10489,13 +10603,37 @@ onUnmounted(() => {
   font-weight: 400;
 }
 
-/* べつの場所へ行く（控えめ・行末に単独で置く） */
+/* 控えめなコマンドボタン（紺色の下地になじむ、うすい色）
+
+   主役のボタン（金色・緑・紫）より一段うしろに見えるようにしたいときに使う
+   いまは、ゴール／GAME OVER画面の「← はじめの画面へ戻る」で使っている */
 .cmd--sub {
   border-color: var(--navy-line);
   background: rgb(255 255 255 / 8%);
   color: #d5e2f5;
   font-size: 16px;
   font-weight: 400;
+}
+
+/* はじめの画面へ戻る（ゴール／GAME OVER画面の、2つ目のボタン）
+
+   すぐ上の「もう一度あそぶ」と同じ幅（380px）で、中央にそろえて下に置く
+   1 / -1 は「1列目から最後の列まで、ぜんぶ使う」という意味 */
+.cmd--back {
+  grid-column: 1 / -1;
+  justify-self: center;
+  max-width: 380px;
+}
+
+.cmd--back .cmd__text {
+  text-align: center;
+}
+
+/* ▶ は、そのままだと紺色なので、紺色の下地に沈んで見えなくなる
+   このボタンだけ下地が暗いので、白にしてはっきり見えるようにする
+   （文字の #d5e2f5 より少し明るくして、いま選んでいることが分かりやすい） */
+.cmd--back::before {
+  color: #fff;
 }
 
 /* 次の場所を選ぶ／もう一度あそぶ（1つだけなので中央に置く） */
@@ -10558,9 +10696,9 @@ onUnmounted(() => {
   font-size: 19px;
 }
 
-/* 金色のボタン（公園へ行く／もう一度あそぶ）も、文字と同じ濃い茶色にする
-   この2つは ▶ をいつも出している（.cmd--single）ので、
-   見つけやすいように少しだけ大きくもしている
+/* 金色のボタン（はじめる・公園へ行く／もう一度あそぶ）も、文字と同じ濃い茶色にする
+   下地が明るいので、▶ は文字と同じ濃い茶色にしないと沈んで見えなくなる
+   大きなボタンなので、▶ も少しだけ大きくしてそろえている
 */
 .cmd--start::before,
 .cmd--next::before {
@@ -11063,7 +11201,8 @@ onUnmounted(() => {
     box-shadow: none;
   }
 
-  .cmd--next {
+  .cmd--next,
+  .cmd--back {
     max-width: none;
   }
 }
