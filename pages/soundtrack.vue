@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 
 /* ============================================================
    サウンドトラックページ（/soundtrack）
@@ -167,6 +167,24 @@ const duration = ref(0);
    曲どうしの音量バランス（①）はくずれない
    ============================================================ */
 
+/* ============================================================
+   キーボードで操作するための覚えごと
+
+   このページのボタンは、ぜんぶ button・input なので、
+   Tabキーで移動して Enter / Space で押す、というブラウザの操作は
+   もともとできる
+
+   そこへ2つだけ足している
+   ① ページを開いたとき「▶ 全曲再生」にフォーカスを当てる
+   ② 曲の一覧では ↑↓ で、上下の曲の同じボタンへ移動できる
+      （→ handleTrackListKeydown）
+   ============================================================ */
+
+/* 「▶ 全曲再生」と「⏭ 次のトラックへ」を覚えておく箱
+   ref="〜" と書いたボタンが、そのままここに入ってくる（出ていないときは null） */
+const playAllButtonRef = ref<HTMLButtonElement | null>(null);
+const nextTrackButtonRef = ref<HTMLButtonElement | null>(null);
+
 /* ページ全体の音量（0〜1）。はじめは100％＝今までと同じ音量
    （前に使ったときの音量があれば、下の onMounted で思い出して入れなおす） */
 const masterVolume = ref(1);
@@ -189,6 +207,106 @@ const masterVolumePercent = computed(() => Math.round(masterVolume.value * 100))
    （全曲再生でも、個別再生でも、次のトラックへでも、かならずここを通る） */
 function getTrackVolume(track: SoundtrackTrack) {
   return track.volume * masterVolume.value;
+}
+
+/* ============================================================
+   効果音「ポン♪」（ボタンを押したときの合図）
+
+   ゲーム本編（pages/index.vue）の決定音とまったく同じ音を、
+   同じ作りかたで鳴らす
+   ・音のファイルは使わず、その場で音を作って鳴らす（AudioContext）
+   ・700Hzの丸い音を0.09秒だけ。鋭くならないよう triangle（三角の波）にしている
+
+   鳴らすのは、押しても曲が鳴りはじめない2つのボタンだけ
+   ① トラック番号（全曲再生の開始曲を選ぶ）… 押しても音が出ないと、
+      選べたのかどうか分かりにくいため
+   ② ← はじめの画面へ戻る
+
+   「▶ 再生」「▶ 全曲再生」などでは鳴らさない
+   （すぐ曲そのものが鳴りはじめるので、合図の音はかえってじゃまになる）
+   ============================================================ */
+
+/* 音を作る作業台
+
+   null は「まだ作っていない」という意味
+   作るのが重たいので、1個だけ作って、このページにいるあいだ使い回す
+   （ここで new しないのは、サーバー側には AudioContext が無いため） */
+let effectAudioContext: AudioContext | null = null;
+
+/* 作業台を用意して返す（初めて必要になったときだけ作る） */
+function getEffectAudioContext() {
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    if (!effectAudioContext) {
+      effectAudioContext = new AudioContext();
+    }
+
+    /* ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがあり、
+       そのとき作業台は suspended（お休み中）になっている
+       resume() で起こすが、await はしない
+       ここで待たせると、画面の切り替わりが音のせいで遅れてしまう */
+    if (effectAudioContext.state === 'suspended') {
+      effectAudioContext.resume().catch(() => {});
+    }
+
+    return effectAudioContext;
+  } catch {
+    // 音が使えない環境でも、ページはふつうに使えるようにする
+    return null;
+  }
+}
+
+/* 効果音「ポン♪」を鳴らす
+
+   大きさは、上の音量スライダー（masterVolume）に合わせる
+   曲だけ小さくして効果音がそのまま、ということが起きないようにするため
+   0%にしているときは、そもそも鳴らさない */
+function playDecisionSound() {
+  const volume = 0.06 * masterVolume.value;
+
+  if (volume <= 0) {
+    return;
+  }
+
+  const context = getEffectAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  try {
+    const startTime = context.currentTime;
+    const duration = 0.09;
+
+    const oscillator = context.createOscillator(); // 音の発生源
+    const gain = context.createGain(); // 音量つまみ
+
+    oscillator.type = 'triangle';
+    oscillator.frequency.setValueAtTime(700, startTime);
+
+    /* 音量の動き（これが無いと、鳴りはじめと鳴り終わりに「ブツッ」と雑音が入る）
+       ① ほぼ無音からはじめる
+       ② 0.015秒かけて、すっと目的の音量まで上げる
+       ③ そのあと、鳴り終わりに向かってゆっくり下げる
+
+       ※ 下げる先を 0 ではなく 0.001 にしているのは、
+         exponentialRampToValueAtTime() が 0 を受け取れないため */
+    gain.gain.setValueAtTime(0.0001, startTime);
+    gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+
+    // 発生源 → 音量つまみ → スピーカー の順につなぐ
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+
+    oscillator.start(startTime);
+    oscillator.stop(startTime + duration + 0.02);
+  } catch {
+    // 効果音が鳴らなくても、曲の再生には影響させない
+  }
 }
 
 /* ============================================================
@@ -372,7 +490,16 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   }
 }
 
-/* 鳴っている曲を完全に止める（次はまた最初から鳴るようにする） */
+/* 鳴っている曲を完全に止める（次はまた最初から鳴るようにする）
+
+   音を止めるだけでなく、「再生中」の表示や再生バーも止まった状態に戻す
+   使うのは、このページを見たまま止めるとき
+   ・「■ 全曲再生を停止」を押したとき
+   ・このページから離れて、画面が消えたあとの後片付け（onUnmounted）
+
+   ※ ページを移る「直前」には使わない
+     表示が先に消えてしまい、画面がバタバタして見えるため
+     そのときは下の stopAudioForNavigation()（音だけ止める）を使う */
 function stopSoundtrack() {
   if (soundtrackAudio) {
     try {
@@ -391,6 +518,44 @@ function stopSoundtrack() {
 
   // 再生バーも先頭へ戻しておく
   currentTime.value = 0;
+
+  /* 「■ 全曲再生を停止」で消えたボタンの代わりに、「▶ 全曲再生」へフォーカスを移す
+     ※ ページから離れるときの後片付け（onUnmounted）でもここを通るが、
+       そのときボタンはもう無い（ref は null）ので、何も起きないだけ */
+  focusAfterPlaylistChange(playAllButtonRef);
+}
+
+/* ページを離れる直前に「音だけ」止める
+
+   上の stopSoundtrack() との違いは、画面の表示にさわるかどうか
+
+   ・stopSoundtrack()        … 音を止めて、画面の表示も止まった状態に戻す
+                               （「■ 全曲再生を停止」を押したときなど、
+                                 このページを見たまま止めるとき用）
+   ・stopAudioForNavigation() … 音を止めるだけ。表示はいっさいさわらない
+                               （タイトル画面へ移るときなど、
+                                 このあと画面ごと消えるとき用）
+
+   移る直前に表示まで止めた状態に戻してしまうと、
+   画面が消えるまでのほんの一瞬に
+   「全曲再生中の案内が消える → 再生バーが消える → ボタンの並びが変わる」
+   と見えてしまい、バタバタ閉じたように感じられる
+   そこで、ここでは音だけを止めて、見た目はそのままにしておく
+
+   ※ すでに止まっている音にもう一度 pause() を呼んでも、何も起きないだけで安全
+     （このあと onUnmounted() の stopSoundtrack() でもう一度止まるが問題ない）
+*/
+function stopAudioForNavigation() {
+  if (!soundtrackAudio) {
+    return;
+  }
+
+  try {
+    soundtrackAudio.pause();
+    soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+  } catch {
+    // 止められなくても、このあとページごと消えるので何もしない
+  }
 }
 
 /* トラック番号を押したときに、その曲を「全曲再生の開始曲」にする
@@ -399,6 +564,9 @@ function stopSoundtrack() {
    実際に鳴らすのは「▶ 全曲再生」を押したとき
 */
 function selectStartTrack(track: SoundtrackTrack) {
+  // 決定音「ポン♪」（押して選べたことが分かるように）
+  playDecisionSound();
+
   selectedStartTrackId.value = track.id;
 }
 
@@ -509,6 +677,10 @@ function startPlaylist() {
   }
 
   playTrackAudio(audio, firstTrack);
+
+  /* 「▶ 全曲再生」はここで画面から消えるので、
+     入れかわりに出てくる「⏭ 次のトラックへ」へフォーカスを移しておく */
+  focusAfterPlaylistChange(nextTrackButtonRef);
 }
 
 /* 全曲再生を終わりにする
@@ -541,6 +713,9 @@ function finishPlaylist() {
   // 再生バーの表示も、まっさらに戻す
   currentTime.value = 0;
   duration.value = 0;
+
+  // 「⏭ 次のトラックへ」などが消えて「▶ 全曲再生」に戻るので、そちらへフォーカスを移す
+  focusAfterPlaylistChange(playAllButtonRef);
 }
 
 /* 全曲再生中に、次の曲へ進む
@@ -819,18 +994,125 @@ function formatTrackNumber(id: number) {
   return String(id).padStart(2, '0');
 }
 
+/* ============================================================
+   曲の一覧のキーボード操作（↑↓で上下の曲へ）
+
+   曲のカードには3種類のボタンが並んでいる
+     ・トラック番号（開始曲を選ぶ）
+     ・ⓘ（制作情報）
+     ・▶ 再生
+
+   ↑↓ を押したときは「いま選んでいるのと同じ種類のボタン」のまま、
+   1つ上・1つ下の曲へ移る
+   （例：03の「▶ 再生」で↓を押すと、04の「▶ 再生」へ）
+   いちばん下で↓を押したら先頭へ、先頭で↑を押したらいちばん下へ回りこむ
+
+   ※ 再生バー（つまみ）の上では何もしない
+     ←→↑↓ で再生位置を動かすという、ブラウザ本来の操作をじゃましないため
+   ※ 曲のボタン以外を選んでいるとき（音量スライダー、どこも選んでいない、など）も
+     何もしない。そのときの ↑↓ は、いままでどおりページのスクロールになる
+   ============================================================ */
+
+/* 曲のカードにある3種類のボタン（この順番に意味はない。見分けるために使う） */
+const trackButtonClasses = ['track__no', 'track__infoBtn', 'track__button'];
+
+function handleTrackListKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+    return;
+  }
+
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  // 再生バーの上では、ブラウザにまかせる（再生位置を動かす操作）
+  if (target.closest('.track__seek')) {
+    return;
+  }
+
+  // いま押されているのが、3種類のうちどのボタンかを調べる
+  const buttonClass = trackButtonClasses.find((name) => target.classList.contains(name));
+
+  if (!buttonClass) {
+    return;
+  }
+
+  // 曲のカードをぜんぶ取り出して、いまいるカードが何番目かを調べる
+  const list = event.currentTarget as HTMLElement;
+  const cards = Array.from(list.querySelectorAll<HTMLElement>('.track'));
+  const currentIndex = cards.findIndex((card) => card.contains(target));
+
+  if (currentIndex < 0) {
+    return;
+  }
+
+  /* 1つ上・1つ下のカードへ（はしまで来たら反対のはしへ回りこむ）
+     ※ % は「わったあまり」。cards.length を足してから割ることで、
+       引き算の結果がマイナスになっても、ちゃんと最後のカードに戻れる */
+  const step = event.key === 'ArrowDown' ? 1 : -1;
+  const nextCard = cards[(currentIndex + step + cards.length) % cards.length];
+  const nextButton = nextCard.querySelector<HTMLElement>('.' + buttonClass);
+
+  if (!nextButton) {
+    return;
+  }
+
+  // 曲の移動を優先するので、ページがスクロールしないようにする
+  event.preventDefault();
+  nextButton.focus();
+}
+
+/* 全曲再生のボタンが入れかわったあと、続きをキーボードで操作できるようにする
+
+   「▶ 全曲再生」を押すと、そのボタンは画面から消えて
+   「⏭ 次のトラックへ」「■ 全曲再生を停止」に入れかわる
+   ボタンが消えると、フォーカスはどこにも無い状態（body）になってしまい、
+   キーボードだけで操作している人は、またTabで探しに行くことになる
+   そこで、入れかわったあとのボタンへフォーカスを移しておく
+
+   ※ どこにもフォーカスが無いときだけ移す
+     ユーザーがすでに別のボタンを選んでいるなら、そのじゃまをしない
+     （曲が最後まで流れて自然に終わったときなどは、こちらが勝手に奪わない） */
+async function focusAfterPlaylistChange(button: Ref<HTMLButtonElement | null>) {
+  // ボタンが入れかわるのを待ってから、フォーカスを当てる
+  await nextTick();
+
+  if (document.activeElement && document.activeElement !== document.body) {
+    return;
+  }
+
+  button.value?.focus();
+}
+
 /* 「← はじめの画面へ戻る」
 
-   戻る前に、鳴っている曲をかならず止める
-   （移動したあとに、サントラの曲だけが鳴り続けないようにするため）
+   ここでやるのは2つだけ
+
+   ① 鳴っている曲を止める（音だけ）
+      移動したあとに、サントラの曲だけが鳴り続けないようにするため
+   ② タイトル画面へ移る
+
+   ※ ここでは stopSoundtrack() を呼ばないのが大事
+     呼ぶと「再生中」や再生バーの表示まで先に消えてしまい、
+     画面が切りかわるまでの一瞬、レイアウトがバタバタ動いて見える
+     表示の後片付けは、画面が消えたあとの onUnmounted() にまかせる
 
    ※ ブラウザの「戻る」ボタンで出ていった場合はここを通らないが、
-     そのときは下の onUnmounted() が同じように止めてくれる
+     そのときも onUnmounted() が同じように止めてくれる
 */
-function goToTitle() {
-  stopSoundtrack();
+async function goToTitle() {
+  /* 決定音「ポン♪」（ゲーム本編のボタンと同じ音）
 
-  navigateTo('/');
+     曲を止めるより先に鳴らす
+     ※ 効果音は曲とは別のしくみ（AudioContext）で鳴らしているので、
+       このあと曲を止めても、効果音は最後まで鳴りきる */
+  playDecisionSound();
+
+  stopAudioForNavigation();
+
+  await navigateTo('/');
 }
 
 /* ページが表示されたときの準備
@@ -841,6 +1123,10 @@ function goToTitle() {
 */
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideCreditPointerDown);
+
+  /* このページでいちばん使う「▶ 全曲再生」にフォーカスを当てておく
+     キーボードだけでも、開いてすぐ Enter で全曲再生を始められる */
+  playAllButtonRef.value?.focus();
 
   /* 前に使ったときの音量を思い出す
 
@@ -868,6 +1154,15 @@ onMounted(() => {
    のどちらでも、かならずここを通る
 
    曲を止めて、使いまわしていたAudioも手放しておく
+
+   ※ ここが呼ばれるのは、画面がもう消えたあと
+     だから stopSoundtrack() で「再生中」や再生バーの表示を止まった状態に戻しても、
+     その変化は誰にも見えない（＝バタバタした動きにならない）
+
+   ※ ブラウザの戻るボタンのときは goToTitle() を通らないので、
+     音を確実に止められるのはここだけ
+     「戻る」ボタンからのときは goToTitle() ですでに止まっているが、
+     止まっている音をもう一度止めても何も起きないだけなので、そのままで安全
 */
 onUnmounted(() => {
   // ページ全体の見張りをやめる（付けっぱなしにしない）
@@ -916,7 +1211,9 @@ onUnmounted(() => {
           {{ selectedStartTrackTitle }}
         </p>
 
-        <button v-if="!isPlaylistPlaying" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
+        <!-- ref … ページを開いたときと、全曲再生を止めたときに
+             このボタンへフォーカスを当てるための目印 -->
+        <button v-if="!isPlaylistPlaying" ref="playAllButtonRef" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
       </div>
 
       <!-- どの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える） -->
@@ -938,6 +1235,7 @@ onUnmounted(() => {
              一時停止中でも押せて、そのときは次の曲が自動的に鳴りはじめる -->
         <div class="st-playall__actions">
           <button
+            ref="nextTrackButtonRef"
             type="button"
             class="st-playall__button st-playall__button--next"
             aria-label="現在の曲を飛ばして次のトラックを再生する"
@@ -985,7 +1283,10 @@ onUnmounted(() => {
          曲を増やしたり、曲名を変えたりしたいときは
          tracks を書きかえるだけでよい
          ============================================================ -->
-    <ol class="st-list">
+    <!-- @keydown … 曲のボタンを選んでいるときだけ、↑↓で上下の曲へ移動する
+         （キーは押されたボタンからこの ol まで伝わってくるので、
+           見張りはここ1か所でよい。くわしくは handleTrackListKeydown） -->
+    <ol class="st-list" @keydown="handleTrackListKeydown">
       <li v-for="track in tracks" :key="track.id" class="track" :class="{ 'track--current': playingTrackId === track.id }">
         <button
           type="button"
