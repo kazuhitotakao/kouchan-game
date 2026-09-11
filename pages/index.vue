@@ -3077,6 +3077,32 @@ function startGame() {
   selectedCommandIndex.value = 0;
 }
 
+/* サウンドトラックのページ（/soundtrack）へ移動する
+
+   タイトル画面ではタイトルBGMが鳴っているので、
+   移動する前に、かならずここで止めておく
+
+   止めないままページを移ると、サントラの曲を再生したときに
+   タイトルBGMと重なって2曲同時に鳴ってしまう
+
+   止める前に cancelTitleBgmStart() を呼んでいるのは、
+   「あとで鳴らす」の予約（playTitleBgmSoon）がまだ残っているかもしれないため
+   予約を消さずに stopTitleBgm() だけをすると、
+   ページを移ったあとに予約のほうが動いて、曲が鳴りだしてしまう
+
+   ※ このあと onUnmounted() も走ってBGMを止めてくれるが、
+     押した時点で確実に止めておきたいので、ここでも止めている
+*/
+function goToSoundtrack() {
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  cancelTitleBgmStart();
+  stopTitleBgm();
+
+  navigateTo('/soundtrack');
+}
+
 /* 場所を移動する
    移動すると前の結果メッセージと変化量の表示は消す
 
@@ -5152,20 +5178,32 @@ function runSelectedCommand() {
    ③ Enter / Space なら、選択中のコマンドを実行する
 */
 function handleKeydown(event: KeyboardEvent) {
-  /* サウンドボタンにフォーカスしているときは、ゲームのキー操作をしない
+  /* 画面の中のボタンにフォーカスしているときは、ゲームのキー操作をしない
 
      このゲームのキー操作は window 全体で受け取っているため、
      音ボタンを選んだ状態で Enter を押すと、
      「音のON/OFF」と「ゲームの決定（公園へ行く など）」が同時に起きてしまう
      それを防ぐために、いちばん最初にここで抜ける
 
+     ここで抜けるボタン
+     ・.sound-toggle … サウンドのON/OFF
+     ・.title-link   … タイトル画面の「♪ サウンドトラック」
+
+     「♪ サウンドトラック」も同じ理由で入れてある
+     Tabキーで選んだ状態で Enter を押したとき、ここで抜けないと
+     「サントラページへ移動」と「公園へ行く（startGame）」の
+     両方が同時に起きてしまう
+
      ※ event.preventDefault() は呼ばない
        呼ばずに return することで、button本来の Enter / Space による
        クリック動作はブラウザにそのまま任せられる
+
+     ※ 何もフォーカスしていないときの Enter / Space は、これまでどおり
+       「公園へ行く」になる（そのときの target はボタンではないので、ここは通らない）
   */
   const target = event.target as HTMLElement | null;
 
-  if (target?.closest?.('.sound-toggle')) {
+  if (target?.closest?.('.sound-toggle, .title-link')) {
     return;
   }
 
@@ -5449,6 +5487,19 @@ onUnmounted(() => {
         </div>
 
         <button class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
+
+        <!-- サウンドトラックのページ（/soundtrack）への入口
+
+             メインの操作は「公園へ行く」なので、同じ大きさのボタンにはせず、
+             サブメニュー（リンク）のように見える控えめな見た目にしてある
+             ただし、小さすぎて押しにくくならないよう、余白は広めにとっている
+
+             ※ 起動画面（▶ はじめる）のほうには出さない
+               あちらは「音を鳴らせるようにするための1枚」なので、
+               ボタンは1つだけのままにしておく -->
+        <div class="title-card__sub">
+          <button type="button" class="title-link" @click="goToSoundtrack">♪ サウンドトラック</button>
+        </div>
       </div>
     </div>
 
@@ -7980,6 +8031,52 @@ onUnmounted(() => {
 
 .title-card__rule p {
   margin: 0;
+}
+
+/* タイトル画面のサブメニュー（♪ サウンドトラック）の置き場所
+   メインの「公園へ行く」の下に、少しだけ間を空けて置く */
+.title-card__sub {
+  margin-top: 16px;
+}
+
+/* サブメニューのリンク（♪ サウンドトラック）
+
+   メインの「公園へ行く」（金色の大きなボタン）より控えめに見せるため、
+   ・背景を塗らない
+   ・枠線も出さない
+   ・文字も少し小さめ
+   にして、ボタンではなくリンクのように見せている
+
+   ただし、小さすぎると押しにくくなるので、
+   上下左右の余白を広めにとって、指でも押せる大きさは残してある
+*/
+.title-link {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.title-link:hover {
+  background: rgb(42 118 143 / 8%);
+  color: var(--navy-deep);
+}
+
+/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
+.title-link:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
 }
 
 /* ============================================================
