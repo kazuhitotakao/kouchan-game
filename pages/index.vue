@@ -5438,12 +5438,13 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="!titleEntered" class="title-screen">
       <div class="title-card title-card--boot">
-        <!-- 上のツールバー
+        <!-- 上のツールバー（B画面と同じ .title-card__tools を使う）
              左：サウンドトラック（/soundtrack）への入口
              右：サウンドON/OFF（「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく） -->
         <div class="title-card__tools">
           <!-- サウンドトラックへの入口（左上）
-               目立たせず、右のサウンドON/OFFとそろえた小さなボタンにしている
+               右のサウンドON/OFFと同じ高さ・同じ文字サイズのpillにそろえている
+               （見た目のCSSは .title-card__tools のところにまとめてある）
                押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに /soundtrack へ移る
                @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
                enterTitle() が二重に走るのを止める（preventDefault はしない） -->
@@ -5475,12 +5476,13 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-else-if="!gameStarted" class="title-screen">
       <div class="title-card">
-        <!-- 上のツールバー
+        <!-- 上のツールバー（A画面と同じ .title-card__tools を使う）
              左：はじめの画面（起動画面）へ戻る
              右：サウンドON/OFF（「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
         <div class="title-card__tools">
-          <!-- はじめの画面へ戻る（左上の小さな補助操作）
-               目立たせず、右のサウンドON/OFFとそろえた小さなボタンにしている
+          <!-- はじめの画面へ戻る（左上の補助操作）
+               A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
+               A→B で切り替えても、左側は文字だけが入れかわって見える
                @keydown.stop … Enter/Space が window の handleKeydown まで伝わって
                startGame() が二重に走るのを止める（preventDefault はしない） -->
           <button type="button" class="title-card__back" @click="goBackToBoot" @keydown.stop>← はじめの画面へ戻る</button>
@@ -7949,6 +7951,21 @@ onUnmounted(() => {
   padding: 32px 24px;
 }
 
+/* min-height は「A画面とB画面でカードの高さをそろえる」ためのもの
+
+   タイトル画面（.title-screen）はカードを上下まんなかに置くので、
+   A画面とB画面でカードの高さがちがうと、カードの上のふちの位置もずれる
+   → 上部のサウンドON/OFFがA→Bでガクッと動いて見えてしまう
+
+   そこで、中身が多いB画面（説明文つき）でも収まる高さを min-height にしておく
+   こうすると2枚のカードは同じ高さになり、上部の操作も同じ場所に出る
+   （あまった縦の余白は、name の margin-top: auto と
+     開始ボタンの margin-bottom: auto が上下に分けて吸収する）
+
+   ※ このゲームは box-sizing を border-box にしていないので、
+     ここの400pxは padding（44px）をふくまない「中身だけ」の高さ
+     上部の操作を大きくしてもB画面の中身は400pxに収まるため、
+     デスクトップではこの値のままでよい */
 .title-card {
   display: flex;
   flex-direction: column;
@@ -8023,68 +8040,71 @@ onUnmounted(() => {
   margin: 0;
 }
 
-/* サウンドトラックへの入口ボタン（起動画面の左上）
+/* ============================================================
+   タイトルカード上部の補助操作（A画面・B画面で共通）
 
-   右のサウンドON/OFF（.sound-toggle）とそろえた、小さく控えめなpill
-   目立たせない・ふつうのテキストリンクには見せない（下線なし）ためのもの
-*/
-.title-card__soundtrack {
-  display: inline-flex;
+   左：A画面＝「♪ サウンドトラック」 / B画面＝「← はじめの画面へ戻る」
+   右：サウンドON/OFF（どちらの画面も同じ）
+
+   A→B へ切り替えたときに上部のボタンがガクッと動いて見えないよう、
+   入れ物（.title-card__tools）も中のボタンの大きさも、
+   A画面・B画面でまったく同じCSSを使う（画面ごとの調整はしない）
+
+   大きさは「はじめる」「公園へ行く」より目立たせないが、
+   ふつうに読めて押せるくらい（高さ38px・文字15px）にしている
+   ============================================================ */
+
+/* 入れ物：カードのいちばん上に、左の補助リンクと右のサウンドON/OFFを分けて置く
+
+   ※ マイナスの余白は「その分だけ外側へはみ出す」という意味
+     はみ出す先はカードの内側の余白（padding: 44px）なので、外へは出ない
+     下は26pxあけて、タイトルと近づきすぎないようにする */
+.title-card__tools {
+  display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  border: 1px solid var(--navy-line);
+  justify-content: space-between;
+  gap: 12px;
+  margin: -22px -12px 26px;
+}
+
+/* 上部に並ぶボタンの大きさ（高さ・文字・左右の余白・アイコンとのすき間）
+   左右どちらも同じ値にして、上端・高さ・文字サイズをそろえる
+
+   ※ .sound-toggle はゲーム画面の上部バーでも使っているので、
+     ここでは .title-card__tools の中にあるものだけを大きくする */
+.title-card__soundtrack,
+.title-card__back,
+.title-card__tools .sound-toggle {
+  gap: 7px;
+  min-height: 38px;
+  padding: 8px 14px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 55%);
-  color: var(--navy);
-  font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
-  line-height: 1;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.1s ease;
+  font-size: 15px;
+  line-height: 1.2;
+  white-space: nowrap; /* 「← はじめの画面へ戻る」を2行に折り返させない */
 }
 
-.title-card__soundtrack:hover {
-  border-color: var(--navy);
-  background: rgb(255 255 255 / 85%);
+/* 文字を大きくしたぶん、スピーカーのアイコンも合わせて大きくする */
+.title-card__tools .sound-toggle__icon {
+  font-size: 16px;
 }
 
-.title-card__soundtrack:active {
-  transform: translateY(1px);
-}
+/* 左側の補助リンク（A：♪ サウンドトラック / B：← はじめの画面へ戻る）
 
-.title-card__soundtrack:focus-visible {
-  outline: 2px solid var(--navy);
-  outline-offset: 2px;
-}
-
-/* 「← はじめの画面へ戻る」ボタン（タイトル画面の左上）
-
-   A画面の「♪ サウンドトラック」とそろえた、小さく控えめなpill
-   「公園へ行く」が主役なので、戻る操作は目立たせない（下線なし）
+   2つは同じ種類の「補助ナビゲーション」なので、見た目もそろえる
+   ふつうのテキストリンクには見せない（下線なし）、白地に紺文字のpill
 */
+.title-card__soundtrack,
 .title-card__back {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 12px;
+  justify-content: center;
   border: 1px solid var(--navy-line);
-  border-radius: 999px;
   background: rgb(255 255 255 / 55%);
   color: var(--navy);
   font-family: inherit;
-  font-size: 11.5px;
   font-weight: 700;
-  line-height: 1;
   letter-spacing: 0.02em;
-  white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
   transition:
@@ -8095,6 +8115,7 @@ onUnmounted(() => {
 }
 
 /* PCでカーソルを当てたときだけ、うすい水色になって少し上へ動く（派手にしない） */
+.title-card__soundtrack:hover,
 .title-card__back:hover {
   border-color: var(--navy);
   background: #e3f2fb;
@@ -8102,10 +8123,12 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 
+.title-card__soundtrack:active,
 .title-card__back:active {
   transform: translateY(1px);
 }
 
+.title-card__soundtrack:focus-visible,
 .title-card__back:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
@@ -8173,8 +8196,12 @@ onUnmounted(() => {
      音の設定に使うと意味を取りちがえてしまう）
    navy と 水色 だけの、中立的な見た目にしている
 
+   ここの値はゲーム画面の上部バーに置くときの大きさ
    高さは padding 4px + 文字11.5px + 枠1px で約21px
    タイトル1行ぶん（約25px）より小さいので、行の高さは変わらない
+
+   ※ タイトル画面（A/B）の上部に置くときは、左の補助リンクと高さをそろえるため
+     .title-card__tools の中でひとまわり大きくしている
 */
 .sound-toggle {
   display: inline-flex;
@@ -8263,31 +8290,6 @@ onUnmounted(() => {
 
 .sound-toggle--bar:focus-visible {
   outline-color: #eef9ff;
-}
-
-/* タイトル画面：カードの上部に、左の補助操作と右のサウンドON/OFFを分けて置く
-   上のよぶんな余白へ食い込ませて、カードの高さがほとんど変わらないようにする */
-.title-card__tools {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: -16px 0 10px;
-}
-
-/* 起動画面だけ、左右のすみへ寄せる
-   左に「♪ サウンドトラック」、右に「サウンド ON/OFF」を置く
-
-   この画面はタイトルと「▶ はじめる」しか出ないので、
-   カードの余白（padding: 56px 44px）がとても広い
-   マイナスの余白でその余白へ食い込ませて、
-   カードの角ちかくへ小さく置く
-
-   ※ マイナスの余白は「その分だけ外側へはみ出す」という意味
-     はみ出す先はカードの内側の余白なので、外へは出ない */
-.title-card--boot .title-card__tools {
-  justify-content: space-between;
-  align-items: center;
-  margin: -34px -22px 12px;
 }
 
 .status-clock {
@@ -10990,15 +10992,38 @@ onUnmounted(() => {
     font-size: 20px;
   }
 
+  /* せまい画面では説明文の折り返しが増えるぶん、B画面の中身が縦に伸びる
+     340pxのままだとB画面だけ min-height を超えてカードが高くなり、
+     上下まんなか置きのせいで上部の操作がA画面とずれてしまうので、
+     折り返しが増えても収まる高さまで上げておく */
   .title-card {
-    min-height: 340px;
+    min-height: 400px;
     padding: 28px 20px;
   }
 
-  /* せまい画面ではカードの余白そのものが小さくなる（上 24px / 横 20px）ので、
-     食い込ませる量も小さくしないと、ボタンがカードの外へ出てしまう */
-  .title-card--boot .title-card__tools {
-    margin: -12px -8px 8px;
+  /* せまい画面ではカードの余白そのものが小さくなる（上下28px / 左右20px）ので、
+     食い込ませる量も小さくしないと、ボタンがカードの外へ出てしまう
+     タイトルとのあいだは20pxだけあける */
+  .title-card__tools {
+    gap: 8px;
+    margin: -8px -4px 20px;
+  }
+
+  /* スマホでは左右2つが1行に収まるよう、文字と余白を少しだけ下げる
+     （それでも以前の11.5pxよりは大きいままにして、押しやすさを残す）
+     「サウンド」の文字は下の .sound-toggle__text で隠れるので、
+     右側は「🔊 ON」の短い表示になり、左の長いリンクとぶつからない */
+  .title-card__soundtrack,
+  .title-card__back,
+  .title-card__tools .sound-toggle {
+    gap: 6px;
+    min-height: 36px;
+    padding: 7px 11px;
+    font-size: 13.5px;
+  }
+
+  .title-card__tools .sound-toggle__icon {
+    font-size: 15px;
   }
 
   .title-card__name {
