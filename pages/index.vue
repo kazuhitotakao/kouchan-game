@@ -7123,6 +7123,21 @@ onUnmounted(() => {
   border-color: #e8b3a8;
 }
 
+/* このカードだけは縮ませない
+
+   ほかの画面の結果カードは、中身を .result-card__body（overflow-y: auto）で
+   包んであるので、縮んでも中はスクロールするだけで外へはみ出さない
+   GAME OVER画面のカードにはその包みが無いため、
+   上の .stage > .result-card（flex: 0 1 auto）で縮むと、
+   中の文字がカードの外へあふれて、下の「今日の記録」に重なってしまう
+
+   ゴール／GAME OVERの画面は .stage ぜんぶがスクロールするので、
+   ここを縮ませずに、はみ出したぶんは画面のスクロールにまかせる
+*/
+.stage > .result-card--gameover {
+  flex: none;
+}
+
 /* GAME OVERの「最後の行動」も、こうちゃん／親／おでかけ の3つに分けて横に並べる */
 .last-action-groups {
   display: grid;
