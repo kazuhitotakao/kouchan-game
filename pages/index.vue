@@ -421,7 +421,7 @@ const dangerWarnings = computed(() => {
   }
 
   if (isChildEnergyDanger.value) {
-    warnings.push('⚠ こうちゃんもかなり疲れています');
+    warnings.push('⚠ こうちゃんはかなり疲れています');
   }
 
   return warnings;
@@ -470,28 +470,45 @@ function toggleSound() {
        効果音は getAudioContext() が soundEnabled を見てくれるので何もしなくてよいが、
        BGMは「いま鳴っている曲」なので、その場で止める・再開する必要がある
 
-       ONに戻したときは、いまの画面に合う曲だけを再開する
-       ・起動画面            … どちらも鳴らさない（まだ何も始まっていない）
-       ・タイトル画面        … タイトルBGM
-       ・公園を探検している最中 … 公園BGM
-       ・ゴール／GAME OVER   … どちらも鳴らさない（もともと無音の画面）
+       ONに戻したときは、いまの画面に合う曲「1曲だけ」を再開する
+       ・起動画面                  … どれも鳴らさない（まだ何も始まっていない）
+       ・タイトル画面              … タイトルBGM
+       ・いやいやタイム            … いやいやBGM
+       ・いやいや発生の結果を読んでいる最中 … どれも鳴らさない（わざと無音にしている画面）
+       ・公園を探検している最中     … 公園BGM
+       ・ゴール／GAME OVER         … どれも鳴らさない（もともと無音の画面）
 
        止めたところからの続きなので、play〜ではなく resume〜 を使う
 
        ※ タイトルBGMの条件に titleEntered が要る
          「!gameStarted」だけだと起動画面も当てはまってしまい、
          起動画面でONに戻しただけで曲が鳴りだしてしまう
+
+       ※ いやいや関連の2つを、公園BGMより先に置くのが大事
+         あとにすると「公園を探検している最中」にも当てはまってしまい、
+         いやいや画面なのに公園BGMが鳴りだしてしまう
+
+       ※ 「いやいや発生の結果を読んでいる最中」は
+         currentEvent がまだ場所（すべり台など）のままで、
+         isTantrum だけが true になっている状態
+         ここでONに戻しても、わざと作った無音をこわさないように何も鳴らさない
   */
   if (soundEnabled.value) {
     if (titleEntered.value && !gameStarted.value) {
       resumeTitleBgm();
+    } else if (gameStarted.value && currentEvent.value === 'tantrum') {
+      resumeTantrumBgm();
+    } else if (gameStarted.value && isTantrum.value) {
+      // いやいや発生の結果カードを読んでいる最中（わざと無音）なので、何も鳴らさない
     } else if (gameStarted.value && !isResultScene.value) {
       resumeParkBgm();
     }
   } else {
     // OFFのときは pause() だけ（どこまで再生したかを覚えておく）
+    // どの画面でも止まるように、3曲ぜんぶに声をかける
     pauseTitleBgm();
     pauseParkBgm();
+    pauseTantrumBgm();
   }
 
   // サーバー側には localStorage が無いので、ここで終わり
@@ -712,6 +729,10 @@ const titleBgmVolume = 0.25;
 
 /* 公園BGMの音量（タイトルBGMより録音が大きいので、少し下げてそろえる） */
 const parkBgmVolume = 0.17;
+
+/* いやいやBGMの音量（ひとまず公園BGMと同じにしてある）
+   大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
+const tantrumBgmVolume = 0.17;
 
 /* 公園BGMを入れておく箱
 
@@ -1181,6 +1202,169 @@ function stopTitleBgm() {
   try {
     titleBgm.pause();
     titleBgm.currentTime = 0;
+  } catch {
+    // 何もしない
+  }
+}
+
+/* ============================================================
+   いやいやタイムのBGM
+
+   作りは公園BGM・タイトルBGMとまったく同じで、鳴らす場面だけがちがう
+   ・いやいやBGM … いやいやタイムの画面にいるあいだ（currentEvent === 'tantrum'）
+
+   ここでいちばん大事なのは「いつ切り替えるか」
+
+   ① いやいやが発生した瞬間（isTantrum が true になったとき）は、
+     公園BGMを stop して「無音」にするだけ（いやいやBGMはまだ鳴らさない）
+     プレイヤーはまだ「通常行動の結果」を読んでいる最中なので、
+     しんと静かな画面で「たいへんなことが起きた」を伝える
+
+   ② 「こうちゃんのところへ行く」を押して、いやいやタイムの画面へ移った瞬間に切り替える
+     （goToNextPlace() の中）
+
+   ③ いやいやが終わっても（isTantrum が false になっても）、その瞬間には止めない
+     「ぎゅっとだっこすると……」などの結果を読んでいるあいだ、画面はまだ
+     いやいやタイムなので、曲もそのまま流しつづける
+
+   ④ 「次の場所を選ぶ」でいやいやタイムの画面から出るときに止める
+     （こちらも goToNextPlace() の中）
+   ============================================================ */
+
+/* いやいやBGMを入れておく箱
+   ほかの2曲と同じく、サーバー側では作れないので null から始める */
+let tantrumBgm: HTMLAudioElement | null = null;
+
+/* いやいやBGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ ほかの2曲と同じく、ここでは soundEnabled を見ない
+     OFFにした瞬間に「鳴っている曲を止める」ために必要になるため
+*/
+function getTantrumBgm() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!tantrumBgm) {
+      // public/audio/tantrum-bgm.mp3 は、URLでは /audio/tantrum-bgm.mp3 になる
+      tantrumBgm = new Audio('/audio/tantrum-bgm.mp3');
+
+      // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+      // （いやいやが何回続いても、音が途切れないようにするため）
+      tantrumBgm.loop = true;
+
+      // volume … 音の大きさ（上の tantrumBgmVolume で決めている）
+      tantrumBgm.volume = tantrumBgmVolume;
+    }
+
+    return tantrumBgm;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* いやいやBGMを「最初から」再生する（いやいやタイムへ入ったとき用）
+
+   いやいやは1回ごとに独立した場面なので、毎回きちんと曲の頭から始める
+   （前のいやいやの途中から鳴りだすと、場面が変わった感じがしない）
+
+   公園BGMと同じくフェードインさせる
+   公園BGMを止めた直後に、いきなり別の曲が最大音量で始まると唐突なため
+*/
+function playTantrumBgm() {
+  // サウンドOFFのときは、ここで終わり
+  // ※ getTantrumBgm() より先に見ることで、OFFのあいだは
+  //   mp3の読み込みそのものが起きないようにしている
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getTantrumBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.currentTime = 0; // 曲の先頭へ戻す
+
+    /* 無音から少しずつ大きくしていく
+
+       ※ フェードインの係（startBgmFadeIn / cancelBgmFade）は
+         公園BGMと共用で問題ない
+         2曲が同時に鳴ることはなく、切り替えるときは必ず前の曲を止めており、
+         startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
+    startBgmFadeIn(bgm, tantrumBgmVolume);
+
+    bgm.play().catch(() => {});
+  } catch {
+    // BGMが鳴らなくても、ゲームは止めない
+  }
+}
+
+/* いやいやBGMを「続きから」再生する（サウンドをONに戻したとき用）
+
+   playTantrumBgm() とのちがいは currentTime を 0 に戻さないこと
+   OFFにしたところから、そのまま続きを鳴らす
+*/
+function resumeTantrumBgm() {
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getTantrumBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.play().catch(() => {});
+  } catch {
+    // 何もしない
+  }
+}
+
+/* いやいやBGMを一時停止する（どこまで再生したかは覚えたまま）
+   サウンドをOFFにしたときと、ページを離れるときに使う */
+function pauseTantrumBgm() {
+  // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
+  cancelBgmFade();
+
+  if (!tantrumBgm) {
+    return;
+  }
+
+  try {
+    tantrumBgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
+/* いやいやBGMを完全に止める（次はまた最初から鳴るようにする）
+
+   いやいやタイムの画面から出るとき・ゴール・GAME OVER・
+   「もう一度あそぶ」で使う
+
+   pause() ではなく stop（先頭へ戻す）にしているのは、
+   次のいやいやが「前のいやいやの続き」から鳴りださないようにするため
+*/
+function stopTantrumBgm() {
+  // フェードインの途中で止めることもあるので、音量も戻しておく
+  cancelBgmFade();
+
+  if (!tantrumBgm) {
+    return;
+  }
+
+  try {
+    tantrumBgm.pause();
+    tantrumBgm.currentTime = 0;
   } catch {
     // 何もしない
   }
@@ -1751,6 +1935,19 @@ function checkTantrum() {
   // ※ 見た目だけの追加なので、このあとの処理はいつもどおりすぐ進む
   showTantrumAlert();
 
+  /* 公園BGMを止めて、いやいや発生の結果カードを「無音」にする
+
+     こうちゃんが泣きだした場面なので、
+     結果を読んでいるあいだは楽しい公園BGMを流さず、
+     しんと静かにして「たいへんなことが起きた」を伝える
+
+     ※ pause ではなく stop（先頭へ戻す）にしている
+       いやいやが終わって公園へ戻るときは、曲の続きからではなく
+       また最初から鳴らしたいため
+       （いやいやをはさんで場面が変わったので、
+         曲も「仕切りなおし」にしたほうが切りかわった感じが出る） */
+  stopParkBgm();
+
   childMood.value -= 15;
   parentCalm.value -= 12;
 
@@ -1779,7 +1976,11 @@ function checkGameOver() {
 
   /* ※ 下の3つは、あてはまった1つだけが実行されて return する
        （いちばん上に「すでにGAME OVERなら return」もあるので、
-        公園BGMを止める stopParkBgm() が動くのは1回だけ）
+        BGMを止める処理が動くのも1回だけ）
+
+     BGMは公園・いやいやの2曲とも止める
+     いやいやタイム中でも、だっこで親の体力が0になるなどでGAME OVERになるため
+     （鳴っていない曲に stop を呼んでも、何も起きないだけなので安全）
 
      どの理由でも、いやいや発生の演出（hideTantrumAlert）は必ず消す
      いやいやが起きた行動でそのままGAME OVERになることがあり、
@@ -1791,6 +1992,7 @@ function checkGameOver() {
     gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    stopTantrumBgm();
     hideTantrumAlert();
     return;
   }
@@ -1801,6 +2003,7 @@ function checkGameOver() {
     gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    stopTantrumBgm();
     hideTantrumAlert();
     return;
   }
@@ -1811,6 +2014,7 @@ function checkGameOver() {
     gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    stopTantrumBgm();
     hideTantrumAlert();
     return;
   }
@@ -2010,9 +2214,55 @@ function goToNextPlace() {
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
 
+  /* ② いやいや中なら、いやいやタイムの画面へ
+
+     ここでいやいやBGMを先頭から鳴らしはじめる（フェードイン付き）
+
+     公園BGMは、いやいやが発生した瞬間（checkTantrum）にすでに
+     stop して無音にしてあるので、ここでは止まったまま
+     それでも念のためもう一度 stop を呼んでおく
+     （いやいやタイムへ来る道はここ1本だが、
+       万一どこかで鳴っていても、2曲が重ならないようにするため）
+  */
   if (isTantrum.value) {
+    stopParkBgm();
+    playTantrumBgm();
+
     currentEvent.value = 'tantrum';
     return;
+  }
+
+  /* ここから下は、いやいやが終わっている（isTantrum が false）とき
+
+     いまいる画面がいやいやタイムなら、この「次の場所を選ぶ」が
+     いやいやタイムの終わり＝いやいやBGMの終わり
+     （だっこ・おやつ・待つ成功で isTantrum が false になった瞬間ではなく、
+       結果の文章を読み終えて画面から出るここで止める）
+
+     ・いやいやBGMは stop（先頭へ戻す）
+       次のいやいやは、また曲の頭から始めたいため
+     ・公園へ戻るときだけ、公園BGMを「また最初から」鳴らしはじめる
+       （続きからではなく頭から）
+
+       鳴らしかたは playParkBgmSoon()＝「公園へ行く」を押したときと同じ
+       ・少し間（700ms）を空けてから鳴らしはじめる
+         → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
+       ・そのあと無音からフェードインする
+       こうすると「いやいやが終わって、また公園にもどってきた」という
+       感じが、ゲームを始めたときとまったく同じ聞こえかたになる
+
+     ※ 12:00を過ぎているときは公園BGMを鳴らさない
+       このあとすぐ下の goToGoal() で止めることになり、
+       一瞬だけ鳴って消える不自然な音になってしまうため
+       （playParkBgmSoon() の中でも、待っているあいだに
+         リザルト画面へ移っていたら鳴らさないようにしてある）
+  */
+  if (currentEvent.value === 'tantrum') {
+    stopTantrumBgm();
+
+    if (!isTimeOver.value) {
+      playParkBgmSoon();
+    }
   }
 
   if (isTimeOver.value) {
@@ -3057,9 +3307,14 @@ function goToGoal() {
     return;
   }
 
-  /* 公園BGMを止める（ゴールしたので公園での探検は終わり）
-     先に止めることで、このあとのファンファーレがBGMに埋もれない */
+  /* BGMを止める（ゴールしたので公園での探検は終わり）
+     先に止めることで、このあとのファンファーレがBGMに埋もれない
+
+     ※ いやいやBGMも止めておく
+       いやいや対応中に12:00を過ぎると、いやいやタイムからそのまま
+       ここへ来ることがあるため */
   stopParkBgm();
+  stopTantrumBgm();
 
   /* ゴール音「タタターン♪」
 
@@ -3097,8 +3352,12 @@ function resetGame() {
      （待つのは音だけで、画面の切り替えはこのあとすぐ行う）
 
      ※ ここは「もう一度あそぶ」を押した直後＝ユーザーが操作したあとなので、
-       自動再生を止められることなくタイトルBGMを鳴らせる */
+       自動再生を止められることなくタイトルBGMを鳴らせる
+
+     いやいやBGMも stop で先頭に戻しておく
+     （pause だと、次のプレイのいやいやが前回の途中から鳴りだしてしまう） */
   stopParkBgm();
+  stopTantrumBgm();
   playTitleBgmSoon();
 
   childEnergy.value = 100;
@@ -3703,9 +3962,10 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('resize', updateEntranceColumns);
 
-  // 別のページへ移ったあともBGMが鳴り続けないように、2曲とも止めておく
+  // 別のページへ移ったあともBGMが鳴り続けないように、3曲とも止めておく
   pauseTitleBgm();
   pauseParkBgm();
+  pauseTantrumBgm();
 
   // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
   // 残っていると、ページを離れたあとも動きつづけてしまう
