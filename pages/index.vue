@@ -4474,16 +4474,22 @@ onUnmounted(() => {
           </section>
         </div>
 
-        <!-- ゲージの目もりの説明 -->
-        <p class="gauge-legend">
-          <span class="gauge-legend__item">
-            <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
-            ぐずりだすライン
-          </span>
+        <!-- ゲージの目もりの説明
 
+             並べる順番は、ゲージの上での位置と同じ「左 → 右」にそろえてある
+             ・あぶないライン   … 20 のあたり（ゲージの左のほう）
+             ・ぐずりだすライン … 71 のあたり（ゲージの右のほう）
+             説明の並びとゲージの線の並びが同じなので、
+             どちらの線の話をしているのか見つけやすい -->
+        <p class="gauge-legend">
           <span class="gauge-legend__item">
             <span class="gauge-legend__mark gauge-legend__mark--danger"></span>
             あぶないライン
+          </span>
+
+          <span class="gauge-legend__item">
+            <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
+            ぐずりだすライン
           </span>
         </p>
 
