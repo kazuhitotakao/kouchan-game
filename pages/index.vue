@@ -1430,50 +1430,6 @@ const changeGroups = computed(() => {
   ];
 });
 
-/* GAME OVER画面に出す「最後の行動」の内訳
-
-   中央の changeGroups と同じく、こうちゃん／親／おでかけ の3つに分けている
-   「親の体力 10 → 0（-15）」のように行動前の値も出すので、
-   どのステータスが限界になってGAME OVERになったのかが分かる
-
-   ※ こちらには時間を入れていないので、おでかけのまとまりは
-     おでかけポイントの1つだけになる
-*/
-const lastActionGroups = computed(() => {
-  const changes = statusChanges.value;
-
-  // 直前の行動の結果がないときは、からっぽにする
-  if (changes === null) {
-    return [];
-  }
-
-  const before = statusBefore.value;
-
-  // 中央の changeGroups と同じ作りかた（1行ぶんを作る道具）
-  const makeRow = (label: string, statusName: string, beforeValue: number, afterValue: number, amount: number) => ({
-    label,
-    before: beforeValue,
-    after: afterValue,
-    text: formatChange(amount),
-    className: changeClass(statusName, amount),
-  });
-
-  return [
-    {
-      name: 'こうちゃん',
-      rows: [makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy), makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood)],
-    },
-    {
-      name: '親',
-      rows: [makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy), makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm)],
-    },
-    {
-      name: 'おでかけ',
-      rows: [makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint)],
-    },
-  ];
-});
-
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
   return visitedPlaces.value.includes(place);
@@ -1823,7 +1779,11 @@ function checkGameOver() {
 
   /* ※ 下の3つは、あてはまった1つだけが実行されて return する
        （いちばん上に「すでにGAME OVERなら return」もあるので、
-        公園BGMを止める stopParkBgm() が動くのは1回だけ） */
+        公園BGMを止める stopParkBgm() が動くのは1回だけ）
+
+     どの理由でも、いやいや発生の演出（hideTantrumAlert）は必ず消す
+     いやいやが起きた行動でそのままGAME OVERになることがあり、
+     消さないとGAME OVER画面の上に「イヤイヤ発生！」が重なって残ってしまう */
 
   // ① 親の体力が0以下
   if (parentEnergy.value <= 0) {
@@ -1831,6 +1791,7 @@ function checkGameOver() {
     gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    hideTantrumAlert();
     return;
   }
 
@@ -1840,6 +1801,7 @@ function checkGameOver() {
     gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    hideTantrumAlert();
     return;
   }
 
@@ -1849,6 +1811,7 @@ function checkGameOver() {
     gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
+    hideTantrumAlert();
     return;
   }
 }
@@ -5597,62 +5560,6 @@ onUnmounted(() => {
               <p class="gameover-card__text">{{ gameOverMessage }}</p>
             </article>
 
-            <!-- 最後に選んだ行動で、何がどれだけ変わったか
-                 「親の体力 10 → 0（-15）」のように、限界になった理由が分かる -->
-            <article v-if="statusChanges" class="result-card result-card--gameover">
-              <h3 class="result-card__title">最後の行動</h3>
-
-              <p class="result-card__text">{{ resultMessage }}</p>
-
-              <!-- 見つけたものの文
-                   アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-              <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                「
-                <b class="found-line__name">{{ item }}</b>
-                」を見つけました！
-              </p>
-
-              <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                   地の文にまぎれないように、専用の枠と
-                   色つきのしるし（おでかけポイント +5 など）で出す -->
-              <div v-if="randomEventText" class="event-flash">
-                <p class="event-flash__label">ちいさなできごと！</p>
-
-                <p class="event-flash__text">{{ randomEventText }}</p>
-
-                <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                  <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                    <span class="event-flash__item-label">{{ effect.label }}</span>
-                    <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                  </li>
-                </ul>
-              </div>
-
-              <!-- いやいやが始まったときの文
-                   起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                   読めるように、いちばん最後に置く -->
-              <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-              <div class="change-box">
-                <p class="change-box__title">この行動での変化</p>
-
-                <!-- 中央の「今回の変化」と同じく、誰の情報かで3つに分ける -->
-                <div class="last-action-groups">
-                  <section v-for="group in lastActionGroups" :key="group.name" class="last-action-group">
-                    <p class="last-action-group__name">{{ group.name }}</p>
-
-                    <ul class="last-action-list">
-                      <li v-for="row in group.rows" :key="row.label" class="last-action-item">
-                        <span class="last-action-item__label">{{ row.label }}</span>
-                        <span class="last-action-item__flow">{{ row.before }} → {{ row.after }}</span>
-                        <span class="last-action-item__value" :class="row.className">{{ row.text }}</span>
-                      </li>
-                    </ul>
-                  </section>
-                </div>
-              </div>
-            </article>
-
             <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
             <div class="record-grid">
               <article class="record-card">
@@ -7118,97 +7025,6 @@ onUnmounted(() => {
   line-height: 1.8;
 }
 
-/* GAME OVER画面の「最後の行動」 */
-.result-card--gameover {
-  border-color: #e8b3a8;
-}
-
-/* このカードだけは縮ませない
-
-   ほかの画面の結果カードは、中身を .result-card__body（overflow-y: auto）で
-   包んであるので、縮んでも中はスクロールするだけで外へはみ出さない
-   GAME OVER画面のカードにはその包みが無いため、
-   上の .stage > .result-card（flex: 0 1 auto）で縮むと、
-   中の文字がカードの外へあふれて、下の「今日の記録」に重なってしまう
-
-   ゴール／GAME OVERの画面は .stage ぜんぶがスクロールするので、
-   ここを縮ませずに、はみ出したぶんは画面のスクロールにまかせる
-*/
-.stage > .result-card--gameover {
-  flex: none;
-}
-
-/* GAME OVERの「最後の行動」も、こうちゃん／親／おでかけ の3つに分けて横に並べる */
-.last-action-groups {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 18px;
-}
-
-/* GAME OVERの「最後の行動」の見出しも、中央の「今回の変化」と同じ見た目にそろえる */
-.last-action-group__name {
-  display: inline-block;
-  margin: 0 0 3px;
-  padding: 1px 10px;
-  border-radius: 999px;
-  background: rgb(42 118 143 / 13%);
-  color: var(--navy);
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.5;
-}
-
-.last-action-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.last-action-item {
-  /* ラベル ／ 行動前→行動後 ／ 増減 の3列 */
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: baseline;
-  column-gap: 10px;
-  padding: 3px 0;
-  border-bottom: 1px dotted #f0e7d8;
-  font-size: 13.5px;
-}
-
-.last-action-item__label {
-  overflow: hidden;
-  color: var(--ink-soft);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.last-action-item__flow {
-  color: var(--navy);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.last-action-item__value {
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.last-action-item__value.change--good {
-  color: var(--good);
-}
-
-.last-action-item__value.change--bad {
-  color: var(--bad);
-}
-
-.last-action-item__value.change--neutral {
-  color: var(--ink-soft);
-}
-
 /* 今日の記録／見つけたもの（2枚を横並び） */
 .record-grid {
   display: grid;
@@ -8413,10 +8229,6 @@ onUnmounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .last-action-groups {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .status-area {
     gap: 8px 18px;
     padding: 10px 18px 12px;
@@ -8541,16 +8353,8 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  .last-action-groups {
-    grid-template-columns: 1fr;
-  }
-
   /* 上部ステータスも、こうちゃん と 親 を上下に積む */
   .status-groups {
-    grid-template-columns: 1fr;
-  }
-
-  .last-action-list {
     grid-template-columns: 1fr;
   }
 
