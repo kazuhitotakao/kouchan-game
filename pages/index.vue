@@ -3367,10 +3367,23 @@ function keepDistanceFromDog() {
    ※ このイベントからは checkTantrum() を呼ばない
      「ころぶ → 選ぶ → 結果」だけの、シンプルな流れにしている
 
-   ※ ころんだ直後は、こうちゃんの機嫌が下がっている
-     下の4つに書いてある数字は「ころんだ分」も入れた合計なので、
-     じょうずになだめても、機嫌はころぶ前より少し上がるくらいで止まる
-     （おやつ +5 ／ だっこ +3 ／ 痛いの痛いの +1 ／ 見守る -4）
+   ※ 下の4つに書いてある こうちゃん の数字は、
+     「ころんだ分」と「なだめた分」を足したあとの合計
+
+     ころんだ時点で、ひざは痛いし、びっくりして泣きそうになっている
+     そこからどれだけ取り返せるかがこのイベントなので、
+     じょうずになだめても、ころぶ前より良くはならない
+     （＝こうちゃんの数字は、基本プラスにしない）
+
+     ・体力 … ころべば必ず減る。うまくなだめても、よくて±0まで
+       （おやつ 0 ／ だっこ -3 ／ 痛いの痛いの -4 ／ 見守る -6）
+     ・機嫌 … だっこなら、ころぶ前と同じところまで戻る（±0）
+       おやつだけは、ころんだこと自体を忘れてしまうので少しプラス
+       （おやつ +2 ／ だっこ 0 ／ 痛いの痛いの -2 ／ 見守る -8）
+
+     なだめかたの強さの順番は、今までどおり
+       おやつ ＞ だっこ ＞ 痛いの痛いの ＞ 見守る
+     おやつがいちばん強いが、1日2個しかないので使いどころを選ぶ
 
    ※ 目の前で子どもがころぶと、どうしてもヒヤッとする
      そのため、どれを選んでも親の余裕は減る
@@ -3386,13 +3399,16 @@ function hugAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 3;
-  childEnergy.value += 3;
+  // 機嫌は ±0（ころんだ分を、だっこでちょうど取り返した）
+  // ＝ここでは childMood をさわらない
+  // 体力のほうは、ひざを打ったぶんだけ残る
+  childEnergy.value -= 3;
   parentEnergy.value -= 10;
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = 'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。';
+  resultMessage.value =
+    'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。びっくりした気持ちは、ころぶ前と同じところまで戻ったようです。ひざはまだ少しひりひりします。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3410,7 +3426,9 @@ function watchAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value -= 4;
+  // なだめていないので、ころんだ分がほとんどそのまま残る
+  childMood.value -= 8;
+  childEnergy.value -= 6;
   parentEnergy.value += 1;
   parentCalm.value -= 8;
   addMinutes(5);
@@ -3429,7 +3447,7 @@ function watchAfterFall() {
 /* ③ 痛いの痛いのとんでいけ〜
 
    だっこ（親の体力-10）ほど親の力を使わずに、
-   見守る（機嫌-4）よりも こうちゃん の気持ちを立てなおせる、
+   見守る（機嫌-8）よりも こうちゃん の気持ちを立てなおせる、
    ちょうど真ん中の選択肢
    声をかけて、痛いのを空へ投げるまねをするだけなので、おやつも減らない
 */
@@ -3437,8 +3455,9 @@ function blowPainAway() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 1;
-  childEnergy.value += 2;
+  // だっこほどではないが、ころんだ分をだいぶ取り返せる
+  childMood.value -= 2;
+  childEnergy.value -= 4;
   parentEnergy.value -= 3;
   parentCalm.value -= 5;
   addMinutes(5);
@@ -3462,8 +3481,10 @@ function giveSnackAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childMood.value += 5;
-  childEnergy.value += 8;
+  // ころんだこと自体を忘れてしまうので、機嫌だけ少しプラスになる
+  // 体力は、おやつで取り返してちょうど ±0
+  // ＝ここでは childEnergy をさわらない
+  childMood.value += 2;
   parentEnergy.value -= 2;
   parentCalm.value -= 2;
   addMinutes(5);
