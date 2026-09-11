@@ -124,6 +124,14 @@ const tantrumText = ref('');
 /* いやいやが起きた回数（記録用） */
 const tantrumCount = ref(0);
 
+/* いやいや発生の演出（画面いっぱいのオーバーレイ）を出しているかどうか
+
+   true のあいだだけ「イヤイヤ発生！」のオーバーレイが画面に重なって出る
+   出すのは「新しいいやいやが始まった瞬間」の1回だけで、
+   「少し待ってみる」に失敗して同じいやいやが続くときには出さない
+*/
+const tantrumAlertVisible = ref(false);
+
 /* おやつの残り回数（今日持ってきた分だけ） */
 const snackLeft = ref(2);
 
@@ -1669,6 +1677,54 @@ function dropMoodWhenTired() {
   }
 }
 
+/* いやいや発生の演出を出しておく時間（ミリ秒）
+   1000 で1秒。ここだけ書きかえれば、出ている長さを調整できる */
+const tantrumAlertDuration = 2000;
+
+/* 「あとで消す」の予約票（公園BGMの予約票と同じ考え方）
+
+   null は「予約していない」という意味
+   setTimeout() は予約すると番号を返してくれるので、それを取っておく
+   （あとで「やっぱり消す」と取り消すのに必要）
+*/
+let tantrumAlertTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* いやいや発生の演出をすぐ消して、予約も取り消す（後始末）
+
+   ・「もう一度あそぶ」でタイトルへ戻るとき
+   ・ページから離れるとき
+   に呼んで、前の演出やタイマーが残らないようにする
+*/
+function hideTantrumAlert() {
+  tantrumAlertVisible.value = false;
+
+  if (tantrumAlertTimer === null) {
+    return;
+  }
+
+  clearTimeout(tantrumAlertTimer);
+  tantrumAlertTimer = null;
+}
+
+/* いやいや発生の演出を出して、約2秒後にひとりでに消す
+
+   ※ 止めるのは「演出」だけで、ゲームの進みは止めない
+     結果メッセージやステータスの変化は今までどおりすぐ処理され、
+     このオーバーレイが少しのあいだ、上に重なって出るだけ
+*/
+function showTantrumAlert() {
+  // 前の予約が残っていたら取り消す
+  // （残したままだと、古いタイマーが新しい演出を途中で消してしまう）
+  hideTantrumAlert();
+
+  tantrumAlertVisible.value = true;
+
+  tantrumAlertTimer = setTimeout(() => {
+    tantrumAlertTimer = null;
+    tantrumAlertVisible.value = false;
+  }, tantrumAlertDuration);
+}
+
 /* いやいや判定
    「こうちゃんの体力」「こうちゃんの機嫌」「今の時間」から
    いやいやが起きる確率を計算して、その確率で発生させる
@@ -1733,6 +1789,11 @@ function checkTantrum() {
   // ※「少し待ってみる」に失敗して同じいやいやが続くときは、
   //   関数のいちばん上（isTantrum が true）で return しているので鳴らない
   playTantrumSound();
+
+  // 「イヤイヤ発生！」のオーバーレイを約2秒だけ出す
+  // 効果音と同じで、新しいいやいやが始まったこの瞬間だけの演出
+  // ※ 見た目だけの追加なので、このあとの処理はいつもどおりすぐ進む
+  showTantrumAlert();
 
   childMood.value -= 15;
   parentCalm.value -= 12;
@@ -3091,6 +3152,10 @@ function resetGame() {
   tantrumCount.value = 0;
   snackLeft.value = 2;
 
+  // いやいや発生の演出も消しておく
+  // （残っていると、タイトル画面の上に前回の「イヤイヤ発生！」が出たままになる）
+  hideTantrumAlert();
+
   resultMessage.value = '';
   statusChanges.value = null;
   endingRank.value = '';
@@ -3684,6 +3749,9 @@ onUnmounted(() => {
   cancelTitleBgmStart();
   cancelParkBgmStart();
   cancelBgmFade();
+
+  // いやいや発生の演出の「あとで消す」予約も取り消しておく
+  hideTantrumAlert();
 });
 </script>
 
@@ -5653,6 +5721,22 @@ onUnmounted(() => {
         </div>
       </Transition>
     </div>
+
+    <!-- ============================================================
+         いやいや発生の演出（画面いっぱいのオーバーレイ）
+
+         新しいいやいやが始まった瞬間だけ、2秒ほど画面の上に重ねて出す
+         ※ うしろのゲーム画面はそのまま動いているので、
+           演出が消えたあとは、いつもの結果カードがそのまま残っている
+
+         ※ ここ（main のいちばん最後）に置いているのは、
+           どの画面の上にも同じように重ねて出すため
+         ============================================================ -->
+    <div v-if="tantrumAlertVisible" class="tantrum-alert">
+      <div class="tantrum-alert__content">
+        <strong class="tantrum-alert__title">イヤイヤ発生！</strong>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -7294,6 +7378,91 @@ onUnmounted(() => {
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
+}
+
+/* ============================================================
+   いやいや発生の演出（画面いっぱいのオーバーレイ）
+
+   新しいいやいやが始まった瞬間だけ、2秒ほど出して自動で消える
+   ・背景は少しだけ暗くするていど（こわい警告画面にはしない）
+   ・まるい角とパステルの色で、子ども向けゲームらしい見た目にする
+
+   ※ pointer-events: none を付けているので、
+     この演出が出ているあいだも、下のボタンはふつうに押せる
+     （ゲームの進みを止めない「見た目だけの演出」にするため）
+   ============================================================ */
+.tantrum-alert {
+  display: grid;
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
+  animation: tantrum-alert-in 0.2s ease-out;
+  background: rgb(16 29 44 / 22%);
+  pointer-events: none;
+}
+
+/* 中央に出すカード
+   結果カードやタイトルカードと同じ「紙の色＋太めのまるい枠」でそろえて、
+   いやいや関連の色（--parent-calm ＝ さんご色）で囲む
+*/
+.tantrum-alert__content {
+  max-width: 100%;
+  padding: 26px 46px;
+  border: 4px solid var(--parent-calm);
+  border-radius: 26px;
+  animation: tantrum-alert-pop 0.55s ease-out;
+  background: var(--paper);
+  box-shadow: 0 12px 0 rgb(35 57 94 / 18%);
+  text-align: center;
+}
+
+/* 「イヤイヤ発生！」…… いちばん目立たせる */
+.tantrum-alert__title {
+  color: #c9412f;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.06em;
+}
+
+/* --- いやいや発生の演出：背景はふわっと出すだけ --- */
+@keyframes tantrum-alert-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* --- いやいや発生の演出：中央のカードが「ぽよん」と出る ---
+
+   小さい → 少し大きくなる → ふつうの大きさに戻る、という動き
+   あわせて、ほんの少しだけ左右にかたむける
+   （画面ぜんぶをゆらす派手な動きは使わない）
+*/
+@keyframes tantrum-alert-pop {
+  0% {
+    transform: scale(0.6) rotate(-4deg);
+    opacity: 0;
+  }
+
+  45% {
+    transform: scale(1.12) rotate(3deg);
+    opacity: 1;
+  }
+
+  70% {
+    transform: scale(0.97) rotate(-2deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
 }
 
 /* --- アイテム発見 --- */
