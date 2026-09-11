@@ -493,13 +493,19 @@ function toggleSound() {
        ・いやいやタイム            … いやいやBGM
        ・いやいや発生の結果を読んでいる最中 … どれも鳴らさない（わざと無音にしている画面）
        ・公園を探検している最中     … 公園BGM
-       ・ゴール／GAME OVER         … どれも鳴らさない（もともと無音の画面）
+       ・ゴール（通常のおしまい）   … リザルトBGM
+       ・GAME OVER                 … どれも鳴らさない（もともと無音の画面）
 
        止めたところからの続きなので、play〜ではなく resume〜 を使う
 
        ※ タイトルBGMの条件に titleEntered が要る
          「!gameStarted」だけだと起動画面も当てはまってしまい、
          起動画面でONに戻しただけで曲が鳴りだしてしまう
+
+       ※ ゴールを、いやいや関連より先に置くのが大事
+         いやいや対応の途中でお昼になってゴールすると、
+         結果画面なのに isTantrum が true のまま残っていることがある
+         あとに置くと、そこに当てはまってリザルトBGMが鳴らなくなってしまう
 
        ※ いやいや関連の2つを、公園BGMより先に置くのが大事
          あとにすると「公園を探検している最中」にも当てはまってしまい、
@@ -513,6 +519,8 @@ function toggleSound() {
   if (soundEnabled.value) {
     if (titleEntered.value && !gameStarted.value) {
       resumeTitleBgm();
+    } else if (gameStarted.value && currentEvent.value === 'goal') {
+      resumeResultBgm();
     } else if (gameStarted.value && currentEvent.value === 'tantrum') {
       resumeTantrumBgm();
     } else if (gameStarted.value && isTantrum.value) {
@@ -522,10 +530,11 @@ function toggleSound() {
     }
   } else {
     // OFFのときは pause() だけ（どこまで再生したかを覚えておく）
-    // どの画面でも止まるように、3曲ぜんぶに声をかける
+    // どの画面でも止まるように、4曲ぜんぶに声をかける
     pauseTitleBgm();
     pauseParkBgm();
     pauseTantrumBgm();
+    pauseResultBgm();
   }
 
   // サーバー側には localStorage が無いので、ここで終わり
@@ -742,14 +751,18 @@ function playGoalSound() {
 */
 
 /* タイトルBGMの音量 */
-const titleBgmVolume = 0.25;
+const titleBgmVolume = 0.22;
 
 /* 公園BGMの音量（タイトルBGMより録音が大きいので、少し下げてそろえる） */
-const parkBgmVolume = 0.17;
+const parkBgmVolume = 0.16;
 
 /* いやいやBGMの音量（ひとまず公園BGMと同じにしてある）
    大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
 const tantrumBgmVolume = 0.17;
+
+/* リザルトBGMの音量（ひとまず公園BGMと同じにしてある）
+   大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
+const resultBgmVolume = 0.17;
 
 /* 公園BGMを入れておく箱
 
@@ -1382,6 +1395,217 @@ function stopTantrumBgm() {
   try {
     tantrumBgm.pause();
     tantrumBgm.currentTime = 0;
+  } catch {
+    // 何もしない
+  }
+}
+
+/* ============================================================
+   リザルト画面のBGM
+
+   作りは公園BGM・タイトルBGM・いやいやBGMとまったく同じで、
+   鳴らす場面だけがちがう
+   ・リザルトBGM … 通常ゴールの結果画面にいるあいだ（currentEvent === 'goal'）
+
+   「午前中に親子で公園をたくさん探検して、お昼になったので帰る」という
+   おしまいの場面に合う曲を流す
+
+   ※ GAME OVERでは鳴らさない
+     こちらは「途中で帰ることになってしまった」場面なので、
+     これまでどおり無音のままにする
+
+   ※ ゴール音「タタターン♪」とは重ねない
+     goToGoal() で「タタターン♪」を鳴らしたあと、
+     少しだけ間を空けてから曲を始める（playResultBgmSoon）
+   ============================================================ */
+
+/* リザルトBGMを入れておく箱
+   ほかの3曲と同じく、サーバー側では作れないので null から始める */
+let resultBgm: HTMLAudioElement | null = null;
+
+/* リザルトBGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ ほかの3曲と同じく、ここでは soundEnabled を見ない
+     OFFにした瞬間に「鳴っている曲を止める」ために必要になるため
+*/
+function getResultBgm() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!resultBgm) {
+      // public/audio/result-bgm.mp3 は、URLでは /audio/result-bgm.mp3 になる
+      resultBgm = new Audio('/audio/result-bgm.mp3');
+
+      // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+      // （結果をゆっくり読んでいても、曲が途切れないようにするため）
+      resultBgm.loop = true;
+
+      // volume … 音の大きさ（上の resultBgmVolume で決めている）
+      resultBgm.volume = resultBgmVolume;
+    }
+
+    return resultBgm;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* リザルトBGMを「最初から」再生する（ゴールしたとき用）
+
+   公園BGM・いやいやBGMと同じくフェードインさせる
+   ゴール音「タタターン♪」のあとに、ふわっと曲が始まるようにするため
+*/
+function playResultBgm() {
+  // サウンドOFFのときは、ここで終わり
+  // ※ getResultBgm() より先に見ることで、OFFのあいだは
+  //   mp3の読み込みそのものが起きないようにしている
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getResultBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.currentTime = 0; // 曲の先頭へ戻す
+
+    /* 無音から少しずつ大きくしていく
+
+       ※ フェードインの係（startBgmFadeIn / cancelBgmFade）は
+         ほかの3曲と共用で問題ない
+         4曲が同時に鳴ることはなく、切り替えるときは必ず前の曲を止めており、
+         startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
+    startBgmFadeIn(bgm, resultBgmVolume);
+
+    bgm.play().catch(() => {});
+  } catch {
+    // BGMが鳴らなくても、ゲームは止めない
+  }
+}
+
+/* リザルトBGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+   1500 で1.5秒。ここだけ書きかえれば、間の長さを調整できる
+
+   ゴール音「タタターン♪」と同時に曲が始まってしまうと
+   せっかくのファンファーレが聞こえなくなるので、そのぶんだけ待つ */
+const resultBgmStartDelay = 1500;
+
+/* 「あとで鳴らす」の予約票（公園BGM・タイトルBGMのものと同じ仕組み）
+
+   null は「予約していない」という意味
+   setTimeout() は予約すると番号を返してくれるので、それを取っておく
+   （あとで「やっぱり鳴らさない」と取り消すのに必要）
+*/
+let resultBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* リザルトBGMを「少し待ってから」最初から鳴らす
+
+   ※ 待たせるのは「音を鳴らすこと」だけ
+     結果画面は、いつもどおりすぐ表示される
+*/
+function playResultBgmSoon() {
+  // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+  cancelResultBgmStart();
+
+  // サーバー側では音を鳴らさないので、予約もしない
+  if (!import.meta.client) {
+    return;
+  }
+
+  resultBgmTimer = setTimeout(() => {
+    resultBgmTimer = null;
+
+    /* 待っているあいだに画面が変わっていたら、もう鳴らさない
+       （待ち時間のうちに「もう一度あそぶ」を押して、
+         タイトル画面へ戻ってしまった場合） */
+    if (currentEvent.value !== 'goal') {
+      return;
+    }
+
+    playResultBgm();
+  }, resultBgmStartDelay);
+}
+
+/* 「あとで鳴らす」の予約を取り消す */
+function cancelResultBgmStart() {
+  if (resultBgmTimer === null) {
+    return;
+  }
+
+  clearTimeout(resultBgmTimer);
+  resultBgmTimer = null;
+}
+
+/* リザルトBGMを「続きから」再生する（サウンドをONに戻したとき用）
+
+   playResultBgm() とのちがいは currentTime を 0 に戻さないこと
+   OFFにしたところから、そのまま続きを鳴らす
+*/
+function resumeResultBgm() {
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getResultBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.play().catch(() => {});
+  } catch {
+    // 何もしない
+  }
+}
+
+/* リザルトBGMを一時停止する（どこまで再生したかは覚えたまま）
+   サウンドをOFFにしたときと、ページを離れるときに使う */
+function pauseResultBgm() {
+  // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
+  // （こうしないと、次に再開したとき小さい音のままになる）
+  cancelBgmFade();
+
+  if (!resultBgm) {
+    return;
+  }
+
+  try {
+    resultBgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
+/* リザルトBGMを完全に止める（次はまた最初から鳴るようにする）
+   「もう一度あそぶ」で使う */
+function stopResultBgm() {
+  /* 「あとで鳴らす」の予約も取り消す
+
+     ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
+       ゴール音が鳴っているあいだに「もう一度あそぶ」を押すと、
+       予約だけして、まだ曲を作っていない状態のことがあるため
+       あとに置くと、取り消せずに タイトル画面で鳴りだしてしまう */
+  cancelResultBgmStart();
+
+  // フェードインの途中で止めることもあるので、音量も戻しておく
+  cancelBgmFade();
+
+  if (!resultBgm) {
+    return;
+  }
+
+  try {
+    resultBgm.pause();
+    resultBgm.currentTime = 0;
   } catch {
     // 何もしない
   }
@@ -3385,6 +3609,17 @@ function goToGoal() {
   selectedCommandIndex.value = 0;
   judgeResult();
   currentEvent.value = 'goal';
+
+  /* リザルトBGMを鳴らしはじめる
+
+     すぐ鳴らすと、上で鳴らしたゴール音「タタターン♪」と重なってしまうので、
+     playResultBgmSoon() の中で少しだけ間を空けてから始める
+     （待つのは音だけで、結果画面はすぐ表示される）
+
+     ※ currentEvent を 'goal' にしたあとで呼ぶこと
+       playResultBgmSoon() は、鳴らす直前に
+       「まだ結果画面にいるか」を currentEvent で確かめているため */
+  playResultBgmSoon();
 }
 
 /* もう一度あそぶ */
@@ -3409,9 +3644,15 @@ function resetGame() {
        自動再生を止められることなくタイトルBGMを鳴らせる
 
      いやいやBGMも stop で先頭に戻しておく
-     （pause だと、次のプレイのいやいやが前回の途中から鳴りだしてしまう） */
+     （pause だと、次のプレイのいやいやが前回の途中から鳴りだしてしまう）
+
+     リザルトBGMも stop で止める
+     stopResultBgm() は「あとで鳴らす」の予約も取り消すので、
+     ゴール音が鳴っているあいだに「もう一度あそぶ」を押しても、
+     あとからタイトル画面でリザルトBGMが鳴りだすことはない */
   stopParkBgm();
   stopTantrumBgm();
+  stopResultBgm();
   playTitleBgmSoon();
 
   childEnergy.value = 100;
@@ -4017,15 +4258,17 @@ onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('resize', updateEntranceColumns);
 
-  // 別のページへ移ったあともBGMが鳴り続けないように、3曲とも止めておく
+  // 別のページへ移ったあともBGMが鳴り続けないように、4曲とも止めておく
   pauseTitleBgm();
   pauseParkBgm();
   pauseTantrumBgm();
+  pauseResultBgm();
 
   // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
   // 残っていると、ページを離れたあとも動きつづけてしまう
   cancelTitleBgmStart();
   cancelParkBgmStart();
+  cancelResultBgmStart();
   cancelBgmFade();
 
   // いやいや発生の演出の「あとで消す」予約も取り消しておく
