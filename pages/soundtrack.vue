@@ -174,16 +174,47 @@ const duration = ref(0);
    Tabキーで移動して Enter / Space で押す、というブラウザの操作は
    もともとできる
 
-   そこへ2つだけ足している
+   そこへ足しているのは、つぎの3つだけ
    ① ページを開いたとき「▶ 全曲再生」にフォーカスを当てる
-   ② 曲の一覧では ↑↓ で、上下の曲の同じボタンへ移動できる
-      （→ handleTrackListKeydown）
+      （→ onMounted）
+   ② 曲の一覧を、ゲームのメニューのように矢印キーで動かせる
+      ↑↓＝上下の曲へ、←→＝同じ曲の中の操作へ、Home / End＝最初 / 最後の曲へ
+      （→ handleTrackListKeydown。見張りは <ol class="st-list"> の1か所だけ）
+   ③ 曲の一覧と、その上にある操作ボタンとを ↑↓ で行き来できる
+      ふだんは「▶ 全曲再生」（→ handlePlayAllKeydown）、
+      全曲再生中は「⏭ 次のトラックへ」「■ 全曲再生を停止」
+      （→ handlePlaylistActionsKeydown。この2つは ← → で行き来もできる）
+      一覧から上のボタンへ戻る道は findVerticalTarget にある
+
+   ※ document や window では矢印キーを見張らない
+     ページのスクロールや、再生バー・音量バーの操作をじゃましないため
+   ※ 音量スライダーは、矢印キーの移動先に入れない
+     矢印キーでそのまま音量を大小させるものなので、
+     移動先にしてしまうと「動かすつもりが移動になる」ため（Tabで移れる）
    ============================================================ */
 
 /* 「▶ 全曲再生」と「⏭ 次のトラックへ」を覚えておく箱
    ref="〜" と書いたボタンが、そのままここに入ってくる（出ていないときは null） */
 const playAllButtonRef = ref<HTMLButtonElement | null>(null);
 const nextTrackButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* 曲の一覧（<ol class="st-list">）そのものを覚えておく箱
+   「▶ 全曲再生」から ↑↓ で曲の一覧へ入るときに、行き先のボタンを探すのに使う */
+const trackListRef = ref<HTMLElement | null>(null);
+
+/* ↑↓ で曲の一覧へ入るとき、どのボタンから入ったかを覚えておく
+
+   一覧の上には、そのときどきでちがうボタンが出ている
+   ・ふだん     … 「▶ 全曲再生」
+   ・全曲再生中 … 「⏭ 次のトラックへ」「■ 全曲再生を停止」
+
+   一覧のはしで↑↓を押して戻るときは、出てきたボタンへ帰りたい
+   （「■ 全曲再生を停止」から入ったのに「⏭ 次のトラックへ」へ帰ると、
+     行きと帰りで場所がずれて、どこにいるのか分からなくなるため）
+
+   ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい
+   ※ そのボタンが画面から消えていたら、この覚えは使わない（→ findOutsidePlayButton） */
+let lastOutsideButton: HTMLElement | null = null;
 
 /* ページ全体の音量（0〜1）。はじめは100％＝今までと同じ音量
    （前に使ったときの音量があれば、下の onMounted で思い出して入れなおす） */
@@ -995,40 +1026,84 @@ function formatTrackNumber(id: number) {
 }
 
 /* ============================================================
-   曲の一覧のキーボード操作（↑↓で上下の曲へ）
+   曲の一覧のキーボード操作（ゲームのメニューのように動かす）
 
    曲のカードには3種類のボタンが並んでいる
-     ・トラック番号（開始曲を選ぶ）
-     ・ⓘ（制作情報）
-     ・▶ 再生
+     ・トラック番号（開始曲を選ぶ）… track__no
+     ・ⓘ（制作情報）              … track__infoBtn
+     ・▶ 再生                     … track__button
 
-   ↑↓ を押したときは「いま選んでいるのと同じ種類のボタン」のまま、
-   1つ上・1つ下の曲へ移る
-   （例：03の「▶ 再生」で↓を押すと、04の「▶ 再生」へ）
-   いちばん下で↓を押したら先頭へ、先頭で↑を押したらいちばん下へ回りこむ
+   つまり「3列 × 曲数」のマス目だと思うと分かりやすい
 
-   ※ 再生バー（つまみ）の上では何もしない
-     ←→↑↓ で再生位置を動かすという、ブラウザ本来の操作をじゃましないため
-   ※ 曲のボタン以外を選んでいるとき（音量スライダー、どこも選んでいない、など）も
-     何もしない。そのときの ↑↓ は、いままでどおりページのスクロールになる
+     [ 01 ] [ ⓘ ] [ ▶ 再生 ]
+     [ 02 ] [ ⓘ ] [ ▶ 再生 ]
+     [ 03 ] [ ⓘ ] [ ▶ 再生 ]
+       …
+
+   受け取るキーは、つぎの4しゅるい
+
+   ↑ ↓        同じ列のまま、1つ上・1つ下の曲へ
+               （例：03の「▶ 再生」で↓ → 04の「▶ 再生」）
+               はしまで来たら、反対のはしへ回りこむ
+               ※「▶ 再生」の列だけは「▶ 全曲再生」も輪に入れる
+                 （→ findVerticalTarget）
+   ← →        同じ曲の中で、番号 ↔ ▶ 再生 を行き来する
+               ⓘ（制作情報）は ← → の行き先には入れない
+               （→ findHorizontalTarget）
+   Home / End  同じ列のまま、最初の曲 / 最後の曲へ
+               （→ findEdgeTarget）
+   Escape      開いている制作情報の吹き出しを閉じる（それだけ）
+
+   Enter / Space はここでは受け取らない
+   button・input なので、押したときの動きはブラウザにまかせればよい
+   （ここから .click() を呼ぶと、同じ処理が二重に動いてしまう）
+
+   ※ 再生バー（つまみ）の上では、矢印キーも Home / End も横取りしない
+     「← → で再生位置を動かす」「Home で曲の先頭」といった、
+     ブラウザ本来の操作をそのまま残すため
+     （音量スライダーはこの一覧の外にあるので、そもそもここへは来ない）
+   ※ 曲の3種類のボタン以外を選んでいるときも、何もしない
+     そのときの ↑↓ は、いままでどおりページのスクロールになる
+   ※ 見張りは <ol class="st-list"> の1か所だけでよい
+     押されたキーは、ボタンからこの ol まで伝わってくるので、
+     ボタン1つずつに @keydown を付けて回る必要はない
    ============================================================ */
 
-/* 曲のカードにある3種類のボタン（この順番に意味はない。見分けるために使う） */
+/* 曲のカードにある3種類のボタン（↑↓ は、この3つそれぞれの列を上下する） */
 const trackButtonClasses = ['track__no', 'track__infoBtn', 'track__button'];
 
-function handleTrackListKeydown(event: KeyboardEvent) {
-  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
-    return;
-  }
+/* ← → で行き来するボタン（ⓘ は入れない。理由は findHorizontalTarget に書いてある） */
+const trackRowMoveClasses = trackButtonClasses.filter((name) => name !== 'track__infoBtn');
 
+/* 曲の一覧で受け取るキー（これ以外は、ブラウザにまかせる） */
+const trackListMoveKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'];
+
+function handleTrackListKeydown(event: KeyboardEvent) {
   const target = event.target;
 
   if (!(target instanceof HTMLElement)) {
     return;
   }
 
+  /* Escape … 開いている制作情報を閉じるだけ
+
+     再生を止めたり、タイトルへ戻ったりはしない
+     押しまちがいで曲が止まってしまうと、こまるため
+     開いていないときは、何もしない */
+  if (event.key === 'Escape') {
+    if (openedCreditTrackId.value !== null) {
+      openedCreditTrackId.value = null;
+    }
+
+    return;
+  }
+
+  if (!trackListMoveKeys.includes(event.key)) {
+    return;
+  }
+
   // 再生バーの上では、ブラウザにまかせる（再生位置を動かす操作）
-  if (target.closest('.track__seek')) {
+  if (target.closest('input[type="range"]')) {
     return;
   }
 
@@ -1048,18 +1123,272 @@ function handleTrackListKeydown(event: KeyboardEvent) {
     return;
   }
 
-  /* 1つ上・1つ下のカードへ（はしまで来たら反対のはしへ回りこむ）
-     ※ % は「わったあまり」。cards.length を足してから割ることで、
-       引き算の結果がマイナスになっても、ちゃんと最後のカードに戻れる */
-  const step = event.key === 'ArrowDown' ? 1 : -1;
-  const nextCard = cards[(currentIndex + step + cards.length) % cards.length];
-  const nextButton = nextCard.querySelector<HTMLElement>('.' + buttonClass);
+  // つぎに選ぶボタンを決める（行き先の計算は、下の3つの関数に分けてある）
+  let nextButton: HTMLElement | null = null;
+
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    nextButton = findHorizontalTarget(event.key, cards[currentIndex], buttonClass);
+  } else if (event.key === 'Home' || event.key === 'End') {
+    nextButton = findEdgeTarget(event.key, cards, buttonClass);
+  } else {
+    nextButton = findVerticalTarget(event.key, cards, currentIndex, buttonClass);
+  }
 
   if (!nextButton) {
     return;
   }
 
+  /* キーボードでⓘから離れるときは、開いている吹き出しも閉じる
+     フォーカスだけ動いて、吹き出しだけが取り残されないようにするため
+     （マウスで押して開いたものは、いままでどおり。外側を押せば閉じる） */
+  if (buttonClass === 'track__infoBtn') {
+    openedCreditTrackId.value = null;
+  }
+
+  /* 曲の移動を優先するので、ページがスクロールしないようにする
+     ※ 行き先が画面の外にあるときは、focus() にともなう
+       ブラウザふつうのスクロールにまかせる（大げさな演出は足さない） */
+  event.preventDefault();
+  nextButton.focus();
+}
+
+/* ← → の行き先 … 同じ曲の中で、となりの操作へ（はしまで行ったら回りこむ）
+
+   ここで行き来するのは trackRowMoveClasses（番号 ↔ ▶ 再生）だけで、
+   ⓘ（制作情報）へは ← → では移らない
+   ⓘは「聴く」操作ではなく説明を見るためのものなので、
+   曲を選んで鳴らすまでの道すじからは外してある
+   （ⓘへは Tab と ↑↓ で行ける）
+
+   例）03の番号で → を押す → 03の「▶ 再生」
+       03の「▶ 再生」で → を押す → 03の番号（うしろから、先頭へ回りこむ）
+
+   ※ ⓘを選んでいるときだけは、行き止まりにならないよう外へ出られるようにする
+     → なら右どなりの「▶ 再生」、← なら左どなりの番号へ
+   ※ 2 という数を直接書かず、trackRowMoveClasses.length を使う
+     あとからボタンの種類が増えても、ここを直さなくてよい
+   ※ 引き算がマイナスになっても大じょうぶなように、
+     length を足してから「あまり（%）」を出している
+*/
+function findHorizontalTarget(key: string, card: HTMLElement, buttonClass: string) {
+  const step = key === 'ArrowRight' ? 1 : -1;
+
+  // ⓘからは、画面の並びどおり（← 番号  ⓘ  ▶ 再生 →）に外へ出る
+  if (buttonClass === 'track__infoBtn') {
+    const exitClass = step === 1 ? 'track__button' : 'track__no';
+
+    return card.querySelector<HTMLElement>('.' + exitClass);
+  }
+
+  const columnIndex = trackRowMoveClasses.indexOf(buttonClass);
+  const nextIndex = (columnIndex + step + trackRowMoveClasses.length) % trackRowMoveClasses.length;
+
+  return card.querySelector<HTMLElement>('.' + trackRowMoveClasses[nextIndex]);
+}
+
+/* Home / End の行き先 … 同じ列のまま、最初の曲 / 最後の曲へ
+
+   例）04の「▶ 再生」で Home → 01の「▶ 再生」
+       02のⓘで End → 最後の曲のⓘ
+
+   ※ ここには「▶ 全曲再生」を入れない
+     「Home なら01、End なら最後の曲」と、行き先をはっきりさせるため
+*/
+function findEdgeTarget(key: string, cards: HTMLElement[], buttonClass: string) {
+  const card = key === 'Home' ? cards[0] : cards[cards.length - 1];
+
+  return card.querySelector<HTMLElement>('.' + buttonClass);
+}
+
+/* ↑ ↓ の行き先 … 同じ列のまま、1つ上・1つ下の曲へ（はしまで来たら回りこむ）
+
+   「▶ 再生」の列（track__button）だけは、
+   一覧のはしから出たときに「一覧の上にある操作ボタン」へ移る
+   その操作ボタンは、そのときの画面によって入れかわる（→ findOutsidePlayButton）
+
+   ふだん（止まっているとき）
+
+     ▶ 全曲再生 → 01 ▶ 再生 → 02 ▶ 再生 → … → 最後の曲 ▶ 再生 → ▶ 全曲再生
+
+   全曲再生中（「▶ 全曲再生」は消えている）
+
+     ⏭ 次のトラックへ → 01 ▶ 再生 → 02 ▶ 再生 → … → 最後の曲 ▶ 再生 → ⏭ 次のトラックへ
+
+   帰り先は「出てきたボタン」なので、
+   「■ 全曲再生を停止」から↓で入ったときは、↑で「■ 全曲再生を停止」へ帰る
+
+   いちばん使う「聴く」ための列なので、
+   上の操作ボタンから↓を押すだけで、すぐ曲を選べるようにしている
+   （行きは handlePlayAllKeydown / handlePlaylistActionsKeydown、
+     帰りはここ。これで、どちらの向きにもぐるっと回れる）
+
+   番号とⓘの列には、上の操作ボタンを入れていない
+   その2つは役わりがちがう（開始曲を選ぶ・説明を見る）ので、
+   曲の一覧の中だけでぐるぐる回るほうが、迷わず使えるため
+
+   ※ 上の操作ボタンが1つも画面に無いときは、無理に移さず、
+     いままでどおり一覧の中で回りこむ
+   ※ 曲数は数えずに cards.length を使うので、
+     あとから曲が増えても、そのまま動く
+*/
+function findVerticalTarget(key: string, cards: HTMLElement[], currentIndex: number, buttonClass: string) {
+  const step = key === 'ArrowDown' ? 1 : -1;
+  const nextIndex = currentIndex + step;
+  const isOutOfList = nextIndex < 0 || nextIndex >= cards.length;
+
+  if (buttonClass === 'track__button' && isOutOfList) {
+    const outsideButton = findOutsidePlayButton();
+
+    if (outsideButton) {
+      return outsideButton;
+    }
+  }
+
+  const nextCard = cards[(nextIndex + cards.length) % cards.length];
+
+  return nextCard.querySelector<HTMLElement>('.' + buttonClass);
+}
+
+/* 曲の一覧の「上にある操作ボタン」をさがす（↑↓で一覧から戻るときの行き先）
+
+   ① 直前に一覧へ入ったときのボタンが、まだ画面にあるなら、そこへ帰る
+      「■ 全曲再生を停止」から入ったなら「■ 全曲再生を停止」へ、
+      「⏭ 次のトラックへ」から入ったなら「⏭ 次のトラックへ」へ
+      （isConnected … その要素が、まだ画面（DOM）にあるかどうか）
+
+   ② 覚えが無いとき（Tabで一覧に来たときなど）や、
+      覚えていたボタンがもう消えているときは、いま出ているボタンへ
+      ・ふだん      … 「▶ 全曲再生」
+      ・全曲再生中  … 「⏭ 次のトラックへ」（「▶ 全曲再生」は消えている）
+      ・どちらも無い（切りかわりの一瞬など）… null
+
+   ※ null のときに無理にフォーカスを当てないよう、呼ぶ側で確かめている
+*/
+function findOutsidePlayButton() {
+  if (lastOutsideButton) {
+    if (lastOutsideButton.isConnected) {
+      return lastOutsideButton;
+    }
+
+    // 画面から消えたボタン（停止して消えた、など）は、もう覚えておかない
+    lastOutsideButton = null;
+  }
+
+  return playAllButtonRef.value ?? nextTrackButtonRef.value;
+}
+
+/* 曲の一覧のいちばん上・いちばん下の「▶ 再生」をさがす
+
+   ↓ なら01の「▶ 再生」、↑ なら最後の曲の「▶ 再生」
+   一覧の外にあるボタン（下の2つの関数）から、一覧へ入るときに使う
+
+   ※ 曲数は数えずに、いま画面にある「▶ 再生」を数えて先頭・最後を選ぶので、
+     あとから曲が増えても、そのまま動く
+*/
+function findListPlayButton(key: string) {
+  const list = trackListRef.value;
+
+  if (!list) {
+    return null;
+  }
+
+  const playButtons = Array.from(list.querySelectorAll<HTMLElement>('.track__button'));
+
+  if (playButtons.length === 0) {
+    return null;
+  }
+
+  return key === 'ArrowDown' ? playButtons[0] : playButtons[playButtons.length - 1];
+}
+
+/* 「▶ 全曲再生」のキーボード操作（このボタンだけ、曲の一覧の外にある）
+
+   ・↓ … 01の「▶ 再生」へ
+   ・↑ … 最後の曲の「▶ 再生」へ
+
+   上の findVerticalTarget といっしょになって、
+   「▶ 全曲再生 → 01 → 02 → … → 最後の曲 → ▶ 全曲再生」という輪になる
+
+   ※ ここでするのは、この行き来だけ
+     Enter / Space で全曲再生が始まるのも、Tabでの移動も、ブラウザ本来の動きのまま
+*/
+function handlePlayAllKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') {
+    return;
+  }
+
+  const nextButton = findListPlayButton(event.key);
+
+  if (!nextButton) {
+    return;
+  }
+
+  // どのボタンから一覧へ入ったかを覚えておく（↑↓で戻るときの行き先になる）
+  lastOutsideButton = playAllButtonRef.value;
+
   // 曲の移動を優先するので、ページがスクロールしないようにする
+  event.preventDefault();
+  nextButton.focus();
+}
+
+/* 全曲再生中に出る2つのボタンのキーボード操作
+
+     [ ⏭ 次のトラックへ ]  [ ■ 全曲再生を停止 ]
+
+   ・← → … このならびの中で、となりのボタンへ（2つだけなので行ったり来たり）
+   ・↑ ↓ … 曲の一覧へ入る（↓で01の「▶ 再生」、↑で最後の曲の「▶ 再生」）
+            一覧のはしから↑↓を押すと、出てきたほうのボタンへ戻ってくる
+            （「■ 全曲再生を停止」から入れば「■ 全曲再生を停止」へ帰る）
+            （帰りの道は findVerticalTarget と findOutsidePlayButton にある）
+
+   「▶ 全曲再生」を押すと、そのボタンはこの2つに入れかわる
+   入れかわったあとも、矢印キーだけで操作を続けられるようにしている
+
+   ※ この下にある音量スライダーへは、矢印キーでは移らない
+     音量は矢印キーでそのまま大小を変えるものなので、
+     キーボードの移動先に入れてしまうと、動かすつもりが移動になってしまう
+     音量へ行きたいときは Tab で移る（いままでどおり）
+   ※ 見張りは、2つのボタンを囲む1か所（.st-playall__actions）だけ
+   ※ Enter / Space は受け取らない（button本来の動きのまま）
+*/
+function handlePlaylistActionsKeydown(event: KeyboardEvent) {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  const row = event.currentTarget as HTMLElement;
+  const buttons = Array.from(row.querySelectorAll<HTMLElement>('.st-playall__button'));
+  const currentIndex = buttons.findIndex((button) => button.contains(target));
+
+  if (currentIndex < 0) {
+    return;
+  }
+
+  let nextButton: HTMLElement | null = null;
+
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    const step = event.key === 'ArrowRight' ? 1 : -1;
+
+    nextButton = buttons[(currentIndex + step + buttons.length) % buttons.length];
+  } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    nextButton = findListPlayButton(event.key);
+  } else {
+    return;
+  }
+
+  if (!nextButton) {
+    return;
+  }
+
+  /* 一覧へ入るときだけ、どのボタンから入ったかを覚えておく
+     （← → でとなりのボタンへ移っただけのときは、覚え直さない） */
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    lastOutsideButton = buttons[currentIndex];
+  }
+
+  // ボタンの移動を優先するので、ページがスクロールしないようにする
   event.preventDefault();
   nextButton.focus();
 }
@@ -1212,8 +1541,20 @@ onUnmounted(() => {
         </p>
 
         <!-- ref … ページを開いたときと、全曲再生を止めたときに
-             このボタンへフォーカスを当てるための目印 -->
-        <button v-if="!isPlaylistPlaying" ref="playAllButtonRef" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
+             このボタンへフォーカスを当てるための目印
+
+             @keydown … ↓で01の「▶ 再生」へ、↑で最後の曲の「▶ 再生」へ移る
+             このボタンだけ曲の一覧の外にあるので、ここにも見張りを付けている
+             （くわしくは handlePlayAllKeydown） -->
+        <button
+          v-if="!isPlaylistPlaying"
+          ref="playAllButtonRef"
+          type="button"
+          class="st-playall__button"
+          @click="startPlaylist"
+          @keydown="handlePlayAllKeydown">
+          ▶ 全曲再生
+        </button>
       </div>
 
       <!-- どの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える） -->
@@ -1233,7 +1574,11 @@ onUnmounted(() => {
              よく押す「⏭ 次のトラックへ」を先（PCでは左、スマホでは上）に置き、
              幅も広くとって押しやすくしている
              一時停止中でも押せて、そのときは次の曲が自動的に鳴りはじめる -->
-        <div class="st-playall__actions">
+        <!-- @keydown … ← → で「⏭ 次のトラックへ」と「■ 全曲再生を停止」を行き来する
+             ↑↓ を押したときは、曲の一覧の「▶ 再生」へ移る
+             （下の音量スライダーへは、矢印キーでは移らない）
+             くわしくは handlePlaylistActionsKeydown -->
+        <div class="st-playall__actions" @keydown="handlePlaylistActionsKeydown">
           <button
             ref="nextTrackButtonRef"
             type="button"
@@ -1283,10 +1628,14 @@ onUnmounted(() => {
          曲を増やしたり、曲名を変えたりしたいときは
          tracks を書きかえるだけでよい
          ============================================================ -->
-    <!-- @keydown … 曲のボタンを選んでいるときだけ、↑↓で上下の曲へ移動する
+    <!-- @keydown … 曲のボタンを選んでいるときだけ、キーボードで動かせるようにする
+         ↑↓＝上下の曲へ、←→＝同じ曲の中の操作へ、Home / End＝最初 / 最後の曲へ
          （キーは押されたボタンからこの ol まで伝わってくるので、
-           見張りはここ1か所でよい。くわしくは handleTrackListKeydown） -->
-    <ol class="st-list" @keydown="handleTrackListKeydown">
+           見張りはここ1か所でよい。くわしくは handleTrackListKeydown）
+
+         ref … 「▶ 全曲再生」から↑↓で入ってくるときに、
+         行き先の「▶ 再生」を探すために使う -->
+    <ol ref="trackListRef" class="st-list" @keydown="handleTrackListKeydown">
       <li v-for="track in tracks" :key="track.id" class="track" :class="{ 'track--current': playingTrackId === track.id }">
         <button
           type="button"
