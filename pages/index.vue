@@ -71,6 +71,16 @@ const currentTime = ref('09:00'); // 時間
 */
 const visitedPlaces = ref<GameEvent[]>([]);
 
+/* 場所で遊んだ回数
+   その場所で1つ行動するたびに、1ずつ増える（同じ場所で遊んでも増える）
+
+   探検済みの場所（visitedPlaces）は「何か所回ったか」しか分からないので、
+   「同じすべり台で5回あそんだ」も「1か所だけ」になってしまう
+   結果の文章で「たくさん遊んだ／ほとんど遊べなかった」を見分けるために、
+   回った場所の数とは別に、遊んだ回数もここで数えておく
+*/
+const playCount = ref(0);
+
 /* 公園で見つけたもの
    同じものは1つしか入らない
 */
@@ -375,6 +385,13 @@ const fussEnergyLine = 71;
 /* 公園にある場所の数（すべり台・砂場・どんぐり・池・丘・秘密の場所）
    結果の文章で「ぜんぶ回れたか」を見るのに使う */
 const totalPlaceCount = 6;
+
+/* 遊んだ回数：これ以上あそんでいたら「たくさん遊んだ」とみなす
+   結果の文章を「たくさん遊んだ」と「あまり遊べなかった」で
+   書きわけるときの境目に使う
+   （1つの場所だけでも、3回あそべば十分たっぷり遊んでいる）
+*/
+const playedALotLine = 3;
 
 /* こうちゃんの機嫌：これ以下だと「いやいや」が起きやすくなる */
 const fussMoodLine = 50;
@@ -2086,6 +2103,7 @@ function checkSuddenEvent() {
    「疲れて機嫌もわるい」ときほど、ちゃんといやいやが起きやすくなる
 */
 function finishPlayAction(place: GameEvent) {
+  playCount.value += 1;
   addVisitedPlace(place);
   runRandomEvent();
   dropMoodWhenTired();
@@ -3169,7 +3187,8 @@ function isWornOut() {
      文章がそれとくいちがうと、遊んでいる人が混乱してしまうため
      ・Aランク … こうちゃんの機嫌が低いときは「楽しそう」と書かない
      ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
-     ・C／Dランク … 「遊びすぎた」は、実際に3か所以上まわったときだけ使う
+     ・C／Dランク … 「あまり遊べなかった」系の文は、遊んだ回数が少ないときだけ使う
+                     （同じ場所でくりかえし遊んだ人に言うと話が合わない）
 
    ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
 */
@@ -3262,15 +3281,34 @@ function judgeResult() {
         return;
       }
 
-      // あまり回っていないのに疲れたとき
+      // 回った場所は少ないけれど、同じ場所でたっぷり遊んだとき
+      // （お気に入りの場所を見つけて、そこで遊びこんだ形）
+      // ここで「あまり遊べなかった」と書くと、
+      // 何回も遊んだ人に「遊べていない」と言うことになってしまう
+      if (playCount.value >= playedALotLine) {
+        endingTitle.value = 'お気に入りでたっぷり！';
+        endingMessage.value = 'お気に入りの場所で、たっぷり遊べました！そのぶん少しおつかれです。次はちがう場所にも行ってみよう！';
+        return;
+      }
+
+      // あまり遊べていないのに疲れたとき
       // （いやいややちいさなできごとで、先に気持ちや体力を持っていかれた形）
-      // ここで「遊びすぎた」と書くと、2か所しか回っていない人と話が合わない
+      // ここで「遊びすぎた」と書くと、2回しか遊んでいない人と話が合わない
       endingTitle.value = '今日はちょっと大変…';
       endingMessage.value = 'あまり探検できないうちに、どっと疲れてしまいました。次は元気なうちに、どんどん先へ進んでみよう！';
       return;
     }
 
-    // まだまだ元気なのに帰ってきたとき
+    // たっぷり遊んだのに、二人とも元気なまま帰ってきたとき
+    // （のんびりしたコマンドばかり選ぶと、疲れないかわりに点も伸びない）
+    // ここで「あっさり」と書くと、何回も遊んだ人と話が合わない
+    if (playCount.value >= playedALotLine) {
+      endingTitle.value = 'のんびりマイペース！';
+      endingMessage.value = 'あわてず、のんびり遊びました。二人ともまだまだ元気です！次はもう少し思いきり遊んで、おでかけポイントもためてみよう！';
+      return;
+    }
+
+    // あまり遊ばないうちに、元気なまま帰ってきたとき
     endingTitle.value = 'あっさり公園さんぽ';
     endingMessage.value = '二人ともまだまだ元気なまま、おうちへ帰ってきました。次はもう少し公園の中を探検してみよう！';
     return;
@@ -3288,10 +3326,26 @@ function judgeResult() {
       return;
     }
 
-    // あまり回っていないのに疲れたとき
+    // 回った場所は少ないけれど、同じ場所でたっぷり遊んだとき
+    // 遊んだ回数は多いので「あまり遊べないうちに」とは書かない
+    if (playCount.value >= playedALotLine) {
+      endingTitle.value = '遊びこんでへとへと…';
+      endingMessage.value = 'お気に入りの場所で遊びこんで、二人ともへとへとになりました。次はいろいろな場所も探検してみよう！';
+      return;
+    }
+
+    // あまり遊べていないのに疲れたとき
     // 「無理せず休みながら」と書くと、まだ遊んでいない人には合わないので変える
     endingTitle.value = '今日は大変だった……';
     endingMessage.value = 'あまり遊べないうちに、二人ともへとへとになってしまいました。次は元気なうちに探検してみよう！';
+    return;
+  }
+
+  // たっぷり遊んだのに、二人とも元気なまま帰ってきたとき
+  // 遊んだ回数は多いので「着いたばかり」とは書かない
+  if (playCount.value >= playedALotLine) {
+    endingTitle.value = 'のんびり公園さんぽ';
+    endingMessage.value = 'のんびり遊んで、二人ともまだまだ元気なまま帰ってきました。次はもっと思いきり遊んで、おでかけポイントをためてみよう！';
     return;
   }
 
@@ -3369,6 +3423,7 @@ function resetGame() {
 
   visitedPlaces.value = [];
   collectedItems.value = [];
+  playCount.value = 0;
 
   isTantrum.value = false;
   tantrumCount.value = 0;
@@ -5783,6 +5838,11 @@ onUnmounted(() => {
                   </li>
 
                   <li class="record-item">
+                    <span>遊んだ回数</span>
+                    <b>{{ playCount }}回</b>
+                  </li>
+
+                  <li class="record-item">
                     <span>帰った時間</span>
                     <b>{{ currentTime }}</b>
                   </li>
@@ -5859,6 +5919,11 @@ onUnmounted(() => {
                   <li class="record-item">
                     <span>探検した場所の数</span>
                     <b>{{ visitedPlaces.length }}か所</b>
+                  </li>
+
+                  <li class="record-item">
+                    <span>遊んだ回数</span>
+                    <b>{{ playCount }}回</b>
                   </li>
 
                   <li class="record-item">
