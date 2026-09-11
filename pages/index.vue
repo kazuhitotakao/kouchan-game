@@ -293,6 +293,119 @@ const isCommandKeyboardActive = computed(() => {
 */
 const isTantrumUnsolved = computed(() => currentEvent.value === 'tantrum' && isTantrum.value);
 
+/* 公園にある「通常の場所」6か所
+
+   この6か所だけが、その場所ならではの遊びを持っている場所
+   （公園入口・いやいやタイム・突然イベント・ゴール・GAME OVER はふくまない）
+
+   別枠の「ひとやすみ」を出すのは、ここに書いた6か所だけ
+   あとから場所が増えたときも、この配列に1行足すだけでそろう
+*/
+const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 'pond', 'hill', 'secretSpot'];
+
+/* いま「通常の場所」にいるかどうか
+
+   includes() は「この配列の中にあるか？」を調べる書きかた
+   true なら、その場所ならではの遊びがならんでいて、
+   「休憩・おやつ」からサブメニューを開ける画面だという意味
+*/
+const isNormalPlace = computed(() => normalPlaceEvents.includes(currentEvent.value));
+
+/* ===== 通常の場所のメインコマンドの番号 =====
+
+   通常の場所6か所は、どこでも同じ4つにそろえてある
+
+   0 その場所の行動①
+   1 その場所の行動②
+   2 休憩・おやつ          ← 押すとサブメニューが開く
+   3 べつの場所へ行く      ← よく使うので、サブメニューには入れない
+
+   ※ 2・3 という数字を直接書かず、名前を付けておく
+     画面とキーボード操作の両方で同じ番号を使うので、
+     名前にしておけば、あとから順番を変えてもずれない
+*/
+const careMenuCommandIndex = 2;
+const leavePlaceCommandIndex = 3;
+
+/* ===== サブメニュー「☕ ひとやすみ」 =====
+
+   休憩とおやつは、その場所ならではの遊びではなく
+   「どこでも同じ、親子の状態を整える行動」なので、
+   メインコマンドの中にまぜず、別のメニューにまとめている
+
+   ふだんは閉じていて、「休憩・おやつ」を選んだときだけ開く
+*/
+
+/* サブメニューが開いているかどうか（true = 開いている） */
+const isCareMenuOpen = ref(false);
+
+/* サブメニューの中で、いま選んでいるコマンドの番号
+   0 = 休憩する、1 = おやつをあげる
+
+   メインコマンドの selectedCommandIndex とは別に持っている
+   （こうしておくと、サブメニューを閉じたときに
+     メイン側の「休憩・おやつ」が選ばれたままになる）
+*/
+const selectedCareCommandIndex = ref(0);
+
+/* サブメニューを実際に画面に出すかどうか
+
+   次の3つがそろったときだけ出す
+   ① 通常の場所6か所にいる
+   ② 結果カードが出ていない（まだ行動を選んでいる最中）
+   ③ サブメニューを開いている
+
+   画面（v-if）・キーボード操作・Enterの実行 の3か所で同じこれを見るので、
+   「画面に無いのにキーだけ効く」ということが起きない
+*/
+const isCareMenuVisible = computed(() => isNormalPlace.value && !resultMessage.value && isCareMenuOpen.value);
+
+/* サブメニューに出ているコマンドの数
+   おやつが残っていれば2つ（休憩・おやつ）、食べきっていれば1つ（休憩だけ）
+   ↑↓キーで動ける範囲を決めるのに使う
+*/
+const careCommandCount = computed(() => (snackLeft.value > 0 ? 2 : 1));
+
+/* サブメニューを開く
+
+   開くときは、いつも一番上（0 = 休憩する）が選ばれた状態からはじめる
+
+   メイン側の選択も「休憩・おやつ」にそろえておく
+   こうしておくと、Escapeで閉じたときに
+   そのまま「休憩・おやつ」が選ばれた状態に戻る
+*/
+function openCareMenu() {
+  // 決定音「ポン♪」（メニューを開いたことが分かるように）
+  playDecisionSound();
+
+  isCareMenuOpen.value = true;
+  selectedCareCommandIndex.value = 0;
+  selectedCommandIndex.value = careMenuCommandIndex;
+}
+
+/* サブメニューを閉じる
+
+   ※ selectedCommandIndex はさわらない
+     メイン側の「休憩・おやつ」が選ばれたまま残るようにするため
+*/
+function closeCareMenu() {
+  isCareMenuOpen.value = false;
+  selectedCareCommandIndex.value = 0;
+}
+
+/* 「休憩・おやつ」を押したときの開け閉め
+   開いていなければ開く、開いていればもう一度押して閉じる
+*/
+function toggleCareMenu() {
+  if (isCareMenuOpen.value) {
+    // 閉じるときは決定音を鳴らさない（開くときだけ鳴らす）
+    closeCareMenu();
+    return;
+  }
+
+  openCareMenu();
+}
+
 /* いま画面に出ているコマンドの数
    ↑↓キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
 */
@@ -316,6 +429,24 @@ const commandCount = computed(() => {
     return 1;
   }
 
+  /* 通常の場所6か所は、どこでも同じ4つ
+
+     0 その場所の行動①
+     1 その場所の行動②
+     2 休憩・おやつ
+     3 べつの場所へ行く
+
+     ※ サブメニューが開いているあいだのコマンド数は、ここでは数えない
+       サブメニュー側は careCommandCount で別に管理している
+
+     ※ すぐ上の「結果表示中は1つ」より後ろに置くのが大事
+       結果カードを読んでいるあいだは、メインコマンドも
+       「次の場所を選ぶ」1つだけになるため
+  */
+  if (isNormalPlace.value) {
+    return 4;
+  }
+
   // 突然イベント「こうちゃんがころんだ」だけは、
   // おやつが残っていれば4つ、食べきっていれば3つになる
   // （4番目の「おやつで気をそらす」が画面から消えるため）
@@ -323,8 +454,9 @@ const commandCount = computed(() => {
     return snackLeft.value > 0 ? 4 : 3;
   }
 
-  // それ以外の場所は「行動2つ ＋ べつの場所へ行く」で3つ
-  // 突然イベント（救急車・テントウムシ・犬・噴水）も選択肢が3つなので、ここに当てはまる
+  // ここに来るのは突然イベント（救急車・テントウムシ・犬・噴水）だけ
+  // どれも選択肢が3つなので3を返す
+  // ※ 通常の場所は、1つ上の isNormalPlace の分岐で返している
   return 3;
 });
 
@@ -1649,15 +1781,24 @@ function fixAllStatus() {
 /* 行動をはじめる前に呼ぶ
    「今のステータス」を控えておくだけの処理
 
-   ※ 各場所の行動・いやいや対応・突然イベントの31個の関数は、
+   ※ 各場所の行動・いやいや対応・突然イベント・ひとやすみの行動は、
      どれも1行目でこの関数を呼んでいる＝「行動がはじまった瞬間」の共通の入口
      クリックでも Enter / Space でも必ずここを通るので、
      決定音はここで1回だけ鳴らせばよい
-     （31個すべてに同じ1行を書き足すより、こちらのほうが見通しがよい）
+     （行動ごとに同じ1行を書き足すより、こちらのほうが見通しがよい）
 */
 function startStatusChanges() {
   // 決定音「ポン♪」
   playDecisionSound();
+
+  /* サブメニュー「☕ ひとやすみ」を閉じる
+
+     どの行動を選んでも、ここを通れば必ず閉じるので、
+     行動のあとにサブメニューが出しっぱなしになることがない
+     （休憩・おやつだけでなく、「一緒にすべる」のような
+       場所の行動を選んだときにも閉じる）
+  */
+  closeCareMenu();
 
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
@@ -2413,6 +2554,9 @@ function goToPlace(place: GameEvent) {
   // 決定音「ポン♪」（公園入口から各場所へ移動するとき）
   playDecisionSound();
 
+  // 前の場所で開いたままのサブメニューが残らないように閉じる
+  closeCareMenu();
+
   resultMessage.value = '';
   statusChanges.value = null;
   currentEvent.value = place;
@@ -2452,6 +2596,10 @@ function goToNextPlace() {
 
   resultMessage.value = '';
   statusChanges.value = null;
+
+  // サブメニュー「☕ ひとやすみ」も閉じておく
+  // （結果カードを読まずに「べつの場所へ行く」を押したときのため）
+  closeCareMenu();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -2600,19 +2748,24 @@ function playSandbox() {
   finishPlayAction('sandbox');
 }
 
-/* ② ベンチから見守る */
-function watchFromBench() {
+/* ② 砂のトンネルを作る
+
+   山づくり（①）より軽いけれど、親子でいっしょに手を動かす「遊び」
+   休むための行動ではないので、親の体力もきちんと減る
+   （休みたいときは、別枠の「ひとやすみ」を使う）
+*/
+function buildSandTunnel() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 10;
-  childMood.value += 2;
+  childEnergy.value -= 8;
+  childMood.value += 4;
   addOutingPoint('sandbox', 4);
-  parentEnergy.value += 2;
+  parentEnergy.value -= 7;
   parentCalm.value -= 2;
-  addMinutes(20);
+  addMinutes(15);
 
-  resultMessage.value = 'ベンチから見守りました。こうちゃんは楽しそうに遊んでいます。';
+  resultMessage.value = 'こうちゃんと一緒に砂のトンネルを作りました。向こう側から手が見えると、こうちゃんは大よろこびです！';
 
   finishPlayAction('sandbox');
 }
@@ -2637,19 +2790,24 @@ function collectAcorns() {
   finishPlayAction('acornArea');
 }
 
-/* ② 木かげで少し休む */
-function takeBreak() {
+/* ② どんぐりをころがして遊ぶ
+
+   前はここに「木かげで少し休む」があったが、
+   休む行動は別枠の「ひとやすみ」にまとめたので、
+   この場所ならではの遊びに置きかえている
+*/
+function rollAcorns() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value += 12;
-  childMood.value -= 6;
-  addOutingPoint('acornArea', 1);
-  parentEnergy.value += 14;
-  parentCalm.value += 10;
-  addMinutes(20);
+  childEnergy.value -= 7;
+  childMood.value += 4;
+  addOutingPoint('acornArea', 5);
+  parentEnergy.value -= 5;
+  parentCalm.value -= 2;
+  addMinutes(15);
 
-  resultMessage.value = '木かげで少し休みました。親の体力が回復しました。';
+  resultMessage.value = '拾ったどんぐりを坂になった地面からころがして遊びました。こうちゃんは何度も追いかけています！';
 
   finishPlayAction('acornArea');
 }
@@ -2750,21 +2908,141 @@ function playSecretBase() {
   finishPlayAction('secretSpot');
 }
 
-/* ② 二人で景色をながめる */
-function enjoySecretView() {
+/* ② 秘密の道をもう少し探検する
+
+   前はここに「二人で景色をながめる」があったが、
+   体力も余裕も回復する、ほとんど休憩の行動になっていた
+   休む行動は別枠の「ひとやすみ」にまとめたので、
+   ここは秘密の場所らしい「もう少し奥へ進む」遊びに置きかえている
+*/
+function exploreSecretPath() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value += 6;
-  childMood.value += 4;
+  childEnergy.value -= 10;
+  childMood.value += 5;
   addOutingPoint('secretSpot', 9);
-  parentEnergy.value += 4;
-  parentCalm.value += 6;
+  parentEnergy.value -= 8;
+  parentCalm.value -= 4;
   addMinutes(20);
 
-  resultMessage.value = '二人でならんで景色をながめました。とても穏やかな時間です。';
+  resultMessage.value = '秘密の場所の奥へ、もう少し進んでみました。こうちゃんは細い道を見つけて、わくわくしながら先へ進みます。';
 
   finishPlayAction('secretSpot');
+}
+
+/* ============================================================
+   ひとやすみ（どの場所でも使える共通のケア行動）
+
+   通常の場所では、コマンドを2つの枠に分けている
+   ・「どうする？」  … その場所ならではの遊び（すべる・どんぐりを拾う など）
+   ・「☕ ひとやすみ」… どの場所でも同じ、親子の状態を整える行動
+
+   いちばん大事なのは finishPlayAction() を呼ばないこと
+   あの関数は「その場所で遊んだ」ときの共通処理なので、中で
+   ・playCount（遊んだ回数）を増やす
+   ・visitedPlaces（探検済みの場所）に追加する
+   ・runRandomEvent()（ちいさなできごと）を起こす
+   ・checkTantrum()（いやいや抽選）
+   ・checkSuddenEvent()（突然イベント抽選）
+   までまとめて行っている
+
+   ひとやすみは遊びではなく休んだだけなので、
+   これらが起きてしまうと
+   「ベンチに座っただけで、どんぐりの木を探検済みにした」
+   「休んだ直後に救急車が来た」
+   のようにおかしなことになる
+
+   そこで finishPlayAction() は通さず、
+   行動のあとに必ず要る3つだけを finishCareAction() で行う
+   ============================================================ */
+
+/* ひとやすみの行動が終わったあとに呼ぶ共通処理
+
+   場所の行動の finishPlayAction() にあたるものだが、中身はずっと少ない
+   ① 今回の変化量を記録する（0〜100に丸める前に行うのが大事）
+   ② ステータスを0〜100に収める
+   ③ 限界をむかえていないか判定する
+   ④ 選択中のコマンドを一番上（0）に戻す
+
+   ③を入れてあるのは、休憩やおやつでもステータスが動くため
+   （どちらも回復する行動なので、ここでGAME OVERになることは無いはずだが、
+     ステータスを動かしたら必ず判定する、という書きかたにそろえておく）
+*/
+function finishCareAction() {
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  // 結果カードが出て「次の場所を選ぶ」だけの画面になるので、一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ① 休憩する
+
+   おやつを使わずに、いつでも選べる回復行動
+   こうちゃんの体力・親の体力・親の余裕が戻るかわりに、15分かかる
+   「まだ遊びたいのに休まされた」ので、こうちゃんの機嫌だけは少し下がる
+
+   ※ おでかけポイントは増えない（遊んでいないので点にはならない）
+*/
+function takeCommonBreak() {
+  // 行動する前のステータスを控えておく
+  // ※ 決定音「ポン♪」と、前の行動の演出データのリセットもここで行われる
+  startStatusChanges();
+
+  childEnergy.value += 12;
+  childMood.value -= 2;
+  parentEnergy.value += 12;
+  parentCalm.value += 8;
+  addMinutes(15);
+
+  resultMessage.value = 'ベンチに座って、親子で少し休憩しました。こうちゃんも少し元気を取り戻したようです。';
+
+  // finishPlayAction() は呼ばない（上の説明のとおり）
+  finishCareAction();
+}
+
+/* ② おやつをあげる（通常の探検中）
+
+   いやいやタイムの giveSnack() とは別の関数にしている
+   あちらは「泣いているこうちゃんを落ち着かせる」ための処理なので、
+   いやいやを終わらせる（isTantrum を false にする）までを受け持っている
+   こちらは泣いていないときに食べるおやつなので、回復だけを行う
+
+   おやつの残り（snackLeft）は、いやいや用と同じものを使っている
+   ここで1個使えば、そのあといやいやが起きたときに使えるおやつも減る
+   ＝「ここで使ってしまって大丈夫か？」を考える場面になる
+*/
+function giveSnackWhileExploring() {
+  /* おやつを食べきっているときは、何もしないで終わり
+
+     おやつが0個のときは画面にもこのコマンドを出していないが、
+     ここでも確かめることで、万一呼ばれても
+     snackLeft がマイナスにならないようにしている
+
+     ※ startStatusChanges() より前に置くのが大事
+       あとに置くと、何も起きていないのに決定音が鳴り、
+       前の行動の結果表示だけが消えてしまう
+  */
+  if (snackLeft.value <= 0) {
+    return;
+  }
+
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  childEnergy.value += 8;
+  childMood.value += 10;
+  parentCalm.value += 2;
+  addMinutes(5);
+
+  snackLeft.value -= 1;
+
+  resultMessage.value = 'ベンチに座っておやつを食べました。こうちゃんはうれしそうにもぐもぐしています。';
+
+  // finishPlayAction() は呼ばない（上の説明のとおり）
+  finishCareAction();
 }
 
 /* ===== いやいや中（なだめる場面） ===== */
@@ -3605,6 +3883,10 @@ function goToGoal() {
   statusChanges.value = null;
   addMinutes(10);
 
+  // サブメニュー「☕ ひとやすみ」も閉じておく
+  // （公園入口からそのままゴールへ向かうこともあるため）
+  closeCareMenu();
+
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
   judgeResult();
@@ -3673,6 +3955,10 @@ function resetGame() {
   // いやいや発生の演出も消しておく
   // （残っていると、タイトル画面の上に前回の「イヤイヤ発生！」が出たままになる）
   hideTantrumAlert();
+
+  // サブメニュー「☕ ひとやすみ」も閉じておく
+  // （前回のプレイで開いたままGAME OVERになっていることがあるため）
+  closeCareMenu();
 
   resultMessage.value = '';
   statusChanges.value = null;
@@ -3754,6 +4040,38 @@ function moveCommandDown() {
   }
 
   selectedCommandIndex.value += 1;
+}
+
+/* ===== ここから下は、サブメニュー「☕ ひとやすみ」の中の↑↓ =====
+
+   上の2つ（moveCommandUp / moveCommandDown）とまったく同じ考えかたで、
+   見ている数が selectedCommandIndex → selectedCareCommandIndex、
+   commandCount → careCommandCount に変わるだけ
+
+   おやつが残っていれば2つ（休憩 → おやつ → 休憩 …）でループし、
+   食べきっていれば「休憩する」1つだけなので、押しても動かない
+*/
+
+/* ↑：サブメニューの1つ上のコマンドへ */
+function moveCareCommandUp() {
+  // すでに一番上にいるなら、一番下（コマンド数 - 1）へ回りこむ
+  if (selectedCareCommandIndex.value <= 0) {
+    selectedCareCommandIndex.value = careCommandCount.value - 1;
+    return;
+  }
+
+  selectedCareCommandIndex.value -= 1;
+}
+
+/* ↓：サブメニューの1つ下のコマンドへ */
+function moveCareCommandDown() {
+  // すでに一番下にいるなら、一番上（0）へ戻る
+  if (selectedCareCommandIndex.value >= careCommandCount.value - 1) {
+    selectedCareCommandIndex.value = 0;
+    return;
+  }
+
+  selectedCareCommandIndex.value += 1;
 }
 
 /* ===== ここから下は、公園入口（3列にならぶコマンド）のための処理 ===== */
@@ -3906,8 +4224,55 @@ function runSelectedCommand() {
     return;
   }
 
+  /* サブメニュー「☕ ひとやすみ」が開いているときは、そちらを優先する
+
+     開いているあいだ、プレイヤーが見て選んでいるのはサブメニューなので、
+     メインコマンド（selectedCommandIndex）のほうは見ない
+
+     ※ isCareMenuVisible を使うのがポイント
+       「画面に出ているか」まで見てくれるので、
+       結果カードが出ているときなど、見えていないサブメニューが
+       うっかり実行されることがない
+  */
+  if (isCareMenuVisible.value) {
+    // 0 休憩する
+    if (selectedCareCommandIndex.value === 0) {
+      takeCommonBreak();
+      return;
+    }
+
+    // 1 おやつをあげる
+    // おやつが0個のときは画面にこのコマンドが無いので、念のため残りも確かめる
+    if (selectedCareCommandIndex.value === 1 && snackLeft.value > 0) {
+      giveSnackWhileExploring();
+      return;
+    }
+
+    return;
+  }
+
   // 毎回 .value と書かなくてよいように、番号を取り出しておく
   const index = selectedCommandIndex.value;
+
+  /* 通常の場所6か所で共通の、下2つのコマンドをまとめて受け取る
+
+     2 休憩・おやつ       → サブメニューを開く
+     3 べつの場所へ行く   → 次の場所へ
+
+     場所ごとの switch より前に書いておくと、
+     下の6か所に同じ2行を書き足さなくてよい
+  */
+  if (isNormalPlace.value) {
+    if (index === careMenuCommandIndex) {
+      openCareMenu();
+      return;
+    }
+
+    if (index === leavePlaceCommandIndex) {
+      goToNextPlace();
+      return;
+    }
+  }
 
   switch (currentEvent.value) {
     /* 公園入口
@@ -3937,74 +4302,68 @@ function runSelectedCommand() {
       break;
 
     /* すべり台
-       0 一緒にすべる／1 下で見守る／2 べつの場所へ行く */
+       0 一緒にすべる／1 下で見守る
+       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'slide':
       if (index === 0) {
         playSlide();
       } else if (index === 1) {
         watchSlide();
-      } else if (index === 2) {
-        goToNextPlace();
       }
       break;
 
     /* 砂場
-       0 一緒に大きな山を作る／1 ベンチから見守る／2 べつの場所へ行く */
+       0 一緒に大きな山を作る／1 砂のトンネルを作る
+       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'sandbox':
       if (index === 0) {
         playSandbox();
       } else if (index === 1) {
-        watchFromBench();
-      } else if (index === 2) {
-        goToNextPlace();
+        buildSandTunnel();
       }
       break;
 
     /* どんぐりの木
-       0 一緒にどんぐりを拾う／1 木かげで少し休む／2 べつの場所へ行く */
+       0 一緒にどんぐりを拾う／1 どんぐりをころがして遊ぶ
+       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'acornArea':
       if (index === 0) {
         collectAcorns();
       } else if (index === 1) {
-        takeBreak();
-      } else if (index === 2) {
-        goToNextPlace();
+        rollAcorns();
       }
       break;
 
     /* 池
-       0 白鳥を近くで見る／1 少し離れて見る／2 べつの場所へ行く */
+       0 白鳥を近くで見る／1 少し離れて見る
+       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'pond':
       if (index === 0) {
         watchSwansClose();
       } else if (index === 1) {
         watchSwansFar();
-      } else if (index === 2) {
-        goToNextPlace();
       }
       break;
 
     /* 丘
-       0 走って丘をのぼる／1 ゆっくり歩いてのぼる／2 べつの場所へ行く */
+       0 走って丘をのぼる／1 ゆっくり歩いてのぼる
+       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'hill':
       if (index === 0) {
         runUpHill();
       } else if (index === 1) {
         walkUpHill();
-      } else if (index === 2) {
-        goToNextPlace();
       }
       break;
 
     /* 秘密の場所
-       0 秘密基地で遊ぶ／1 二人で景色をながめる／2 べつの場所へ行く */
+       0 秘密基地で遊ぶ／1 秘密の道をもう少し探検する
+       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
         playSecretBase();
       } else if (index === 1) {
-        enjoySecretView();
-      } else if (index === 2) {
-        goToNextPlace();
+        exploreSecretPath();
       }
       break;
 
@@ -4149,6 +4508,60 @@ function handleKeydown(event: KeyboardEvent) {
       }
     }
 
+    return;
+  }
+
+  /* ⓪-2 サブメニュー「☕ ひとやすみ」が開いているとき
+
+     開いているあいだは、キー操作をぜんぶサブメニュー側で受け取る
+     （メインコマンドは画面に残っているが、↑↓で動くのはサブメニューの中だけ）
+
+     ・↑↓           サブメニューの中で選ぶ
+     ・Enter / Space 選んでいる行を実行する
+     ・Escape        サブメニューを閉じる
+     ・→             サブメニューはPCでは左側に出るので、右を押すとメインへ戻る
+
+     閉じたあとは、メイン側の「休憩・おやつ」が選ばれたままになる
+     （closeCareMenu() は selectedCommandIndex をさわらないため）
+
+     ※ メインコマンドの↑↓（この下の ①②）より前に置くのが大事
+       あとに置くと、↑↓がメイン側に取られてしまう
+  */
+  if (isCareMenuVisible.value) {
+    // Escape と → で閉じる
+    if (event.key === 'Escape' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      closeCareMenu();
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      // 矢印キーでページが上下にスクロールしてしまわないようにする
+      event.preventDefault();
+      moveCareCommandUp();
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveCareCommandDown();
+      return;
+    }
+
+    if (isDecideKey) {
+      // Spaceでページが下にスクロールするのを防ぐ
+      event.preventDefault();
+
+      // 押しっぱなし（長押し）で同じ行動が何度も走らないようにする
+      if (event.repeat) {
+        return;
+      }
+
+      runSelectedCommand();
+      return;
+    }
+
+    // ここまでに当てはまらないキー（←など）は、何もしないでブラウザにまかせる
     return;
   }
 
@@ -4698,35 +5111,97 @@ onUnmounted(() => {
               </div>
             </article>
 
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <!-- 結果がまだ無いとき -->
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
+            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">一緒にすべる</span>
-                </button>
+                 PCでは [☕ ひとやすみ][どうする？] の横ならび
+                 スマホでは横幅が足りないので、たてにならぶ
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">下で見守る</span>
-                </button>
+                 メインコマンドはいつも右はしにあるので、
+                 サブメニューを開いても場所が動かない -->
+            <div class="command-area">
+              <!-- サブメニュー「☕ ひとやすみ」
 
-                <button
-                  class="command-box__item command-box__item--sub"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
-                  @click="goToNextPlace"
-                  @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">べつの場所へ行く</span>
-                </button>
-              </template>
+                   休憩とおやつは、その場所ならではの遊びではなく
+                   「どこでも同じ、親子の状態を整える行動」なので、
+                   メインコマンドにまぜず、こちらにまとめている
 
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
+                   出るのは「休憩・おやつ」を選んだときだけ
+                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                     開いているか の3つをまとめて見てくれる） -->
+              <Transition name="care-menu">
+                <aside v-if="isCareMenuVisible" class="care-menu">
+                  <p class="care-menu__label">☕ ひとやすみ</p>
+
+                  <button
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                    @click="takeCommonBreak"
+                    @mouseenter="selectedCareCommandIndex = 0">
+                    <span class="care-menu__text">休憩する</span>
+                  </button>
+
+                  <!-- おやつが残っているときだけ出す
+                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                    @click="giveSnackWhileExploring"
+                    @mouseenter="selectedCareCommandIndex = 1">
+                    <span class="care-menu__text">おやつをあげる</span>
+                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                </aside>
+              </Transition>
+
+              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <nav class="command-box">
+                <!-- 結果がまだ無いとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">一緒にすべる</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">下で見守る</span>
+                  </button>
+
+                  <!-- サブメニューを開け閉めするコマンド
+                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                    :aria-expanded="isCareMenuVisible"
+                    @click="toggleCareMenu"
+                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                    <span class="command-box__text">休憩・おやつ</span>
+                  </button>
+
+                  <!-- 「べつの場所へ行く」はよく使うので、
+                       サブメニューには入れず、ここに残してある
+
+                       よく使うコマンドなので、見た目も上の行動と
+                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                    <span class="command-box__text">べつの場所へ行く</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </div>
           </section>
         </div>
 
@@ -4817,34 +5292,97 @@ onUnmounted(() => {
               </div>
             </article>
 
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
+            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">一緒に大きな山を作る</span>
-                </button>
+                 PCでは [☕ ひとやすみ][どうする？] の横ならび
+                 スマホでは横幅が足りないので、たてにならぶ
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFromBench" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">ベンチから見守る</span>
-                </button>
+                 メインコマンドはいつも右はしにあるので、
+                 サブメニューを開いても場所が動かない -->
+            <div class="command-area">
+              <!-- サブメニュー「☕ ひとやすみ」
 
-                <button
-                  class="command-box__item command-box__item--sub"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
-                  @click="goToNextPlace"
-                  @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">べつの場所へ行く</span>
-                </button>
-              </template>
+                   休憩とおやつは、その場所ならではの遊びではなく
+                   「どこでも同じ、親子の状態を整える行動」なので、
+                   メインコマンドにまぜず、こちらにまとめている
 
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
+                   出るのは「休憩・おやつ」を選んだときだけ
+                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                     開いているか の3つをまとめて見てくれる） -->
+              <Transition name="care-menu">
+                <aside v-if="isCareMenuVisible" class="care-menu">
+                  <p class="care-menu__label">☕ ひとやすみ</p>
+
+                  <button
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                    @click="takeCommonBreak"
+                    @mouseenter="selectedCareCommandIndex = 0">
+                    <span class="care-menu__text">休憩する</span>
+                  </button>
+
+                  <!-- おやつが残っているときだけ出す
+                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                    @click="giveSnackWhileExploring"
+                    @mouseenter="selectedCareCommandIndex = 1">
+                    <span class="care-menu__text">おやつをあげる</span>
+                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                </aside>
+              </Transition>
+
+              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <nav class="command-box">
+                <!-- 結果がまだ無いとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">一緒に大きな山を作る</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">砂のトンネルを作る</span>
+                  </button>
+
+                  <!-- サブメニューを開け閉めするコマンド
+                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                    :aria-expanded="isCareMenuVisible"
+                    @click="toggleCareMenu"
+                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                    <span class="command-box__text">休憩・おやつ</span>
+                  </button>
+
+                  <!-- 「べつの場所へ行く」はよく使うので、
+                       サブメニューには入れず、ここに残してある
+
+                       よく使うコマンドなので、見た目も上の行動と
+                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                    <span class="command-box__text">べつの場所へ行く</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </div>
           </section>
         </div>
 
@@ -4935,34 +5473,97 @@ onUnmounted(() => {
               </div>
             </article>
 
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
+            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">一緒にどんぐりを拾う</span>
-                </button>
+                 PCでは [☕ ひとやすみ][どうする？] の横ならび
+                 スマホでは横幅が足りないので、たてにならぶ
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="takeBreak" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">木かげで少し休む</span>
-                </button>
+                 メインコマンドはいつも右はしにあるので、
+                 サブメニューを開いても場所が動かない -->
+            <div class="command-area">
+              <!-- サブメニュー「☕ ひとやすみ」
 
-                <button
-                  class="command-box__item command-box__item--sub"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
-                  @click="goToNextPlace"
-                  @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">べつの場所へ行く</span>
-                </button>
-              </template>
+                   休憩とおやつは、その場所ならではの遊びではなく
+                   「どこでも同じ、親子の状態を整える行動」なので、
+                   メインコマンドにまぜず、こちらにまとめている
 
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
+                   出るのは「休憩・おやつ」を選んだときだけ
+                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                     開いているか の3つをまとめて見てくれる） -->
+              <Transition name="care-menu">
+                <aside v-if="isCareMenuVisible" class="care-menu">
+                  <p class="care-menu__label">☕ ひとやすみ</p>
+
+                  <button
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                    @click="takeCommonBreak"
+                    @mouseenter="selectedCareCommandIndex = 0">
+                    <span class="care-menu__text">休憩する</span>
+                  </button>
+
+                  <!-- おやつが残っているときだけ出す
+                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                    @click="giveSnackWhileExploring"
+                    @mouseenter="selectedCareCommandIndex = 1">
+                    <span class="care-menu__text">おやつをあげる</span>
+                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                </aside>
+              </Transition>
+
+              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <nav class="command-box">
+                <!-- 結果がまだ無いとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">一緒にどんぐりを拾う</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="rollAcorns" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">どんぐりをころがして遊ぶ</span>
+                  </button>
+
+                  <!-- サブメニューを開け閉めするコマンド
+                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                    :aria-expanded="isCareMenuVisible"
+                    @click="toggleCareMenu"
+                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                    <span class="command-box__text">休憩・おやつ</span>
+                  </button>
+
+                  <!-- 「べつの場所へ行く」はよく使うので、
+                       サブメニューには入れず、ここに残してある
+
+                       よく使うコマンドなので、見た目も上の行動と
+                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                    <span class="command-box__text">べつの場所へ行く</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </div>
           </section>
         </div>
 
@@ -5053,34 +5654,97 @@ onUnmounted(() => {
               </div>
             </article>
 
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
+            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">白鳥を近くで見る</span>
-                </button>
+                 PCでは [☕ ひとやすみ][どうする？] の横ならび
+                 スマホでは横幅が足りないので、たてにならぶ
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">少し離れて見る</span>
-                </button>
+                 メインコマンドはいつも右はしにあるので、
+                 サブメニューを開いても場所が動かない -->
+            <div class="command-area">
+              <!-- サブメニュー「☕ ひとやすみ」
 
-                <button
-                  class="command-box__item command-box__item--sub"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
-                  @click="goToNextPlace"
-                  @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">べつの場所へ行く</span>
-                </button>
-              </template>
+                   休憩とおやつは、その場所ならではの遊びではなく
+                   「どこでも同じ、親子の状態を整える行動」なので、
+                   メインコマンドにまぜず、こちらにまとめている
 
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
+                   出るのは「休憩・おやつ」を選んだときだけ
+                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                     開いているか の3つをまとめて見てくれる） -->
+              <Transition name="care-menu">
+                <aside v-if="isCareMenuVisible" class="care-menu">
+                  <p class="care-menu__label">☕ ひとやすみ</p>
+
+                  <button
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                    @click="takeCommonBreak"
+                    @mouseenter="selectedCareCommandIndex = 0">
+                    <span class="care-menu__text">休憩する</span>
+                  </button>
+
+                  <!-- おやつが残っているときだけ出す
+                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                    @click="giveSnackWhileExploring"
+                    @mouseenter="selectedCareCommandIndex = 1">
+                    <span class="care-menu__text">おやつをあげる</span>
+                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                </aside>
+              </Transition>
+
+              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <nav class="command-box">
+                <!-- 結果がまだ無いとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">白鳥を近くで見る</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">少し離れて見る</span>
+                  </button>
+
+                  <!-- サブメニューを開け閉めするコマンド
+                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                    :aria-expanded="isCareMenuVisible"
+                    @click="toggleCareMenu"
+                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                    <span class="command-box__text">休憩・おやつ</span>
+                  </button>
+
+                  <!-- 「べつの場所へ行く」はよく使うので、
+                       サブメニューには入れず、ここに残してある
+
+                       よく使うコマンドなので、見た目も上の行動と
+                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                    <span class="command-box__text">べつの場所へ行く</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </div>
           </section>
         </div>
 
@@ -5171,34 +5835,97 @@ onUnmounted(() => {
               </div>
             </article>
 
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
+            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">走って丘をのぼる</span>
-                </button>
+                 PCでは [☕ ひとやすみ][どうする？] の横ならび
+                 スマホでは横幅が足りないので、たてにならぶ
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">ゆっくり歩いてのぼる</span>
-                </button>
+                 メインコマンドはいつも右はしにあるので、
+                 サブメニューを開いても場所が動かない -->
+            <div class="command-area">
+              <!-- サブメニュー「☕ ひとやすみ」
 
-                <button
-                  class="command-box__item command-box__item--sub"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
-                  @click="goToNextPlace"
-                  @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">べつの場所へ行く</span>
-                </button>
-              </template>
+                   休憩とおやつは、その場所ならではの遊びではなく
+                   「どこでも同じ、親子の状態を整える行動」なので、
+                   メインコマンドにまぜず、こちらにまとめている
 
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
+                   出るのは「休憩・おやつ」を選んだときだけ
+                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                     開いているか の3つをまとめて見てくれる） -->
+              <Transition name="care-menu">
+                <aside v-if="isCareMenuVisible" class="care-menu">
+                  <p class="care-menu__label">☕ ひとやすみ</p>
+
+                  <button
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                    @click="takeCommonBreak"
+                    @mouseenter="selectedCareCommandIndex = 0">
+                    <span class="care-menu__text">休憩する</span>
+                  </button>
+
+                  <!-- おやつが残っているときだけ出す
+                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                    @click="giveSnackWhileExploring"
+                    @mouseenter="selectedCareCommandIndex = 1">
+                    <span class="care-menu__text">おやつをあげる</span>
+                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                </aside>
+              </Transition>
+
+              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <nav class="command-box">
+                <!-- 結果がまだ無いとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">走って丘をのぼる</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">ゆっくり歩いてのぼる</span>
+                  </button>
+
+                  <!-- サブメニューを開け閉めするコマンド
+                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                    :aria-expanded="isCareMenuVisible"
+                    @click="toggleCareMenu"
+                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                    <span class="command-box__text">休憩・おやつ</span>
+                  </button>
+
+                  <!-- 「べつの場所へ行く」はよく使うので、
+                       サブメニューには入れず、ここに残してある
+
+                       よく使うコマンドなので、見た目も上の行動と
+                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                    <span class="command-box__text">べつの場所へ行く</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </div>
           </section>
         </div>
 
@@ -5289,34 +6016,97 @@ onUnmounted(() => {
               </div>
             </article>
 
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
+            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSecretBase" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">秘密基地で遊ぶ</span>
-                </button>
+                 PCでは [☕ ひとやすみ][どうする？] の横ならび
+                 スマホでは横幅が足りないので、たてにならぶ
 
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="enjoySecretView" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">二人で景色をながめる</span>
-                </button>
+                 メインコマンドはいつも右はしにあるので、
+                 サブメニューを開いても場所が動かない -->
+            <div class="command-area">
+              <!-- サブメニュー「☕ ひとやすみ」
 
-                <button
-                  class="command-box__item command-box__item--sub"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
-                  @click="goToNextPlace"
-                  @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">べつの場所へ行く</span>
-                </button>
-              </template>
+                   休憩とおやつは、その場所ならではの遊びではなく
+                   「どこでも同じ、親子の状態を整える行動」なので、
+                   メインコマンドにまぜず、こちらにまとめている
 
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
+                   出るのは「休憩・おやつ」を選んだときだけ
+                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                     開いているか の3つをまとめて見てくれる） -->
+              <Transition name="care-menu">
+                <aside v-if="isCareMenuVisible" class="care-menu">
+                  <p class="care-menu__label">☕ ひとやすみ</p>
+
+                  <button
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                    @click="takeCommonBreak"
+                    @mouseenter="selectedCareCommandIndex = 0">
+                    <span class="care-menu__text">休憩する</span>
+                  </button>
+
+                  <!-- おやつが残っているときだけ出す
+                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="care-menu__item"
+                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                    @click="giveSnackWhileExploring"
+                    @mouseenter="selectedCareCommandIndex = 1">
+                    <span class="care-menu__text">おやつをあげる</span>
+                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                </aside>
+              </Transition>
+
+              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <nav class="command-box">
+                <!-- 結果がまだ無いとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSecretBase" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">秘密基地で遊ぶ</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreSecretPath" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">秘密の道をもう少し探検する</span>
+                  </button>
+
+                  <!-- サブメニューを開け閉めするコマンド
+                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                    :aria-expanded="isCareMenuVisible"
+                    @click="toggleCareMenu"
+                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                    <span class="command-box__text">休憩・おやつ</span>
+                  </button>
+
+                  <!-- 「べつの場所へ行く」はよく使うので、
+                       サブメニューには入れず、ここに残してある
+
+                       よく使うコマンドなので、見た目も上の行動と
+                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                    <span class="command-box__text">べつの場所へ行く</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </div>
           </section>
         </div>
 
@@ -6276,6 +7066,18 @@ onUnmounted(() => {
   --child-mood: #ffd98f; /* バターイエロー */
   --parent-energy: #93cff5; /* そらいろ */
   --parent-calm: #ffa3a3; /* さんご（親の余裕ゲージと、いやいや関連の表示に使う） */
+
+  /* 「☕ ひとやすみ」の枠の色（やさしい緑）
+
+     コマンドの枠は2つあり、色で役割を分けている
+     ・どうする？（遊ぶ）    … 紺色（--navy / --navy-deep）
+     ・ひとやすみ（休む）    … ここの緑
+
+     ゴールのボタン（#59bd7f → #38955f）と同じ緑の系統なので、
+     新しい色が1つ増えたようには見えず、画面から浮かない
+     文字は白なので、白が読める暗さ（コントラスト4.5以上）にしてある */
+  --care: #3c8265;
+  --care-deep: #326d55;
 
   /* ゲージの目もり（しきい値）の色
      ゲージの中身（緑・オレンジ・青・赤）のどれに重なっても見えるように、
@@ -8221,7 +9023,8 @@ onUnmounted(() => {
 
 .cmd--selected::after,
 .cmd--single::after,
-.command-box__item--selected::after {
+.command-box__item--selected::after,
+.care-menu__item--selected::after {
   position: absolute;
   inset: 0;
   border-radius: inherit;
@@ -8252,7 +9055,8 @@ onUnmounted(() => {
 /* 押している最中は光を止める
    （光が強いままだと「押しこんだ」感じが分からなくなるため） */
 .cmd:active::after,
-.command-box__item:active::after {
+.command-box__item:active::after,
+.care-menu__item:active::after {
   animation: none;
 }
 
@@ -8260,7 +9064,8 @@ onUnmounted(() => {
    ※ いまのゲームに disabled のボタンは無いが、
      あとから増えたときのための保険として書いておく */
 .cmd:disabled::after,
-.command-box__item:disabled::after {
+.command-box__item:disabled::after,
+.care-menu__item:disabled::after {
   display: none;
 }
 
@@ -8292,10 +9097,21 @@ onUnmounted(() => {
   transform: translateX(4px) scale(0.98);
 }
 
-/* 選択カーソル「▶」（選ばれていない行では見えない） */
+/* 選択カーソル「▶」（選ばれていない行では見えない）
+
+   top: 50% ＋ translateY(-50%) で、行のたての中央に置く
+   ・top: 50%              … 行の高さの半分の位置まで下げる
+   ・translateY(-50%)      … そこから自分の高さの半分だけ上へ戻す
+   この2つで、文字の大きさが変わっても中央のままになる
+
+   ※ これを書かないと、行が align-items: baseline なので
+     カーソルが文字のベースラインに合わせて少し上に出てしまう
+*/
 .command-box__item::before {
   position: absolute;
+  top: 50%;
   left: 9px;
+  transform: translateY(-50%);
   color: var(--gold);
   content: '▶';
   font-size: 11px;
@@ -8340,12 +9156,6 @@ onUnmounted(() => {
   font-weight: 400;
 }
 
-/* 「べつの場所へ行く」は少し控えめにする */
-.command-box__item--sub {
-  color: #b9cbe6;
-  font-size: 15.5px;
-}
-
 /* おやつを食べきったときのお知らせ */
 .command-box__note {
   margin: 0;
@@ -8353,6 +9163,212 @@ onUnmounted(() => {
   color: #b8dfef;
   font-size: 14px;
   line-height: 1.7;
+}
+
+/* ============================================================
+   コマンド欄（サブメニュー ＋ メインコマンド）
+
+   通常の場所6か所だけ、コマンドの枠を2つならべる
+   ・どうする？（command-box） … その場所ならではの遊び／紺色
+   ・ひとやすみ（care-menu）   … 親子の状態を整える行動／やさしい緑
+
+   PCでは [care-menu][command-box] の横ならび
+   スマホでは横幅が足りないので、たてにならぶ（いちばん下の媒体クエリ）
+
+   ※ いやいやタイムと突然イベントでは command-box が1枚だけで、
+     この .command-area を通らない
+     そのため .command-box 自身の置きかた（align-self / margin-top）は
+     そのまま残してあり、ここでは入れものの中だけ上書きしている
+   ============================================================ */
+.command-area {
+  /* .stage の中では「右下」に置く（command-box が1枚だけのときと同じ位置）
+     margin-top: auto で、たての余白をぜんぶ上へ寄せている */
+  align-self: flex-end;
+  margin-top: auto;
+
+  display: flex;
+
+  /* 右はしにそろえる
+     こうしておくと、サブメニューが出ても command-box は動かず、
+     新しい枠が その左がわ に増えるだけになる */
+  justify-content: flex-end;
+
+  /* 2つの枠の上をそろえる（下ではなく上でそろえると、見出しの行が横に並ぶ） */
+  align-items: flex-start;
+
+  /* 入りきらない幅のときは、横にはみ出さずに折り返す
+     （スマホ幅になる前の、中くらいの幅のための保険） */
+  flex-wrap: wrap;
+
+  gap: 14px;
+
+  /* .stage > * の width:100% / max-width:900px をそのまま受けとる */
+}
+
+/* 入れものの中に入った command-box は、置きかたを .command-area にゆずる
+
+   ※ margin-top を0に戻すのが大事
+     横ならび（flex-direction: row）のままだと、auto のマージンが
+     たての余白をぜんぶ吸ってしまい、枠が下へ寄ってしまう
+*/
+.command-area .command-box {
+  flex: 0 1 380px;
+  min-width: 0;
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+/* サブメニュー「☕ ひとやすみ」の枠
+
+   「ならべても浮かない」ことを大事にしているので、
+   形・角のまるさ・文字の大きさ・選択中の見せかたは command-box とそろえ、
+   ちがうのは色（紺色 → やさしい緑）と幅だけにしている
+*/
+.care-menu {
+  /* command-box（380px）より少しせまくして、
+     2つならべても1280×720の画面に収まるようにする */
+  flex: 0 1 240px;
+  min-width: 0;
+
+  /* 見出し1行＋コマンド2行だけなので、command-box より少しだけ浅くする */
+  padding: 10px 14px 12px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--care) 0%, var(--care-deep) 100%);
+  box-shadow: 0 6px 18px rgb(16 29 44 / 40%);
+}
+
+/* 「☕ ひとやすみ」の見出し（command-box の「どうする？」と同じ形） */
+.care-menu__label {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgb(255 255 255 / 38%);
+  color: #e6f6ed;
+  font-size: 13.5px;
+  letter-spacing: 0.1em;
+}
+
+/* 選択肢1つぶん
+   command-box__item とまったく同じ形にして、
+   となりの枠と続いて見えるようにしている
+   左の28pxは、選ばれたときに出る「▶」の場所 */
+.care-menu__item {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* クリックしたとき、一瞬押しこまれたように見せる */
+.care-menu__item:active {
+  transform: translateX(4px) scale(0.98);
+}
+
+/* 選択カーソル「▶」（選ばれていない行では見えない）
+   たての中央に置く考えかたは command-box__item::before と同じ */
+.care-menu__item::before {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  transform: translateY(-50%);
+  color: var(--gold);
+  content: '▶';
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* 選んでいる項目の見た目
+
+   ・マウスを乗せた行（:hover）
+   ・キーボードの↑↓で選んでいる行（--selected）
+   のどちらも、まったく同じ見た目になるようにまとめて指定する
+*/
+.care-menu__item:hover,
+.care-menu__item:focus-visible,
+.care-menu__item--selected {
+  background: rgb(255 255 255 / 14%);
+  font-weight: 700;
+  transform: translateX(3px);
+}
+
+.care-menu__item:hover::before,
+.care-menu__item:focus-visible::before,
+.care-menu__item--selected::before {
+  opacity: 1;
+}
+
+.care-menu__item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.care-menu__text {
+  flex: 1;
+}
+
+/* おやつの残り個数（行の右はしに出す小さな文字） */
+.care-menu__badge {
+  flex: none;
+  color: #ffe2ac;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+/* おやつを食べきったときのお知らせ */
+.care-menu__note {
+  margin: 0;
+  padding: 6px 10px 6px 28px;
+  color: #cfeadd;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* --- サブメニューの開け閉め（Transition name="care-menu"） ---
+
+   PCでは command-box の左がわに出るので、
+   「少し左からすべって出てくる」動きにしている
+
+   場面の切り替え（name="scene"）と同じくらいの軽さ（0.2秒ほど）にして、
+   opacity と translateX だけを動かす
+   位置やはばは変えていないので、メインコマンドはぴくりとも動かない
+
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定でここも自動的に止まる
+     （transition-duration が 0.01ms になり、ぱっと出てぱっと消える）
+*/
+.care-menu-enter-active {
+  transition:
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out;
+}
+
+.care-menu-leave-active {
+  transition:
+    opacity 0.15s ease-in,
+    transform 0.15s ease-in;
+}
+
+.care-menu-enter-from,
+.care-menu-leave-to {
+  opacity: 0;
+  transform: translateX(-10px);
 }
 
 /* ============================================================
@@ -8700,6 +9716,24 @@ onUnmounted(() => {
     font-size: 16px;
   }
 
+  /* サブメニューも同じだけつめる
+     ※ PCでは command-box の「横」に出るので、
+       サブメニューを開いてもコマンド欄の高さは変わらない
+       （高さは、背の高いほうの command-box で決まる） */
+  .care-menu {
+    padding: 7px 12px 9px;
+  }
+
+  .care-menu__label {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+
+  .care-menu__item {
+    padding: 4px 10px 4px 28px;
+    font-size: 16px;
+  }
+
   /* ちいさなできごとの枠も、背の低い画面では少しつめる */
   .event-flash {
     margin-top: 10px;
@@ -8786,7 +9820,8 @@ onUnmounted(() => {
      動きが無くても「いまここを選んでいる」ことは分かる */
   .cmd--selected::after,
   .cmd--single::after,
-  .command-box__item--selected::after {
+  .command-box__item--selected::after,
+  .care-menu__item--selected::after {
     animation: none !important;
   }
 }
@@ -8935,6 +9970,36 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
+  /* スマホでは横にならべると幅が足りないので、たてにならべる
+     （上に「☕ ひとやすみ」、下に「どうする？」） */
+  .command-area {
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    gap: 10px;
+  }
+
+  /* たてならびでは、2つの枠を画面の幅いっぱいにそろえる
+
+     ・flex: none
+       たてならび（flex-direction: column）では flex の基準が「高さ」になるので、
+       横ならび用に付けた 380px / 240px の基準をここで外す
+
+     ・width: auto ＋ align-self: stretch
+       width: 100% にはしないのが大事
+       このゲームは box-sizing を border-box にしていないため、
+       width: 100% だと padding と border のぶんだけ横にはみ出してしまう
+       stretch にまかせれば、padding と border をふくめた外枠が
+       ちょうど画面の幅に収まり、2つの枠の幅もぴったりそろう
+  */
+  .command-area .command-box,
+  .command-area .care-menu {
+    flex: none;
+    align-self: stretch;
+    width: auto;
+    max-width: none;
+  }
+
   .command-box {
     align-self: stretch;
     max-width: none;
@@ -8998,13 +10063,10 @@ onUnmounted(() => {
     font-size: 16px;
   }
 
-  /* 各場所の「どうする？」も、せまい画面では1つ下のサイズにそろえる */
-  .command-box__item {
+  /* 各場所の「どうする？」「ひとやすみ」も、せまい画面では1つ下のサイズにそろえる */
+  .command-box__item,
+  .care-menu__item {
     font-size: 16px;
-  }
-
-  .command-box__item--sub {
-    font-size: 15px;
   }
 
   .cmd:hover {
