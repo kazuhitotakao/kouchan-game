@@ -751,10 +751,10 @@ function playGoalSound() {
 */
 
 /* タイトルBGMの音量 */
-const titleBgmVolume = 0.25;
+const titleBgmVolume = 0.22;
 
 /* 公園BGMの音量（タイトルBGMより録音が大きいので、少し下げてそろえる） */
-const parkBgmVolume = 0.17;
+const parkBgmVolume = 0.16;
 
 /* いやいやBGMの音量（ひとまず公園BGMと同じにしてある）
    大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
@@ -1492,11 +1492,11 @@ function playResultBgm() {
 }
 
 /* リザルトBGMを鳴らしはじめるまでの待ち時間（ミリ秒）
-   900 で0.9秒。ここだけ書きかえれば、間の長さを調整できる
+   1500 で1.5秒。ここだけ書きかえれば、間の長さを調整できる
 
    ゴール音「タタターン♪」と同時に曲が始まってしまうと
    せっかくのファンファーレが聞こえなくなるので、そのぶんだけ待つ */
-const resultBgmStartDelay = 900;
+const resultBgmStartDelay = 1500;
 
 /* 「あとで鳴らす」の予約票（公園BGM・タイトルBGMのものと同じ仕組み）
 
