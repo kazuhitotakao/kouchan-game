@@ -6605,13 +6605,14 @@ onUnmounted(() => {
 .place-card__subtitle {
   margin: 0 0 8px;
   color: var(--navy);
-  font-size: 16px;
+  font-size: 17px;
   letter-spacing: 0.12em;
 }
 
 .place-card__text {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 /* 秘密の場所 */
@@ -6739,7 +6740,8 @@ onUnmounted(() => {
 
 .result-card__text {
   margin: 0;
-  font-size: 15.5px;
+  font-size: 17px;
+  line-height: 1.8;
   white-space: pre-line;
 }
 
@@ -6987,7 +6989,8 @@ onUnmounted(() => {
 .ending-card__text {
   max-width: 640px;
   margin: 0 auto;
-  font-size: 14.5px;
+  font-size: 16.5px;
+  line-height: 1.8;
 }
 
 /* 総合スコア（エンディングカードのいちばん上に大きく出す） */
@@ -7052,7 +7055,7 @@ onUnmounted(() => {
   gap: 12px;
   padding: 4px 0;
   border-bottom: 1px dotted #ece2cd;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .score-item:last-child {
@@ -7111,7 +7114,8 @@ onUnmounted(() => {
 .gameover-card__text {
   max-width: 640px;
   margin: 0 auto;
-  font-size: 14.5px;
+  font-size: 16.5px;
+  line-height: 1.8;
 }
 
 /* GAME OVER画面の「最後の行動」 */
@@ -7216,7 +7220,7 @@ onUnmounted(() => {
 .record-card__empty {
   margin: 0;
   color: var(--ink-soft);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .record-list {
@@ -7232,7 +7236,7 @@ onUnmounted(() => {
   gap: 12px;
   padding: 4px 0;
   border-bottom: 1px dotted #dfe6ef;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .record-item:last-child {
@@ -7496,7 +7500,7 @@ onUnmounted(() => {
 
 .found-flash__label {
   color: #8a5a00;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -7506,7 +7510,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--gold);
   color: #4a3208;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
 }
 
@@ -7516,7 +7520,8 @@ onUnmounted(() => {
 */
 .found-line {
   margin: 10px 0 0;
-  font-size: 15.5px;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 .found-line__name {
@@ -7553,15 +7558,15 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--navy);
   color: #fff;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.08em;
 }
 
 .event-flash__text {
   margin: 0;
-  font-size: 14.5px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 /* ステータスの増減のしるし（おでかけポイント +5 など） */
@@ -7586,7 +7591,7 @@ onUnmounted(() => {
 
 .event-flash__item-label {
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 /* 増減の数字（色は結果カードの「今回の変化」と同じ考えかた）
@@ -7621,8 +7626,8 @@ onUnmounted(() => {
   border-radius: 6px;
   background: #fff5f3;
   color: #a33a29;
-  font-size: 14.5px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.8;
 }
 
 /* --- 危険なステータスのゆっくりした点滅 --- */
@@ -7749,7 +7754,7 @@ onUnmounted(() => {
   padding-bottom: 8px;
   border-bottom: 1px solid var(--navy-line);
   color: #dcf0f9;
-  font-size: 12px;
+  font-size: 13.5px;
   letter-spacing: 0.1em;
 }
 
@@ -7864,8 +7869,8 @@ onUnmounted(() => {
   background: transparent;
   color: #fff;
   font-family: inherit;
-  font-size: 15.5px;
-  line-height: 1.7;
+  font-size: 17px;
+  line-height: 1.6;
   text-align: left;
   cursor: pointer;
   transition:
@@ -7923,14 +7928,14 @@ onUnmounted(() => {
 .command-box__badge {
   flex: none;
   color: #ffd9a0;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 400;
 }
 
 /* 「べつの場所へ行く」は少し控えめにする */
 .command-box__item--sub {
   color: #b9cbe6;
-  font-size: 14.5px;
+  font-size: 15.5px;
 }
 
 /* おやつを食べきったときのお知らせ */
@@ -7938,7 +7943,7 @@ onUnmounted(() => {
   margin: 0;
   padding: 6px 10px 6px 28px;
   color: #b8dfef;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.7;
 }
 
@@ -7964,7 +7969,7 @@ onUnmounted(() => {
   grid-column: 1 / -1;
   margin: 0;
   color: #dcf0f9;
-  font-size: 12px;
+  font-size: 13.5px;
   letter-spacing: 0.1em;
 }
 
@@ -7975,7 +7980,7 @@ onUnmounted(() => {
   border: 1px dashed var(--navy-line);
   border-radius: 10px;
   color: #b8dfef;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 /* コマンドボタン */
@@ -7993,9 +7998,9 @@ onUnmounted(() => {
   background: var(--paper);
   color: var(--navy);
   font-family: inherit;
-  font-size: 15.5px;
+  font-size: 17px;
   font-weight: 700;
-  line-height: 1.4;
+  line-height: 1.5;
   text-align: left;
   cursor: pointer;
   transition:
@@ -8097,7 +8102,7 @@ onUnmounted(() => {
   border-radius: 999px;
   background: #e7edf6;
   color: #63758d;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 400;
 }
 
@@ -8106,7 +8111,7 @@ onUnmounted(() => {
   border-color: var(--navy-line);
   background: rgb(255 255 255 / 8%);
   color: #d5e2f5;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 400;
 }
 
@@ -8167,7 +8172,7 @@ onUnmounted(() => {
   border-color: #e8b23c;
   background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
   color: #4a3208;
-  font-size: 18px;
+  font-size: 19px;
 }
 
 /* 金色のボタン（公園へ行く／もう一度あそぶ）も、文字と同じ濃い茶色にする
@@ -8226,13 +8231,15 @@ onUnmounted(() => {
     padding: 3px 9px 5px;
   }
 
+  /* 本文を大きくしたぶんは、カードの余白をつめてかせぐ
+     （文字を小さくするより、余白を減らすほうを先にする） */
   .stage {
-    gap: 12px;
-    padding: 18px 28px 20px;
+    gap: 10px;
+    padding: 16px 28px 18px;
   }
 
   .place-card {
-    padding: 16px 24px;
+    padding: 14px 22px;
   }
 
   .place-card__title {
@@ -8282,12 +8289,24 @@ onUnmounted(() => {
 
   .command-box__item {
     padding: 4px 10px 4px 28px;
+    font-size: 16px;
   }
 
   /* ちいさなできごとの枠も、背の低い画面では少しつめる */
   .event-flash {
     margin-top: 10px;
     padding: 10px 14px 11px;
+  }
+
+  /* 本文は 17px → 16px までにとどめる
+     高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ */
+  .place-card__text,
+  .result-card__text,
+  .found-line,
+  .event-flash__text,
+  .tantrum-line {
+    font-size: 16px;
+    line-height: 1.75;
   }
 
   /* ゴールの結果カードも、たてにつめて1画面におさめる
@@ -8306,8 +8325,9 @@ onUnmounted(() => {
     font-size: clamp(27px, 2.6vw, 31px);
   }
 
-  .event-flash__text {
-    font-size: 14px;
+  .ending-card__text,
+  .gameover-card__text {
+    font-size: 15.5px;
   }
 
   /* 「前 → 後」で1行ふえたので、背の低い画面では余白と文字を少しつめて
@@ -8334,7 +8354,8 @@ onUnmounted(() => {
   }
 
   .cmd {
-    padding: 10px 16px 10px 32px;
+    padding: 9px 16px 9px 32px;
+    font-size: 16px;
   }
 }
 
@@ -8398,7 +8419,7 @@ onUnmounted(() => {
     min-height: 100vh;
     min-height: 100dvh;
     overflow: visible;
-    font-size: 15px;
+    font-size: 16px;
   }
 
   /* ステータスとコマンドはスクロールしても画面に残す */
@@ -8477,12 +8498,23 @@ onUnmounted(() => {
   }
 
   .place-card__title {
-    font-size: 19px;
+    font-size: 20px;
   }
 
+  /* 本文はスマホでも16pxを下まわらないようにする
+     （画面がせまいぶん、行間は1.8のままゆったり取る） */
   .place-card__text,
-  .result-card__text {
-    font-size: 14px;
+  .result-card__text,
+  .found-line,
+  .event-flash__text,
+  .tantrum-line {
+    font-size: 16px;
+    line-height: 1.8;
+  }
+
+  .ending-card__text,
+  .gameover-card__text {
+    font-size: 15.5px;
   }
 
   .result-card {
@@ -8567,6 +8599,15 @@ onUnmounted(() => {
 
   .cmd {
     padding: 11px 14px 11px 30px;
+    font-size: 16px;
+  }
+
+  /* 各場所の「どうする？」も、せまい画面では1つ下のサイズにそろえる */
+  .command-box__item {
+    font-size: 16px;
+  }
+
+  .command-box__item--sub {
     font-size: 15px;
   }
 
