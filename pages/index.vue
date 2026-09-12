@@ -187,36 +187,33 @@ const tantrumCount = ref(0);
 */
 const tantrumAlertVisible = ref(false);
 
-/* おやつの残り回数（今日持ってきた分だけ）
-
-   ※ この数は、いまのところ「おやつを何回あげられるか」だけを見ている
-     どのおやつをあげたか（グミ／せんべい など）は、まだ区別していない
-     この下の「きょうのおやつ」で選んだ中身とつなぐのは、次の実装 */
-const snackLeft = ref(2);
-
 /* ============================================================
-   きょうのおやつ（公園へ持っていくおやつを選ぶ）
+   きょうのおやつ（公園へ持っていくおやつ ＝ バッグの中身）
 
    ゲームが始まる前に、6種類から2種類を選んでバッグに入れてもらう
-   ここにあるのは、そのための「おやつのデータ」と「選んだ記録」だけ
+   公園へ出発したあとは、同じバッグから1つずつ取り出して食べる
 
-   ■ いまの段階でやっていること
+   ■ selectedSnackIds の2つの顔
 
-     選んだ記録を selectedSnackIds に持つところまで
-     ゲーム中に「おやつをあげる」を押したときに何が起きるかは、
-     今までどおり snackLeft（残り回数）だけで決まっている
+     ゲーム開始前 … 「公園へ持っていくおやつ」
+     ゲーム中     … 「いまバッグに残っているおやつ」
 
-   ■ どうして2つに分かれているのか
+     どちらも同じ配列で、食べるたびにそのおやつの名札が消えていく
+       出発したとき   ['gummy', 'senbei']
+       グミを食べた   ['senbei']
+       せんべいも食べた []
 
-     snackLeft            … 「あと何回あげられるか」だけの数
-     selectedSnackIds     … 「どのおやつを持ってきたか」の中身
+     「残りのおやつ」を別の配列に写したりはしないので、
+     バッグの中身が2か所でずれることがない
 
-     先に中身のほうだけ作っておき、
-     ・通常の休憩でどれを食べるか選ぶ
-     ・いやいやタイムでどれを食べるか選ぶ
-     ・おやつごとに体力／機嫌の回復量を変える
-     といったゲーム中の処理は、次の実装でこちらへ移していく
-     （そのときに snackLeft は selectedSnackIds の個数で置きかえられる）
+   ■ おやつの残り個数（snackLeft）
+
+     バッグの中身の数そのもの（selectedSnackIds.length）
+     数を別に持って増やしたり減らしたりはしない
+     ＝ おやつを食べて名札が消えれば、残り個数も自動で1つ減る
+
+   ■ ゲーム中にどのおやつを食べるか選ぶメニュー（おやつバッグ）は、
+     もう少し下の「サブメニュー ☕ ひとやすみ」のあとにまとめてある
    ============================================================ */
 
 /* おやつの名札（どのおやつかを表す文字）
@@ -236,10 +233,13 @@ type SnackId = 'gummy' | 'chocolate' | 'senbei' | 'biscuit' | 'banana' | 'jelly'
    minutes     … 食べるのにかかる時間（分）
    description … どんなおやつかの説明文
 
-   ※ energy / mood / minutes は、いまはまだゲームの計算に使っていない
-     画面に「体力 +5 ／ 機嫌 +20 ／ 5分」と出すだけ
-     次の実装で、おやつを食べたときの回復量としてそのまま使う
-     （ただの文字の配列ではなく、はじめから型にしておく理由がこれ） */
+   ※ energy / mood / minutes は、ゲーム中におやつを食べたときの
+     「こうちゃんの体力・機嫌がどれだけ回復するか」「何分かかるか」としてそのまま使う
+     （休憩中の giveSnackWhileExploring() と、いやいやタイムの giveSnack()）
+
+     「グミなら機嫌 +20」のような数字は、この snacks の中にしか書かない
+     回復量を変えたくなったら、ここ1か所を書きかえるだけで
+     おやつ選択画面の表示も、ゲーム中の効果も、いっしょに変わる */
 type Snack = {
   id: SnackId;
   name: string;
@@ -334,17 +334,31 @@ const maxSnackCount = 2;
    おやつの中身（名前・絵文字・回復量）は snacks のほうが持っているので、
    ここでは同じ情報を2か所に持たないようにしている
 
+   ゲーム中は「いまバッグに残っているおやつ」として使う
+   食べたおやつは removeSnackFromBag() でここから消える
+
    ※ 同じおやつは1個までなので、['gummy', 'gummy'] にはならない
    ※ localStorage には保存しない（その1プレイだけのもの）
-     ページを読みこみ直したら、また空から選びなおす */
+     ページを読みこみ直したら、また空から選びなおす
+   ※ 空に戻すのは resetGame()（もう一度あそぶ）と goBackToBoot()（A画面へ戻る）だけ
+     startGame() では書きかえないので、選んだおやつがそのまま公園へ持ちこまれる */
 const selectedSnackIds = ref<SnackId[]>([]);
+
+/* 名札（'gummy' など）から、おやつの中身（snacks の中の1件）をさがす
+
+   find() は、snacks の中から条件に合う最初の1件を返す
+   見つからなかったときは undefined になる */
+function findSnack(snackId: SnackId) {
+  return snacks.find((snack) => snack.id === snackId);
+}
 
 /* 選んだおやつの中身（名札 → snacks の中の本体）
 
    画面で「🍇 グミ」と絵文字つきで出したいので、名札から本体を引いておく
+   おやつ選択画面のバッグ表示と、ゲーム中のおやつバッグの両方で、これを並べる
+   （食べたおやつは selectedSnackIds から消えるので、ここからも自動で消える）
 
-   ・map()    … 名札をひとつずつ本体に置きかえる
-   ・find()   … snacks の中から、その名札のおやつをさがす
+   ・map()    … 名札をひとつずつ本体に置きかえる（findSnack() でさがす）
    ・filter() … 見つからなかったぶん（undefined）を取りのぞく
 
    filter の中の「snack is Snack」は、
@@ -352,7 +366,19 @@ const selectedSnackIds = ref<SnackId[]>([]);
    TypeScriptに伝えるための書きかた
    これがないと、このあと snack.name と書くたびに
    「undefined かもしれない」と言われてしまう */
-const selectedSnacks = computed(() => selectedSnackIds.value.map((id) => snacks.find((snack) => snack.id === id)).filter((snack): snack is Snack => snack !== undefined));
+const selectedSnacks = computed(() => selectedSnackIds.value.map((id) => findSnack(id)).filter((snack): snack is Snack => snack !== undefined));
+
+/* おやつの残り個数（＝バッグに残っているおやつの数）
+
+   selectedSnackIds の長さをそのまま返すだけ
+   数を別に持たないので「バッグは空なのに残り1個」のようなずれが起きない
+
+   ※ computed なので snackLeft.value = 2 や snackLeft.value -= 1 は書けない
+     減らしたいときは、バッグからおやつを取り出す（removeSnackFromBag()）
+
+   「snackLeft > 0」は「バッグにおやつが1個以上残っている」という意味
+   （おやつのコマンドを出すか・コマンドの数・「少し待ってみる」の番号 で使う） */
+const snackLeft = computed(() => selectedSnackIds.value.length);
 
 /* バッグがいっぱいかどうか（＝これ以上は選べない）
 
@@ -365,12 +391,38 @@ const isSnackBagFull = computed(() => selectedSnackIds.value.length >= maxSnackC
    「このおやつで公園へ行く！」を押せるようにする条件 */
 const canStartWithSnacks = computed(() => selectedSnackIds.value.length === maxSnackCount);
 
-/* そのおやつを、もうバッグに入れてあるかどうか
+/* そのおやつが、いまバッグに入っているかどうか
 
-   画面で「選択中」の見た目にするかどうかと、
-   カードを押せなくするかどうかの、両方で使う */
+   おやつ選択画面では、「選択中」の見た目にするかどうかと、
+   カードを押せなくするかどうかの、両方で使う
+   ゲーム中は「そのおやつをまだ食べていないか」の確認に使う（findSnackInBag()） */
 function isSnackSelected(snackId: SnackId) {
   return selectedSnackIds.value.includes(snackId);
+}
+
+/* バッグの中にあるおやつの中身を返す（ここではまだバッグから消さない）
+
+   ゲーム中におやつを食べる関数が、いちばん最初にこれを呼ぶ
+   ・バッグに入っていない（もう食べた／持ってきていない）おやつ … undefined
+   ・バッグに入っているおやつ                                   … そのおやつの中身
+
+   画面にはバッグにあるおやつしか出していないが、
+   関数を直接呼ばれても「持っていないおやつで回復する」ことがないように、ここでも確かめる */
+function findSnackInBag(snackId: SnackId) {
+  if (!isSnackSelected(snackId)) {
+    return undefined;
+  }
+
+  return findSnack(snackId);
+}
+
+/* おやつをバッグから出す（selectedSnackIds から名札を消す）
+
+   同じおやつは1個までなので、同じ名札をぜんぶ消す形で問題ない
+   ゲーム中は、ステータスの計算がぜんぶ終わってから呼ぶこと
+   （先に呼ぶと、途中で何かあったときに「おやつだけ減った」ことになってしまう） */
+function removeSnackFromBag(snackId: SnackId) {
+  selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
 }
 
 /* 突然イベントが起きる確率
@@ -636,10 +688,16 @@ function openCareMenu() {
 
    ※ selectedCommandIndex はさわらない
      メイン側の「休憩・おやつ」が選ばれたまま残るようにするため
+
+   ※ おやつバッグ（closeSnackMenu()）もいっしょに閉じる
+     ひとやすみを閉じたのに、その中から開いたバッグだけが残る、ということが起きない
+     この関数は「行動をはじめたとき・場所を移動したとき・もう一度あそぶ」でも呼ばれるので、
+     いやいやタイムやころんだ場面で開いたバッグも、そのときにまとめて閉じられる
 */
 function closeCareMenu() {
   isCareMenuOpen.value = false;
   selectedCareCommandIndex.value = 0;
+  closeSnackMenu();
 }
 
 /* 「休憩・おやつ」を押したときの開け閉め
@@ -653,6 +711,130 @@ function toggleCareMenu() {
   }
 
   openCareMenu();
+}
+
+/* ===== おやつバッグ（ゲーム中に、どのおやつを食べるか選ぶメニュー） =====
+
+   isSnackSelectionOpen（ゲーム開始前に、持っていくおやつを選ぶ画面）とは別もの
+   こちらは公園の中で「バッグに残っているおやつから1つ選んで食べる」ためのメニュー
+
+   おやつを食べる場面は3つあり、どれも同じバッグ（selectedSnackIds）から選ぶ
+
+     exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
+     tantrum   … いやいやタイムの「おやつをあげる ＞」
+     fallDown  … 突然イベント「こうちゃんがころんだ」の「おやつで気をそらす ＞」
+
+   並べるおやつも、↑↓・Enter・Escape の動きも3つとも同じ
+   ちがうのは「選んだあとに呼ぶ関数（＝おやつの効果）」だけなので、
+   どこから開いたかを snackUseContext に覚えておき、eatSnackFromBag() で呼び分ける
+*/
+
+/* どの場面からおやつバッグを開いたか */
+type SnackUseContext = 'exploring' | 'tantrum' | 'fallDown';
+
+/* いまおやつバッグを開いている場面
+
+   null なら「バッグは閉じている」
+   開いているかどうかを別の true / false では持たず、これ1つで表す
+   （「開いているのに、どの場面か分からない」という食いちがいが起きない） */
+const snackUseContext = ref<SnackUseContext | null>(null);
+
+/* おやつバッグの中で、いま選んでいる行の番号（キーボード操作用）
+
+   0 〜 おやつの数-1 … バッグの中のおやつ（selectedSnacks の順）
+   おやつの数        … いちばん下の「← もどる」
+
+   selectedCommandIndex（メインコマンド）・selectedCareCommandIndex（ひとやすみ）とは別に持つ
+   こうしておくと、もどったときに「おやつをあげる」が選ばれたまま残る */
+const selectedSnackMenuIndex = ref(0);
+
+/* 「← もどる」が何番目か（＝バッグに残っているおやつの数） */
+const snackMenuBackIndex = computed(() => selectedSnacks.value.length);
+
+/* おやつバッグを実際に画面に出しているかどうか
+
+   isCareMenuVisible と同じ考えかたで、画面（v-if）・キーボード操作・Enterの実行 の
+   3か所がこれを見るので、「画面に無いのにキーだけ効く」ということが起きない
+
+   開いた場面のコマンドが、いま画面に出ているときだけ true にする
+   ・exploring … ☕ ひとやすみ が出ているとき（バッグは その枠の中に出る）
+   ・tantrum   … いやいやが続いているとき（「少し待ってみる」に失敗した直後もふくむ）
+   ・fallDown  … ころんだ画面で、まだ結果が出ていないとき */
+const isSnackMenuVisible = computed(() => {
+  if (snackUseContext.value === 'exploring') {
+    return isCareMenuVisible.value;
+  }
+
+  if (snackUseContext.value === 'tantrum') {
+    return isTantrumUnsolved.value;
+  }
+
+  if (snackUseContext.value === 'fallDown') {
+    return currentEvent.value === 'fallDown' && !resultMessage.value;
+  }
+
+  return false;
+});
+
+/* おやつバッグに「体力 +5 ／ 機嫌 +20 ／ 5分」を出すかどうか
+
+   休憩・いやいやタイムでは、おやつごとの energy / mood / minutes がそのまま効くので出す
+   ころんだ場面は、どのおやつでも効果が同じ（giveSnackAfterFall() の説明を参照）なので、
+   実際とちがう数字を見せて迷わせないように出さない */
+const isSnackEffectShown = computed(() => snackUseContext.value !== 'fallDown');
+
+/* おやつバッグを開く
+
+   開いたときは、いつもバッグの最初のおやつが選ばれた状態からはじめる
+   バッグが空のときは開かない（コマンドも画面に出ていないが、念のため） */
+function openSnackMenu(context: SnackUseContext) {
+  if (snackLeft.value <= 0) {
+    return;
+  }
+
+  // 決定音「ポン♪」（ひとやすみを開くときと同じ）
+  playDecisionSound();
+
+  snackUseContext.value = context;
+  selectedSnackMenuIndex.value = 0;
+}
+
+/* おやつバッグを閉じる（「← もどる」・Escape・行動をはじめたとき）
+
+   バッグの中身（selectedSnackIds）はさわらない
+   閉じると、開く前のメニューがそのまま出てくる
+   ・exploring … ☕ ひとやすみ（「おやつをあげる」が選ばれたまま）
+   ・tantrum   … だっこ／おやつ／待つ（「おやつをあげる」が選ばれたまま）
+   ・fallDown  … ころんだ場面の4つのコマンド（「おやつで気をそらす」が選ばれたまま） */
+function closeSnackMenu() {
+  snackUseContext.value = null;
+  selectedSnackMenuIndex.value = 0;
+}
+
+/* バッグの中のおやつを選んだとき（クリック・タップ・Enter / Space の共通の入口）
+
+   開いた場面に合わせて、効果のちがう関数へ振り分けるだけ
+   おやつの種類ごとの関数（グミ用・せんべい用…）は作らず、
+   どの関数も snackId を受け取って、snacks のデータから効果を読む */
+function eatSnackFromBag(snackId: SnackId) {
+  // 画面に出ていないバッグから食べることはない（念のため）
+  if (!isSnackMenuVisible.value) {
+    return;
+  }
+
+  if (snackUseContext.value === 'exploring') {
+    giveSnackWhileExploring(snackId);
+    return;
+  }
+
+  if (snackUseContext.value === 'tantrum') {
+    giveSnack(snackId);
+    return;
+  }
+
+  if (snackUseContext.value === 'fallDown') {
+    giveSnackAfterFall(snackId);
+  }
 }
 
 /* いま画面に出ているコマンドの数
@@ -2532,6 +2714,9 @@ function startStatusChanges() {
      行動のあとにサブメニューが出しっぱなしになることがない
      （休憩・おやつだけでなく、「一緒にすべる」のような
        場所の行動を選んだときにも閉じる）
+
+     ※ closeCareMenu() の中で、おやつバッグもいっしょに閉じる
+       おやつを食べたあとに、バッグが出しっぱなしになることもない
   */
   closeCareMenu();
 
@@ -3526,7 +3711,7 @@ function toggleSnackSelection(snackId: SnackId) {
 
   if (isSnackSelected(snackId)) {
     // すでに入っているので、バッグから出す（＝選択を解除する）
-    selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
+    removeSnackFromBag(snackId);
     return;
   }
 
@@ -4210,44 +4395,54 @@ function takeCommonBreak() {
 
 /* ② おやつをあげる（通常の探検中）
 
+   「☕ ひとやすみ」→「おやつをあげる ＞」→ おやつバッグ で選んだときに呼ばれる
+   （引数の snackId が、選んだおやつの名札）
+
    いやいやタイムの giveSnack() とは別の関数にしている
    あちらは「泣いているこうちゃんを落ち着かせる」ための処理なので、
    いやいやを終わらせる（isTantrum を false にする）までを受け持っている
    こちらは泣いていないときに食べるおやつなので、回復だけを行う
 
-   おやつの残り（snackLeft）は、いやいや用と同じものを使っている
+   おやつは、いやいや用と同じバッグ（selectedSnackIds）から取り出す
    ここで1個使えば、そのあといやいやが起きたときに使えるおやつも減る
    ＝「ここで使ってしまって大丈夫か？」を考える場面になる
-*/
-function giveSnackWhileExploring() {
-  /* おやつを食べきっているときは、何もしないで終わり
 
-     おやつが0個のときは画面にもこのコマンドを出していないが、
+   ・こうちゃんの体力・機嫌、かかる時間 … 選んだおやつのデータ（snack.energy / mood / minutes）
+   ・親の余裕 +2                         … ベンチでひと息つけたぶん（どのおやつでも同じ）
+*/
+function giveSnackWhileExploring(snackId: SnackId) {
+  /* バッグに入っていないおやつなら、何もしないで終わり
+
+     画面にはバッグにあるおやつしか出していないが、
      ここでも確かめることで、万一呼ばれても
-     snackLeft がマイナスにならないようにしている
+     持っていないおやつで回復することがないようにしている
 
      ※ startStatusChanges() より前に置くのが大事
        あとに置くと、何も起きていないのに決定音が鳴り、
        前の行動の結果表示だけが消えてしまう
   */
-  if (snackLeft.value <= 0) {
+  const snack = findSnackInBag(snackId);
+
+  if (!snack) {
     return;
   }
 
   // 行動する前のステータスを控えておく
+  // ※ ここで ☕ ひとやすみ とおやつバッグも閉じる
   startStatusChanges();
 
-  childEnergy.value += 8;
-  childMood.value += 10;
+  childEnergy.value += snack.energy;
+  childMood.value += snack.mood;
   parentCalm.value += 2;
-  addMinutes(5);
+  addMinutes(snack.minutes);
 
-  snackLeft.value -= 1;
-
-  resultMessage.value = 'ベンチに座っておやつを食べました。こうちゃんはうれしそうにもぐもぐしています。';
+  resultMessage.value = `ベンチに座って${snack.name}を食べました。こうちゃんはうれしそうにもぐもぐしています。`;
 
   // finishPlayAction() は呼ばない（上の説明のとおり）
   finishCareAction();
+
+  // ステータスの計算がぜんぶ終わってから、食べたおやつをバッグから出す
+  removeSnackFromBag(snack.id);
 }
 
 /* ===== いやいや中（なだめる場面） ===== */
@@ -4283,24 +4478,46 @@ function hugChild() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② おやつをあげる */
-function giveSnack() {
+/* ② おやつをあげる
+
+   「おやつをあげる ＞」→ おやつバッグ で選んだときに呼ばれる
+   （引数の snackId が、選んだおやつの名札）
+
+   効果は2つに分けて考える
+   ・おやつごとにちがう … こうちゃんの体力・機嫌、かかる時間（snack.energy / mood / minutes）
+   ・どのおやつでも同じ … いやいや対応としての効果
+                           おでかけポイント +2 ／ 親の体力 -5 ／ 親の余裕 -3 ／ いやいや終了
+
+   ※ いまはまだ「どのおやつなら泣きやむか」の相性は無く、どれを選んでもいやいやは終わる
+*/
+function giveSnack(snackId: SnackId) {
+  // バッグに入っていないおやつなら、何もしないで終わり
+  // （giveSnackWhileExploring() と同じ理由で、startStatusChanges() より前に確かめる）
+  const snack = findSnackInBag(snackId);
+
+  if (!snack) {
+    return;
+  }
+
   // 行動する前のステータスを控えておく
+  // ※ ここでおやつバッグも閉じる
   startStatusChanges();
 
-  childEnergy.value += 22;
-  childMood.value += 8;
+  // おやつごとにちがう効果
+  childEnergy.value += snack.energy;
+  childMood.value += snack.mood;
+  addMinutes(snack.minutes);
+
+  // いやいや対応として、どのおやつでも同じ効果
   outingPoint.value += 2;
   parentEnergy.value -= 5;
   // いやいや対応の中では、いちばん軽く済む方法（親の余裕は3しか減らない）
-  // そのかわり、おやつは1日2個しか持ってきていない
+  // そのかわり、おやつはバッグに入れてきた2個しか無い
   parentCalm.value -= 3;
-  addMinutes(10);
 
-  snackLeft.value -= 1;
   isTantrum.value = false;
 
-  resultMessage.value = 'おやつをそっと見せると、涙のたまった目で「……たべる」。ほっぺをふくらませたまま、もぐもぐ食べ始めました。';
+  resultMessage.value = `${snack.name}をそっと見せると、涙のたまった目で「……たべる」。ほっぺをふくらませたまま、もぐもぐ食べ始めました。`;
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -4308,6 +4525,9 @@ function giveSnack() {
 
   // おやつは安全な選択だが、念のためここでも判定しておく
   checkGameOver();
+
+  // ステータスの計算がぜんぶ終わってから、食べたおやつをバッグから出す
+  removeSnackFromBag(snack.id);
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -4680,9 +4900,28 @@ function blowPainAway() {
 
 /* ④ おやつで気をそらす
    おやつが1個以上あるときだけ、画面にこのコマンドが出る
+
+   「おやつで気をそらす ＞」→ おやつバッグ で選んだときに呼ばれる
+   （引数の snackId が、選んだおやつの名札）
+
+   ※ この場面だけは、おやつのデータ（energy / mood / minutes）を使わない
+     上の説明のとおり、ころんだ場面は「こうちゃんの数字を基本プラスにしない」と決めてあり、
+     バナナ（体力 +24）などをそのまま足すと、その決まりがくずれてしまうため
+     効果は今までどおり「どのおやつでも同じ」にして、
+     どのおやつを使ったか（バッグから消えるおやつと、結果の文章）だけを選べるようにしている
+     （おやつごとに効果を変えるかどうかは、あとで決める）
 */
-function giveSnackAfterFall() {
+function giveSnackAfterFall(snackId: SnackId) {
+  // バッグに入っていないおやつなら、何もしないで終わり
+  // （giveSnackWhileExploring() と同じ理由で、startStatusChanges() より前に確かめる）
+  const snack = findSnackInBag(snackId);
+
+  if (!snack) {
+    return;
+  }
+
   // 行動する前のステータスを控えておく
+  // ※ ここでおやつバッグも閉じる
   startStatusChanges();
 
   // ころんだこと自体を忘れてしまうので、機嫌だけ少しプラスになる
@@ -4693,14 +4932,15 @@ function giveSnackAfterFall() {
   parentCalm.value -= 2;
   addMinutes(5);
 
-  snackLeft.value -= 1;
-
-  resultMessage.value = 'おやつをそっと見せると、こうちゃんの目がぱっと変わりました。ころんだことは、もうすっかり忘れているようです。';
+  resultMessage.value = `${snack.name}をそっと見せると、こうちゃんの目がぱっと変わりました。ころんだことは、もうすっかり忘れているようです。`;
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
   checkGameOver();
+
+  // ステータスの計算がぜんぶ終わってから、使ったおやつをバッグから出す
+  removeSnackFromBag(snack.id);
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -5191,7 +5431,6 @@ function resetGame() {
 
   isTantrum.value = false;
   tantrumCount.value = 0;
-  snackLeft.value = 2;
 
   /* きょうのおやつも、選んでいない状態に戻す
 
@@ -5204,8 +5443,11 @@ function resetGame() {
      ここで戻さないと、B画面へ帰ったつもりが
      おやつ選択画面のままになってしまう
 
-     ※ すぐ上の snackLeft（あと何回あげられるか）は、今までどおり2に戻す
-       ゲーム中の「おやつをあげる」は、まだこちらの数だけを見ている */
+     ※ おやつの残り個数（snackLeft）は、バッグの中身の数そのものなので、
+       ここでバッグを空にすれば いっしょに0になる（別に戻す必要はない）
+       次のプレイでは、おやつ選択画面でまた2つ選んでから出発する
+
+     ※ ゲーム中に開いていたおやつバッグは、このあとの closeCareMenu() で閉じる */
   selectedSnackIds.value = [];
   isSnackSelectionOpen.value = false;
 
@@ -5369,6 +5611,37 @@ function moveCareCommandDown() {
   }
 
   selectedCareCommandIndex.value += 1;
+}
+
+/* ===== ここから下は、おやつバッグの中の↑↓ =====
+
+   ひとやすみの↑↓と同じ考えかたで、
+   見ている数が selectedSnackMenuIndex、いちばん下が「← もどる」（snackMenuBackIndex）に変わるだけ
+
+   例）バッグにグミ・せんべいがあるとき
+     0 グミ → 1 せんべい → 2 ← もどる → 0 グミ …
+*/
+
+/* ↑：おやつバッグの1つ上の行へ */
+function moveSnackMenuUp() {
+  // すでに一番上にいるなら、一番下（← もどる）へ回りこむ
+  if (selectedSnackMenuIndex.value <= 0) {
+    selectedSnackMenuIndex.value = snackMenuBackIndex.value;
+    return;
+  }
+
+  selectedSnackMenuIndex.value -= 1;
+}
+
+/* ↓：おやつバッグの1つ下の行へ */
+function moveSnackMenuDown() {
+  // すでに一番下（← もどる）にいるなら、一番上（0）へ戻る
+  if (selectedSnackMenuIndex.value >= snackMenuBackIndex.value) {
+    selectedSnackMenuIndex.value = 0;
+    return;
+  }
+
+  selectedSnackMenuIndex.value += 1;
 }
 
 /* ===== ここから下は、公園入口（3列にならぶコマンド）のための処理 ===== */
@@ -5538,6 +5811,29 @@ function runSelectedCommand() {
     return;
   }
 
+  /* おやつバッグが開いているときは、いちばん先にそちらを見る
+
+     ひとやすみの中でバッグを開いているあいだは isCareMenuVisible も true のままなので、
+     下のサブメニューの処理より前に置く
+     （いやいやタイム・ころんだ場面のバッグも、ここで受け取る）
+  */
+  if (isSnackMenuVisible.value) {
+    // いちばん下の「← もどる」
+    if (selectedSnackMenuIndex.value === snackMenuBackIndex.value) {
+      closeSnackMenu();
+      return;
+    }
+
+    // 選んでいる行のおやつを食べる（開いた場面に合った効果になる）
+    const snack = selectedSnacks.value[selectedSnackMenuIndex.value];
+
+    if (snack) {
+      eatSnackFromBag(snack.id);
+    }
+
+    return;
+  }
+
   /* サブメニュー「☕ ひとやすみ」が開いているときは、そちらを優先する
 
      開いているあいだ、プレイヤーが見て選んでいるのはサブメニューなので、
@@ -5555,10 +5851,10 @@ function runSelectedCommand() {
       return;
     }
 
-    // 1 おやつをあげる
-    // おやつが0個のときは画面にこのコマンドが無いので、念のため残りも確かめる
+    // 1 おやつをあげる ＞（おやつバッグを開くだけで、ここではまだ食べない）
+    // バッグが空のときは画面にこのコマンドが無いので、念のため残りも確かめる
     if (selectedCareCommandIndex.value === 1 && snackLeft.value > 0) {
-      giveSnackWhileExploring();
+      openSnackMenu('exploring');
       return;
     }
 
@@ -5682,17 +5978,20 @@ function runSelectedCommand() {
       break;
 
     /* いやいやタイム
-       おやつが残っているとき   0 だっこ／1 おやつをあげる／2 少し待ってみる
+       おやつが残っているとき   0 だっこ／1 おやつをあげる ＞／2 少し待ってみる
        おやつが0個のとき       0 だっこ／1 少し待ってみる（おやつの行は画面に無い）
 
-       ※ おやつが0個のときに giveSnack() を呼んでしまわないように、
-         必ず snackLeft を見てから決める
+       「おやつをあげる ＞」はおやつバッグを開くだけ
+       食べるのは、バッグの中でおやつを選んだとき（上の isSnackMenuVisible の分岐）
+
+       ※ バッグが空のときにバッグを開いてしまわないように、
+         必ず snackLeft（バッグの残り）を見てから決める
     */
     case 'tantrum':
       if (index === 0) {
         hugChild();
       } else if (index === 1 && snackLeft.value > 0) {
-        giveSnack();
+        openSnackMenu('tantrum');
       } else if (index === waitCommandIndex.value) {
         // 「少し待ってみる」は、おやつがあれば3番目（2）、なければ2番目（1）
         waitCalmly();
@@ -5739,7 +6038,10 @@ function runSelectedCommand() {
 
     /* こうちゃんがころんだ
        0 すぐにだっこする／1 「大丈夫？」と見守る
-       2 痛いの痛いのとんでいけ〜／3 おやつで気をそらす
+       2 痛いの痛いのとんでいけ〜／3 おやつで気をそらす ＞
+
+       「おやつで気をそらす ＞」はおやつバッグを開くだけ
+       （いやいやタイムの「おやつをあげる ＞」と同じ）
 
        ※ おやつのコマンドはいちばん下（3番目）なので、
          おやつが0個のときは画面に無いだけで、番号のくり上がりは起きない
@@ -5753,7 +6055,7 @@ function runSelectedCommand() {
       } else if (index === 2) {
         blowPainAway();
       } else if (index === 3 && snackLeft.value > 0) {
-        giveSnackAfterFall();
+        openSnackMenu('fallDown');
       }
       break;
 
@@ -6108,6 +6410,59 @@ function handleKeydown(event: KeyboardEvent) {
   // Enter と Space は、どちらも同じ「決定」として扱う
   // Space は event.key では ' '（半角スペース1文字）になる
   const isDecideKey = event.key === 'Enter' || event.key === ' ';
+
+  /* ⓪-1 おやつバッグが開いているとき
+
+     いちばん内側のメニューなので、サブメニュー「☕ ひとやすみ」より先に見る
+     （ひとやすみの中でバッグを開いているときは、どちらも「開いている」状態のため）
+
+     ・↑↓           バッグの中で選ぶ（いちばん下は「← もどる」）
+     ・Enter / Space 選んでいるおやつを食べる（「← もどる」なら戻る）
+     ・Escape        1つ前のメニューへ戻る（☕ ひとやすみ／いやいやのコマンド など）
+                     ゲームを終えたり、タイトルへ戻ったりはしない
+
+     ※ Enter / Space で preventDefault() を呼ぶのが大事
+       フォーカスが当たっているボタンの「本来のクリック」が止まるので、
+       1回押しただけで「ここでの実行」と「ボタンのクリック」の2回ぶん
+       おやつを食べてしまう、ということが起きない
+       （メインコマンド・ひとやすみと同じやりかた）
+  */
+  if (isSnackMenuVisible.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeSnackMenu();
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      // 矢印キーでページが上下にスクロールしてしまわないようにする
+      event.preventDefault();
+      moveSnackMenuUp();
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveSnackMenuDown();
+      return;
+    }
+
+    if (isDecideKey) {
+      // Spaceでページが下にスクロールするのを防ぐ（ボタン本来のクリックも、これで止まる）
+      event.preventDefault();
+
+      // 押しっぱなし（長押し）で、おやつを続けて食べてしまわないようにする
+      if (event.repeat) {
+        return;
+      }
+
+      runSelectedCommand();
+      return;
+    }
+
+    // ここまでに当てはまらないキー（←→など）は、何もしないでブラウザにまかせる
+    return;
+  }
 
   /* ⓪-2 サブメニュー「☕ ひとやすみ」が開いているとき
 
@@ -6954,25 +7309,61 @@ onUnmounted(() => {
                        開いているか の3つをまとめて見てくれる） -->
                 <Transition name="care-menu">
                   <aside v-if="isCareMenuVisible" class="care-menu">
-                    <p class="care-menu__label">☕ ひとやすみ</p>
+                    <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                         ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
+                         並べるのはバッグに残っているおやつ（selectedSnacks）だけで、
+                         食べたおやつはバッグから消えるので、ここからも消える -->
+                    <template v-if="isSnackMenuVisible">
+                      <p class="care-menu__label">🎒 どのおやつにする？</p>
 
-                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                      <span class="care-menu__text">休憩する</span>
-                    </button>
+                      <button
+                        v-for="(snack, index) in selectedSnacks"
+                        :key="snack.id"
+                        class="care-menu__item snack-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === index }"
+                        @click="eatSnackFromBag(snack.id)"
+                        @mouseenter="selectedSnackMenuIndex = index"
+                        @focus="selectedSnackMenuIndex = index">
+                        <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                          <span>体力 +{{ snack.energy }}</span>
+                          <span>機嫌 +{{ snack.mood }}</span>
+                          <span>{{ snack.minutes }}分</span>
+                        </span>
+                      </button>
 
-                    <!-- おやつが残っているときだけ出す
-                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                    <button
-                      v-if="snackLeft > 0"
-                      class="care-menu__item"
-                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                      @click="giveSnackWhileExploring"
-                      @mouseenter="selectedCareCommandIndex = 1">
-                      <span class="care-menu__text">おやつをあげる</span>
-                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                    </button>
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                        @click="closeSnackMenu"
+                        @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                        @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                        <span class="care-menu__text">← もどる</span>
+                      </button>
+                    </template>
 
-                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    <template v-else>
+                      <p class="care-menu__label">☕ ひとやすみ</p>
+
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                        <span class="care-menu__text">休憩する</span>
+                      </button>
+
+                      <!-- バッグにおやつが残っているときだけ出す
+                           押すとおやつバッグが開く（ここではまだ食べない）
+                           ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+                      <button
+                        v-if="snackLeft > 0"
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                        @click="openSnackMenu('exploring')"
+                        @mouseenter="selectedCareCommandIndex = 1">
+                        <span class="care-menu__text">おやつをあげる ＞</span>
+                        <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                      </button>
+
+                      <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    </template>
                   </aside>
                 </Transition>
 
@@ -7144,25 +7535,61 @@ onUnmounted(() => {
                        開いているか の3つをまとめて見てくれる） -->
                 <Transition name="care-menu">
                   <aside v-if="isCareMenuVisible" class="care-menu">
-                    <p class="care-menu__label">☕ ひとやすみ</p>
+                    <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                         ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
+                         並べるのはバッグに残っているおやつ（selectedSnacks）だけで、
+                         食べたおやつはバッグから消えるので、ここからも消える -->
+                    <template v-if="isSnackMenuVisible">
+                      <p class="care-menu__label">🎒 どのおやつにする？</p>
 
-                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                      <span class="care-menu__text">休憩する</span>
-                    </button>
+                      <button
+                        v-for="(snack, index) in selectedSnacks"
+                        :key="snack.id"
+                        class="care-menu__item snack-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === index }"
+                        @click="eatSnackFromBag(snack.id)"
+                        @mouseenter="selectedSnackMenuIndex = index"
+                        @focus="selectedSnackMenuIndex = index">
+                        <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                          <span>体力 +{{ snack.energy }}</span>
+                          <span>機嫌 +{{ snack.mood }}</span>
+                          <span>{{ snack.minutes }}分</span>
+                        </span>
+                      </button>
 
-                    <!-- おやつが残っているときだけ出す
-                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                    <button
-                      v-if="snackLeft > 0"
-                      class="care-menu__item"
-                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                      @click="giveSnackWhileExploring"
-                      @mouseenter="selectedCareCommandIndex = 1">
-                      <span class="care-menu__text">おやつをあげる</span>
-                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                    </button>
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                        @click="closeSnackMenu"
+                        @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                        @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                        <span class="care-menu__text">← もどる</span>
+                      </button>
+                    </template>
 
-                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    <template v-else>
+                      <p class="care-menu__label">☕ ひとやすみ</p>
+
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                        <span class="care-menu__text">休憩する</span>
+                      </button>
+
+                      <!-- バッグにおやつが残っているときだけ出す
+                           押すとおやつバッグが開く（ここではまだ食べない）
+                           ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+                      <button
+                        v-if="snackLeft > 0"
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                        @click="openSnackMenu('exploring')"
+                        @mouseenter="selectedCareCommandIndex = 1">
+                        <span class="care-menu__text">おやつをあげる ＞</span>
+                        <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                      </button>
+
+                      <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    </template>
                   </aside>
                 </Transition>
 
@@ -7334,25 +7761,61 @@ onUnmounted(() => {
                        開いているか の3つをまとめて見てくれる） -->
                 <Transition name="care-menu">
                   <aside v-if="isCareMenuVisible" class="care-menu">
-                    <p class="care-menu__label">☕ ひとやすみ</p>
+                    <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                         ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
+                         並べるのはバッグに残っているおやつ（selectedSnacks）だけで、
+                         食べたおやつはバッグから消えるので、ここからも消える -->
+                    <template v-if="isSnackMenuVisible">
+                      <p class="care-menu__label">🎒 どのおやつにする？</p>
 
-                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                      <span class="care-menu__text">休憩する</span>
-                    </button>
+                      <button
+                        v-for="(snack, index) in selectedSnacks"
+                        :key="snack.id"
+                        class="care-menu__item snack-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === index }"
+                        @click="eatSnackFromBag(snack.id)"
+                        @mouseenter="selectedSnackMenuIndex = index"
+                        @focus="selectedSnackMenuIndex = index">
+                        <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                          <span>体力 +{{ snack.energy }}</span>
+                          <span>機嫌 +{{ snack.mood }}</span>
+                          <span>{{ snack.minutes }}分</span>
+                        </span>
+                      </button>
 
-                    <!-- おやつが残っているときだけ出す
-                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                    <button
-                      v-if="snackLeft > 0"
-                      class="care-menu__item"
-                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                      @click="giveSnackWhileExploring"
-                      @mouseenter="selectedCareCommandIndex = 1">
-                      <span class="care-menu__text">おやつをあげる</span>
-                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                    </button>
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                        @click="closeSnackMenu"
+                        @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                        @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                        <span class="care-menu__text">← もどる</span>
+                      </button>
+                    </template>
 
-                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    <template v-else>
+                      <p class="care-menu__label">☕ ひとやすみ</p>
+
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                        <span class="care-menu__text">休憩する</span>
+                      </button>
+
+                      <!-- バッグにおやつが残っているときだけ出す
+                           押すとおやつバッグが開く（ここではまだ食べない）
+                           ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+                      <button
+                        v-if="snackLeft > 0"
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                        @click="openSnackMenu('exploring')"
+                        @mouseenter="selectedCareCommandIndex = 1">
+                        <span class="care-menu__text">おやつをあげる ＞</span>
+                        <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                      </button>
+
+                      <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    </template>
                   </aside>
                 </Transition>
 
@@ -7524,25 +7987,61 @@ onUnmounted(() => {
                        開いているか の3つをまとめて見てくれる） -->
                 <Transition name="care-menu">
                   <aside v-if="isCareMenuVisible" class="care-menu">
-                    <p class="care-menu__label">☕ ひとやすみ</p>
+                    <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                         ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
+                         並べるのはバッグに残っているおやつ（selectedSnacks）だけで、
+                         食べたおやつはバッグから消えるので、ここからも消える -->
+                    <template v-if="isSnackMenuVisible">
+                      <p class="care-menu__label">🎒 どのおやつにする？</p>
 
-                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                      <span class="care-menu__text">休憩する</span>
-                    </button>
+                      <button
+                        v-for="(snack, index) in selectedSnacks"
+                        :key="snack.id"
+                        class="care-menu__item snack-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === index }"
+                        @click="eatSnackFromBag(snack.id)"
+                        @mouseenter="selectedSnackMenuIndex = index"
+                        @focus="selectedSnackMenuIndex = index">
+                        <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                          <span>体力 +{{ snack.energy }}</span>
+                          <span>機嫌 +{{ snack.mood }}</span>
+                          <span>{{ snack.minutes }}分</span>
+                        </span>
+                      </button>
 
-                    <!-- おやつが残っているときだけ出す
-                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                    <button
-                      v-if="snackLeft > 0"
-                      class="care-menu__item"
-                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                      @click="giveSnackWhileExploring"
-                      @mouseenter="selectedCareCommandIndex = 1">
-                      <span class="care-menu__text">おやつをあげる</span>
-                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                    </button>
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                        @click="closeSnackMenu"
+                        @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                        @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                        <span class="care-menu__text">← もどる</span>
+                      </button>
+                    </template>
 
-                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    <template v-else>
+                      <p class="care-menu__label">☕ ひとやすみ</p>
+
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                        <span class="care-menu__text">休憩する</span>
+                      </button>
+
+                      <!-- バッグにおやつが残っているときだけ出す
+                           押すとおやつバッグが開く（ここではまだ食べない）
+                           ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+                      <button
+                        v-if="snackLeft > 0"
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                        @click="openSnackMenu('exploring')"
+                        @mouseenter="selectedCareCommandIndex = 1">
+                        <span class="care-menu__text">おやつをあげる ＞</span>
+                        <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                      </button>
+
+                      <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    </template>
                   </aside>
                 </Transition>
 
@@ -7714,25 +8213,61 @@ onUnmounted(() => {
                        開いているか の3つをまとめて見てくれる） -->
                 <Transition name="care-menu">
                   <aside v-if="isCareMenuVisible" class="care-menu">
-                    <p class="care-menu__label">☕ ひとやすみ</p>
+                    <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                         ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
+                         並べるのはバッグに残っているおやつ（selectedSnacks）だけで、
+                         食べたおやつはバッグから消えるので、ここからも消える -->
+                    <template v-if="isSnackMenuVisible">
+                      <p class="care-menu__label">🎒 どのおやつにする？</p>
 
-                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                      <span class="care-menu__text">休憩する</span>
-                    </button>
+                      <button
+                        v-for="(snack, index) in selectedSnacks"
+                        :key="snack.id"
+                        class="care-menu__item snack-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === index }"
+                        @click="eatSnackFromBag(snack.id)"
+                        @mouseenter="selectedSnackMenuIndex = index"
+                        @focus="selectedSnackMenuIndex = index">
+                        <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                          <span>体力 +{{ snack.energy }}</span>
+                          <span>機嫌 +{{ snack.mood }}</span>
+                          <span>{{ snack.minutes }}分</span>
+                        </span>
+                      </button>
 
-                    <!-- おやつが残っているときだけ出す
-                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                    <button
-                      v-if="snackLeft > 0"
-                      class="care-menu__item"
-                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                      @click="giveSnackWhileExploring"
-                      @mouseenter="selectedCareCommandIndex = 1">
-                      <span class="care-menu__text">おやつをあげる</span>
-                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                    </button>
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                        @click="closeSnackMenu"
+                        @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                        @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                        <span class="care-menu__text">← もどる</span>
+                      </button>
+                    </template>
 
-                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    <template v-else>
+                      <p class="care-menu__label">☕ ひとやすみ</p>
+
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                        <span class="care-menu__text">休憩する</span>
+                      </button>
+
+                      <!-- バッグにおやつが残っているときだけ出す
+                           押すとおやつバッグが開く（ここではまだ食べない）
+                           ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+                      <button
+                        v-if="snackLeft > 0"
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                        @click="openSnackMenu('exploring')"
+                        @mouseenter="selectedCareCommandIndex = 1">
+                        <span class="care-menu__text">おやつをあげる ＞</span>
+                        <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                      </button>
+
+                      <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    </template>
                   </aside>
                 </Transition>
 
@@ -7904,25 +8439,61 @@ onUnmounted(() => {
                        開いているか の3つをまとめて見てくれる） -->
                 <Transition name="care-menu">
                   <aside v-if="isCareMenuVisible" class="care-menu">
-                    <p class="care-menu__label">☕ ひとやすみ</p>
+                    <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                         ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
+                         並べるのはバッグに残っているおやつ（selectedSnacks）だけで、
+                         食べたおやつはバッグから消えるので、ここからも消える -->
+                    <template v-if="isSnackMenuVisible">
+                      <p class="care-menu__label">🎒 どのおやつにする？</p>
 
-                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                      <span class="care-menu__text">休憩する</span>
-                    </button>
+                      <button
+                        v-for="(snack, index) in selectedSnacks"
+                        :key="snack.id"
+                        class="care-menu__item snack-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === index }"
+                        @click="eatSnackFromBag(snack.id)"
+                        @mouseenter="selectedSnackMenuIndex = index"
+                        @focus="selectedSnackMenuIndex = index">
+                        <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                          <span>体力 +{{ snack.energy }}</span>
+                          <span>機嫌 +{{ snack.mood }}</span>
+                          <span>{{ snack.minutes }}分</span>
+                        </span>
+                      </button>
 
-                    <!-- おやつが残っているときだけ出す
-                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                    <button
-                      v-if="snackLeft > 0"
-                      class="care-menu__item"
-                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                      @click="giveSnackWhileExploring"
-                      @mouseenter="selectedCareCommandIndex = 1">
-                      <span class="care-menu__text">おやつをあげる</span>
-                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                    </button>
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                        @click="closeSnackMenu"
+                        @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                        @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                        <span class="care-menu__text">← もどる</span>
+                      </button>
+                    </template>
 
-                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    <template v-else>
+                      <p class="care-menu__label">☕ ひとやすみ</p>
+
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                        <span class="care-menu__text">休憩する</span>
+                      </button>
+
+                      <!-- バッグにおやつが残っているときだけ出す
+                           押すとおやつバッグが開く（ここではまだ食べない）
+                           ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+                      <button
+                        v-if="snackLeft > 0"
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                        @click="openSnackMenu('exploring')"
+                        @mouseenter="selectedCareCommandIndex = 1">
+                        <span class="care-menu__text">おやつをあげる ＞</span>
+                        <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                      </button>
+
+                      <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                    </template>
                   </aside>
                 </Transition>
 
@@ -8091,16 +8662,54 @@ onUnmounted(() => {
 
               <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
               <nav class="command-box">
+                <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
+                     いやいやのコマンドと入れかえて、同じ枠の中に出す
+                     「← もどる」・Escape で、だっこ／おやつ／待つ に戻る -->
+                <template v-if="isSnackMenuVisible">
+                  <p class="command-box__label">🎒 どのおやつをあげる？</p>
+
+                  <button
+                    v-for="(snack, index) in selectedSnacks"
+                    :key="snack.id"
+                    class="command-box__item snack-menu__item"
+                    :class="{ 'command-box__item--selected': selectedSnackMenuIndex === index }"
+                    @click="eatSnackFromBag(snack.id)"
+                    @mouseenter="selectedSnackMenuIndex = index"
+                    @focus="selectedSnackMenuIndex = index">
+                    <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                    <span v-if="isSnackEffectShown" class="command-box__badge snack-menu__effects">
+                      <span>体力 +{{ snack.energy }}</span>
+                      <span>機嫌 +{{ snack.mood }}</span>
+                      <span>{{ snack.minutes }}分</span>
+                    </span>
+                  </button>
+
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                    @click="closeSnackMenu"
+                    @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                    @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                    <span class="command-box__text">← もどる</span>
+                  </button>
+                </template>
+
                 <!-- いやいやが続いているあいだは、結果が出ていてもコマンドを出しつづける -->
-                <template v-if="isTantrumUnsolved">
+                <template v-else-if="isTantrumUnsolved">
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
                     <span class="command-box__text">だっこしてなだめる</span>
                   </button>
 
-                  <button v-if="snackLeft > 0" class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="giveSnack" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">おやつをあげる</span>
+                  <!-- バッグにおやつが残っているときだけ出す（押すとおやつバッグが開く） -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="openSnackMenu('tantrum')"
+                    @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">おやつをあげる ＞</span>
                     <span class="command-box__badge">残り{{ snackLeft }}個</span>
                   </button>
 
@@ -8537,8 +9146,41 @@ onUnmounted(() => {
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box">
+                <!-- おやつバッグ（「おやつで気をそらす ＞」を押したあと）
+                     4つのコマンドと入れかえて、同じ枠の中に出す
+                     ※ この場面はどのおやつでも効果が同じなので、効果の数字は出さない
+                       （isSnackEffectShown が false になる） -->
+                <template v-if="isSnackMenuVisible">
+                  <p class="command-box__label">🎒 どのおやつで気をそらす？</p>
+
+                  <button
+                    v-for="(snack, index) in selectedSnacks"
+                    :key="snack.id"
+                    class="command-box__item snack-menu__item"
+                    :class="{ 'command-box__item--selected': selectedSnackMenuIndex === index }"
+                    @click="eatSnackFromBag(snack.id)"
+                    @mouseenter="selectedSnackMenuIndex = index"
+                    @focus="selectedSnackMenuIndex = index">
+                    <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+                    <span v-if="isSnackEffectShown" class="command-box__badge snack-menu__effects">
+                      <span>体力 +{{ snack.energy }}</span>
+                      <span>機嫌 +{{ snack.mood }}</span>
+                      <span>{{ snack.minutes }}分</span>
+                    </span>
+                  </button>
+
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
+                    @click="closeSnackMenu"
+                    @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
+                    @focus="selectedSnackMenuIndex = snackMenuBackIndex">
+                    <span class="command-box__text">← もどる</span>
+                  </button>
+                </template>
+
                 <!-- まだ選んでいないとき -->
-                <template v-if="!resultMessage">
+                <template v-else-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0">
@@ -8553,13 +9195,14 @@ onUnmounted(() => {
                     <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
                   </button>
 
+                  <!-- バッグにおやつが残っているときだけ出す（押すとおやつバッグが開く） -->
                   <button
                     v-if="snackLeft > 0"
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }"
-                    @click="giveSnackAfterFall"
+                    @click="openSnackMenu('fallDown')"
                     @mouseenter="selectedCommandIndex = 3">
-                    <span class="command-box__text">おやつで気をそらす</span>
+                    <span class="command-box__text">おやつで気をそらす ＞</span>
                     <span class="command-box__badge">残り{{ snackLeft }}個</span>
                   </button>
                 </template>
@@ -11930,6 +12573,51 @@ onUnmounted(() => {
   color: #cfeadd;
   font-size: 14px;
   line-height: 1.7;
+}
+
+/* ============================================================
+   おやつバッグ（ゲーム中に、どのおやつを食べるか選ぶメニュー）
+
+   新しい枠は作らず、いま出ている枠の中身だけを入れかえて使う
+   ・休憩中               … ☕ ひとやすみ（care-menu）の枠の中
+   ・いやいや／ころんだ場面 … どうする？（command-box）の枠の中
+
+   おやつ1つぶんの行には care-menu__item / command-box__item をそのまま付けているので、
+   ▶ カーソル・水色の光・hover・focus-visible の見た目は、ほかのコマンドと同じになる
+   ここで足すのは「名前の下に、効果の数字をもう1行出す」ための形だけ
+   ============================================================ */
+
+/* おやつ1つぶんの行
+
+   ふつうのコマンドは「文字 … 右はしに残り個数」の横ならびだが、
+   おやつは「🍇 グミ」の下に「体力 +5 機嫌 +20 5分」を出したいので、たてならびにする
+
+   うすい線でかこって、ほかのコマンドより少し「カード」らしく見せる
+   （線は border ではなく内側の影で引くので、行の大きさは変わらない）
+   スマホで指で押しやすいように、カードとカードのあいだも少しあける */
+.snack-menu__item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin-bottom: 6px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
+}
+
+/* おやつの名前（「🍇 グミ」） */
+.snack-menu__name {
+  line-height: 1.5;
+}
+
+/* 効果の数字（「体力 +5」「機嫌 +20」「5分」）
+
+   色・大きさ・太さは、いっしょに付けた care-menu__badge / command-box__badge
+   （「残り2個」の文字）をそのまま使う
+   ☕ ひとやすみ の枠はせまいので、3つが入りきらないときは はみ出さずに折り返す */
+.snack-menu__effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  line-height: 1.5;
 }
 
 /* --- サブメニューの開け閉め（Transition name="care-menu"） ---
