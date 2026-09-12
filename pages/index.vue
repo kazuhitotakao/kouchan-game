@@ -9138,6 +9138,9 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  /* 「ぐずりだす／ライン」のように語の途中で折り返らないようにする
+     せまいときは、2つの説明のあいだで折り返る */
+  white-space: nowrap;
 }
 
 /* 説明の前に置く、ゲージの目もりと同じ見た目の小さな線 */
@@ -11180,9 +11183,11 @@ onUnmounted(() => {
    上部ステータス〜下部コマンドが一画面に収まるようにする
    ============================================================ */
 @media (max-height: 800px) {
+  /* 上下の余白は、目もりの説明（.gauge-legend）を残す場所をつくるために
+     2pxずつつめてある */
   .status-area {
     gap: 6px 24px;
-    padding: 8px 28px 10px;
+    padding: 6px 28px 8px;
   }
 
   .status-clock__now {
@@ -11202,10 +11207,31 @@ onUnmounted(() => {
     max-height: 52px;
   }
 
-  /* 高さが足りないので、目もりの説明は隠す
-     （目もりの線そのものは残り、マウスを乗せると説明が出る） */
+  /* 高さが足りなくても、目もりの説明は消さない
+
+     前は display: none で丸ごと隠していたが、
+     それだと「あぶないライン」「ぐずりだすライン」がどの線のことなのか
+     まったく分からなくなってしまう
+     （マウスを乗せれば説明は出るが、タッチ操作や小さな窓では出せない）
+
+     そこで「隠す」のではなく「小さくして残す」ようにしている
+     ・文字を少し小さくする（それでも11pxは下まわらない）
+     ・行の高さ（line-height）をつめる
+     ・2つの説明のあいだのすき間を少しせまくする
+     ・目もりの見本の線も少し短くする
+     これで1行ぶんの高さは約16px → 約13px になる
+
+     増えるぶんの高さは、この下で余白（ステータス欄・ゲージのまとまり・
+     中央エリア）を1〜3pxずつつめて取り返しているので、
+     1280×720 でも今までとほぼ同じ高さに収まる */
   .gauge-legend {
-    display: none;
+    gap: 2px 12px;
+    font-size: clamp(11px, 0.85vw, 12.5px);
+    line-height: 1.25;
+  }
+
+  .gauge-legend__mark {
+    height: 10px;
   }
 
   /* 「こうちゃん」「親」の札も少しだけつめる
@@ -11217,14 +11243,14 @@ onUnmounted(() => {
   }
 
   .status-group {
-    padding: 3px 9px 5px;
+    padding: 2px 9px 4px;
   }
 
   /* 本文を大きくしたぶんは、カードの余白をつめてかせぐ
      （文字を小さくするより、余白を減らすほうを先にする） */
   .stage {
-    gap: 10px;
-    padding: 16px 28px 18px;
+    gap: 9px;
+    padding: 13px 28px 15px;
   }
 
   .place-card {
@@ -11482,6 +11508,19 @@ onUnmounted(() => {
   .status-list {
     grid-template-columns: 1fr 1fr;
     gap: 6px 10px;
+  }
+
+  /* スマホは画面ごとスクロールできるので、
+     背の低い画面向けに小さくした目もりの説明を、読みやすい大きさに戻す
+     （このブロックは背の低い画面用の指定より後ろにあるので、こちらが勝つ） */
+  .gauge-legend {
+    gap: 3px 14px;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+
+  .gauge-legend__mark {
+    height: 12px;
   }
 
   .status-pills {
