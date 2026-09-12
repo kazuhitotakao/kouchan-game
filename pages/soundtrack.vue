@@ -878,6 +878,10 @@ function stopSoundtrack() {
   focusAfterPlaylistChange(playAllButtonRef);
 }
 
+/* もうタイトル画面へ移動しはじめたかどうか（連打よけ）
+   画面に出す数字ではないので、ref ではなくふつうの入れものでよい */
+let isLeavingPage = false;
+
 /* ページを離れる直前に「音だけ」止める
 
    上の stopSoundtrack() との違いは、画面の表示にさわるかどうか
@@ -1774,8 +1778,20 @@ async function focusAfterPlaylistChange(button: Ref<HTMLButtonElement | null>) {
 
    ※ ブラウザの「戻る」ボタンで出ていった場合はここを通らないが、
      そのときも onUnmounted() が同じように止めてくれる
+
+   ※ ページの入れかわりには短いフェードがかかる（→ nuxt.config.ts の pageTransition）
+     押したあともしばらくこのページが見えているので、
+     そのあいだに続けて押されても移動のお願いを2回出さないよう、
+     isLeavingPage で1回きりにしている
 */
 async function goToTitle() {
+  // もう移動をはじめているときは、何もしない（連打よけ）
+  if (isLeavingPage) {
+    return;
+  }
+
+  isLeavingPage = true;
+
   /* 決定音「ポン♪」（ゲーム本編のボタンと同じ音）
 
      曲を止めるより先に鳴らす

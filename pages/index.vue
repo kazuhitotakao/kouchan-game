@@ -3050,6 +3050,89 @@ function finishPlayAction(place: GameEvent) {
   selectedCommandIndex.value = 0;
 }
 
+/* ============================================================
+   画面の切りかえ（A画面 ⇄ B画面 ⇄ ゲーム画面）のフェード
+
+   画面そのものの出し分けは、今までどおり v-if / v-else-if
+   そこへ <Transition name="screen-fade" mode="out-in"> をかぶせて、
+   「前の画面が短く消える → 次の画面が短く出る」ようにしてある
+   （画面のほうは、template の <main class="game"> のすぐ中を見ること）
+
+   ここにあるのは、そのフェードに合わせて必要になった2つの世話だけ
+
+   ① フェード中は、キーの操作を受けつけない（→ isScreenChanging）
+   ② 次の画面が出おわったら、フォーカスを当てなおす（→ handleScreenEnterEnd）
+
+   ■ ①が要る理由
+
+     ボタンを押したしゅんかんに、中身（state）はもう次の画面のものになる
+     でも目に見えているのは、消えかけの前の画面
+
+     このあいだにEnterを押せてしまうと、
+     「はじめる」を押した直後に、見えていないB画面の「公園へ行く」まで
+     続けて押したことになってしまう
+
+     マウスのほうは、消えかけの画面を押せないようにするCSS
+     （.screen-fade-leave-active の pointer-events: none）で止めている
+     キーは window でまとめて受け取っていて、画面の外の話なので、
+     こちらの目じるしで止める
+
+   ■ ②が要る理由
+
+     mode="out-in" では、次の画面はフェードアウトが終わってから作られる
+     そのため、ボタンを押した直後に（nextTick で）フォーカスを当てようとしても、
+     行き先のボタンはまだ画面に無い
+     そこで「次の画面が出おわった」合図（@after-enter）を待ってから当てている
+   ============================================================ */
+
+/* いま画面がフェードで切りかわっている最中かどうか
+
+   true になるのは、前の画面が消えているあいだだけ
+   （次の画面が出てくるときは、もう押して大丈夫なので false に戻す） */
+const isScreenChanging = ref(false);
+
+/* 前の画面が、消えはじめたとき
+
+   el … これから消えていく画面（Vueがわたしてくれる）
+
+   キーの受付を止めるほかに、もう1つだけ世話をしている
+   消えていく画面のボタンにフォーカスが残っていると、
+   そのボタンはEnterでもう一度押せてしまう（ブラウザのふつうの動き）
+   マウスのほうはCSSで押せなくしてあるので、こちらも合わせて外しておく
+
+   外したフォーカスは、次の画面が出おわったときに
+   handleScreenEnterEnd() がメインのボタンへ当てなおしてくれる */
+function handleScreenLeaveStart(el: Element) {
+  isScreenChanging.value = true;
+
+  const active = document.activeElement;
+
+  if (active instanceof HTMLElement && el.contains(active)) {
+    active.blur();
+  }
+}
+
+/* 前の画面が、消えおわったとき（次の画面は、このすぐあとに出てくる） */
+function handleScreenLeaveEnd() {
+  isScreenChanging.value = false;
+}
+
+/* 次の画面が、出おわったとき
+
+   A画面なら「はじめる」、B画面なら「公園へ行く」へフォーカスを当てる
+   ゲーム画面のときは、focusTitleMainButton() の中で何も起きない
+   （getTitleFocusItems() が、ゲーム中は空っぽを返すため）
+
+   ※ ページを開いた1回目は、ここは通らない（<Transition> は最初の表示では動かないため）
+     そのときは onMounted の focusTitleMainButton() が当ててくれる */
+function handleScreenEnterEnd() {
+  /* ここまで来ればフェードは終わっているので、キーの受付も念のため戻しておく
+     （ふつうは、ひとつ上の handleScreenLeaveEnd() でもう戻っている） */
+  isScreenChanging.value = false;
+
+  focusTitleMainButton();
+}
+
 /* 起動画面の「▶ はじめる」
 
    この画面がある理由はただ1つ、タイトルBGMを鳴らすため
@@ -3071,9 +3154,11 @@ function enterTitle() {
 
   titleEntered.value = true;
 
-  // B画面のメインのボタン「公園へ行く」へフォーカスを移す
-  // （キーボードだけでも、そのまま Enter で先へ進める）
-  focusTitleMainButton();
+  /* B画面のメインのボタン「公園へ行く」へのフォーカスは、ここでは当てない
+
+     フェード（mode="out-in"）が終わるまで、B画面はまだ作られていないため
+     フェードが終わったときに handleScreenEnterEnd() が当ててくれる
+     （キーボードだけでも、そのまま Enter で先へ進める） */
 }
 
 /* B画面（タイトル画面）から、A画面（起動画面）へ戻る
@@ -3092,10 +3177,13 @@ function goBackToBoot() {
   cancelTitleBgmStart();
   stopTitleBgm();
 
+  /* 画面のほうは、この1行だけで切りかわる（表示用のstateはこれ以外いじらない）
+     BGMを止める上の2行も、音を止めるだけで画面の中身にはさわらないので、
+     B画面は中身がそろったまま、まるごとフェードアウトしていく */
   titleEntered.value = false;
 
-  // A画面のメインのボタン「はじめる」へフォーカスを戻す
-  focusTitleMainButton();
+  /* A画面のメインのボタン「はじめる」へのフォーカスは、
+     フェードが終わってから handleScreenEnterEnd() が当てる */
 }
 
 /* ゲーム開始 */
@@ -3127,6 +3215,9 @@ function startGame() {
   selectedCommandIndex.value = 0;
 }
 
+/* もうサウンドトラックのページへ移動しはじめたかどうか（連打よけ） */
+let isLeavingPage = false;
+
 /* サウンドトラックのページ（/soundtrack）へ移動する
 
    このボタンは起動画面（A画面）にある。まだ「はじめる」を押していないので、
@@ -3138,12 +3229,28 @@ function startGame() {
    （将来ほかの画面からも呼んだときの保険として残してある）
 */
 function goToSoundtrack() {
+  /* もう移動をはじめているときは、何もしない
+
+     ページが入れかわるときも短いフェードをはさむので、
+     押したあとも、しばらくこのA画面が見えている
+     そのあいだに続けて押されても、移動のお願いを2回出さないようにする
+
+     ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい */
+  if (isLeavingPage) {
+    return;
+  }
+
+  isLeavingPage = true;
+
   // 決定音「ポン♪」（ほかのボタンと同じ）
   playDecisionSound();
 
   cancelTitleBgmStart();
   stopTitleBgm();
 
+  /* A画面の表示には、いっさいさわらない
+     （タイトルやボタンを先に消さないので、A画面は中身がそろったままフェードアウトする）
+     表示の後片づけは、ページが消えたあとにNuxtがやってくれる */
   navigateTo('/soundtrack');
 }
 
@@ -4776,6 +4883,15 @@ function resetGame() {
      （B画面からA画面へ戻る goBackToBoot() と、まったく同じ後始末）
 */
 function goBackToBootFromResult() {
+  /* ここでの変更は、ぜんぶ「まとめて1回」で行われる（await も nextTick も無い）
+
+     resetGame() でゲームの記録が初期値に戻り、そのあと titleEntered も false になるが、
+     Vueは同じ処理の中で変えたぶんをまとめて1回だけ描きなおす
+     つまり「スコアが0になったリザルト画面」や「B画面」が
+     途中でチラッと見えることはなく、リザルト画面 → A画面 と一度に切りかわる
+
+     しかも <Transition> のおかげで、消えかけのリザルト画面は
+     もう描きなおされないので、スコアも結果文も見えたままフェードアウトする */
   resetGame();
 
   cancelTitleBgmStart();
@@ -4783,8 +4899,8 @@ function goBackToBootFromResult() {
 
   titleEntered.value = false;
 
-  // A画面のメインのボタン「はじめる」へフォーカスを移す（B→Aへ戻るときと同じ）
-  focusTitleMainButton();
+  /* A画面のメインのボタン「はじめる」へのフォーカスは、
+     フェードが終わってから handleScreenEnterEnd() が当てる（B→Aへ戻るときと同じ） */
 }
 
 /* ============================================================
@@ -5469,6 +5585,19 @@ function handleTitleKeydown(event: KeyboardEvent) {
    ③ Enter / Space なら、選択中のコマンドを実行する
 */
 function handleKeydown(event: KeyboardEvent) {
+  /* 画面がフェードで切りかわっている最中は、キーを受けつけない
+
+     見えているのは前の画面なのに、中身（state）はもう次の画面のものになっている
+     ここでEnterを押せてしまうと、見えていない次の画面のボタンまで
+     続けて押したことになってしまうため
+     （例：「はじめる」→ 見えないうちに「公園へ行く」まで押されてゲームが始まる）
+
+     マウスのほうは、消えかけの画面を押せなくするCSSで止めている
+     （.screen-fade-leave-active の pointer-events: none） */
+  if (isScreenChanging.value) {
+    return;
+  }
+
   /* ⓪ 起動画面（A）・タイトル画面（B）
 
      この2画面は、操作するものが「ボタン3つ」だけで、
@@ -5696,121 +5825,68 @@ onUnmounted(() => {
 <template>
   <main class="game">
     <!-- ============================================================
-         起動画面（いちばん最初の1枚）
+         画面の切りかえ（A画面 ⇄ B画面 ⇄ ゲーム画面）
 
-         この画面をはさむ理由は、ブラウザの決まりへの対応
-         ページを開いた直後は音を鳴らせないので、
-         「▶ はじめる」を1回押してもらい、
-         その操作をきっかけにタイトルBGMを鳴らしはじめる
+         この3つはページを移動しているのではなく、
+         同じページの中で v-if / v-else-if を切りかえて出し分けている
+         そのままだと切りかわった瞬間にパッと入れかわって見えるので、
+         Vueの <Transition> で短いフェードをはさんでいる
+
+         mode="out-in" ＝ 前の画面が消えきってから、次の画面を出す
+         2枚が同時に出ないので、
+         ・カードの位置がずれない
+         ・画面が一瞬2つぶんの高さにならない
+
+         うれしいのは、消えていく画面の中身がそのまま残ること
+         「もう一度あそぶ」を押すと、中の記録（スコアなど）は
+         その場でぜんぶ初期値に戻るが、消えかけの画面はもう作りなおされないので、
+         スコアや結果文は見えたままフェードアウトしていく
+         （＝「数字が先に0になってから消える」ようには見えない）
+
+         hooks（@before-leave など）でやっていること
+         ・フェード中は、キーの操作を受けつけない（→ isScreenChanging）
+         ・次の画面が出おわったら、その画面のメインのボタンへフォーカスを当てる
          ============================================================ -->
-    <div v-if="!titleEntered" class="title-screen">
-      <div class="title-card title-card--boot">
-        <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
-             （「公園へ行く」「もう一度あそぶ」と同じ書き方）
+    <Transition
+      name="screen-fade"
+      mode="out-in"
+      @before-leave="handleScreenLeaveStart"
+      @after-leave="handleScreenLeaveEnd"
+      @after-enter="handleScreenEnterEnd">
+      <!-- ============================================================
+           起動画面（いちばん最初の1枚）
 
-             ※ この画面のメインのボタンなので、HTMLではいちばん先に書いてある
-               Tabキーを押したときに「はじめる → サウンドトラック → サウンド」の
-               順で回れるようにするため（見た目の位置はCSSの order でいちばん下のまま）
-             ref … キーボード操作でフォーカスを当てるための目印 -->
-        <button ref="startButtonRef" class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
+           この画面をはさむ理由は、ブラウザの決まりへの対応
+           ページを開いた直後は音を鳴らせないので、
+           「▶ はじめる」を1回押してもらい、
+           その操作をきっかけにタイトルBGMを鳴らしはじめる
+           ============================================================ -->
+      <div v-if="!titleEntered" key="boot" class="title-screen">
+        <div class="title-card title-card--boot">
+          <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
+               （「公園へ行く」「もう一度あそぶ」と同じ書き方）
 
-        <!-- 上のツールバー（B画面と同じ .title-card__tools を使う）
-             左：サウンドトラック（/soundtrack）への入口
-             右：サウンドON/OFF（「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく） -->
-        <div class="title-card__tools">
-          <!-- サウンドトラックへの入口（左上）
-               右のサウンドON/OFFと同じ高さ・同じ文字サイズのpillにそろえている
-               （見た目のCSSは .title-card__tools のところにまとめてある）
-               押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに /soundtrack へ移る
+               ※ この画面のメインのボタンなので、HTMLではいちばん先に書いてある
+                 Tabキーを押したときに「はじめる → サウンドトラック → サウンド」の
+                 順で回れるようにするため（見た目の位置はCSSの order でいちばん下のまま）
+               ref … キーボード操作でフォーカスを当てるための目印 -->
+          <button ref="startButtonRef" class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
 
-               ※ Enter/Space を押したときに「はじめる」まで動いてしまわないのは、
-                 handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
-                 ようにしているため（ボタン側で止める必要はない） -->
-          <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" @click="goToSoundtrack">♪ サウンドトラック</button>
+          <!-- 上のツールバー（B画面と同じ .title-card__tools を使う）
+               左：サウンドトラック（/soundtrack）への入口
+               右：サウンドON/OFF（「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく） -->
+          <div class="title-card__tools">
+            <!-- サウンドトラックへの入口（左上）
+                 右のサウンドON/OFFと同じ高さ・同じ文字サイズのpillにそろえている
+                 （見た目のCSSは .title-card__tools のところにまとめてある）
+                 押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに /soundtrack へ移る
 
-          <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
-            <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-            <span class="sound-toggle__text">サウンド</span>
-            <span class="sound-toggle__state">
-              <!-- ON と OFF を同じ場所に重ねて置いておく
-                   使わないほうは「見えなくする」だけで場所は残るので、
-                   ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-              <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-              <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
-            </span>
-          </button>
-        </div>
+                 ※ Enter/Space を押したときに「はじめる」まで動いてしまわないのは、
+                   handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
+                   ようにしているため（ボタン側で止める必要はない） -->
+            <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" @click="goToSoundtrack">♪ サウンドトラック</button>
 
-        <h1 class="title-card__name">{{ gameTitle }}</h1>
-      </div>
-    </div>
-
-    <!-- ============================================================
-         タイトル画面（ゲーム開始前）
-         ============================================================ -->
-    <div v-else-if="!gameStarted" class="title-screen">
-      <div class="title-card">
-        <!-- この画面のメインのボタン
-             A画面と同じ理由で、HTMLではいちばん先に書いてある
-             （Tabで「公園へ行く → はじめの画面へ戻る → サウンド」と回れるようにするため。
-               見た目の位置はCSSの order でいちばん下のまま） -->
-        <button ref="goParkButtonRef" class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
-
-        <!-- 上のツールバー（A画面と同じ .title-card__tools を使う）
-             左：はじめの画面（起動画面）へ戻る
-             右：サウンドON/OFF（「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
-        <div class="title-card__tools">
-          <!-- はじめの画面へ戻る（左上の補助操作）
-               A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
-               A→B で切り替えても、左側は文字だけが入れかわって見える
-
-               ※ Enter/Space で「公園へ行く」まで動いてしまわないのは、
-                 handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
-                 ようにしているため（ボタン側で止める必要はない） -->
-          <button ref="backToBootButtonRef" type="button" class="title-card__back" @click="goBackToBoot">はじめの画面へ戻る</button>
-
-          <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
-            <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-            <span class="sound-toggle__text">サウンド</span>
-            <span class="sound-toggle__state">
-              <!-- ON と OFF を同じ場所に重ねて置いておく
-                     使わないほうは「見えなくする」だけで場所は残るので、
-                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-              <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-              <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
-            </span>
-          </button>
-        </div>
-
-        <h1 class="title-card__name">{{ gameTitle }}</h1>
-
-        <div class="title-card__rule">
-          <p>冒険の舞台は9時から12時の公園です！</p>
-
-          <p>
-            どんな出会い、冒険があるかな。
-            <br />
-            たくさん探索してみよう！
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============================================================
-         ゲーム画面（上部ステータス／中央イベント／下部コマンド）
-         ============================================================ -->
-    <div v-else class="game-screen">
-      <!-- ==========================================================
-           【上部】常時表示のステータスエリア
-           ========================================================== -->
-      <header class="status-area">
-        <div class="status-area__head">
-          <!-- タイトルと音ボタンを同じ行に並べる
-               新しい行を作らないので、上部ステータスの高さは変わらない -->
-          <div class="status-area__titleRow">
-            <span class="status-area__title">{{ gameTitle }}</span>
-
-            <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
               <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
               <span class="sound-toggle__text">サウンド</span>
               <span class="sound-toggle__state">
@@ -5823,420 +5899,1589 @@ onUnmounted(() => {
             </button>
           </div>
 
-          <span class="status-clock">
-            <span class="status-clock__now">{{ currentTime }}</span>
-            <span class="status-clock__limit">／ 12:00</span>
-
-            <!-- 直前の行動でかかった時間（結果を表示している間だけ出す）
-                 出たり消えたりしても幅が変わらないように、
-                 外側の span で置き場所（幅）をいつも確保しておく -->
-            <span class="status-clock__change">
-              <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
-            </span>
-          </span>
+          <h1 class="title-card__name">{{ gameTitle }}</h1>
         </div>
+      </div>
 
-        <!-- ゲージを「こうちゃん」と「親」の2つのまとまりに分ける
-             見出し＋うすい背景だけでグループに見せているので、
-             増える高さは見出し1行ぶんだけ（1280×720でも一画面に収まる） -->
-        <div class="status-groups">
-          <section class="status-group status-group--child">
-            <p class="status-group__name">こうちゃん</p>
+      <!-- ============================================================
+           タイトル画面（ゲーム開始前）
+           ============================================================ -->
+      <div v-else-if="!gameStarted" key="title" class="title-screen">
+        <div class="title-card">
+          <!-- この画面のメインのボタン
+               A画面と同じ理由で、HTMLではいちばん先に書いてある
+               （Tabで「公園へ行く → はじめの画面へ戻る → サウンド」と回れるようにするため。
+                 見た目の位置はCSSの order でいちばん下のまま） -->
+          <button ref="goParkButtonRef" class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
 
-            <ul class="status-list">
-              <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
-                <span class="status-item__label">
-                  <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
-                  体力
-                </span>
-                <span class="status-item__value">{{ childEnergy }}</span>
-                <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
-                  {{ formatChange(statusChanges.childEnergy) }}
-                </span>
-                <span class="gauge">
-                  <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
+          <!-- 上のツールバー（A画面と同じ .title-card__tools を使う）
+               左：はじめの画面（起動画面）へ戻る
+               右：サウンドON/OFF（「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
+          <div class="title-card__tools">
+            <!-- はじめの画面へ戻る（左上の補助操作）
+                 A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
+                 A→B で切り替えても、左側は文字だけが入れかわって見える
 
-                  <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
-                  <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
+                 ※ Enter/Space で「公園へ行く」まで動いてしまわないのは、
+                   handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
+                   ようにしているため（ボタン側で止める必要はない） -->
+            <button ref="backToBootButtonRef" type="button" class="title-card__back" @click="goBackToBoot">はじめの画面へ戻る</button>
 
-                  <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
-                  <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
-                </span>
-              </li>
+            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+              <span class="sound-toggle__text">サウンド</span>
+              <span class="sound-toggle__state">
+                <!-- ON と OFF を同じ場所に重ねて置いておく
+                       使わないほうは「見えなくする」だけで場所は残るので、
+                       ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              </span>
+            </button>
+          </div>
 
-              <li class="status-item">
-                <span class="status-item__label">機嫌</span>
-                <span class="status-item__value">{{ childMood }}</span>
-                <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
-                  {{ formatChange(statusChanges.childMood) }}
-                </span>
-                <span class="gauge">
-                  <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
+          <h1 class="title-card__name">{{ gameTitle }}</h1>
 
-                  <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
-                  <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
-                </span>
-              </li>
-            </ul>
-          </section>
+          <div class="title-card__rule">
+            <p>冒険の舞台は9時から12時の公園です！</p>
 
-          <section class="status-group status-group--parent">
-            <p class="status-group__name">親</p>
-
-            <ul class="status-list">
-              <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
-                <span class="status-item__label">
-                  <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
-                  体力
-                </span>
-                <span class="status-item__value">{{ parentEnergy }}</span>
-                <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
-                  {{ formatChange(statusChanges.parentEnergy) }}
-                </span>
-                <span class="gauge">
-                  <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
-
-                  <!-- 目もり：あぶないライン（親の体力20以下） -->
-                  <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
-                </span>
-              </li>
-
-              <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
-                <span class="status-item__label">
-                  <span v-if="isParentCalmDanger" class="status-item__alert">⚠</span>
-                  余裕
-                </span>
-                <span class="status-item__value">{{ parentCalm }}</span>
-                <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
-                  {{ formatChange(statusChanges.parentCalm) }}
-                </span>
-                <span class="gauge">
-                  <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
-
-                  <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
-                  <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
-                </span>
-              </li>
-            </ul>
-          </section>
+            <p>
+              どんな出会い、冒険があるかな。
+              <br />
+              たくさん探索してみよう！
+            </p>
+          </div>
         </div>
+      </div>
 
-        <!-- ゲージの目もりの説明
+      <!-- ============================================================
+           ゲーム画面（上部ステータス／中央イベント／下部コマンド）
+           ============================================================ -->
+      <div v-else key="game" class="game-screen">
+        <!-- ==========================================================
+             【上部】常時表示のステータスエリア
+             ========================================================== -->
+        <header class="status-area">
+          <div class="status-area__head">
+            <!-- タイトルと音ボタンを同じ行に並べる
+                 新しい行を作らないので、上部ステータスの高さは変わらない -->
+            <div class="status-area__titleRow">
+              <span class="status-area__title">{{ gameTitle }}</span>
 
-             並べる順番は、ゲージの上での位置と同じ「左 → 右」にそろえてある
-             ・あぶないライン   … 20 のあたり（ゲージの左のほう）
-             ・ぐずりだすライン … 71 のあたり（ゲージの右のほう）
-             説明の並びとゲージの線の並びが同じなので、
-             どちらの線の話をしているのか見つけやすい -->
-        <p class="gauge-legend">
-          <span class="gauge-legend__item">
-            <span class="gauge-legend__mark gauge-legend__mark--danger"></span>
-            あぶないライン
-          </span>
+              <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+                <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+                <span class="sound-toggle__text">サウンド</span>
+                <span class="sound-toggle__state">
+                  <!-- ON と OFF を同じ場所に重ねて置いておく
+                       使わないほうは「見えなくする」だけで場所は残るので、
+                       ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+                  <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                  <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+                </span>
+              </button>
+            </div>
 
-          <span class="gauge-legend__item">
-            <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
-            ぐずりだすライン
-          </span>
-        </p>
+            <span class="status-clock">
+              <span class="status-clock__now">{{ currentTime }}</span>
+              <span class="status-clock__limit">／ 12:00</span>
 
-        <div class="status-pills">
-          <span class="pill pill--point">
-            おでかけポイント
-            <b>{{ outingPoint }}</b>
-            <span class="pill__change">
-              <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
-                {{ formatChange(statusChanges.outingPoint) }}
+              <!-- 直前の行動でかかった時間（結果を表示している間だけ出す）
+                   出たり消えたりしても幅が変わらないように、
+                   外側の span で置き場所（幅）をいつも確保しておく -->
+              <span class="status-clock__change">
+                <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
               </span>
             </span>
-          </span>
+          </div>
 
-          <span class="pill pill--snack">
-            おやつ残り
-            <b>{{ snackLeft }}</b>
+          <!-- ゲージを「こうちゃん」と「親」の2つのまとまりに分ける
+               見出し＋うすい背景だけでグループに見せているので、
+               増える高さは見出し1行ぶんだけ（1280×720でも一画面に収まる） -->
+          <div class="status-groups">
+            <section class="status-group status-group--child">
+              <p class="status-group__name">こうちゃん</p>
 
-            <!-- 「個」も、上のおでかけポイントの増減表示と同じ幅の置き場所に入れる
-                 こうすると、2つの数字が上下でぴったり同じ位置にそろう -->
-            <span class="pill__unit">個</span>
-          </span>
-        </div>
+              <ul class="status-list">
+                <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
+                  <span class="status-item__label">
+                    <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
+                    体力
+                  </span>
+                  <span class="status-item__value">{{ childEnergy }}</span>
+                  <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
+                    {{ formatChange(statusChanges.childEnergy) }}
+                  </span>
+                  <span class="gauge">
+                    <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
 
-        <div class="status-found">
-          <span class="status-found__label">見つけたもの</span>
+                    <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
+                    <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
 
-          <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
+                    <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
+                    <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
+                  </span>
+                </li>
 
-          <ul v-else class="status-found__list">
-            <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
+                <li class="status-item">
+                  <span class="status-item__label">機嫌</span>
+                  <span class="status-item__value">{{ childMood }}</span>
+                  <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
+                    {{ formatChange(statusChanges.childMood) }}
+                  </span>
+                  <span class="gauge">
+                    <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
+
+                    <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
+                    <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
+                  </span>
+                </li>
+              </ul>
+            </section>
+
+            <section class="status-group status-group--parent">
+              <p class="status-group__name">親</p>
+
+              <ul class="status-list">
+                <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
+                  <span class="status-item__label">
+                    <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
+                    体力
+                  </span>
+                  <span class="status-item__value">{{ parentEnergy }}</span>
+                  <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
+                    {{ formatChange(statusChanges.parentEnergy) }}
+                  </span>
+                  <span class="gauge">
+                    <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
+
+                    <!-- 目もり：あぶないライン（親の体力20以下） -->
+                    <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
+                  </span>
+                </li>
+
+                <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
+                  <span class="status-item__label">
+                    <span v-if="isParentCalmDanger" class="status-item__alert">⚠</span>
+                    余裕
+                  </span>
+                  <span class="status-item__value">{{ parentCalm }}</span>
+                  <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
+                    {{ formatChange(statusChanges.parentCalm) }}
+                  </span>
+                  <span class="gauge">
+                    <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
+
+                    <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
+                    <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
+                  </span>
+                </li>
+              </ul>
+            </section>
+          </div>
+
+          <!-- ゲージの目もりの説明
+
+               並べる順番は、ゲージの上での位置と同じ「左 → 右」にそろえてある
+               ・あぶないライン   … 20 のあたり（ゲージの左のほう）
+               ・ぐずりだすライン … 71 のあたり（ゲージの右のほう）
+               説明の並びとゲージの線の並びが同じなので、
+               どちらの線の話をしているのか見つけやすい -->
+          <p class="gauge-legend">
+            <span class="gauge-legend__item">
+              <span class="gauge-legend__mark gauge-legend__mark--danger"></span>
+              あぶないライン
+            </span>
+
+            <span class="gauge-legend__item">
+              <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
+              ぐずりだすライン
+            </span>
+          </p>
+
+          <div class="status-pills">
+            <span class="pill pill--point">
+              おでかけポイント
+              <b>{{ outingPoint }}</b>
+              <span class="pill__change">
+                <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
+                  {{ formatChange(statusChanges.outingPoint) }}
+                </span>
+              </span>
+            </span>
+
+            <span class="pill pill--snack">
+              おやつ残り
+              <b>{{ snackLeft }}</b>
+
+              <!-- 「個」も、上のおでかけポイントの増減表示と同じ幅の置き場所に入れる
+                   こうすると、2つの数字が上下でぴったり同じ位置にそろう -->
+              <span class="pill__unit">個</span>
+            </span>
+          </div>
+
+          <div class="status-found">
+            <span class="status-found__label">見つけたもの</span>
+
+            <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
+
+            <ul v-else class="status-found__list">
+              <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
+            </ul>
+          </div>
+
+          <!-- 危険な状態の警告（GAME OVERになる前の合図）
+               リザルト画面では、もう気をつけようがないので出さない -->
+          <ul v-if="dangerWarnings.length > 0 && !isResultScene" class="status-warnings">
+            <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
           </ul>
-        </div>
 
-        <!-- 危険な状態の警告（GAME OVERになる前の合図）
-             リザルト画面では、もう気をつけようがないので出さない -->
-        <ul v-if="dangerWarnings.length > 0 && !isResultScene" class="status-warnings">
-          <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
-        </ul>
+          <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
+          <p v-if="isAlmostNoon && !isResultScene" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
+        </header>
 
-        <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
-        <p v-if="isAlmostNoon && !isResultScene" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
-      </header>
+        <!-- ==========================================================
+             【中央】イベント表示 ＋ 【下部】コマンド欄
+             場面ごとに .stage（中央）と .command（下部）を並べる
+             ========================================================== -->
 
-      <!-- ==========================================================
-           【中央】イベント表示 ＋ 【下部】コマンド欄
-           場面ごとに .stage（中央）と .command（下部）を並べる
-           ========================================================== -->
+        <!-- 場面の切り替え
+             前の場面がすっと消えてから、次の場面がふわっと出るようにする
+             mode="out-in" ＝ 前が消えきってから次を出す（重ならないので位置がずれない） -->
+        <Transition name="scene" mode="out-in">
+          <!-- 公園入口 -->
+          <div v-if="currentEvent === 'parkEntrance'" class="scene" key="parkEntrance">
+            <section class="stage">
+              <article class="place-card">
+                <h2 class="place-card__title">公園入口</h2>
 
-      <!-- 場面の切り替え
-           前の場面がすっと消えてから、次の場面がふわっと出るようにする
-           mode="out-in" ＝ 前が消えきってから次を出す（重ならないので位置がずれない） -->
-      <Transition name="scene" mode="out-in">
-        <!-- 公園入口 -->
-        <div v-if="currentEvent === 'parkEntrance'" class="scene" key="parkEntrance">
-          <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">公園入口</h2>
+                <!-- あいさつ文は3段階（着いたばかり／前半のおかえり／午前後半）
+                     どの文にするかは、上の parkEntranceText で決めている -->
+                <p class="place-card__text">{{ parkEntranceText }}</p>
+              </article>
 
-              <!-- あいさつ文は3段階（着いたばかり／前半のおかえり／午前後半）
-                   どの文にするかは、上の parkEntranceText で決めている -->
-              <p class="place-card__text">{{ parkEntranceText }}</p>
-            </article>
+              <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
+              <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
+                <!-- 探検済みかどうかで文言を切り替える
+                     まだ行っていない → はじめて見つけたときの案内
+                     もう行った → また行ってみようという案内 -->
+                <template v-if="isVisited('secretSpot')">
+                  <h2 class="place-card__title">秘密の場所</h2>
 
-            <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
-            <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
-              <!-- 探検済みかどうかで文言を切り替える
-                   まだ行っていない → はじめて見つけたときの案内
-                   もう行った → また行ってみようという案内 -->
-              <template v-if="isVisited('secretSpot')">
+                  <p class="place-card__text">こうちゃんは、あの秘密の道を覚えているようです。また行ってみよう！</p>
+                </template>
+
+                <template v-else>
+                  <h2 class="place-card__title">秘密の場所を発見！</h2>
+
+                  <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
+                </template>
+              </article>
+            </section>
+
+            <nav class="command">
+              <p class="command__label">どこへ行く？</p>
+
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0">
+                <span class="cmd__text">すべり台へ行く</span>
+                <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
+              </button>
+
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1">
+                <span class="cmd__text">砂場へ行く</span>
+                <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
+              </button>
+
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2">
+                <span class="cmd__text">どんぐりの木へ行く</span>
+                <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
+              </button>
+
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3">
+                <span class="cmd__text">池へ行く</span>
+                <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
+              </button>
+
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('hill')" @mouseenter="selectedCommandIndex = 4">
+                <span class="cmd__text">丘へ行く</span>
+                <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
+              </button>
+
+              <button v-if="canEnterSecretSpot" class="cmd cmd--secret" :class="{ 'cmd--selected': selectedCommandIndex === 5 }" @click="goToPlace('secretSpot')" @mouseenter="selectedCommandIndex = 5">
+                <span class="cmd__text">秘密の場所へ行く</span>
+                <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
+              </button>
+
+              <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="goToGoal" @mouseenter="selectedCommandIndex = goalCommandIndex">
+                <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
+              </button>
+            </nav>
+          </div>
+
+          <!-- すべり台 -->
+          <div v-else-if="currentEvent === 'slide'" class="scene" key="slide">
+            <section class="stage">
+              <article class="place-card">
+                <h2 class="place-card__title">すべり台</h2>
+
+                <p class="place-card__text">大きなすべり台があります。こうちゃんは階段をのぼりはじめました。</p>
+              </article>
+
+              <!-- 結果が出たあと -->
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
+
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+
+                   PCでは [☕ ひとやすみ][どうする？] の横ならび
+                   スマホでは横幅が足りないので、たてにならぶ
+
+                   メインコマンドはいつも右はしにあるので、
+                   サブメニューを開いても場所が動かない -->
+              <div class="command-area">
+                <!-- サブメニュー「☕ ひとやすみ」
+
+                     休憩とおやつは、その場所ならではの遊びではなく
+                     「どこでも同じ、親子の状態を整える行動」なので、
+                     メインコマンドにまぜず、こちらにまとめている
+
+                     出るのは「休憩・おやつ」を選んだときだけ
+                     （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                       開いているか の3つをまとめて見てくれる） -->
+                <Transition name="care-menu">
+                  <aside v-if="isCareMenuVisible" class="care-menu">
+                    <p class="care-menu__label">☕ ひとやすみ</p>
+
+                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <span class="care-menu__text">休憩する</span>
+                    </button>
+
+                    <!-- おやつが残っているときだけ出す
+                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                    <button
+                      v-if="snackLeft > 0"
+                      class="care-menu__item"
+                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                      @click="giveSnackWhileExploring"
+                      @mouseenter="selectedCareCommandIndex = 1">
+                      <span class="care-menu__text">おやつをあげる</span>
+                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                    </button>
+
+                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                  </aside>
+                </Transition>
+
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                <nav class="command-box">
+                  <!-- 結果がまだ無いとき -->
+                  <template v-if="!resultMessage">
+                    <p class="command-box__label">どうする？</p>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">一緒にすべる</span>
+                    </button>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">下で見守る</span>
+                    </button>
+
+                    <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                         上の2つ … その場所ならではの遊び（すべる・見守る など）
+                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                         同じ枠の中にならんでいても種類がちがうので、
+                         あいだに細い線と小さな見出しを入れて、
+                         ひとめで「ここからは別のなかま」と分かるようにする
+
+                         ※ ボタンではなくただの見出しなので、
+                           ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                    <p class="command-box__divider">そのほか</p>
+
+                    <!-- サブメニューを開け閉めするコマンド
+                         aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                      :aria-expanded="isCareMenuVisible"
+                      @click="toggleCareMenu"
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      <span class="command-box__text">休憩・おやつ</span>
+                    </button>
+
+                    <!-- 「べつの場所へ行く」はよく使うので、
+                         サブメニューには入れず、ここに残してある
+
+                         よく使うコマンドなので、見た目も上の行動と
+                         まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      <span class="command-box__text">べつの場所へ行く</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                    </button>
+                  </template>
+                </nav>
+              </div>
+            </section>
+          </div>
+
+          <!-- 砂場 -->
+          <div v-else-if="currentEvent === 'sandbox'" class="scene" key="sandbox">
+            <section class="stage">
+              <article class="place-card">
+                <h2 class="place-card__title">砂場</h2>
+
+                <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
+              </article>
+
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
+
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+
+                   PCでは [☕ ひとやすみ][どうする？] の横ならび
+                   スマホでは横幅が足りないので、たてにならぶ
+
+                   メインコマンドはいつも右はしにあるので、
+                   サブメニューを開いても場所が動かない -->
+              <div class="command-area">
+                <!-- サブメニュー「☕ ひとやすみ」
+
+                     休憩とおやつは、その場所ならではの遊びではなく
+                     「どこでも同じ、親子の状態を整える行動」なので、
+                     メインコマンドにまぜず、こちらにまとめている
+
+                     出るのは「休憩・おやつ」を選んだときだけ
+                     （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                       開いているか の3つをまとめて見てくれる） -->
+                <Transition name="care-menu">
+                  <aside v-if="isCareMenuVisible" class="care-menu">
+                    <p class="care-menu__label">☕ ひとやすみ</p>
+
+                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <span class="care-menu__text">休憩する</span>
+                    </button>
+
+                    <!-- おやつが残っているときだけ出す
+                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                    <button
+                      v-if="snackLeft > 0"
+                      class="care-menu__item"
+                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                      @click="giveSnackWhileExploring"
+                      @mouseenter="selectedCareCommandIndex = 1">
+                      <span class="care-menu__text">おやつをあげる</span>
+                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                    </button>
+
+                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                  </aside>
+                </Transition>
+
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                <nav class="command-box">
+                  <!-- 結果がまだ無いとき -->
+                  <template v-if="!resultMessage">
+                    <p class="command-box__label">どうする？</p>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">一緒に大きな山を作る</span>
+                    </button>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">砂のトンネルを作る</span>
+                    </button>
+
+                    <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                         上の2つ … その場所ならではの遊び（すべる・見守る など）
+                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                         同じ枠の中にならんでいても種類がちがうので、
+                         あいだに細い線と小さな見出しを入れて、
+                         ひとめで「ここからは別のなかま」と分かるようにする
+
+                         ※ ボタンではなくただの見出しなので、
+                           ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                    <p class="command-box__divider">そのほか</p>
+
+                    <!-- サブメニューを開け閉めするコマンド
+                         aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                      :aria-expanded="isCareMenuVisible"
+                      @click="toggleCareMenu"
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      <span class="command-box__text">休憩・おやつ</span>
+                    </button>
+
+                    <!-- 「べつの場所へ行く」はよく使うので、
+                         サブメニューには入れず、ここに残してある
+
+                         よく使うコマンドなので、見た目も上の行動と
+                         まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      <span class="command-box__text">べつの場所へ行く</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                    </button>
+                  </template>
+                </nav>
+              </div>
+            </section>
+          </div>
+
+          <!-- どんぐりの木 -->
+          <div v-else-if="currentEvent === 'acornArea'" class="scene" key="acornArea">
+            <section class="stage">
+              <article class="place-card">
+                <h2 class="place-card__title">どんぐりの木</h2>
+
+                <p class="place-card__text">大きな木の下に、どんぐりがたくさん落ちています。</p>
+              </article>
+
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
+
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+
+                   PCでは [☕ ひとやすみ][どうする？] の横ならび
+                   スマホでは横幅が足りないので、たてにならぶ
+
+                   メインコマンドはいつも右はしにあるので、
+                   サブメニューを開いても場所が動かない -->
+              <div class="command-area">
+                <!-- サブメニュー「☕ ひとやすみ」
+
+                     休憩とおやつは、その場所ならではの遊びではなく
+                     「どこでも同じ、親子の状態を整える行動」なので、
+                     メインコマンドにまぜず、こちらにまとめている
+
+                     出るのは「休憩・おやつ」を選んだときだけ
+                     （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                       開いているか の3つをまとめて見てくれる） -->
+                <Transition name="care-menu">
+                  <aside v-if="isCareMenuVisible" class="care-menu">
+                    <p class="care-menu__label">☕ ひとやすみ</p>
+
+                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <span class="care-menu__text">休憩する</span>
+                    </button>
+
+                    <!-- おやつが残っているときだけ出す
+                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                    <button
+                      v-if="snackLeft > 0"
+                      class="care-menu__item"
+                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                      @click="giveSnackWhileExploring"
+                      @mouseenter="selectedCareCommandIndex = 1">
+                      <span class="care-menu__text">おやつをあげる</span>
+                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                    </button>
+
+                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                  </aside>
+                </Transition>
+
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                <nav class="command-box">
+                  <!-- 結果がまだ無いとき -->
+                  <template v-if="!resultMessage">
+                    <p class="command-box__label">どうする？</p>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">一緒にどんぐりを拾う</span>
+                    </button>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="rollAcorns" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">どんぐりをころがして遊ぶ</span>
+                    </button>
+
+                    <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                         上の2つ … その場所ならではの遊び（すべる・見守る など）
+                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                         同じ枠の中にならんでいても種類がちがうので、
+                         あいだに細い線と小さな見出しを入れて、
+                         ひとめで「ここからは別のなかま」と分かるようにする
+
+                         ※ ボタンではなくただの見出しなので、
+                           ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                    <p class="command-box__divider">そのほか</p>
+
+                    <!-- サブメニューを開け閉めするコマンド
+                         aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                      :aria-expanded="isCareMenuVisible"
+                      @click="toggleCareMenu"
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      <span class="command-box__text">休憩・おやつ</span>
+                    </button>
+
+                    <!-- 「べつの場所へ行く」はよく使うので、
+                         サブメニューには入れず、ここに残してある
+
+                         よく使うコマンドなので、見た目も上の行動と
+                         まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      <span class="command-box__text">べつの場所へ行く</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                    </button>
+                  </template>
+                </nav>
+              </div>
+            </section>
+          </div>
+
+          <!-- 池 -->
+          <div v-else-if="currentEvent === 'pond'" class="scene" key="pond">
+            <section class="stage">
+              <article class="place-card">
+                <h2 class="place-card__title">池</h2>
+
+                <p class="place-card__text">池には白鳥が泳いでいます。こうちゃんは指をさして大はしゃぎです。</p>
+              </article>
+
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
+
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+
+                   PCでは [☕ ひとやすみ][どうする？] の横ならび
+                   スマホでは横幅が足りないので、たてにならぶ
+
+                   メインコマンドはいつも右はしにあるので、
+                   サブメニューを開いても場所が動かない -->
+              <div class="command-area">
+                <!-- サブメニュー「☕ ひとやすみ」
+
+                     休憩とおやつは、その場所ならではの遊びではなく
+                     「どこでも同じ、親子の状態を整える行動」なので、
+                     メインコマンドにまぜず、こちらにまとめている
+
+                     出るのは「休憩・おやつ」を選んだときだけ
+                     （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                       開いているか の3つをまとめて見てくれる） -->
+                <Transition name="care-menu">
+                  <aside v-if="isCareMenuVisible" class="care-menu">
+                    <p class="care-menu__label">☕ ひとやすみ</p>
+
+                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <span class="care-menu__text">休憩する</span>
+                    </button>
+
+                    <!-- おやつが残っているときだけ出す
+                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                    <button
+                      v-if="snackLeft > 0"
+                      class="care-menu__item"
+                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                      @click="giveSnackWhileExploring"
+                      @mouseenter="selectedCareCommandIndex = 1">
+                      <span class="care-menu__text">おやつをあげる</span>
+                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                    </button>
+
+                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                  </aside>
+                </Transition>
+
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                <nav class="command-box">
+                  <!-- 結果がまだ無いとき -->
+                  <template v-if="!resultMessage">
+                    <p class="command-box__label">どうする？</p>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">白鳥を近くで見る</span>
+                    </button>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">少し離れて見る</span>
+                    </button>
+
+                    <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                         上の2つ … その場所ならではの遊び（すべる・見守る など）
+                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                         同じ枠の中にならんでいても種類がちがうので、
+                         あいだに細い線と小さな見出しを入れて、
+                         ひとめで「ここからは別のなかま」と分かるようにする
+
+                         ※ ボタンではなくただの見出しなので、
+                           ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                    <p class="command-box__divider">そのほか</p>
+
+                    <!-- サブメニューを開け閉めするコマンド
+                         aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                      :aria-expanded="isCareMenuVisible"
+                      @click="toggleCareMenu"
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      <span class="command-box__text">休憩・おやつ</span>
+                    </button>
+
+                    <!-- 「べつの場所へ行く」はよく使うので、
+                         サブメニューには入れず、ここに残してある
+
+                         よく使うコマンドなので、見た目も上の行動と
+                         まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      <span class="command-box__text">べつの場所へ行く</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                    </button>
+                  </template>
+                </nav>
+              </div>
+            </section>
+          </div>
+
+          <!-- 丘 -->
+          <div v-else-if="currentEvent === 'hill'" class="scene" key="hill">
+            <section class="stage">
+              <article class="place-card">
+                <h2 class="place-card__title">丘</h2>
+
+                <p class="place-card__text">ゆるやかな丘があります。てっぺんまでのぼれそうです。</p>
+              </article>
+
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
+
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+
+                   PCでは [☕ ひとやすみ][どうする？] の横ならび
+                   スマホでは横幅が足りないので、たてにならぶ
+
+                   メインコマンドはいつも右はしにあるので、
+                   サブメニューを開いても場所が動かない -->
+              <div class="command-area">
+                <!-- サブメニュー「☕ ひとやすみ」
+
+                     休憩とおやつは、その場所ならではの遊びではなく
+                     「どこでも同じ、親子の状態を整える行動」なので、
+                     メインコマンドにまぜず、こちらにまとめている
+
+                     出るのは「休憩・おやつ」を選んだときだけ
+                     （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                       開いているか の3つをまとめて見てくれる） -->
+                <Transition name="care-menu">
+                  <aside v-if="isCareMenuVisible" class="care-menu">
+                    <p class="care-menu__label">☕ ひとやすみ</p>
+
+                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <span class="care-menu__text">休憩する</span>
+                    </button>
+
+                    <!-- おやつが残っているときだけ出す
+                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                    <button
+                      v-if="snackLeft > 0"
+                      class="care-menu__item"
+                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                      @click="giveSnackWhileExploring"
+                      @mouseenter="selectedCareCommandIndex = 1">
+                      <span class="care-menu__text">おやつをあげる</span>
+                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                    </button>
+
+                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                  </aside>
+                </Transition>
+
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                <nav class="command-box">
+                  <!-- 結果がまだ無いとき -->
+                  <template v-if="!resultMessage">
+                    <p class="command-box__label">どうする？</p>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">走って丘をのぼる</span>
+                    </button>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">ゆっくり歩いてのぼる</span>
+                    </button>
+
+                    <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                         上の2つ … その場所ならではの遊び（すべる・見守る など）
+                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                         同じ枠の中にならんでいても種類がちがうので、
+                         あいだに細い線と小さな見出しを入れて、
+                         ひとめで「ここからは別のなかま」と分かるようにする
+
+                         ※ ボタンではなくただの見出しなので、
+                           ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                    <p class="command-box__divider">そのほか</p>
+
+                    <!-- サブメニューを開け閉めするコマンド
+                         aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                      :aria-expanded="isCareMenuVisible"
+                      @click="toggleCareMenu"
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      <span class="command-box__text">休憩・おやつ</span>
+                    </button>
+
+                    <!-- 「べつの場所へ行く」はよく使うので、
+                         サブメニューには入れず、ここに残してある
+
+                         よく使うコマンドなので、見た目も上の行動と
+                         まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      <span class="command-box__text">べつの場所へ行く</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                    </button>
+                  </template>
+                </nav>
+              </div>
+            </section>
+          </div>
+
+          <!-- 秘密の場所 -->
+          <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
+            <section class="stage">
+              <article class="place-card place-card--secret">
                 <h2 class="place-card__title">秘密の場所</h2>
 
-                <p class="place-card__text">こうちゃんは、あの秘密の道を覚えているようです。また行ってみよう！</p>
-              </template>
+                <p class="place-card__text">しげみのおくに、細い道を見つけました。こうちゃんが手を引いて進みます。</p>
+              </article>
 
-              <template v-else>
-                <h2 class="place-card__title">秘密の場所を発見！</h2>
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
 
-                <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
-              </template>
-            </article>
-          </section>
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
 
-          <nav class="command">
-            <p class="command__label">どこへ行く？</p>
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
 
-            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0">
-              <span class="cmd__text">すべり台へ行く</span>
-              <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
-            </button>
+                  <p class="result-card__text">{{ resultMessage }}</p>
 
-            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1">
-              <span class="cmd__text">砂場へ行く</span>
-              <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
-            </button>
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
 
-            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2">
-              <span class="cmd__text">どんぐりの木へ行く</span>
-              <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
-            </button>
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
 
-            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3">
-              <span class="cmd__text">池へ行く</span>
-              <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
-            </button>
+                    <p class="event-flash__text">{{ randomEventText }}</p>
 
-            <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('hill')" @mouseenter="selectedCommandIndex = 4">
-              <span class="cmd__text">丘へ行く</span>
-              <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
-            </button>
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
 
-            <button v-if="canEnterSecretSpot" class="cmd cmd--secret" :class="{ 'cmd--selected': selectedCommandIndex === 5 }" @click="goToPlace('secretSpot')" @mouseenter="selectedCommandIndex = 5">
-              <span class="cmd__text">秘密の場所へ行く</span>
-              <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
-            </button>
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
-            <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="goToGoal" @mouseenter="selectedCommandIndex = goalCommandIndex">
-              <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
-            </button>
-          </nav>
-        </div>
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
 
-        <!-- すべり台 -->
-        <div v-else-if="currentEvent === 'slide'" class="scene" key="slide">
-          <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">すべり台</h2>
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
 
-              <p class="place-card__text">大きなすべり台があります。こうちゃんは階段をのぼりはじめました。</p>
-            </article>
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
 
-            <!-- 結果が出たあと -->
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
-
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                </p>
-
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
                   </div>
                 </div>
+              </article>
+
+              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+
+                   PCでは [☕ ひとやすみ][どうする？] の横ならび
+                   スマホでは横幅が足りないので、たてにならぶ
+
+                   メインコマンドはいつも右はしにあるので、
+                   サブメニューを開いても場所が動かない -->
+              <div class="command-area">
+                <!-- サブメニュー「☕ ひとやすみ」
+
+                     休憩とおやつは、その場所ならではの遊びではなく
+                     「どこでも同じ、親子の状態を整える行動」なので、
+                     メインコマンドにまぜず、こちらにまとめている
+
+                     出るのは「休憩・おやつ」を選んだときだけ
+                     （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
+                       開いているか の3つをまとめて見てくれる） -->
+                <Transition name="care-menu">
+                  <aside v-if="isCareMenuVisible" class="care-menu">
+                    <p class="care-menu__label">☕ ひとやすみ</p>
+
+                    <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <span class="care-menu__text">休憩する</span>
+                    </button>
+
+                    <!-- おやつが残っているときだけ出す
+                         ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
+                    <button
+                      v-if="snackLeft > 0"
+                      class="care-menu__item"
+                      :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
+                      @click="giveSnackWhileExploring"
+                      @mouseenter="selectedCareCommandIndex = 1">
+                      <span class="care-menu__text">おやつをあげる</span>
+                      <span class="care-menu__badge">残り{{ snackLeft }}個</span>
+                    </button>
+
+                    <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
+                  </aside>
+                </Transition>
+
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                <nav class="command-box">
+                  <!-- 結果がまだ無いとき -->
+                  <template v-if="!resultMessage">
+                    <p class="command-box__label">どうする？</p>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSecretBase" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">秘密基地で遊ぶ</span>
+                    </button>
+
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreSecretPath" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">秘密の道をもう少し探検する</span>
+                    </button>
+
+                    <!-- ここから下は「どこでも同じコマンド」という区切り
+
+                         上の2つ … その場所ならではの遊び（すべる・見守る など）
+                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+
+                         同じ枠の中にならんでいても種類がちがうので、
+                         あいだに細い線と小さな見出しを入れて、
+                         ひとめで「ここからは別のなかま」と分かるようにする
+
+                         ※ ボタンではなくただの見出しなので、
+                           ↑↓キーの番号（selectedCommandIndex）には数えない -->
+                    <p class="command-box__divider">そのほか</p>
+
+                    <!-- サブメニューを開け閉めするコマンド
+                         aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
+                      :aria-expanded="isCareMenuVisible"
+                      @click="toggleCareMenu"
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      <span class="command-box__text">休憩・おやつ</span>
+                    </button>
+
+                    <!-- 「べつの場所へ行く」はよく使うので、
+                         サブメニューには入れず、ここに残してある
+
+                         よく使うコマンドなので、見た目も上の行動と
+                         まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      <span class="command-box__text">べつの場所へ行く</span>
+                    </button>
+                  </template>
+
+                  <template v-else>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                    </button>
+                  </template>
+                </nav>
               </div>
-            </article>
+            </section>
+          </div>
 
-            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
+          <!-- いやいや中 -->
+          <div v-else-if="currentEvent === 'tantrum'" class="scene" key="tantrum">
+            <section class="stage">
+              <!-- いやいやタイムのカード
+                   place-card--tantrum        … 赤っぽい見た目（いつも付ける）
+                   place-card--tantrum-active … ゆっくりバウンスする動き（いやいや中だけ付ける）
 
-                 PCでは [☕ ひとやすみ][どうする？] の横ならび
-                 スマホでは横幅が足りないので、たてにならぶ
+                   見た目と動きでクラスを分けているので、
+                   いやいやが終わっても、カードの色はそのままで動きだけが止まる
 
-                 メインコマンドはいつも右はしにあるので、
-                 サブメニューを開いても場所が動かない -->
-            <div class="command-area">
-              <!-- サブメニュー「☕ ひとやすみ」
+                   ※ 付け外しの条件は currentEvent ではなく isTantrum
+                     だっこ・おやつ・待つ成功で いやいや が終わると、
+                     画面は 'tantrum' のままでも isTantrum が false になるので、
+                     その瞬間にバウンスが止まる -->
+              <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum }">
+                <h2 class="place-card__title">いやいやタイム！</h2>
 
-                   休憩とおやつは、その場所ならではの遊びではなく
-                   「どこでも同じ、親子の状態を整える行動」なので、
-                   メインコマンドにまぜず、こちらにまとめている
+                <p class="place-card__text">
+                  こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
+                </p>
+              </article>
 
-                   出るのは「休憩・おやつ」を選んだときだけ
-                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                     開いているか の3つをまとめて見てくれる） -->
-              <Transition name="care-menu">
-                <aside v-if="isCareMenuVisible" class="care-menu">
-                  <p class="care-menu__label">☕ ひとやすみ</p>
+              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
+                <h3 class="result-card__title">結果</h3>
 
-                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                    <span class="care-menu__text">休憩する</span>
-                  </button>
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
+                  <!-- 待つことに失敗して、まだいやいやが続いているときに出す -->
+                  <p v-if="isTantrum" class="result-alert">まだ いやいや は続いています…</p>
 
-                  <!-- おやつが残っているときだけ出す
-                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                    @click="giveSnackWhileExploring"
-                    @mouseenter="selectedCareCommandIndex = 1">
-                    <span class="care-menu__text">おやつをあげる</span>
-                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                  </button>
+                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
+                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
+                    <span class="found-flash__label">★ アイテム発見！</span>
+                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                  </p>
 
-                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
-                </aside>
-              </Transition>
+                  <p class="result-card__text">{{ resultMessage }}</p>
 
-              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
               <nav class="command-box">
-                <!-- 結果がまだ無いとき -->
-                <template v-if="!resultMessage">
+                <!-- いやいやが続いているあいだは、結果が出ていてもコマンドを出しつづける -->
+                <template v-if="isTantrumUnsolved">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">一緒にすべる</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">だっこしてなだめる</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">下で見守る</span>
+                  <button v-if="snackLeft > 0" class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="giveSnack" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">おやつをあげる</span>
+                    <span class="command-box__badge">残り{{ snackLeft }}個</span>
                   </button>
 
-                  <!-- ここから下は「どこでも同じコマンド」という区切り
+                  <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
 
-                       上の2つ … その場所ならではの遊び（すべる・見守る など）
-                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
-
-                       同じ枠の中にならんでいても種類がちがうので、
-                       あいだに細い線と小さな見出しを入れて、
-                       ひとめで「ここからは別のなかま」と分かるようにする
-
-                       ※ ボタンではなくただの見出しなので、
-                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
-                  <p class="command-box__divider">そのほか</p>
-
-                  <!-- サブメニューを開け閉めするコマンド
-                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
                   <button
                     class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
-                    :aria-expanded="isCareMenuVisible"
-                    @click="toggleCareMenu"
-                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
-                    <span class="command-box__text">休憩・おやつ</span>
-                  </button>
-
-                  <!-- 「べつの場所へ行く」はよく使うので、
-                       サブメニューには入れず、ここに残してある
-
-                       よく使うコマンドなので、見た目も上の行動と
-                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
-                    @click="goToNextPlace"
-                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                    <span class="command-box__text">べつの場所へ行く</span>
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }"
+                    @click="waitCalmly"
+                    @mouseenter="selectedCommandIndex = waitCommandIndex">
+                    <span class="command-box__text">{{ waitCommandLabel }}</span>
                   </button>
                 </template>
 
@@ -6246,1899 +7491,813 @@ onUnmounted(() => {
                   </button>
                 </template>
               </nav>
-            </div>
-          </section>
-        </div>
+            </section>
+          </div>
 
-        <!-- 砂場 -->
-        <div v-else-if="currentEvent === 'sandbox'" class="scene" key="sandbox">
-          <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">砂場</h2>
+          <!-- 突然イベント：救急車のサイレン！ -->
+          <div v-else-if="currentEvent === 'emergencySiren'" class="scene" key="emergencySiren">
+            <section class="stage">
+              <article class="place-card place-card--sudden">
+                <p class="place-card__flash">突然イベント！</p>
 
-              <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
-            </article>
+                <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
+                <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。こうちゃんは「きゅうきゅうしゃ！」と目を輝かせています。</p>
+              </article>
 
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+              <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+              <article v-if="resultMessage" class="result-card">
+                <h3 class="result-card__title">結果</h3>
 
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                </p>
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <p class="result-card__text">{{ resultMessage }}</p>
 
-                <p class="result-card__text">{{ resultMessage }}</p>
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
 
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
 
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__text">{{ randomEventText }}</p>
 
-                  <p class="event-flash__text">{{ randomEventText }}</p>
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
 
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
 
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
 
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
 
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </article>
+              </article>
 
-            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                 PCでは [☕ ひとやすみ][どうする？] の横ならび
-                 スマホでは横幅が足りないので、たてにならぶ
-
-                 メインコマンドはいつも右はしにあるので、
-                 サブメニューを開いても場所が動かない -->
-            <div class="command-area">
-              <!-- サブメニュー「☕ ひとやすみ」
-
-                   休憩とおやつは、その場所ならではの遊びではなく
-                   「どこでも同じ、親子の状態を整える行動」なので、
-                   メインコマンドにまぜず、こちらにまとめている
-
-                   出るのは「休憩・おやつ」を選んだときだけ
-                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                     開いているか の3つをまとめて見てくれる） -->
-              <Transition name="care-menu">
-                <aside v-if="isCareMenuVisible" class="care-menu">
-                  <p class="care-menu__label">☕ ひとやすみ</p>
-
-                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                    <span class="care-menu__text">休憩する</span>
-                  </button>
-
-                  <!-- おやつが残っているときだけ出す
-                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                    @click="giveSnackWhileExploring"
-                    @mouseenter="selectedCareCommandIndex = 1">
-                    <span class="care-menu__text">おやつをあげる</span>
-                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                  </button>
-
-                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
-                </aside>
-              </Transition>
-
-              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box">
-                <!-- 結果がまだ無いとき -->
+                <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">一緒に大きな山を作る</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">立ち止まって救急車を探す</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">砂のトンネルを作る</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">音を聞きながら少し待つ</span>
                   </button>
 
-                  <!-- ここから下は「どこでも同じコマンド」という区切り
-
-                       上の2つ … その場所ならではの遊び（すべる・見守る など）
-                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
-
-                       同じ枠の中にならんでいても種類がちがうので、
-                       あいだに細い線と小さな見出しを入れて、
-                       ひとめで「ここからは別のなかま」と分かるようにする
-
-                       ※ ボタンではなくただの見出しなので、
-                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
-                  <p class="command-box__divider">そのほか</p>
-
-                  <!-- サブメニューを開け閉めするコマンド
-                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
-                    :aria-expanded="isCareMenuVisible"
-                    @click="toggleCareMenu"
-                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
-                    <span class="command-box__text">休憩・おやつ</span>
-                  </button>
-
-                  <!-- 「べつの場所へ行く」はよく使うので、
-                       サブメニューには入れず、ここに残してある
-
-                       よく使うコマンドなので、見た目も上の行動と
-                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
-                    @click="goToNextPlace"
-                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                    <span class="command-box__text">べつの場所へ行く</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2">
+                    <span class="command-box__text">先へ進む</span>
                   </button>
                 </template>
 
+                <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
               </nav>
-            </div>
-          </section>
-        </div>
+            </section>
+          </div>
 
-        <!-- どんぐりの木 -->
-        <div v-else-if="currentEvent === 'acornArea'" class="scene" key="acornArea">
-          <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">どんぐりの木</h2>
+          <!-- 突然イベント：テントウムシ発見！ -->
+          <div v-else-if="currentEvent === 'ladybug'" class="scene" key="ladybug">
+            <section class="stage">
+              <article class="place-card place-card--sudden">
+                <p class="place-card__flash">突然イベント！</p>
 
-              <p class="place-card__text">大きな木の下に、どんぐりがたくさん落ちています。</p>
-            </article>
+                <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
+                <p class="place-card__text">葉っぱの上にテントウムシがいました。こうちゃんは「てんとうむし！」とうれしそうにしゃがみこみました。</p>
+              </article>
 
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+              <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+              <article v-if="resultMessage" class="result-card">
+                <h3 class="result-card__title">結果</h3>
 
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                </p>
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <p class="result-card__text">{{ resultMessage }}</p>
 
-                <p class="result-card__text">{{ resultMessage }}</p>
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
 
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
 
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__text">{{ randomEventText }}</p>
 
-                  <p class="event-flash__text">{{ randomEventText }}</p>
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
 
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
 
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
 
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
 
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </article>
+              </article>
 
-            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                 PCでは [☕ ひとやすみ][どうする？] の横ならび
-                 スマホでは横幅が足りないので、たてにならぶ
-
-                 メインコマンドはいつも右はしにあるので、
-                 サブメニューを開いても場所が動かない -->
-            <div class="command-area">
-              <!-- サブメニュー「☕ ひとやすみ」
-
-                   休憩とおやつは、その場所ならではの遊びではなく
-                   「どこでも同じ、親子の状態を整える行動」なので、
-                   メインコマンドにまぜず、こちらにまとめている
-
-                   出るのは「休憩・おやつ」を選んだときだけ
-                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                     開いているか の3つをまとめて見てくれる） -->
-              <Transition name="care-menu">
-                <aside v-if="isCareMenuVisible" class="care-menu">
-                  <p class="care-menu__label">☕ ひとやすみ</p>
-
-                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                    <span class="care-menu__text">休憩する</span>
-                  </button>
-
-                  <!-- おやつが残っているときだけ出す
-                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                    @click="giveSnackWhileExploring"
-                    @mouseenter="selectedCareCommandIndex = 1">
-                    <span class="care-menu__text">おやつをあげる</span>
-                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                  </button>
-
-                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
-                </aside>
-              </Transition>
-
-              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box">
-                <!-- 結果がまだ無いとき -->
+                <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">一緒にどんぐりを拾う</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">一緒にじっくり観察する</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="rollAcorns" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">どんぐりをころがして遊ぶ</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">手に乗せてみる</span>
                   </button>
 
-                  <!-- ここから下は「どこでも同じコマンド」という区切り
-
-                       上の2つ … その場所ならではの遊び（すべる・見守る など）
-                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
-
-                       同じ枠の中にならんでいても種類がちがうので、
-                       あいだに細い線と小さな見出しを入れて、
-                       ひとめで「ここからは別のなかま」と分かるようにする
-
-                       ※ ボタンではなくただの見出しなので、
-                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
-                  <p class="command-box__divider">そのほか</p>
-
-                  <!-- サブメニューを開け閉めするコマンド
-                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
-                    :aria-expanded="isCareMenuVisible"
-                    @click="toggleCareMenu"
-                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
-                    <span class="command-box__text">休憩・おやつ</span>
-                  </button>
-
-                  <!-- 「べつの場所へ行く」はよく使うので、
-                       サブメニューには入れず、ここに残してある
-
-                       よく使うコマンドなので、見た目も上の行動と
-                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
-                    @click="goToNextPlace"
-                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                    <span class="command-box__text">べつの場所へ行く</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2">
+                    <span class="command-box__text">そっと見送る</span>
                   </button>
                 </template>
 
+                <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
               </nav>
-            </div>
-          </section>
-        </div>
+            </section>
+          </div>
 
-        <!-- 池 -->
-        <div v-else-if="currentEvent === 'pond'" class="scene" key="pond">
-          <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">池</h2>
+          <!-- 突然イベント：犬が近づいてきた！ -->
+          <div v-else-if="currentEvent === 'dog'" class="scene" key="dog">
+            <section class="stage">
+              <article class="place-card place-card--sudden">
+                <p class="place-card__flash">突然イベント！</p>
 
-              <p class="place-card__text">池には白鳥が泳いでいます。こうちゃんは指をさして大はしゃぎです。</p>
-            </article>
+                <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
 
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
+                <p class="place-card__text">散歩中の犬が、しっぽをふりながら近づいてきました。こうちゃんは気になっているようです。</p>
+              </article>
 
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+              <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+              <article v-if="resultMessage" class="result-card">
+                <h3 class="result-card__title">結果</h3>
 
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                </p>
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <p class="result-card__text">{{ resultMessage }}</p>
 
-                <p class="result-card__text">{{ resultMessage }}</p>
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
 
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
 
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__text">{{ randomEventText }}</p>
 
-                  <p class="event-flash__text">{{ randomEventText }}</p>
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
 
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
 
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
 
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
 
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </article>
+              </article>
 
-            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                 PCでは [☕ ひとやすみ][どうする？] の横ならび
-                 スマホでは横幅が足りないので、たてにならぶ
-
-                 メインコマンドはいつも右はしにあるので、
-                 サブメニューを開いても場所が動かない -->
-            <div class="command-area">
-              <!-- サブメニュー「☕ ひとやすみ」
-
-                   休憩とおやつは、その場所ならではの遊びではなく
-                   「どこでも同じ、親子の状態を整える行動」なので、
-                   メインコマンドにまぜず、こちらにまとめている
-
-                   出るのは「休憩・おやつ」を選んだときだけ
-                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                     開いているか の3つをまとめて見てくれる） -->
-              <Transition name="care-menu">
-                <aside v-if="isCareMenuVisible" class="care-menu">
-                  <p class="care-menu__label">☕ ひとやすみ</p>
-
-                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                    <span class="care-menu__text">休憩する</span>
-                  </button>
-
-                  <!-- おやつが残っているときだけ出す
-                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                    @click="giveSnackWhileExploring"
-                    @mouseenter="selectedCareCommandIndex = 1">
-                    <span class="care-menu__text">おやつをあげる</span>
-                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                  </button>
-
-                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
-                </aside>
-              </Transition>
-
-              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
+              <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box">
-                <!-- 結果がまだ無いとき -->
+                <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">白鳥を近くで見る</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">近くで見る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">親の後ろから見る</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2">
+                    <span class="command-box__text">少し離れる</span>
+                  </button>
+                </template>
+
+                <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </section>
+          </div>
+
+          <!-- 突然イベント：こうちゃんがころんだ！ -->
+          <div v-else-if="currentEvent === 'fallDown'" class="scene" key="fallDown">
+            <section class="stage">
+              <article class="place-card place-card--sudden">
+                <p class="place-card__flash">突然イベント！</p>
+
+                <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
+
+                <p class="place-card__text">走っていたこうちゃんがつまずいてころんでしまいました。少しびっくりした顔でこちらを見ています。</p>
+              </article>
+
+              <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+              <article v-if="resultMessage" class="result-card">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+              <nav class="command-box">
+                <!-- まだ選んでいないとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">すぐにだっこする</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">「大丈夫？」と見守る</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 2">
+                    <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
+                  </button>
+
+                  <button
+                    v-if="snackLeft > 0"
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }"
+                    @click="giveSnackAfterFall"
+                    @mouseenter="selectedCommandIndex = 3">
+                    <span class="command-box__text">おやつで気をそらす</span>
+                    <span class="command-box__badge">残り{{ snackLeft }}個</span>
+                  </button>
+                </template>
+
+                <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
+                <template v-else>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
+                  </button>
+                </template>
+              </nav>
+            </section>
+          </div>
+
+          <!-- 突然イベント：噴水が出た！ -->
+          <div v-else-if="currentEvent === 'fountain'" class="scene" key="fountain">
+            <section class="stage">
+              <article class="place-card place-card--sudden">
+                <p class="place-card__flash">突然イベント！</p>
+
+                <h2 class="place-card__title">⛲ 噴水が出た！</h2>
+
+                <p class="place-card__text">突然、噴水から勢いよく水が飛び出しました。こうちゃんは「わあ！」と大喜びです。</p>
+              </article>
+
+              <!-- 選んだあとの結果（通常の場所とおなじ形） -->
+              <article v-if="resultMessage" class="result-card">
+                <h3 class="result-card__title">結果</h3>
+
+                <!-- ここから下が、高さが足りないときにスクロールする部分
+                     上の「結果」バッジ（h3）は外に置いてあるので、
+                     スクロールしても切れずに残る -->
+                <div class="result-card__body">
+                  <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- 見つけたものの文
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
+                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
+                    「
+                    <b class="found-line__name">{{ item }}</b>
+                    」を見つけました！
+                  </p>
+
+                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                       地の文にまぎれないように、専用の枠と
+                       色つきのしるし（おでかけポイント +5 など）で出す -->
+                  <div v-if="randomEventText" class="event-flash">
+                    <p class="event-flash__label">ちいさなできごと！</p>
+
+                    <p class="event-flash__text">{{ randomEventText }}</p>
+
+                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
+                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
+                        <span class="event-flash__item-label">{{ effect.label }}</span>
+                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
+                      </li>
+                    </ul>
+                  </div>
+
+                  <!-- いやいやが始まったときの文
+                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       読めるように、いちばん最後に置く -->
+                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
+                  <div v-if="statusChanges" class="change-box">
+                    <p class="change-box__title">今回の変化（合計）</p>
+
+                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
+                         外側のループでグループ、内側のループでその中の項目を出す -->
+                    <div class="change-groups">
+                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
+                        <p class="change-group__name">{{ group.name }}</p>
+
+                        <ul class="change-list">
+                          <li v-for="row in group.rows" :key="row.label" class="change-item">
+                            <span class="change-item__label">{{ row.label }}</span>
+
+                            <!-- 行動前 → 行動後
+                                 「いまいくつになったか」がすぐ分かるように、
+                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
+                            <span class="change-item__flow">
+                              <span class="change-item__before">{{ row.before }}</span>
+                              <span class="change-item__arrow">→</span>
+                              <span class="change-item__after">{{ row.after }}</span>
+                            </span>
+                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
+                          </li>
+                        </ul>
+                      </section>
+                    </div>
+                  </div>
+                </div>
+              </article>
+
+              <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
+              <nav class="command-box">
+                <!-- まだ選んでいないとき -->
+                <template v-if="!resultMessage">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">近くまで見に行く</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1">
                     <span class="command-box__text">少し離れて見る</span>
                   </button>
 
-                  <!-- ここから下は「どこでも同じコマンド」という区切り
-
-                       上の2つ … その場所ならではの遊び（すべる・見守る など）
-                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
-
-                       同じ枠の中にならんでいても種類がちがうので、
-                       あいだに細い線と小さな見出しを入れて、
-                       ひとめで「ここからは別のなかま」と分かるようにする
-
-                       ※ ボタンではなくただの見出しなので、
-                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
-                  <p class="command-box__divider">そのほか</p>
-
-                  <!-- サブメニューを開け閉めするコマンド
-                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
-                    :aria-expanded="isCareMenuVisible"
-                    @click="toggleCareMenu"
-                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
-                    <span class="command-box__text">休憩・おやつ</span>
-                  </button>
-
-                  <!-- 「べつの場所へ行く」はよく使うので、
-                       サブメニューには入れず、ここに残してある
-
-                       よく使うコマンドなので、見た目も上の行動と
-                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
-                    @click="goToNextPlace"
-                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                    <span class="command-box__text">べつの場所へ行く</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2">
+                    <span class="command-box__text">先へ進む</span>
                   </button>
                 </template>
 
+                <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
               </nav>
-            </div>
-          </section>
-        </div>
+            </section>
+          </div>
 
-        <!-- 丘 -->
-        <div v-else-if="currentEvent === 'hill'" class="scene" key="hill">
-          <section class="stage">
-            <article class="place-card">
-              <h2 class="place-card__title">丘</h2>
+          <!-- ゴール -->
+          <div v-else-if="currentEvent === 'goal'" class="scene" key="goal">
+            <section class="stage">
+              <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
+                   SランクとS+ランクのときだけ、カードがきらきら光る -->
+              <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' || endingRank === 'S+ランク' }">
+                <!-- 総合スコア（0〜100点） -->
+                <p class="ending-card__score-label">総合スコア</p>
 
-              <p class="place-card__text">ゆるやかな丘があります。てっぺんまでのぼれそうです。</p>
-            </article>
-
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
-
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
+                <p class="ending-card__score">
+                  <span class="ending-card__score-value">{{ finalScore }}</span>
+                  <span class="ending-card__score-max">/ 100</span>
                 </p>
 
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                 PCでは [☕ ひとやすみ][どうする？] の横ならび
-                 スマホでは横幅が足りないので、たてにならぶ
-
-                 メインコマンドはいつも右はしにあるので、
-                 サブメニューを開いても場所が動かない -->
-            <div class="command-area">
-              <!-- サブメニュー「☕ ひとやすみ」
-
-                   休憩とおやつは、その場所ならではの遊びではなく
-                   「どこでも同じ、親子の状態を整える行動」なので、
-                   メインコマンドにまぜず、こちらにまとめている
-
-                   出るのは「休憩・おやつ」を選んだときだけ
-                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                     開いているか の3つをまとめて見てくれる） -->
-              <Transition name="care-menu">
-                <aside v-if="isCareMenuVisible" class="care-menu">
-                  <p class="care-menu__label">☕ ひとやすみ</p>
-
-                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                    <span class="care-menu__text">休憩する</span>
-                  </button>
-
-                  <!-- おやつが残っているときだけ出す
-                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                    @click="giveSnackWhileExploring"
-                    @mouseenter="selectedCareCommandIndex = 1">
-                    <span class="care-menu__text">おやつをあげる</span>
-                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                  </button>
-
-                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
-                </aside>
-              </Transition>
-
-              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-              <nav class="command-box">
-                <!-- 結果がまだ無いとき -->
-                <template v-if="!resultMessage">
-                  <p class="command-box__label">どうする？</p>
-
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">走って丘をのぼる</span>
-                  </button>
-
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">ゆっくり歩いてのぼる</span>
-                  </button>
-
-                  <!-- ここから下は「どこでも同じコマンド」という区切り
-
-                       上の2つ … その場所ならではの遊び（すべる・見守る など）
-                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
-
-                       同じ枠の中にならんでいても種類がちがうので、
-                       あいだに細い線と小さな見出しを入れて、
-                       ひとめで「ここからは別のなかま」と分かるようにする
-
-                       ※ ボタンではなくただの見出しなので、
-                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
-                  <p class="command-box__divider">そのほか</p>
-
-                  <!-- サブメニューを開け閉めするコマンド
-                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
-                    :aria-expanded="isCareMenuVisible"
-                    @click="toggleCareMenu"
-                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
-                    <span class="command-box__text">休憩・おやつ</span>
-                  </button>
-
-                  <!-- 「べつの場所へ行く」はよく使うので、
-                       サブメニューには入れず、ここに残してある
-
-                       よく使うコマンドなので、見た目も上の行動と
-                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
-                    @click="goToNextPlace"
-                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                    <span class="command-box__text">べつの場所へ行く</span>
-                  </button>
-                </template>
-
-                <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                  </button>
-                </template>
-              </nav>
-            </div>
-          </section>
-        </div>
-
-        <!-- 秘密の場所 -->
-        <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
-          <section class="stage">
-            <article class="place-card place-card--secret">
-              <h2 class="place-card__title">秘密の場所</h2>
-
-              <p class="place-card__text">しげみのおくに、細い道を見つけました。こうちゃんが手を引いて進みます。</p>
-            </article>
-
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
-
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                </p>
-
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                 PCでは [☕ ひとやすみ][どうする？] の横ならび
-                 スマホでは横幅が足りないので、たてにならぶ
-
-                 メインコマンドはいつも右はしにあるので、
-                 サブメニューを開いても場所が動かない -->
-            <div class="command-area">
-              <!-- サブメニュー「☕ ひとやすみ」
-
-                   休憩とおやつは、その場所ならではの遊びではなく
-                   「どこでも同じ、親子の状態を整える行動」なので、
-                   メインコマンドにまぜず、こちらにまとめている
-
-                   出るのは「休憩・おやつ」を選んだときだけ
-                   （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                     開いているか の3つをまとめて見てくれる） -->
-              <Transition name="care-menu">
-                <aside v-if="isCareMenuVisible" class="care-menu">
-                  <p class="care-menu__label">☕ ひとやすみ</p>
-
-                  <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
-                    <span class="care-menu__text">休憩する</span>
-                  </button>
-
-                  <!-- おやつが残っているときだけ出す
-                       ※ 残りは、いやいやタイムで使うおやつと同じ snackLeft -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="care-menu__item"
-                    :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
-                    @click="giveSnackWhileExploring"
-                    @mouseenter="selectedCareCommandIndex = 1">
-                    <span class="care-menu__text">おやつをあげる</span>
-                    <span class="care-menu__badge">残り{{ snackLeft }}個</span>
-                  </button>
-
-                  <p v-else class="care-menu__note">おやつは、もうぜんぶ食べてしまいました…</p>
-                </aside>
-              </Transition>
-
-              <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-              <nav class="command-box">
-                <!-- 結果がまだ無いとき -->
-                <template v-if="!resultMessage">
-                  <p class="command-box__label">どうする？</p>
-
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSecretBase" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">秘密基地で遊ぶ</span>
-                  </button>
-
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreSecretPath" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">秘密の道をもう少し探検する</span>
-                  </button>
-
-                  <!-- ここから下は「どこでも同じコマンド」という区切り
-
-                       上の2つ … その場所ならではの遊び（すべる・見守る など）
-                       下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
-
-                       同じ枠の中にならんでいても種類がちがうので、
-                       あいだに細い線と小さな見出しを入れて、
-                       ひとめで「ここからは別のなかま」と分かるようにする
-
-                       ※ ボタンではなくただの見出しなので、
-                         ↑↓キーの番号（selectedCommandIndex）には数えない -->
-                  <p class="command-box__divider">そのほか</p>
-
-                  <!-- サブメニューを開け閉めするコマンド
-                       aria-expanded は「いま開いているか」を読み上げソフトに伝えるための印 -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
-                    :aria-expanded="isCareMenuVisible"
-                    @click="toggleCareMenu"
-                    @mouseenter="selectedCommandIndex = careMenuCommandIndex">
-                    <span class="command-box__text">休憩・おやつ</span>
-                  </button>
-
-                  <!-- 「べつの場所へ行く」はよく使うので、
-                       サブメニューには入れず、ここに残してある
-
-                       よく使うコマンドなので、見た目も上の行動と
-                       まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
-                    @click="goToNextPlace"
-                    @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                    <span class="command-box__text">べつの場所へ行く</span>
-                  </button>
-                </template>
-
-                <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                  </button>
-                </template>
-              </nav>
-            </div>
-          </section>
-        </div>
-
-        <!-- いやいや中 -->
-        <div v-else-if="currentEvent === 'tantrum'" class="scene" key="tantrum">
-          <section class="stage">
-            <!-- いやいやタイムのカード
-                 place-card--tantrum        … 赤っぽい見た目（いつも付ける）
-                 place-card--tantrum-active … ゆっくりバウンスする動き（いやいや中だけ付ける）
-
-                 見た目と動きでクラスを分けているので、
-                 いやいやが終わっても、カードの色はそのままで動きだけが止まる
-
-                 ※ 付け外しの条件は currentEvent ではなく isTantrum
-                   だっこ・おやつ・待つ成功で いやいや が終わると、
-                   画面は 'tantrum' のままでも isTantrum が false になるので、
-                   その瞬間にバウンスが止まる -->
-            <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum }">
-              <h2 class="place-card__title">いやいやタイム！</h2>
-
-              <p class="place-card__text">
-                こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
-              </p>
-            </article>
-
-            <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                <!-- 待つことに失敗して、まだいやいやが続いているときに出す -->
-                <p v-if="isTantrum" class="result-alert">まだ いやいや は続いています…</p>
-
-                <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                  <span class="found-flash__label">★ アイテム発見！</span>
-                  <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                </p>
-
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-            <nav class="command-box">
-              <!-- いやいやが続いているあいだは、結果が出ていてもコマンドを出しつづける -->
-              <template v-if="isTantrumUnsolved">
-                <p class="command-box__label">どうする？</p>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">だっこしてなだめる</span>
-                </button>
-
-                <button v-if="snackLeft > 0" class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="giveSnack" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">おやつをあげる</span>
-                  <span class="command-box__badge">残り{{ snackLeft }}個</span>
-                </button>
-
-                <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
-
-                <button
-                  class="command-box__item"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }"
-                  @click="waitCalmly"
-                  @mouseenter="selectedCommandIndex = waitCommandIndex">
-                  <span class="command-box__text">{{ waitCommandLabel }}</span>
-                </button>
-              </template>
-
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
-          </section>
-        </div>
-
-        <!-- 突然イベント：救急車のサイレン！ -->
-        <div v-else-if="currentEvent === 'emergencySiren'" class="scene" key="emergencySiren">
-          <section class="stage">
-            <article class="place-card place-card--sudden">
-              <p class="place-card__flash">突然イベント！</p>
-
-              <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
-
-              <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。こうちゃんは「きゅうきゅうしゃ！」と目を輝かせています。</p>
-            </article>
-
-            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-            <article v-if="resultMessage" class="result-card">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-            <nav class="command-box">
-              <!-- まだ選んでいないとき -->
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">立ち止まって救急車を探す</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">音を聞きながら少し待つ</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">先へ進む</span>
-                </button>
-              </template>
-
-              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
-          </section>
-        </div>
-
-        <!-- 突然イベント：テントウムシ発見！ -->
-        <div v-else-if="currentEvent === 'ladybug'" class="scene" key="ladybug">
-          <section class="stage">
-            <article class="place-card place-card--sudden">
-              <p class="place-card__flash">突然イベント！</p>
-
-              <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
-
-              <p class="place-card__text">葉っぱの上にテントウムシがいました。こうちゃんは「てんとうむし！」とうれしそうにしゃがみこみました。</p>
-            </article>
-
-            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-            <article v-if="resultMessage" class="result-card">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-            <nav class="command-box">
-              <!-- まだ選んでいないとき -->
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">一緒にじっくり観察する</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">手に乗せてみる</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">そっと見送る</span>
-                </button>
-              </template>
-
-              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
-          </section>
-        </div>
-
-        <!-- 突然イベント：犬が近づいてきた！ -->
-        <div v-else-if="currentEvent === 'dog'" class="scene" key="dog">
-          <section class="stage">
-            <article class="place-card place-card--sudden">
-              <p class="place-card__flash">突然イベント！</p>
-
-              <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
-
-              <p class="place-card__text">散歩中の犬が、しっぽをふりながら近づいてきました。こうちゃんは気になっているようです。</p>
-            </article>
-
-            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-            <article v-if="resultMessage" class="result-card">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-            <nav class="command-box">
-              <!-- まだ選んでいないとき -->
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">近くで見る</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">親の後ろから見る</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">少し離れる</span>
-                </button>
-              </template>
-
-              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
-          </section>
-        </div>
-
-        <!-- 突然イベント：こうちゃんがころんだ！ -->
-        <div v-else-if="currentEvent === 'fallDown'" class="scene" key="fallDown">
-          <section class="stage">
-            <article class="place-card place-card--sudden">
-              <p class="place-card__flash">突然イベント！</p>
-
-              <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
-
-              <p class="place-card__text">走っていたこうちゃんがつまずいてころんでしまいました。少しびっくりした顔でこちらを見ています。</p>
-            </article>
-
-            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-            <article v-if="resultMessage" class="result-card">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-            <nav class="command-box">
-              <!-- まだ選んでいないとき -->
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">すぐにだっこする</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">「大丈夫？」と見守る</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
-                </button>
-
-                <button
-                  v-if="snackLeft > 0"
-                  class="command-box__item"
-                  :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }"
-                  @click="giveSnackAfterFall"
-                  @mouseenter="selectedCommandIndex = 3">
-                  <span class="command-box__text">おやつで気をそらす</span>
-                  <span class="command-box__badge">残り{{ snackLeft }}個</span>
-                </button>
-              </template>
-
-              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
-          </section>
-        </div>
-
-        <!-- 突然イベント：噴水が出た！ -->
-        <div v-else-if="currentEvent === 'fountain'" class="scene" key="fountain">
-          <section class="stage">
-            <article class="place-card place-card--sudden">
-              <p class="place-card__flash">突然イベント！</p>
-
-              <h2 class="place-card__title">⛲ 噴水が出た！</h2>
-
-              <p class="place-card__text">突然、噴水から勢いよく水が飛び出しました。こうちゃんは「わあ！」と大喜びです。</p>
-            </article>
-
-            <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-            <article v-if="resultMessage" class="result-card">
-              <h3 class="result-card__title">結果</h3>
-
-              <!-- ここから下が、高さが足りないときにスクロールする部分
-                   上の「結果」バッジ（h3）は外に置いてあるので、
-                   スクロールしても切れずに残る -->
-              <div class="result-card__body">
-                <p class="result-card__text">{{ resultMessage }}</p>
-
-                <!-- 見つけたものの文
-                     アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                  「
-                  <b class="found-line__name">{{ item }}</b>
-                  」を見つけました！
-                </p>
-
-                <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
-                     地の文にまぎれないように、専用の枠と
-                     色つきのしるし（おでかけポイント +5 など）で出す -->
-                <div v-if="randomEventText" class="event-flash">
-                  <p class="event-flash__label">ちいさなできごと！</p>
-
-                  <p class="event-flash__text">{{ randomEventText }}</p>
-
-                  <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                    <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                      <span class="event-flash__item-label">{{ effect.label }}</span>
-                      <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <!-- いやいやが始まったときの文
-                     起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
-                     読めるように、いちばん最後に置く -->
-                <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                <div v-if="statusChanges" class="change-box">
-                  <p class="change-box__title">今回の変化（合計）</p>
-
-                  <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                       外側のループでグループ、内側のループでその中の項目を出す -->
-                  <div class="change-groups">
-                    <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                      <p class="change-group__name">{{ group.name }}</p>
-
-                      <ul class="change-list">
-                        <li v-for="row in group.rows" :key="row.label" class="change-item">
-                          <span class="change-item__label">{{ row.label }}</span>
-
-                          <!-- 行動前 → 行動後
-                               「いまいくつになったか」がすぐ分かるように、
-                               行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                          <span class="change-item__flow">
-                            <span class="change-item__before">{{ row.before }}</span>
-                            <span class="change-item__arrow">→</span>
-                            <span class="change-item__after">{{ row.after }}</span>
-                          </span>
-                          <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                        </li>
-                      </ul>
-                    </section>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-            <nav class="command-box">
-              <!-- まだ選んでいないとき -->
-              <template v-if="!resultMessage">
-                <p class="command-box__label">どうする？</p>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">近くまで見に行く</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1">
-                  <span class="command-box__text">少し離れて見る</span>
-                </button>
-
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2">
-                  <span class="command-box__text">先へ進む</span>
-                </button>
-              </template>
-
-              <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
-              <template v-else>
-                <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
-                  <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
-                </button>
-              </template>
-            </nav>
-          </section>
-        </div>
-
-        <!-- ゴール -->
-        <div v-else-if="currentEvent === 'goal'" class="scene" key="goal">
-          <section class="stage">
-            <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
-                 SランクとS+ランクのときだけ、カードがきらきら光る -->
-            <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' || endingRank === 'S+ランク' }">
-              <!-- 総合スコア（0〜100点） -->
-              <p class="ending-card__score-label">総合スコア</p>
-
-              <p class="ending-card__score">
-                <span class="ending-card__score-value">{{ finalScore }}</span>
-                <span class="ending-card__score-max">/ 100</span>
-              </p>
-
-              <!-- 今回のランク
-                   結果のいちばん大事なところなので、
-                   小さなラベル ＋ 大きなバッジ の2段にして目立たせる -->
-              <p class="ending-card__rank-label">今回のランク</p>
-
-              <p class="ending-card__rank">{{ endingRank }}</p>
-
-              <h3 class="ending-card__title">{{ endingTitle }}</h3>
-
-              <p class="ending-card__text">{{ endingMessage }}</p>
-            </article>
-
-            <!-- スコア内訳（何で何点もらったか）
-                 プラスは緑・マイナスは赤にしたいので、
-                 数字の形は formatChange()、色は changeClass() を使いまわしている -->
-            <article class="score-card">
-              <h3 class="score-card__title">スコア内訳</h3>
-
-              <ul class="score-list">
-                <li v-for="row in scoreBreakdown" :key="row.label" class="score-item">
-                  <span class="score-item__label">{{ row.label }}</span>
-                  <span class="score-item__value" :class="changeClass('score', row.points)">{{ formatChange(row.points) }}</span>
-                </li>
-              </ul>
-            </article>
-
-            <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
-            <div class="record-grid">
-              <article class="record-card">
-                <h3 class="record-card__title">今日の記録</h3>
-
-                <ul class="record-list">
-                  <li class="record-item">
-                    <span>こうちゃんの体力</span>
-                    <b>{{ childEnergy }}</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>こうちゃんの機嫌</span>
-                    <b>{{ childMood }}</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>親の体力</span>
-                    <b>{{ parentEnergy }}</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>親の余裕</span>
-                    <b>{{ parentCalm }}</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>おでかけポイント</span>
-                    <b>{{ outingPoint }}</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>いやいや発生</span>
-                    <b>{{ tantrumCount }}回</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>探検した場所の数</span>
-                    <b>{{ visitedPlaces.length }}か所</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>遊んだ回数</span>
-                    <b>{{ playCount }}回</b>
-                  </li>
-
-                  <li class="record-item">
-                    <span>帰った時間</span>
-                    <b>{{ currentTime }}</b>
+                <!-- 今回のランク
+                     結果のいちばん大事なところなので、
+                     小さなラベル ＋ 大きなバッジ の2段にして目立たせる -->
+                <p class="ending-card__rank-label">今回のランク</p>
+
+                <p class="ending-card__rank">{{ endingRank }}</p>
+
+                <h3 class="ending-card__title">{{ endingTitle }}</h3>
+
+                <p class="ending-card__text">{{ endingMessage }}</p>
+              </article>
+
+              <!-- スコア内訳（何で何点もらったか）
+                   プラスは緑・マイナスは赤にしたいので、
+                   数字の形は formatChange()、色は changeClass() を使いまわしている -->
+              <article class="score-card">
+                <h3 class="score-card__title">スコア内訳</h3>
+
+                <ul class="score-list">
+                  <li v-for="row in scoreBreakdown" :key="row.label" class="score-item">
+                    <span class="score-item__label">{{ row.label }}</span>
+                    <span class="score-item__value" :class="changeClass('score', row.points)">{{ formatChange(row.points) }}</span>
                   </li>
                 </ul>
               </article>
 
-              <article class="record-card">
-                <h3 class="record-card__title">見つけたもの</h3>
+              <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
+              <div class="record-grid">
+                <article class="record-card">
+                  <h3 class="record-card__title">今日の記録</h3>
 
-                <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+                  <ul class="record-list">
+                    <li class="record-item">
+                      <span>こうちゃんの体力</span>
+                      <b>{{ childEnergy }}</b>
+                    </li>
 
-                <ul v-else class="found-list">
-                  <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
-                </ul>
+                    <li class="record-item">
+                      <span>こうちゃんの機嫌</span>
+                      <b>{{ childMood }}</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>親の体力</span>
+                      <b>{{ parentEnergy }}</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>親の余裕</span>
+                      <b>{{ parentCalm }}</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>おでかけポイント</span>
+                      <b>{{ outingPoint }}</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>いやいや発生</span>
+                      <b>{{ tantrumCount }}回</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>探検した場所の数</span>
+                      <b>{{ visitedPlaces.length }}か所</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>遊んだ回数</span>
+                      <b>{{ playCount }}回</b>
+                    </li>
+
+                    <li class="record-item">
+                      <span>帰った時間</span>
+                      <b>{{ currentTime }}</b>
+                    </li>
+                  </ul>
+                </article>
+
+                <article class="record-card">
+                  <h3 class="record-card__title">見つけたもの</h3>
+
+                  <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+
+                  <ul v-else class="found-list">
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                  </ul>
+                </article>
+              </div>
+            </section>
+
+            <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
+                 Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
+                 マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
+            <nav class="command">
+              <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
+                <span class="cmd__text">もう一度あそぶ</span>
+              </button>
+
+              <!-- はじめの画面（起動画面）へ戻る
+
+                   主役は上の「もう一度あそぶ」なので、色は控えめにしてある
+                   （選ばれたときは、ほかのボタンと同じように「▶」と枠が付く）
+
+                   @keydown.enter.stop / @keydown.space.stop
+                   … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
+                     同じキーが window の handleKeydown にも伝わって、
+                     「選んでいるコマンド」まで実行されてしまうのを止める
+                     ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
+              <button
+                class="cmd cmd--sub cmd--back"
+                :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+                @click="goBackToBootFromResult"
+                @mouseenter="selectedCommandIndex = 1"
+                @keydown.enter.stop
+                @keydown.space.stop>
+                <span class="cmd__text">はじめの画面へ戻る</span>
+              </button>
+            </nav>
+          </div>
+
+          <!-- GAME OVER（限界をむかえて途中で終わったとき）
+               自分で出口へ帰ったときとちがい、S+〜Dランクの判定はしない -->
+          <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" key="gameOver">
+            <section class="stage">
+              <article class="gameover-card">
+                <p class="gameover-card__label">GAME OVER</p>
+
+                <h2 class="gameover-card__title">{{ gameOverTitle }}</h2>
+
+                <p class="gameover-card__text">{{ gameOverMessage }}</p>
               </article>
-            </div>
-          </section>
 
-          <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
-               Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
-               マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
-          <nav class="command">
-            <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
-              <span class="cmd__text">もう一度あそぶ</span>
-            </button>
+              <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
+              <div class="record-grid">
+                <article class="record-card">
+                  <h3 class="record-card__title">今日の記録</h3>
 
-            <!-- はじめの画面（起動画面）へ戻る
+                  <ul class="record-list">
+                    <li class="record-item">
+                      <span>こうちゃんの体力</span>
+                      <b>{{ childEnergy }}</b>
+                    </li>
 
-                 主役は上の「もう一度あそぶ」なので、色は控えめにしてある
-                 （選ばれたときは、ほかのボタンと同じように「▶」と枠が付く）
+                    <li class="record-item">
+                      <span>こうちゃんの機嫌</span>
+                      <b>{{ childMood }}</b>
+                    </li>
 
-                 @keydown.enter.stop / @keydown.space.stop
-                 … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
-                   同じキーが window の handleKeydown にも伝わって、
-                   「選んでいるコマンド」まで実行されてしまうのを止める
-                   ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
-            <button
-              class="cmd cmd--sub cmd--back"
-              :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
-              @click="goBackToBootFromResult"
-              @mouseenter="selectedCommandIndex = 1"
-              @keydown.enter.stop
-              @keydown.space.stop>
-              <span class="cmd__text">はじめの画面へ戻る</span>
-            </button>
-          </nav>
-        </div>
+                    <li class="record-item">
+                      <span>親の体力</span>
+                      <b>{{ parentEnergy }}</b>
+                    </li>
 
-        <!-- GAME OVER（限界をむかえて途中で終わったとき）
-             自分で出口へ帰ったときとちがい、S+〜Dランクの判定はしない -->
-        <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" key="gameOver">
-          <section class="stage">
-            <article class="gameover-card">
-              <p class="gameover-card__label">GAME OVER</p>
+                    <li class="record-item">
+                      <span>親の余裕</span>
+                      <b>{{ parentCalm }}</b>
+                    </li>
 
-              <h2 class="gameover-card__title">{{ gameOverTitle }}</h2>
+                    <li class="record-item">
+                      <span>おでかけポイント</span>
+                      <b>{{ outingPoint }}</b>
+                    </li>
 
-              <p class="gameover-card__text">{{ gameOverMessage }}</p>
-            </article>
+                    <li class="record-item">
+                      <span>いやいや発生</span>
+                      <b>{{ tantrumCount }}回</b>
+                    </li>
 
-            <!-- 横並びにする2枚のカード（記録／見つけたもの） -->
-            <div class="record-grid">
-              <article class="record-card">
-                <h3 class="record-card__title">今日の記録</h3>
+                    <li class="record-item">
+                      <span>探検した場所の数</span>
+                      <b>{{ visitedPlaces.length }}か所</b>
+                    </li>
 
-                <ul class="record-list">
-                  <li class="record-item">
-                    <span>こうちゃんの体力</span>
-                    <b>{{ childEnergy }}</b>
-                  </li>
+                    <li class="record-item">
+                      <span>遊んだ回数</span>
+                      <b>{{ playCount }}回</b>
+                    </li>
 
-                  <li class="record-item">
-                    <span>こうちゃんの機嫌</span>
-                    <b>{{ childMood }}</b>
-                  </li>
+                    <li class="record-item">
+                      <span>帰宅時刻</span>
+                      <b>{{ currentTime }}</b>
+                    </li>
+                  </ul>
+                </article>
 
-                  <li class="record-item">
-                    <span>親の体力</span>
-                    <b>{{ parentEnergy }}</b>
-                  </li>
+                <article class="record-card">
+                  <h3 class="record-card__title">見つけたもの</h3>
 
-                  <li class="record-item">
-                    <span>親の余裕</span>
-                    <b>{{ parentCalm }}</b>
-                  </li>
+                  <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
 
-                  <li class="record-item">
-                    <span>おでかけポイント</span>
-                    <b>{{ outingPoint }}</b>
-                  </li>
+                  <ul v-else class="found-list">
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                  </ul>
+                </article>
+              </div>
+            </section>
 
-                  <li class="record-item">
-                    <span>いやいや発生</span>
-                    <b>{{ tantrumCount }}回</b>
-                  </li>
+            <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
+                 Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
+                 マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
+            <nav class="command">
+              <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
+                <span class="cmd__text">もう一度あそぶ</span>
+              </button>
 
-                  <li class="record-item">
-                    <span>探検した場所の数</span>
-                    <b>{{ visitedPlaces.length }}か所</b>
-                  </li>
+              <!-- はじめの画面（起動画面）へ戻る
 
-                  <li class="record-item">
-                    <span>遊んだ回数</span>
-                    <b>{{ playCount }}回</b>
-                  </li>
+                   主役は上の「もう一度あそぶ」なので、色は控えめにしてある
+                   （選ばれたときは、ほかのボタンと同じように「▶」と枠が付く）
 
-                  <li class="record-item">
-                    <span>帰宅時刻</span>
-                    <b>{{ currentTime }}</b>
-                  </li>
-                </ul>
-              </article>
-
-              <article class="record-card">
-                <h3 class="record-card__title">見つけたもの</h3>
-
-                <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
-
-                <ul v-else class="found-list">
-                  <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
-                </ul>
-              </article>
-            </div>
-          </section>
-
-          <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
-               Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
-               マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
-          <nav class="command">
-            <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
-              <span class="cmd__text">もう一度あそぶ</span>
-            </button>
-
-            <!-- はじめの画面（起動画面）へ戻る
-
-                 主役は上の「もう一度あそぶ」なので、色は控えめにしてある
-                 （選ばれたときは、ほかのボタンと同じように「▶」と枠が付く）
-
-                 @keydown.enter.stop / @keydown.space.stop
-                 … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
-                   同じキーが window の handleKeydown にも伝わって、
-                   「選んでいるコマンド」まで実行されてしまうのを止める
-                   ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
-            <button
-              class="cmd cmd--sub cmd--back"
-              :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
-              @click="goBackToBootFromResult"
-              @mouseenter="selectedCommandIndex = 1"
-              @keydown.enter.stop
-              @keydown.space.stop>
-              <span class="cmd__text">はじめの画面へ戻る</span>
-            </button>
-          </nav>
-        </div>
-      </Transition>
-    </div>
+                   @keydown.enter.stop / @keydown.space.stop
+                   … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
+                     同じキーが window の handleKeydown にも伝わって、
+                     「選んでいるコマンド」まで実行されてしまうのを止める
+                     ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
+              <button
+                class="cmd cmd--sub cmd--back"
+                :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+                @click="goBackToBootFromResult"
+                @mouseenter="selectedCommandIndex = 1"
+                @keydown.enter.stop
+                @keydown.space.stop>
+                <span class="cmd__text">はじめの画面へ戻る</span>
+              </button>
+            </nav>
+          </div>
+        </Transition>
+      </div>
+    </Transition>
 
     <!-- ============================================================
          いやいや発生の演出（画面いっぱいのオーバーレイ）
@@ -8264,6 +8423,54 @@ onUnmounted(() => {
   flex: 1;
   flex-direction: column;
   min-height: 0;
+}
+
+/* ============================================================
+   画面の切りかえ（A画面 ⇄ B画面 ⇄ ゲーム画面）のフェード
+
+   template の <Transition name="screen-fade" mode="out-in"> と組みで使う
+   （名前が screen-fade なので、クラス名も screen-fade-〜 になる）
+
+   ・-leave-active … 消えていくあいだ
+   ・-leave-to     … 消えおわったときの見た目（ここへ向かって変化する）
+   ・-enter-active … 出てくるあいだ
+   ・-enter-from   … 出はじめの見た目（ここから変化してくる）
+
+   動きはごく小さくしてある
+   ・opacity（すけ具合）
+   ・translateY（ほんの2〜4pxの上下）だけ
+   時間も 0.18秒（180ミリ秒）と短くして、
+   「ボタンを押してから次の画面まで待たされる」と感じないようにしている
+
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定でここも自動的に止まる
+   ============================================================ */
+.screen-fade-enter-active,
+.screen-fade-leave-active {
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+}
+
+/* 出てくるとき：4pxだけ下から、すっと上がりながら現れる */
+.screen-fade-enter-from {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* 消えるとき：2pxだけ上へ抜けながら消える */
+.screen-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
+}
+
+/* 消えかけの画面は、もう押せないようにする
+
+   mode="out-in" では、押したあとも前の画面がしばらく見えている
+   そこを続けて押せてしまうと、同じボタンが2回はたらいてしまうため
+   （キーボードのほうは isScreenChanging で止めている） */
+.screen-fade-leave-active {
+  pointer-events: none;
 }
 
 /* ============================================================
