@@ -3,23 +3,38 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 
 const gameTitle: string = 'こうちゃんの大冒険';
 
-/* 画面は3段階あり、この2つの組み合わせで決まる
+/* 画面は4段階あり、この3つの組み合わせで決まる
 
-   titleEntered  gameStarted   画面
-   ----------------------------------------------------
-   false         false         起動画面（▶ はじめる）
-   true          false         タイトル画面（公園へ行く）
-   true          true          ゲーム画面
+   titleEntered  isSnackSelectionOpen  gameStarted   画面
+   ---------------------------------------------------------------------
+   false         false                 false         起動画面（▶ はじめる）
+   true          false                 false         タイトル画面（きょうのおやつを選ぶ）
+   true          true                  false         おやつ選択画面（きょうのおやつ）
+   true          -                     true          ゲーム画面
 
    ※ 起動画面をはさんでいるのは、ブラウザの決まりへの対応
      「ユーザーがまだ一度も触っていないページでは音を鳴らせない」ため、
      ページを開いた直後にBGMを鳴らそうとしても止められてしまう
      そこで「▶ はじめる」を1回押してもらい、
      その操作をきっかけにタイトルBGMを鳴らしはじめる
+
+   ※ ゲーム画面の行の isSnackSelectionOpen が「-」なのは、
+     公園へ出発したあとも true のまま残しているため
+     （選んだおやつはゲーム中もずっと持っているものなので、
+       おやつ選択画面を「閉じた」ことにする必要がない）
+     gameStarted が true ならゲーム画面、という順番で見分けている
 */
 const titleEntered = ref(false);
 
 const gameStarted = ref(false);
+
+/* おやつ選択画面（B画面とゲーム画面のあいだの準備画面）を開いているかどうか
+
+   B画面の「きょうのおやつを選ぶ」で true になり、ここではまだゲームは始まらない
+   （タイトルBGMも鳴ったまま。公園へ出発するのは
+     「このおやつで公園へ行く！」を押したとき）
+*/
+const isSnackSelectionOpen = ref(false);
 
 /* ============================================================
    A画面・B画面のボタンを覚えておく箱（キーボード操作用）
@@ -32,15 +47,24 @@ const gameStarted = ref(false);
    ・↑↓←→ で、3つのボタンをぐるぐる選べるようにする
 
    A画面  … はじめる／♪ サウンドトラック／サウンドON・OFF
-   B画面  … 公園へ行く／はじめの画面へ戻る／サウンドON・OFF
+   B画面  … きょうのおやつを選ぶ／はじめの画面へ戻る／サウンドON・OFF
    ※ サウンドON/OFFはA画面とB画面のどちらか一方しか画面に出ないので、
      箱は1つだけで足りる
    ============================================================ */
 const startButtonRef = ref<HTMLButtonElement | null>(null);
 const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
-const goParkButtonRef = ref<HTMLButtonElement | null>(null);
+const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
 const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* おやつ選択画面の、おやつが6つならんでいる入れもの
+
+   ここだけボタン1つずつではなく、入れものをまるごと覚えておく
+   おやつは snacks 配列から v-for で作るので、
+   あとからおやつが増えても、refを1つずつ増やさなくてすむようにしたい
+   （画面が出たときは、この入れものの中の最初の .snack-option ＝
+     🍇 グミ へフォーカスを当てる） */
+const snackListRef = ref<HTMLElement | null>(null);
 
 /* 今いる場所を管理する型
    parkEntrance = 公園入口
@@ -163,8 +187,191 @@ const tantrumCount = ref(0);
 */
 const tantrumAlertVisible = ref(false);
 
-/* おやつの残り回数（今日持ってきた分だけ） */
+/* おやつの残り回数（今日持ってきた分だけ）
+
+   ※ この数は、いまのところ「おやつを何回あげられるか」だけを見ている
+     どのおやつをあげたか（グミ／せんべい など）は、まだ区別していない
+     この下の「きょうのおやつ」で選んだ中身とつなぐのは、次の実装 */
 const snackLeft = ref(2);
+
+/* ============================================================
+   きょうのおやつ（公園へ持っていくおやつを選ぶ）
+
+   ゲームが始まる前に、6種類から2種類を選んでバッグに入れてもらう
+   ここにあるのは、そのための「おやつのデータ」と「選んだ記録」だけ
+
+   ■ いまの段階でやっていること
+
+     選んだ記録を selectedSnackIds に持つところまで
+     ゲーム中に「おやつをあげる」を押したときに何が起きるかは、
+     今までどおり snackLeft（残り回数）だけで決まっている
+
+   ■ どうして2つに分かれているのか
+
+     snackLeft            … 「あと何回あげられるか」だけの数
+     selectedSnackIds     … 「どのおやつを持ってきたか」の中身
+
+     先に中身のほうだけ作っておき、
+     ・通常の休憩でどれを食べるか選ぶ
+     ・いやいやタイムでどれを食べるか選ぶ
+     ・おやつごとに体力／機嫌の回復量を変える
+     といったゲーム中の処理は、次の実装でこちらへ移していく
+     （そのときに snackLeft は selectedSnackIds の個数で置きかえられる）
+   ============================================================ */
+
+/* おやつの名札（どのおやつかを表す文字）
+
+   'gummy' のように決めた文字しか入れられないようにしておくと、
+   'gumi' や 'グミ' のような書きまちがいを、
+   ブラウザで動かす前にエディタが赤線で教えてくれる */
+type SnackId = 'gummy' | 'chocolate' | 'senbei' | 'biscuit' | 'banana' | 'jelly';
+
+/* おやつ1種類ぶんの中身
+
+   id          … 名札（上の SnackId）
+   name        … 画面に出す名前（「グミ」）
+   icon        … 画面に出す絵文字（「🍇」）
+   energy      … 食べたときに回復する、こうちゃんの体力
+   mood        … 食べたときに回復する、こうちゃんの機嫌
+   minutes     … 食べるのにかかる時間（分）
+   description … どんなおやつかの説明文
+
+   ※ energy / mood / minutes は、いまはまだゲームの計算に使っていない
+     画面に「体力 +5 ／ 機嫌 +20 ／ 5分」と出すだけ
+     次の実装で、おやつを食べたときの回復量としてそのまま使う
+     （ただの文字の配列ではなく、はじめから型にしておく理由がこれ） */
+type Snack = {
+  id: SnackId;
+  name: string;
+  icon: string;
+  energy: number;
+  mood: number;
+  minutes: number;
+  description: string;
+};
+
+/* おやつの一覧（画面に出る6種類）
+
+   おやつを増やしたいときは、ここへ1件足すだけでよい
+   画面のほうは v-for でこの配列をそのまま並べているので、
+   HTMLに新しいカードを書き足す必要はない
+   （そのぶん SnackId にも名札を1つ足すこと） */
+const snacks: Snack[] = [
+  {
+    id: 'gummy',
+    name: 'グミ',
+    /* 🍬（CANDY）は見た目が「包み飴」なので、グミには使わない
+
+       絵文字には「グミ」そのものが無いため、
+       果汁グミでおなじみのぶどうにして、飴と見まちがえないようにしている
+       （ほかの5つ 🍫 🍘 🍪 🍌 🧃 とも色・形がかぶらない）
+
+       ※ ここを変えるだけで、画面のカードもバッグの表示も入れかわる
+         （どちらも snacks のこの icon を見ているため） */
+    icon: '🍇',
+    energy: 5,
+    mood: 20,
+    minutes: 5,
+    description: 'こうちゃんの大好物。機嫌が大きく回復',
+  },
+  {
+    id: 'chocolate',
+    name: 'チョコ',
+    icon: '🍫',
+    energy: 10,
+    mood: 14,
+    minutes: 5,
+    description: '体力と機嫌をバランスよく回復',
+  },
+  {
+    id: 'senbei',
+    name: 'せんべい',
+    icon: '🍘',
+    energy: 18,
+    mood: 6,
+    minutes: 10,
+    description: 'おなかがいっぱいになって体力が回復',
+  },
+  {
+    id: 'biscuit',
+    name: 'ビスケット',
+    icon: '🍪',
+    energy: 12,
+    mood: 10,
+    minutes: 5,
+    description: '体力と機嫌をほどよく回復',
+  },
+  {
+    id: 'banana',
+    name: 'バナナ',
+    icon: '🍌',
+    energy: 24,
+    mood: 4,
+    minutes: 10,
+    description: '体力をしっかり回復',
+  },
+  {
+    id: 'jelly',
+    name: 'ゼリー',
+    icon: '🧃',
+    energy: 7,
+    mood: 15,
+    minutes: 5,
+    description: 'つるんと食べやすく、機嫌が回復',
+  },
+];
+
+/* バッグに入れられるおやつの数
+
+   「2」を画面や関数のあちこちに書かずに、ここ1か所だけにしておく
+   3つ持っていける仕様にしたくなったら、この数字を 3 に変えるだけでよい
+   （画面の「2 / 2」も、押せるようになる条件も、ぜんぶここを見ている） */
+const maxSnackCount = 2;
+
+/* 今日バッグに入れたおやつ（選んだ順にならぶ）
+
+   入っているのは名札だけで、['gummy', 'senbei'] のような見た目になる
+   おやつの中身（名前・絵文字・回復量）は snacks のほうが持っているので、
+   ここでは同じ情報を2か所に持たないようにしている
+
+   ※ 同じおやつは1個までなので、['gummy', 'gummy'] にはならない
+   ※ localStorage には保存しない（その1プレイだけのもの）
+     ページを読みこみ直したら、また空から選びなおす */
+const selectedSnackIds = ref<SnackId[]>([]);
+
+/* 選んだおやつの中身（名札 → snacks の中の本体）
+
+   画面で「🍇 グミ」と絵文字つきで出したいので、名札から本体を引いておく
+
+   ・map()    … 名札をひとつずつ本体に置きかえる
+   ・find()   … snacks の中から、その名札のおやつをさがす
+   ・filter() … 見つからなかったぶん（undefined）を取りのぞく
+
+   filter の中の「snack is Snack」は、
+   「ここを通りぬけたものは、もう undefined ではない」と
+   TypeScriptに伝えるための書きかた
+   これがないと、このあと snack.name と書くたびに
+   「undefined かもしれない」と言われてしまう */
+const selectedSnacks = computed(() => selectedSnackIds.value.map((id) => snacks.find((snack) => snack.id === id)).filter((snack): snack is Snack => snack !== undefined));
+
+/* バッグがいっぱいかどうか（＝これ以上は選べない）
+
+   いっぱいのときは、まだ選んでいないおやつのカードを押せなくする
+   （選んでいるおやつのカードは押せるままにして、解除できるようにする） */
+const isSnackBagFull = computed(() => selectedSnackIds.value.length >= maxSnackCount);
+
+/* 公園へ出発できるかどうか（ちょうど2種類そろっているか）
+
+   「このおやつで公園へ行く！」を押せるようにする条件 */
+const canStartWithSnacks = computed(() => selectedSnackIds.value.length === maxSnackCount);
+
+/* そのおやつを、もうバッグに入れてあるかどうか
+
+   画面で「選択中」の見た目にするかどうかと、
+   カードを押せなくするかどうかの、両方で使う */
+function isSnackSelected(snackId: SnackId) {
+  return selectedSnackIds.value.includes(snackId);
+}
 
 /* 突然イベントが起きる確率
    0.2 ＝ 20%（5回に1回くらい）
@@ -319,6 +526,8 @@ const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedIt
 
 /* ※ 画面ごとのキー操作の分けかたは handleKeydown() にまとめてある
      ・起動画面（A）・タイトル画面（B） … handleTitleKeydown()（ボタン3つを選ぶ）
+     ・おやつ選択画面                    … handleSnackSelectionKeydown()
+       （Tab と Enter / Space だけのふつうの操作。押しっぱなしを止めるだけ）
      ・ゲーム本編                        … そのまま handleKeydown() の続き
        （ゴール・GAME OVER画面も、ボタン2つを ↑↓ で選ぶ同じしくみで動く） */
 
@@ -1261,7 +1470,7 @@ let parkBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
 /* 公園BGMを「少し待ってから」最初から鳴らす
 
-   「公園へ行く」を押した瞬間にいきなり曲が始まると、
+   「このおやつで公園へ行く！」を押した瞬間にいきなり曲が始まると、
    決定音「ポン♪」が鳴りはじめの曲にかき消されてしまい、
    タイトルBGMからの切り替わりも唐突に聞こえる
    そこで少しだけ間を空けて、決定音が鳴り終わってから曲を始める
@@ -1485,7 +1694,7 @@ function switchParkBgmForCurrentTime() {
 
    作りは公園BGM（上）とまったく同じで、鳴らす曲と鳴らす場面だけがちがう
    ・タイトルBGM … gameStarted === false のあいだ（タイトル画面）
-   ・公園BGM     … 「公園へ行く」を押してから、ゴール／GAME OVERまで
+   ・公園BGM     … 「このおやつで公園へ行く！」を押してから、ゴール／GAME OVERまで
 
    2曲が同時に鳴らないよう、切り替えるときは
    「前の曲を止めてから、次の曲を鳴らす」の順番にしている
@@ -1588,7 +1797,7 @@ function playTitleBgmSoon() {
     titleBgmTimer = null;
 
     /* 待っているあいだに画面が変わっていたら、もう鳴らさない
-       （待ち時間のうちに「公園へ行く」を押して、
+       （待ち時間のうちに「このおやつで公園へ行く！」を押して、
          ゲームが始まってしまった場合） */
     if (gameStarted.value) {
       return;
@@ -3069,7 +3278,7 @@ function finishPlayAction(place: GameEvent) {
      でも目に見えているのは、消えかけの前の画面
 
      このあいだにEnterを押せてしまうと、
-     「はじめる」を押した直後に、見えていないB画面の「公園へ行く」まで
+     「はじめる」を押した直後に、見えていないB画面の「きょうのおやつを選ぶ」まで
      続けて押したことになってしまう
 
      マウスのほうは、消えかけの画面を押せないようにするCSS
@@ -3119,7 +3328,8 @@ function handleScreenLeaveEnd() {
 
 /* 次の画面が、出おわったとき
 
-   A画面なら「はじめる」、B画面なら「公園へ行く」へフォーカスを当てる
+   A画面なら「はじめる」、B画面なら「きょうのおやつを選ぶ」、
+   おやつ選択画面なら最初のおやつ「🍇 グミ」へフォーカスを当てる
    ゲーム画面のときは、focusTitleMainButton() の中で何も起きない
    （getTitleFocusItems() が、ゲーム中は空っぽを返すため）
 
@@ -3129,6 +3339,18 @@ function handleScreenEnterEnd() {
   /* ここまで来ればフェードは終わっているので、キーの受付も念のため戻しておく
      （ふつうは、ひとつ上の handleScreenLeaveEnd() でもう戻っている） */
   isScreenChanging.value = false;
+
+  /* おやつ選択画面のときだけ、当てる先がボタン3つの並びではなく
+     おやつのカードなので、専用の関数にまかせる
+
+     gameStarted もいっしょに見ているのが大事
+     isSnackSelectionOpen は公園へ出発したあとも true のまま残るので、
+     これだけで見分けると、ゲーム画面が出たあとにも
+     もう画面に無いおやつのカードをさがしにいってしまう */
+  if (isSnackSelectionOpen.value && !gameStarted.value) {
+    focusFirstSnackOption();
+    return;
+  }
 
   focusTitleMainButton();
 }
@@ -3154,7 +3376,7 @@ function enterTitle() {
 
   titleEntered.value = true;
 
-  /* B画面のメインのボタン「公園へ行く」へのフォーカスは、ここでは当てない
+  /* B画面のメインのボタン「きょうのおやつを選ぶ」へのフォーカスは、ここでは当てない
 
      フェード（mode="out-in"）が終わるまで、B画面はまだ作られていないため
      フェードが終わったときに handleScreenEnterEnd() が当ててくれる
@@ -3177,6 +3399,15 @@ function goBackToBoot() {
   cancelTitleBgmStart();
   stopTitleBgm();
 
+  /* きょうのおやつは、いちばん最初の画面まで戻ったら選びなおしてもらう
+
+     A画面まで戻るのは「最初から始め直す」ことなので、
+     前に選んだグミ・せんべいが残っていると、
+     次に公園へ行くときに知らないうちに持たされてしまう
+     （B画面 ⇄ おやつ選択画面の行き来では、わざと残している） */
+  selectedSnackIds.value = [];
+  isSnackSelectionOpen.value = false;
+
   /* 画面のほうは、この1行だけで切りかわる（表示用のstateはこれ以外いじらない）
      BGMを止める上の2行も、音を止めるだけで画面の中身にはさわらないので、
      B画面は中身がそろったまま、まるごとフェードアウトしていく */
@@ -3186,9 +3417,17 @@ function goBackToBoot() {
      フェードが終わってから handleScreenEnterEnd() が当てる */
 }
 
-/* ゲーム開始 */
+/* ゲーム開始（＝公園へ出発する）
+
+   呼ばれるのは、おやつ選択画面の「このおやつで公園へ行く！」からだけ
+   （B画面の「きょうのおやつを選ぶ」は、ひとつ手前の openSnackSelection() を呼ぶ）
+
+   ここが「ゲーム開始前」と「ゲーム中」の境目なので、
+   BGMの切り替えも gameStarted も、ぜんぶこの1か所でまとめて行う
+   おやつ選択画面のために同じ内容をコピーした関数は作らない
+*/
 function startGame() {
-  // 決定音「ポン♪」（タイトルの「公園へ行く」）
+  // 決定音「ポン♪」（おやつ選択画面の「このおやつで公園へ行く！」）
   playDecisionSound();
 
   /* BGMをタイトル用から公園用へ切り替える
@@ -3203,7 +3442,7 @@ function startGame() {
      （待つのは音だけで、画面の切り替えはこのあとすぐ行う）
 
      ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがある
-     ここはプレイヤーが「公園へ行く」を決定した瞬間なので、
+     ここはプレイヤーが「このおやつで公園へ行く！」を決定した瞬間なので、
      このタイミングで始めるのが確実
   */
   stopTitleBgm();
@@ -3213,6 +3452,145 @@ function startGame() {
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
+}
+
+/* ============================================================
+   おやつ選択画面（B画面 → おやつ選択 → ゲーム）
+
+   B画面の「きょうのおやつを選ぶ」を押しても、まだ公園へは出発しない
+   あいだに「きょうのおやつ」を選ぶ準備画面をはさんでいる
+
+   ■ ここではBGMをいっさいさわらない
+
+     おやつ選択画面は「ゲーム開始前」の画面なので、
+     B画面と同じようにタイトルBGMが鳴ったままでよい
+     ・stopTitleBgm()    … 呼ばない
+     ・playParkBgmSoon() … 呼ばない
+     ・gameStarted       … true にしない
+
+     サウンドON/OFFのほうも、何も直さなくてそのまま動く
+     toggleSound() は「titleEntered && !gameStarted なら
+     タイトルBGMを再開する」と決めていて、
+     おやつ選択画面もその条件にそのまま当てはまるため
+   ============================================================ */
+
+/* B画面の「きょうのおやつを選ぶ」
+
+   やることは、おやつ選択画面を開くことだけ
+   （公園へ出発するのは、この先の confirmSnacksAndStartGame()） */
+function openSnackSelection() {
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  isSnackSelectionOpen.value = true;
+
+  /* 最初のおやつ「🍇 グミ」へのフォーカスは、ここでは当てない
+
+     フェード（mode="out-in"）が終わるまで、おやつのカードはまだ作られていない
+     フェードが終わったときに handleScreenEnterEnd() が当ててくれる
+     （A→B、B→A のときと、まったく同じ考えかた） */
+}
+
+/* おやつ選択画面の「← ひとつ前の画面へ戻る」（B画面へ戻る）
+
+   選んだおやつは、わざと消さずに残しておく
+   もう一度「きょうのおやつを選ぶ」を押したときに、
+   さっき選んだグミ・せんべいがそのまま入っているようにしたいため
+   （ぜんぶ選びなおしになるのは、A画面まで戻ったときだけ）
+
+   タイトルBGMも鳴ったままでよい（ここもまだゲーム開始前の画面） */
+function closeSnackSelection() {
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  isSnackSelectionOpen.value = false;
+
+  /* B画面のメインのボタン「きょうのおやつを選ぶ」へのフォーカスは、
+     フェードが終わってから handleScreenEnterEnd() が当てる */
+}
+
+/* おやつのカードを押したとき（1回で選ぶ・もう1回で解除）
+
+   ・まだ入れていないおやつ … バッグに入れる
+   ・もう入れてあるおやつ   … バッグから出す
+
+   同じおやつを2個入れないようにしているのは、この「入っていたら出す」の形そのもの
+   入っているおやつをもう一度押しても、増えるのではなく減る
+
+   ※ バッグがいっぱいのときに、まだ選んでいないおやつを押せないようにするのは
+     画面のほう（カードの :disabled）にまかせている
+     ここでも念のため、いっぱいのときは追加しないようにしておく */
+function toggleSnackSelection(snackId: SnackId) {
+  // 決定音「ポン♪」（選ぶときも、解除するときも同じ音）
+  playDecisionSound();
+
+  if (isSnackSelected(snackId)) {
+    // すでに入っているので、バッグから出す（＝選択を解除する）
+    selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
+    return;
+  }
+
+  // いっぱいのときは、これ以上入れない
+  if (isSnackBagFull.value) {
+    return;
+  }
+
+  selectedSnackIds.value.push(snackId);
+}
+
+/* おやつ選択画面の「このおやつで公園へ行く！」
+
+   2種類そろっていることを確かめてから、いつもの startGame() を呼ぶだけ
+   （BGMの切り替えも gameStarted も、ぜんぶ startGame() の中のまま）
+
+   ボタン自体も2種類そろうまで押せない（:disabled）ようにしてあるので、
+   ここのチェックは念のためのもの
+   キーボードやブラウザの機能から、思わぬ形で呼ばれても大丈夫にしておく
+
+   isScreenChanging も見ているのは、フェード中の連打よけ
+   押したしゅんかんに gameStarted は true になるが、
+   目に見えているのはまだ消えかけのおやつ選択画面
+   Enterを押しっぱなしにしたときなどに、
+   そこからもう一度このボタンが押されてしまわないようにしている
+   （キー操作をまとめて止める handleKeydown() と同じ目じるしを使う） */
+function confirmSnacksAndStartGame() {
+  if (!canStartWithSnacks.value) {
+    return;
+  }
+
+  if (isScreenChanging.value) {
+    return;
+  }
+
+  startGame();
+}
+
+/* おやつ選択画面が出おわったとき、最初のおやつ「🍇 グミ」へフォーカスを当てる
+
+   A画面・B画面の focusTitleMainButton() と同じ役目だが、
+   当てる先がボタン3つの並びではなく、v-for で作ったカードなので分けてある
+
+   おやつは snacks 配列から作るので、ボタン1つずつに ref は付けていない
+   入れもの（snackListRef）の中の、最初の .snack-option を探して当てる
+   こうしておけば、おやつが増えても直すところは無い
+
+   :not(:disabled) を付けているのは、押せないカードを飛ばすため
+
+   ふつうは、いちばん先にある 🍇 グミ がそのまま選ばれる
+   ただし「チョコとせんべいを選ぶ → ひとつ前の画面へ戻る → もう一度おやつ選択へ」と
+   戻ってきたときは、バッグがいっぱいなのでグミは押せない状態になっている
+   押せないボタンは focus() してもフォーカスが当たらない（何も起きない）ので、
+   そのときは押せるカード（＝もう選んであるチョコ）が選ばれるようにしておく
+
+   ※ nextTick() で画面の書きかえを待つのは、こちらも同じ
+   ※ 画面にまだカードが無いときは snackListRef が null なので、
+     ?. のおかげで何も起きずに終わる（無理にフォーカスしない） */
+async function focusFirstSnackOption() {
+  await nextTick();
+
+  const firstSnackButton = snackListRef.value?.querySelector<HTMLButtonElement>('.snack-option:not(:disabled)');
+
+  firstSnackButton?.focus();
 }
 
 /* もうサウンドトラックのページへ移動しはじめたかどうか（連打よけ） */
@@ -3406,7 +3784,7 @@ function goToNextPlace() {
      ・公園へ戻るときだけ、公園BGMを「また最初から」鳴らしはじめる
        （続きからではなく頭から）
 
-       鳴らしかたは playParkBgmSoon()＝「公園へ行く」を押したときと同じ
+       鳴らしかたは playParkBgmSoon()＝「このおやつで公園へ行く！」を押したときと同じ
        ・少し間（700ms）を空けてから鳴らしはじめる
          → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
        ・そのあと無音からフェードインする
@@ -3440,7 +3818,7 @@ function goToNextPlace() {
      ＝ これからも公園の探検が続く、ということ
      なので、秘密の場所BGMから公園BGMへ戻す
 
-     鳴らしかたは playParkBgmSoon()＝「公園へ行く」を押したときと同じ
+     鳴らしかたは playParkBgmSoon()＝「このおやつで公園へ行く！」を押したときと同じ
      ・秘密の場所BGMは、この関数の上のほうですでに止めてある
      ・少し間（700ms）を空けてから鳴らしはじめる
        → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
@@ -4774,7 +5152,7 @@ function resetGame() {
      startGame() と逆の切り替え
      「公園BGMを止める → タイトルBGMを最初から鳴らす」の順番にする
      公園BGMは先頭に戻しておくので、
-     次に「公園へ行く」を押したときにまた最初から鳴る
+     次に「このおやつで公園へ行く！」を押したときにまた最初から鳴る
 
      タイトルBGMは少しだけ間を空けてから鳴らしはじめる
      すぐ鳴らすと、決定音「ポン♪」が曲にかき消されてしまうため
@@ -4814,6 +5192,22 @@ function resetGame() {
   isTantrum.value = false;
   tantrumCount.value = 0;
   snackLeft.value = 2;
+
+  /* きょうのおやつも、選んでいない状態に戻す
+
+     次のプレイへ前回のグミ・せんべいが残っていると、
+     おやつ選択画面を開いたとたんに「2 / 2」になっていて、
+     選びなおすつもりが「もう選び終わっている」ことになってしまう
+
+     isSnackSelectionOpen も false に戻しておく
+     公園へ出発したあとも true のまま残しているので、
+     ここで戻さないと、B画面へ帰ったつもりが
+     おやつ選択画面のままになってしまう
+
+     ※ すぐ上の snackLeft（あと何回あげられるか）は、今までどおり2に戻す
+       ゲーム中の「おやつをあげる」は、まだこちらの数だけを見ている */
+  selectedSnackIds.value = [];
+  isSnackSelectionOpen.value = false;
 
   // いやいや発生の演出も消しておく
   // （残っていると、タイトル画面の上に前回の「イヤイヤ発生！」が出たままになる）
@@ -5381,8 +5775,8 @@ function runSelectedCommand() {
    起動画面（A）・タイトル画面（B）のキーボード操作
 
    この2つの画面で操作するものは、どちらも3つだけ
-     A … ① はじめる    ② ♪ サウンドトラック ③ サウンドON/OFF
-     B … ① 公園へ行く  ② はじめの画面へ戻る  ③ サウンドON/OFF
+     A … ① はじめる             ② ♪ サウンドトラック ③ サウンドON/OFF
+     B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ サウンドON/OFF
 
    ①がその画面のメインのボタン
    画面が出たときは、いつも①にフォーカスが当たるようにしてある
@@ -5406,8 +5800,26 @@ function getTitleFocusItems(): HTMLButtonElement[] {
     return [];
   }
 
+  /* おやつ選択画面のときも空っぽを返す
+
+     この画面にはA画面・B画面のボタン3つが出ていないので、
+     並びを返してしまうと「もう画面に無い『きょうのおやつを選ぶ』へ
+     フォーカスを動かす」ことになってしまう
+     （selectSnacksButtonRef などは画面から消えると null に戻るが、
+       消えたあとに参照しないほうが分かりやすい）
+
+     空っぽを返すと、この画面では
+     ・moveTitleFocusByArrow() … 何もしない
+     ・focusTitleMainButton()  … 何もしない
+     ・handleTitleKeydown()    … すぐ return する
+     となり、おやつ選択画面のキー操作はブラウザ本来の
+     Tab / Shift+Tab ・ Enter / Space だけになる */
+  if (isSnackSelectionOpen.value) {
+    return [];
+  }
+
   const items = titleEntered.value
-    ? [goParkButtonRef.value, backToBootButtonRef.value, soundToggleButtonRef.value] // B画面
+    ? [selectSnacksButtonRef.value, backToBootButtonRef.value, soundToggleButtonRef.value] // B画面
     : [startButtonRef.value, soundtrackButtonRef.value, soundToggleButtonRef.value]; // A画面
 
   return items.filter((item): item is HTMLButtonElement => item !== null);
@@ -5420,7 +5832,8 @@ function getTitleFocusItems(): HTMLButtonElement[] {
      [ 左上のボタン ]        [ 右上のサウンドON/OFF ]
             （A画面＝♪ サウンドトラック／B画面＝はじめの画面へ戻る）
 
-              [ メインのボタン（はじめる／公園へ行く） ]
+                  [ メインのボタン ]
+        （A画面＝はじめる／B画面＝きょうのおやつを選ぶ）
 
    ・↑ ↓ … メインのボタンと、上の行を行き来する
             （メインで↑を押したら、真上にある左のボタンへ）
@@ -5473,7 +5886,7 @@ function moveTitleFocusByArrow(key: string) {
   }
 }
 
-/* その画面のメインのボタン（はじめる／公園へ行く）へフォーカスを当てる
+/* その画面のメインのボタン（はじめる／きょうのおやつを選ぶ）へフォーカスを当てる
 
    画面が切りかわった直後は、新しいボタンがまだ作られていない
    そこで nextTick()（画面の書きかえが終わるのを待つ）をはさんでからフォーカスする */
@@ -5484,6 +5897,49 @@ async function focusTitleMainButton() {
 
   // 先頭が、その画面のメインのボタン
   items[0]?.focus();
+}
+
+/* ============================================================
+   おやつ選択画面のキーボード操作
+
+   この画面は、A画面・B画面ともゲーム本編ともちがい、
+   ブラウザ本来の操作をそのまま使うだけにしてある
+
+   ・Tab / Shift+Tab … おやつのカード6つ →「このおやつで公園へ行く！」
+                       → 戻る・サウンドON/OFF の順に行き来する
+                       （この順番は、HTMLに書いた順番そのまま）
+   ・Enter / Space   … いま選んでいるボタンを押す
+                       おやつのカードなら、選ぶ／解除がその場で入れかわる
+
+   矢印キーでカードを行き来する操作は、まだ足していない
+   （次の段階で ↑↓←→ のグリッド移動を入れるときは、ここへ書き足す）
+
+   なので、この関数でやることは「押しっぱなしを止める」1つだけ
+   ============================================================ */
+function handleSnackSelectionKeydown(event: KeyboardEvent) {
+  const isDecideKey = event.key === 'Enter' || event.key === ' ';
+
+  if (!isDecideKey) {
+    return;
+  }
+
+  /* 押しっぱなし（長押し）のときは、2回目以降をここで止める
+
+     キーには自動リピートがあるので、Enterを押したままにすると
+     フォーカスしているボタンが何度も押されてしまう
+     ・おやつのカード … 選ぶ／解除がパタパタくり返されてしまう
+     ・出発のボタン   … ゲーム開始が二重に走ってしまう
+
+     preventDefault() を呼ぶと、ブラウザは
+     このキーでボタンを押すのをやめてくれる
+     （A画面・B画面の handleTitleKeydown() と同じやりかた）
+
+     ※ 1回目（event.repeat が false）のときは、何もせずに通す
+       preventDefault() を呼ばずに return するのが大事で、
+       呼んでしまうと、そもそもボタンが1回も押せなくなる */
+  if (event.repeat) {
+    event.preventDefault();
+  }
 }
 
 /* A画面・B画面でキーを押したときの処理（ゲーム本編とは分けてある） */
@@ -5536,7 +5992,7 @@ function handleTitleKeydown(event: KeyboardEvent) {
   /* 押しっぱなし（長押し）のときは、2回目以降をここで止める
 
      Enterを押しっぱなしにすると、キーの自動リピートで
-     「はじめる」を押す → B画面へ進む → そのまま「公園へ行く」も押される、
+     「はじめる」を押す → B画面へ進む → そのまま「きょうのおやつを選ぶ」も押される、
      と続けて進んでしまうため、preventDefault で先へ行かせない */
   if (event.repeat) {
     event.preventDefault();
@@ -5546,7 +6002,7 @@ function handleTitleKeydown(event: KeyboardEvent) {
   /* ボタンなどにフォーカスが当たっているときは、ここでは何もしない
 
      そのボタンを「押す」のはブラウザがやってくれるので、
-     ここで「はじめる」「公園へ行く」まで動かしてしまうと、
+     ここで「はじめる」「きょうのおやつを選ぶ」まで動かしてしまうと、
      1回押しただけで2つのことが起きてしまう
      （例：サウンドON/OFFでSpaceを押すと、切り替えと同時に画面が進んでしまう）
 
@@ -5573,7 +6029,11 @@ function handleTitleKeydown(event: KeyboardEvent) {
   if (!titleEntered.value) {
     enterTitle(); // A画面の「▶ はじめる」
   } else {
-    startGame(); // B画面の「公園へ行く」
+    /* B画面の「きょうのおやつを選ぶ」
+
+       押したときと同じで、ここでもゲームは始まらない
+       まずおやつ選択画面へ進む（公園へ出発するのは、そのあと） */
+    openSnackSelection();
   }
 }
 
@@ -5590,11 +6050,24 @@ function handleKeydown(event: KeyboardEvent) {
      見えているのは前の画面なのに、中身（state）はもう次の画面のものになっている
      ここでEnterを押せてしまうと、見えていない次の画面のボタンまで
      続けて押したことになってしまうため
-     （例：「はじめる」→ 見えないうちに「公園へ行く」まで押されてゲームが始まる）
+     （例：「はじめる」→ 見えないうちに「きょうのおやつを選ぶ」まで押されてゲームが始まる）
 
      マウスのほうは、消えかけの画面を押せなくするCSSで止めている
      （.screen-fade-leave-active の pointer-events: none） */
   if (isScreenChanging.value) {
+    return;
+  }
+
+  /* ⓪ おやつ選択画面
+
+     この画面のキー操作は、ブラウザ本来のものだけで足りる
+     ・Tab / Shift+Tab … おやつのカード・出発・戻るを行き来する
+     ・Enter / Space   … 選んでいるボタンを押す（選ぶ・解除・決定）
+
+     そのため専用の関数でやることは「押しっぱなしを止める」1つだけ
+     （次の段階で ↑↓←→ のグリッド移動を足すなら、そこへ書き足す） */
+  if (!gameStarted.value && isSnackSelectionOpen.value) {
+    handleSnackSelectionKeydown(event);
     return;
   }
 
@@ -5864,7 +6337,7 @@ onUnmounted(() => {
       <div v-if="!titleEntered" key="boot" class="title-screen">
         <div class="title-card title-card--boot">
           <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
-               （「公園へ行く」「もう一度あそぶ」と同じ書き方）
+               （「きょうのおやつを選ぶ」「もう一度あそぶ」と同じ書き方）
 
                ※ この画面のメインのボタンなので、HTMLではいちばん先に書いてある
                  Tabキーを押したときに「はじめる → サウンドトラック → サウンド」の
@@ -5905,24 +6378,33 @@ onUnmounted(() => {
 
       <!-- ============================================================
            タイトル画面（ゲーム開始前）
+
+           おやつ選択画面を開いているあいだは、こちらは出さない
+           （そのため !gameStarted だけでなく
+             !isSnackSelectionOpen も条件に入れている）
            ============================================================ -->
-      <div v-else-if="!gameStarted" key="title" class="title-screen">
+      <div v-else-if="!gameStarted && !isSnackSelectionOpen" key="title" class="title-screen">
         <div class="title-card">
           <!-- この画面のメインのボタン
                A画面と同じ理由で、HTMLではいちばん先に書いてある
-               （Tabで「公園へ行く → はじめの画面へ戻る → サウンド」と回れるようにするため。
-                 見た目の位置はCSSの order でいちばん下のまま） -->
-          <button ref="goParkButtonRef" class="cmd cmd--start cmd--single" @click="startGame">公園へ行く</button>
+               （Tabで「きょうのおやつを選ぶ → はじめの画面へ戻る → サウンド」と回れるようにするため。
+                 見た目の位置はCSSの order でいちばん下のまま）
+
+               ※ このボタンでは、まだゲームは始まらない
+                 先に「きょうのおやつ」を選ぶ画面へ進む（openSnackSelection）
+                 公園へ出発する startGame() は、その画面の
+                 「このおやつで公園へ行く！」から呼ばれる -->
+          <button ref="selectSnacksButtonRef" class="cmd cmd--start cmd--single" @click="openSnackSelection">きょうのおやつを選ぶ</button>
 
           <!-- 上のツールバー（A画面と同じ .title-card__tools を使う）
                左：はじめの画面（起動画面）へ戻る
-               右：サウンドON/OFF（「公園へ行く」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
+               右：サウンドON/OFF（「きょうのおやつを選ぶ」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
           <div class="title-card__tools">
             <!-- はじめの画面へ戻る（左上の補助操作）
                  A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
                  A→B で切り替えても、左側は文字だけが入れかわって見える
 
-                 ※ Enter/Space で「公園へ行く」まで動いてしまわないのは、
+                 ※ Enter/Space で「きょうのおやつを選ぶ」まで動いてしまわないのは、
                    handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
                    ようにしているため（ボタン側で止める必要はない） -->
             <button ref="backToBootButtonRef" type="button" class="title-card__back" @click="goBackToBoot">はじめの画面へ戻る</button>
@@ -5951,6 +6433,154 @@ onUnmounted(() => {
               たくさん探索してみよう！
             </p>
           </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           おやつ選択画面（B画面とゲーム画面のあいだの準備画面）
+
+           公園へ持っていくおやつを、6種類から2種類選んでもらう
+           まだゲーム開始前なので、タイトルBGMは鳴ったまま
+           （公園へ出発するのは「このおやつで公園へ行く！」を押したとき）
+
+           ■ HTMLに書いた順番と、画面に見える順番がちがう
+
+             HTMLの順番 … おやつ6つ → バッグ → 出発 → 上のツールバー
+             見える順番 … 上のツールバー → 見出し → 説明 → おやつ6つ
+                           → バッグ → 出発
+
+             Tabキーは「HTMLに書いた順番」で動くので、
+             最初のおやつから Tab を押すと
+             「おやつ → 出発 → 戻る・サウンド」と自然に進む
+             見た目の位置は、A画面・B画面と同じように
+             CSSの order で並べ直している（.title-card--snack のところ）
+
+           ■ おやつ6種類はベタ書きしない
+
+             v-for で snacks 配列をそのまま並べている
+             おやつを増やしたいときは snacks へ1件足すだけで、
+             このHTMLはさわらなくてよい
+           ============================================================ -->
+      <div v-else-if="!gameStarted" key="snack-selection" class="title-screen">
+        <div class="title-card title-card--snack">
+          <!-- おやつのカード6つ
+
+               ref="snackListRef" … この画面が出おわったときに、
+               focusFirstSnackOption() が中の最初の .snack-option
+               （＝🍇 グミ）へフォーカスを当てるための目印 -->
+          <div ref="snackListRef" class="snack-list">
+            <!-- カードまるごとが1つのボタン
+
+                 中に小さな「選ぶ」ボタンを置くより、
+                 カードのどこを押しても選べるほうが、
+                 マウスでも指でもねらいやすい
+
+                 :disabled … バッグがいっぱいで、まだ選んでいないおやつ
+                 選んであるおやつは押せるままにして、
+                 もう一度押せば解除できるようにしておく
+
+                 :aria-pressed … 読み上げソフトに「押されている（選択中）」
+                 かどうかを伝える（見た目の ✓ 選択中 と同じ意味） -->
+            <button
+              v-for="snack in snacks"
+              :key="snack.id"
+              type="button"
+              class="snack-option"
+              :class="{ 'snack-option--selected': isSnackSelected(snack.id) }"
+              :disabled="isSnackBagFull && !isSnackSelected(snack.id)"
+              :aria-pressed="isSnackSelected(snack.id)"
+              @click="toggleSnackSelection(snack.id)">
+              <span class="snack-option__icon">{{ snack.icon }}</span>
+
+              <span class="snack-option__name">{{ snack.name }}</span>
+
+              <span class="snack-option__text">{{ snack.description }}</span>
+
+              <!-- おやつごとの回復量（次の実装でそのままゲームに使う数）
+
+                   数字はこれからバランスを調整するので、
+                   ここが変わってもカードの形がくずれないようにしている
+
+                   3つを1つずつ span で包んであるのは、折り返しの都合
+                   ひとつづきの文章にしてしまうと、カードの幅が足りないときに
+                   「体力 +1」「8」のように数字の途中で切れてしまう
+                   包んでおけば、切れるのはかならず項目のあいだになる
+                   （区切りの「／」は、CSSで項目のうしろに付けている） -->
+              <span class="snack-option__effect">
+                <span class="snack-option__stat">体力 +{{ snack.energy }}</span>
+                <span class="snack-option__stat">機嫌 +{{ snack.mood }}</span>
+                <span class="snack-option__stat">{{ snack.minutes }}分</span>
+              </span>
+
+              <!-- 選択中の目じるし
+
+                   出たり消えたりしても、カードの高さが変わらないように、
+                   外側の span で置き場所（高さ）をいつも確保しておく
+                   （上部ステータスの「かかった時間」と同じ考えかた） -->
+              <span class="snack-option__mark">
+                <span v-if="isSnackSelected(snack.id)" class="snack-option__markText">✓ 選択中</span>
+              </span>
+            </button>
+          </div>
+
+          <!-- おやつバッグ（いま選んでいる2個が分かるところ） -->
+          <div class="snack-bag">
+            <p class="snack-bag__head">
+              <span class="snack-bag__title">🎒 おやつバッグ</span>
+
+              <!-- 「1 / 2」の数え方も maxSnackCount を見ている
+                   （持っていける数を3つに変えても、ここは直さなくてよい） -->
+              <span class="snack-bag__count">{{ selectedSnackIds.length }} / {{ maxSnackCount }}</span>
+            </p>
+
+            <!-- 選んだおやつの名前をならべる
+                 名札（selectedSnackIds）ではなく、絵文字と名前を持っている
+                 selectedSnacks のほうを使う -->
+            <ul v-if="selectedSnacks.length > 0" class="snack-bag__list">
+              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">{{ snack.icon }} {{ snack.name }}</li>
+            </ul>
+
+            <p v-else class="snack-bag__empty">まだ選んでいません</p>
+          </div>
+
+          <!-- 公園へ出発するボタン（2種類そろうまでは押せない）
+
+               :disabled … canStartWithSnacks が false のあいだ
+               （0 / 2 と 1 / 2 では押せず、2 / 2 になって押せるようになる） -->
+          <button type="button" class="cmd cmd--start cmd--single snack-go" :disabled="!canStartWithSnacks" @click="confirmSnacksAndStartGame">このおやつで公園へ行く！</button>
+
+          <!-- 上のツールバー（A画面・B画面と同じ .title-card__tools を使う）
+               左：タイトル画面（B画面）へ戻る
+               右：サウンドON/OFF（まだゲーム開始前なので、A・B画面と同じはたらき）
+
+               ※ HTMLでいちばん後ろに書いてあるのは、Tabの順番をそろえるため
+                 見た目の位置は、CSSの order でカードのいちばん上に出る -->
+          <div class="title-card__tools">
+            <!-- B画面の「はじめの画面へ戻る」と、同じ場所・同じ大きさで出る
+                 押しても選んだおやつは消さない（B画面 → もう一度おやつ選択で、
+                 さっき選んだおやつがそのまま入っている） -->
+            <button type="button" class="title-card__back" @click="closeSnackSelection">← ひとつ前の画面へ戻る</button>
+
+            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+              <span class="sound-toggle__text">サウンド</span>
+              <span class="sound-toggle__state">
+                <!-- ON と OFF を同じ場所に重ねて置いておく
+                     使わないほうは「見えなくする」だけで場所は残るので、
+                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              </span>
+            </button>
+          </div>
+
+          <h1 class="snack-heading">🍪 きょうのおやつ</h1>
+
+          <p class="snack-lead">
+            公園へ持っていくおやつを{{ maxSnackCount }}つ選ぼう！
+            <br />
+            もう一度押すと、えらびなおせます。
+          </p>
         </div>
       </div>
 
@@ -8516,7 +9146,7 @@ onUnmounted(() => {
 /* カードの中身を、見た目のうえで上から順に並べ直す
 
    HTMLでは、Tabキーの順番をそろえるために
-   メインのボタン（はじめる／公園へ行く）をいちばん先に書いてある
+   メインのボタン（はじめる／きょうのおやつを選ぶ）をいちばん先に書いてある
    そのぶん、見た目の位置はここで元どおりに並べ替える
    （.title-card は display: flex なので、order で順番を決められる）
 
@@ -8565,7 +9195,7 @@ onUnmounted(() => {
   margin-bottom: auto;
 }
 
-/* キーボードで「はじめる」「公園へ行く」を選んでいるとき
+/* キーボードで「はじめる」「きょうのおやつを選ぶ」を選んでいるとき
 
    ふつうの .cmd のフォーカス枠は金色だが、このボタン自体が金色なので、
    金色どうしでふちが見えなくなってしまう
@@ -8589,7 +9219,7 @@ onUnmounted(() => {
 }
 
 /* タイトル画面の説明（どんなゲームかを伝えるいちばん大事な文章）
-   ここを読んでもらってから「公園へ行く」を押してほしいので、
+   ここを読んでもらってから「きょうのおやつを選ぶ」を押してほしいので、
    本文より大きめの文字にして、行のすき間もゆったりとる
 */
 .title-card__rule {
@@ -8621,7 +9251,7 @@ onUnmounted(() => {
    入れ物（.title-card__tools）も中のボタンの大きさも、
    A画面・B画面でまったく同じCSSを使う（画面ごとの調整はしない）
 
-   大きさは「はじめる」「公園へ行く」より目立たせないが、
+   大きさは「はじめる」「きょうのおやつを選ぶ」より目立たせないが、
    ふつうに読めて押せるくらい（高さ38px・文字15px）にしている
    ============================================================ */
 
@@ -8703,6 +9333,435 @@ onUnmounted(() => {
 .title-card__back:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
+}
+
+/* ============================================================
+   おやつ選択画面（きょうのおやつ）
+
+   入れものは、A画面・B画面と同じ .title-card をそのまま使っている
+   （紙の色・紺色のふち・角の丸み・上のツールバーの位置がそろうので、
+     B画面から切りかわっても、同じカードの中身が入れかわったように見える）
+
+   ちがうのは次の2つだけで、どちらも .title-card--snack で足している
+   ① おやつ6つを並べるので、カードの横幅を少し広くする
+   ② 中身の順番が増えるので、order を付け直す
+   ============================================================ */
+
+/* おやつのカードを3列ならべるぶん、B画面（620px）より広くする
+   min-height は .title-card のまま（400px）で足りる
+   （中身のほうが高くなるので、実際はそれ以上に伸びる）
+
+   820pxにしてあるのは、1枚のカードの中身の幅を確保するため
+   2列だと、1枚のカードで文字に使える幅は
+   （820 − カードの余白88 − ふち6 − すき間12）÷ 2 − カードの余白24 − ふち4 ＝ 約329px
+
+   ここに収まってほしいものが2つある
+   ・説明文でいちばん長い「こうちゃんの大好物。機嫌が大きく回復」… 約270px
+   ・回復量「体力 +18 ／ 機嫌 +6 ／ 10分」                      … 約181px
+
+   どちらも1行で収まるので、カードの中で折り返しが起きない
+   （説明文が変な位置で切れていたのは、幅が足りていなかったのが原因）
+
+   ※ 上下の余白は .title-screen（padding: 32px 24px）が持っていて、
+     背の高さが足りないときは .title-screen が縦にスクロールしてくれる */
+.title-card--snack {
+  max-width: 820px;
+}
+
+/* この画面だけ、上のツールバーを折り返せるようにしておく
+
+   「← ひとつ前の画面へ戻る」は、B画面の「はじめの画面へ戻る」より
+   2文字ぶん長い。左右のボタンはどちらも折り返さない指定
+   （.title-card__back の white-space: nowrap）なので、
+   iPhone SE ほどの細い画面（320px）では、
+   2つを1行にならべると、はみ出してしまうことがある
+
+   flex-wrap: wrap にしておくと、そういう細い画面では
+   サウンドON/OFFが下の行へ回りこむだけで、はみ出さなくなる
+   （ふつうの幅では今までどおり1行のままなので、見た目は変わらない） */
+.title-card--snack .title-card__tools {
+  flex-wrap: wrap;
+}
+
+/* カードの中身を、見た目のうえで上から順に並べ直す
+
+   HTMLでは、Tabキーの順番をそろえるために
+   「おやつ → バッグ → 出発 → 上のツールバー」の順で書いてある
+   そのぶん、見た目の位置はここで並べ替える
+   （A画面・B画面の .title-card__tools / __name / __rule と同じやりかた）
+
+     1 上のツールバー（← ひとつ前の画面へ戻る・サウンドON/OFF）… .title-card__tools が持っている
+     2 見出し（🍪 きょうのおやつ）
+     3 説明（2つ選ぼう！）
+     4 おやつ6つ
+     5 おやつバッグ
+     6 このおやつで公園へ行く！
+
+   ※ .cmd--start の order と margin-bottom は、
+     すぐ上の「.title-card .cmd--start」で 4 と auto になっている
+     こちらはあとに書いてあるぶん強いので、6 と 0 に上書きされる
+     （auto のままだと、出発ボタンがカードの下へ引きはがされてしまう） */
+.title-card--snack .snack-heading {
+  order: 2;
+}
+
+.title-card--snack .snack-lead {
+  order: 3;
+}
+
+.title-card--snack .snack-list {
+  order: 4;
+}
+
+.title-card--snack .snack-bag {
+  order: 5;
+}
+
+.title-card--snack .snack-go {
+  order: 6;
+  margin-bottom: 0;
+}
+
+/* 見出し（🍪 きょうのおやつ）
+   ゲームのタイトル（36px）ほど大きくはしない
+   この画面の主役はおやつのカードなので、見出しは一段ひかえめにする */
+.snack-heading {
+  margin: 0 0 10px;
+  color: var(--navy);
+  font-size: 26px;
+  line-height: 1.35;
+}
+
+/* 説明（公園へ持っていくおやつを2つ選ぼう！）
+   B画面の説明文（.title-card__rule）と同じ考えで、本文より少し大きめ
+   ただし枠で囲まずに、見出しのすぐ下にそえるだけにしている */
+.snack-lead {
+  margin: 0 0 20px;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+/* おやつ6つの並べ方
+
+   パソコンでは2列×3行
+
+   3列にすると1枚が細くなり、説明文が
+   「体力と機嫌をバランスよく回」＋「復」のように
+   変な位置で2行に折れてしまう（日本語には単語の区切りが無いため）
+
+   2列なら1枚の文字幅が329pxとれるので、
+   いまの6つの説明はぜんぶ1行で収まり、折り返しが起きない
+   縦には1行ぶん長くなるが、1枚の背が低くなるので、
+   6種類を見比べるのに必要なスクロールの量はほとんど変わらない
+
+   minmax(0, 1fr) の 0 が大事
+   ふつうの 1fr は「中身より小さくならない」ので、
+   説明文が長いおやつがあると、その列だけ広がって列の幅がそろわなくなる
+   0 にしておくと、どの列も同じ幅になる
+   （ゲーム画面の .command などでも同じ書き方をしている） */
+.snack-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+/* おやつ1つぶんのカード（カードまるごとが1つのボタン）
+
+   ・box-sizing: border-box
+     このゲームはふだん border-box にしていないが、ここは付けておく
+     grid の列にきっちり収めるため（padding と枠のぶんで列からはみ出さない）
+
+   ・align-items: center ＋ text-align: center
+     絵文字・名前・説明を、たてに中央ぞろえでならべる
+
+   色はB画面の「はじめの画面へ戻る」と同じ考えで、
+   白い紙＋うすい水色のふち。紺色の文字にして、画面から浮かないようにする */
+.snack-option {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 14px 12px 10px;
+  border: 2px solid var(--navy-line);
+  border-bottom-width: 4px;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--navy);
+  font-family: inherit;
+  line-height: 1.5;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.snack-option__icon {
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.snack-option__name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* おやつの説明（「機嫌が大きく回復」など）
+
+   カードの中身はぜんぶ中央ぞろえ（.snack-option の text-align: center のまま）
+
+   ■ 変な位置で改行させないための決め手は、カードの幅のほう
+
+     日本語には英語のような「単語の区切り」が無いので、
+     幅が足りないとブラウザはどこででも行を変えてしまう
+     3列にしていたときは、1枚の文字幅が206pxしかなく、こう切れていた
+
+       体力と機嫌をバランスよく回 ／ 復     ← 1文字だけ次の行に落ちる
+       おなかがいっぱいになって体 ／ 力が回復 ← 「体力」が2つに割れる
+
+     文字を大きくするほど、この切れ方はひどくなる
+     そこで2列にして、1枚の文字幅を329pxまで広げた
+     いまの6つの説明はいちばん長いもの（18文字＝270px）でも収まるので、
+     そもそも改行が起きない＝変な位置で切れようがない
+     （列の数は .snack-list のところで決めている）
+
+   ■ text-wrap: balance は、これから先のための保険
+
+     説明を長くしたり、さらに文字を大きくしたときには、
+     どうしても2行になることがある
+     そのときブラウザに「2行の長さをできるだけそろえて」とお願いしておくと、
+     上のような「最後の1文字だけ落ちる」形になりにくい
+     （対応していないブラウザでは、ただ無視されるだけなので置いても害はない） */
+.snack-option__text {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+/* おやつごとの回復量
+
+   これからバランスを調整する数字なので、色はいちばんひかえめなまま
+   （ここが変わっても、カードの印象は変わらない）
+
+   ・中央ぞろえ … 上の説明文とちがって「体力 +5 ／ 機嫌 +20 ／ 5分」と
+                  区切りのある短い1行なので、まんなかでも読みにくくならない
+                  （カードの下のほうに、ぴたっと収まって見える）
+
+   ・margin-top: auto … この行から下（回復量と「✓ 選択中」）を、
+                        カードのいちばん下へ押しつける
+                        説明文が1行のカードと2行のカードが横にならんでも、
+                        回復量と ✓ の高さがそろうので、6種類を見比べやすい
+                        （grid の同じ行のカードは、高さがそろえられるため
+                          説明文が短いカードには下に余りができる。
+                          その余りを、この auto がぜんぶ上に持ってくる） */
+.snack-option__effect {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1px 7px;
+  margin-top: auto;
+  padding-top: 6px;
+  color: var(--ink-soft);
+  font-size: 13.5px;
+  letter-spacing: 0.01em;
+}
+
+/* 回復量の1項目（「体力 +18」など）
+
+   white-space: nowrap で、1つの項目の中では絶対に折り返さないようにする
+   カードの幅が足りないときは、項目と項目のあいだで行が変わる */
+.snack-option__stat {
+  white-space: nowrap;
+}
+
+/* 項目の区切り「／」
+
+   最後の項目には付けない（うしろに何も続かないため）
+
+   ※ 「／」を次の項目の前ではなく、前の項目のうしろに付けるのが大事
+     前に付けると、折り返したときに「／」が次の行のあたまに来てしまう
+     うしろに付けておけば、「／」はいつも前の項目にくっついたまま残る */
+.snack-option__stat:not(:last-child)::after {
+  margin-left: 6px;
+  content: '／';
+}
+
+/* 「✓ 選択中」の置き場所
+   選んでいないカードでは中身が空になるが、高さはいつも確保しておく
+   （出たり消えたりしても、カードの高さが変わらないようにするため） */
+.snack-option__mark {
+  display: block;
+  min-height: 20px;
+  margin-top: 6px;
+}
+
+.snack-option__markText {
+  display: inline-block;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* PCでカーソルを当てたとき（押せるカードだけ）
+   :not(:disabled) を付けて、押せないカードは動かないようにしている */
+.snack-option:not(:disabled):hover {
+  border-color: var(--navy);
+  background: #f2f9fd;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(42 118 143 / 22%);
+}
+
+.snack-option:not(:disabled):active {
+  border-bottom-width: 2px;
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+/* いま選んでいるおやつ
+
+   はっきり分かるように、3つ重ねて変えている
+   ① ふちを紺色の太いものにする
+   ② 背景をうすい水色にする
+   ③ 「✓ 選択中」の札を出す（HTMLのほう）
+
+   色は上部バーと同じ紺色と、ゲージに使っているそらいろの系統だけ
+   新しい原色を足さないので、画面から浮かない */
+.snack-option--selected {
+  border-color: var(--navy);
+  background: #e3f2fb;
+  box-shadow: inset 0 0 0 1px var(--navy);
+}
+
+.snack-option--selected:not(:disabled):hover {
+  background: #d8ecf9;
+}
+
+/* 押せないカード（バッグがいっぱいで、まだ選んでいないおやつ）
+
+   うすくして、カーソルも「押せません」の形に変える
+   選んであるカードは押せるままなので、
+   どれかを解除すれば、またここが押せるようになる */
+.snack-option:disabled {
+  border-color: #dbe4ee;
+  background: #f6f7f9;
+  opacity: 55%;
+  cursor: not-allowed;
+}
+
+.snack-option:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* おやつバッグ（いま選んでいるおやつを見せるところ）
+
+   B画面の説明文（.title-card__rule）と同じ、うすい青の枠を使う
+   「この画面の中のひとまとまり」に見えるので、新しい見た目を増やさずにすむ */
+.snack-bag {
+  padding: 14px 18px;
+  border-radius: 14px;
+  background: #f2f6fb;
+  text-align: left;
+}
+
+.snack-bag__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+}
+
+.snack-bag__title {
+  color: var(--navy);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* 「0 / 2」「2 / 2」の数
+   ここだけ数字を大きくして、あと何個選べるかが目に入るようにする */
+.snack-bag__count {
+  color: var(--navy);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* 選んだおやつの名前（🍇 グミ など）
+   list-style: none ＋ padding-left: 0 で、ul の「・」と左の余白を消す */
+.snack-bag__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin: 8px 0 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.snack-bag__item {
+  padding: 3px 12px;
+  border: 1px solid var(--navy-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 75%);
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* まだ1つも選んでいないとき
+   「空っぽ」と分かるだけでよいので、やわらかい色の小さな文字にしておく */
+.snack-bag__empty {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+}
+
+/* 「このおやつで公園へ行く！」
+
+   見た目はB画面の「きょうのおやつを選ぶ」と同じ金色のボタン（.cmd--start）
+   上のおやつバッグと近づきすぎないように、すき間だけ足している */
+.snack-go {
+  margin-top: 18px;
+}
+
+/* まだ2種類そろっていないとき（押せない）
+
+   金色のままだと押せそうに見えてしまうので、
+   色をぬいて、カーソルも「押せません」の形に変える
+   （水色の光も、すでにある .cmd:disabled::after の指定で消える）
+
+   ※ どうすれば押せるようになるかは、
+     すぐ上のおやつバッグの「1 / 2」を見れば分かる */
+.snack-go:disabled {
+  border-color: #d7dde5;
+  background: #eef1f5;
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
+/* 押せないあいだは、浮き上がる動きも止める
+   （.cmd:hover の transform / box-shadow を打ち消す） */
+.snack-go:disabled:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* 押せないあいだは、選択カーソル「▶」も出さない
+   （.cmd--single:focus::before で出てしまうため） */
+.snack-go:disabled::before {
+  opacity: 0;
 }
 
 /* ============================================================
@@ -10468,7 +11527,7 @@ onUnmounted(() => {
 
    対象
      .cmd--selected              … 公園入口などで選んでいるボタン
-     .cmd--single                … ボタンが1つだけの画面のボタン（はじめる／公園へ行く）
+     .cmd--single                … ボタンが1つだけの画面のボタン（はじめる／きょうのおやつを選ぶ）
      .command-box__item--selected … 各イベントの中で選んでいる行
    ============================================================ */
 
@@ -10969,11 +12028,11 @@ onUnmounted(() => {
 
    ▶ の色は「そのボタンの文字と同じ色」にそろえる
    こうすると、どの色のボタンでも文字と同じ濃さで読めるようになる
-   ・白いボタン（すべり台へ行く など）… 紺色     ← ここで指定
-   ・紫のボタン（秘密の場所）          … 白       ← .cmd--secret::before
-   ・緑のボタン（ゴール）              … 白       ← .cmd--goal::before
-   ・金色のボタン（公園へ行く など）    … 濃い茶色 ← .cmd--start / --next::before
-   ・うすい青のボタン（はじめの画面へ戻る）… 白    ← .cmd--back::before
+   ・白いボタン（すべり台へ行く など）         … 紺色     ← ここで指定
+   ・紫のボタン（秘密の場所）                  … 白       ← .cmd--secret::before
+   ・緑のボタン（ゴール）                      … 白       ← .cmd--goal::before
+   ・金色のボタン（きょうのおやつを選ぶ など） … 濃い茶色 ← .cmd--start / --next::before
+   ・うすい青のボタン（はじめの画面へ戻る）    … 白       ← .cmd--back::before
 
    ※ 以前は全部このgold（金色）だったが、白い下地では 1.6:1 しかなく、
      緑の下地では 1.4:1 とほとんど見えなかった
@@ -11030,7 +12089,7 @@ onUnmounted(() => {
   opacity: 1;
 }
 
-/* 「はじめる」「公園へ行く」の選択カーソル「▶」
+/* 「はじめる」「きょうのおやつを選ぶ」の選択カーソル「▶」
 
    前は「このボタンを Enter で押せますよ」と伝えるために、いつも出していた
    いまはキーボードで上のボタン（♪ サウンドトラック／はじめの画面へ戻る・
@@ -11167,7 +12226,7 @@ onUnmounted(() => {
   font-size: 19px;
 }
 
-/* 金色のボタン（はじめる・公園へ行く／もう一度あそぶ）も、文字と同じ濃い茶色にする
+/* 金色のボタン（はじめる・きょうのおやつを選ぶ／もう一度あそぶ）も、文字と同じ濃い茶色にする
    下地が明るいので、▶ は文字と同じ濃い茶色にしないと沈んで見えなくなる
    大きなボタンなので、▶ も少しだけ大きくしてそろえている
 */
@@ -11188,6 +12247,43 @@ onUnmounted(() => {
   .status-area {
     gap: 6px 24px;
     padding: 6px 28px 8px;
+  }
+
+  /* ===== おやつ選択画面（背の低い画面） =====
+
+     おやつ6つ＋バッグ＋出発ボタンとタテに長い画面なので、
+     背の低いパソコン（1280×720 など）では余白と絵文字を少しつめて、
+     スクロールする量を減らしている
+     （それでも収まらないときは、.title-screen が縦にスクロールしてくれる） */
+  .title-card--snack {
+    padding-top: 32px;
+    padding-bottom: 32px;
+  }
+
+  .snack-heading {
+    margin-bottom: 8px;
+    font-size: 23px;
+  }
+
+  .snack-lead {
+    margin-bottom: 14px;
+  }
+
+  .snack-list {
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .snack-option {
+    padding: 10px 10px 8px;
+  }
+
+  .snack-option__icon {
+    font-size: 26px;
+  }
+
+  .snack-go {
+    margin-top: 14px;
   }
 
   .status-clock__now {
@@ -11432,6 +12528,9 @@ onUnmounted(() => {
   .command {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  /* ※ おやつ（.snack-list）は、パソコンのときからすでに2列なので
+       ここでは何もしない（スマホ幅で1列にするのは max-width: 700px のほう） */
 
   /* 3グループ横並び → 2列（おでかけが下へ折り返す） */
   .change-groups {
@@ -11681,6 +12780,113 @@ onUnmounted(() => {
     padding: 18px 18px;
     font-size: 16.5px;
     line-height: 1.8;
+  }
+
+  /* ===== おやつ選択画面（スマホ幅） ===== */
+
+  /* スマホでは1列にする
+
+     考え方はパソコンの2列と同じで、
+     「説明文が変な位置で折り返さない幅」を確保するのが目的
+
+     2列のままだと、375pxの画面では1枚の文字幅が約112pxしか残らない
+     そうなると
+     ・「おなかがいっぱいになって体力が回復」が3行に折り返す
+     ・「体力 +18 ／ 機嫌 +6 ／ 10分」も2〜3行に折り返す
+     となって、せっかく大きくした文字が読みにくくなってしまう
+
+     1列にすると、文字に使える幅が約257pxになり、
+     説明文も回復量もほとんど1行で収まる
+     カード1枚の背が低くなるので、6枚ぜんぶ見るのにかかる
+     スクロールの量は、2列のときとほとんど変わらない
+
+     ※ 列の幅は minmax(0, 1fr) なので、
+       もっと細い画面でもカードが横にはみ出すことはない
+       （そこまで細いと説明文は2行になるが、
+         text-wrap: balance が長さをそろえてくれる） */
+  .snack-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  /* 1列になって横はゆったりしたので、左右の余白も10pxに戻す
+     （文字がカードのふちに近づきすぎないようにする） */
+  .snack-option {
+    gap: 1px;
+    padding: 12px 10px 8px;
+    border-radius: 12px;
+  }
+
+  .snack-option__icon {
+    font-size: 26px;
+  }
+
+  .snack-option__name {
+    font-size: 15.5px;
+  }
+
+  /* 説明文は、せまい画面でも14pxを下まわらないようにする
+     1列にしたので、いちばん長い説明（18文字＝252px）も
+     文字幅 約257px に1行で収まる */
+  .snack-option__text {
+    font-size: 14px;
+  }
+
+  .snack-option__effect {
+    font-size: 12.5px;
+  }
+
+  .snack-option__mark {
+    min-height: 18px;
+    margin-top: 4px;
+  }
+
+  .snack-option__markText {
+    padding: 1px 8px;
+    font-size: 11px;
+  }
+
+  /* PCのカーソル用の動きは、指で押す画面では出さない
+     （B画面の .cmd:hover を切っているのと同じ考えかた） */
+  .snack-option:not(:disabled):hover {
+    background: var(--paper);
+    transform: none;
+    box-shadow: none;
+  }
+
+  .snack-option--selected:not(:disabled):hover {
+    background: #e3f2fb;
+  }
+
+  .snack-heading {
+    margin-bottom: 8px;
+    font-size: 22px;
+  }
+
+  .snack-lead {
+    margin-bottom: 16px;
+    font-size: 15.5px;
+  }
+
+  .snack-bag {
+    padding: 12px 14px;
+  }
+
+  .snack-bag__title {
+    font-size: 15px;
+  }
+
+  .snack-bag__count {
+    font-size: 17px;
+  }
+
+  .snack-bag__item {
+    font-size: 14px;
+  }
+
+  .snack-go {
+    margin-top: 14px;
   }
 
   .command {
