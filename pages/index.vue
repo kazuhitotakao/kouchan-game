@@ -57,14 +57,17 @@ const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
 const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
 
-/* おやつ選択画面の、おやつが6つならんでいる入れもの
+/* おやつ選択画面のカードまるごと
 
    ここだけボタン1つずつではなく、入れものをまるごと覚えておく
    おやつは snacks 配列から v-for で作るので、
    あとからおやつが増えても、refを1つずつ増やさなくてすむようにしたい
-   （画面が出たときは、この入れものの中の最初の .snack-option ＝
-     🍇 グミ へフォーカスを当てる） */
-const snackListRef = ref<HTMLElement | null>(null);
+
+   この入れものを使ってやることは2つ
+   ・画面が出たとき、最初のおやつ（🍇 グミ）へフォーカスを当てる
+   ・矢印キーで、中の押せるボタンを見た目どおりに行き来する
+     （おやつのカード／出発／戻る／サウンドON/OFF） */
+const snackSelectionRef = ref<HTMLElement | null>(null);
 
 /* 今いる場所を管理する型
    parkEntrance = 公園入口
@@ -3571,7 +3574,7 @@ function confirmSnacksAndStartGame() {
    当てる先がボタン3つの並びではなく、v-for で作ったカードなので分けてある
 
    おやつは snacks 配列から作るので、ボタン1つずつに ref は付けていない
-   入れもの（snackListRef）の中の、最初の .snack-option を探して当てる
+   入れもの（snackSelectionRef）の中の、最初の .snack-option を探して当てる
    こうしておけば、おやつが増えても直すところは無い
 
    :not(:disabled) を付けているのは、押せないカードを飛ばすため
@@ -3583,12 +3586,12 @@ function confirmSnacksAndStartGame() {
    そのときは押せるカード（＝もう選んであるチョコ）が選ばれるようにしておく
 
    ※ nextTick() で画面の書きかえを待つのは、こちらも同じ
-   ※ 画面にまだカードが無いときは snackListRef が null なので、
+   ※ 画面にまだカードが無いときは snackSelectionRef が null なので、
      ?. のおかげで何も起きずに終わる（無理にフォーカスしない） */
 async function focusFirstSnackOption() {
   await nextTick();
 
-  const firstSnackButton = snackListRef.value?.querySelector<HTMLButtonElement>('.snack-option:not(:disabled)');
+  const firstSnackButton = snackSelectionRef.value?.querySelector<HTMLButtonElement>('.snack-option:not(:disabled)');
 
   firstSnackButton?.focus();
 }
@@ -5902,24 +5905,287 @@ async function focusTitleMainButton() {
 /* ============================================================
    おやつ選択画面のキーボード操作
 
-   この画面は、A画面・B画面ともゲーム本編ともちがい、
-   ブラウザ本来の操作をそのまま使うだけにしてある
+   ・↑ ↓ ← → … 画面にならんでいるとおりに、となりのボタンへ動く
+   ・Enter / Space … いま選んでいるボタンを押す（選ぶ・解除・決定）
+   ・Escape        … B画面へ戻る
+   ・Tab / Shift+Tab … ブラウザのふつうの移動（こちらでは何もしない）
 
-   ・Tab / Shift+Tab … おやつのカード6つ →「このおやつで公園へ行く！」
-                       → 戻る・サウンドON/OFF の順に行き来する
-                       （この順番は、HTMLに書いた順番そのまま）
-   ・Enter / Space   … いま選んでいるボタンを押す
-                       おやつのカードなら、選ぶ／解除がその場で入れかわる
+   ■ 「いまどこを選んでいるか」は、フォーカスそのもので覚えている
 
-   矢印キーでカードを行き来する操作は、まだ足していない
-   （次の段階で ↑↓←→ のグリッド移動を入れるときは、ここへ書き足す）
+     ゲーム本編は selectedCommandIndex のような番号で選択位置を持っているが、
+     この画面ではそれを作っていない
 
-   なので、この関数でやることは「押しっぱなしを止める」1つだけ
+     理由は、番号とフォーカスの2つを持つと、かならずズレるため
+     （Tabで動かすとフォーカスだけ動く、矢印で動かすと番号だけ動く…）
+     ブラウザのフォーカス1つだけを「いまの居場所」と決めておけば、
+     矢印・Tab・マウスのどれで動かしても、ズレようがない
+
+     見た目は、ボタンの :focus-visible（紺色の枠）が知らせてくれる
+     これは「いまカーソルがここにある」という意味で、
+     「バッグに入れた」ことを表すカードの色の変化とは別物
+     （矢印キーで動かしただけでは、selectedSnackIds は変わらない）
+
+   ■ 行き先は「画面のどこにあるか」で決めている
+
+     おやつは、画面の広さによって2列にも1列にもなる
+     　パソコン … グミ／チョコ が横にならぶ2列
+     　スマホ   … グミ・チョコ・せんべい… とたてに1列
+
+     ここで「2列だから、2つ先が真下」と番号で計算してしまうと、
+     スマホで1列になったとたんに、ぜんぶズレてしまう
+
+     そこで getBoundingClientRect()（＝そのボタンが画面のどこにあるか）を
+     その場で調べて、押した矢印の向きにあるボタンへ動かしている
+     こうすると、CSSの列数を JavaScript 側で知らなくてよい
+     画面幅の数字（600px など）をこのファイルへ書き足す必要もない
+
+   ■ Enter / Space は、ここでは実行しない
+
+     おやつのカードも、出発も、戻るも、サウンドも、ぜんぶ button なので、
+     フォーカスが当たっていれば、ブラウザが勝手に click してくれる
+     ここで toggleSnackSelection() などを呼ぶと、
+     ブラウザのclickと合わせて2回動いてしまう
+     （1回押しただけで「選ぶ→すぐ解除」になってしまう）
+
+     なので、この関数がEnter / Spaceについてやるのは、
+     「押しっぱなしを止める」ことだけ
+     （A画面・B画面の handleTitleKeydown() と同じ考えかた）
    ============================================================ */
+
+/* 矢印キーで行き来できるボタンを、ぜんぶ取り出す
+
+   探すのはこの4つ
+     .snack-option     … おやつのカード（6枚）
+     .snack-go         … このおやつで公園へ行く！
+     .title-card__back … ← ひとつ前の画面へ戻る
+     .sound-toggle     … サウンドON/OFF
+
+   並び順はここでは気にしなくてよい
+   行き先は、このあと画面のどこにあるかで決めるため
+   （おやつが7個・8個に増えても、ここは直さなくてよい）
+
+   最後の filter で、押せないボタンを取りのぞいている
+   ・バッグがいっぱいのときの、選んでいないおやつ
+   ・まだ2個そろっていないときの「このおやつで公園へ行く！」
+   押せないボタンは矢印キーでも飛ばしたいので、
+   画面に出す条件（disabled）をそのまま使いまわしている
+   ＝ 見た目と操作の判定が1か所で済み、食いちがわない */
+function getSnackSelectionFocusItems(): HTMLButtonElement[] {
+  const container = snackSelectionRef.value;
+
+  if (!container) {
+    return [];
+  }
+
+  const items = [...container.querySelectorAll<HTMLButtonElement>('.snack-option, .snack-go, .title-card__back, .sound-toggle')];
+
+  return items.filter((item) => !item.disabled);
+}
+
+/* 矢印キーの向き */
+type SnackArrowDirection = 'up' | 'down' | 'left' | 'right';
+
+/* ボタン1つぶんの「画面のどこにあるか」
+
+   rect … 上下左右のふち（重なっているかを調べるのに使う）
+   x, y … まんなかの位置（どれだけ離れているかを測るのに使う）
+*/
+type SnackNavItem = {
+  button: HTMLButtonElement;
+  rect: DOMRect;
+  x: number;
+  y: number;
+};
+
+/* 矢印キーでフォーカスを動かす（画面の見た目どおりに）
+
+   やることは3つだけ
+
+   ① いまいるボタンと、ほかのボタンの位置を調べる
+   ② 押した矢印の向きにあるものだけに しぼる
+   ③ そのなかから、いちばん自然なものを1つ選んで、フォーカスを当てる
+
+   ■ ← → のとき（②のしぼりかた）
+
+     「同じ行にあること」を条件にしている
+     同じ行かどうかは、上下のふちが重なっているかで調べる
+     （rect.top と rect.bottom を見くらべる）
+
+     こうしておかないと、グミで→を押したときに、
+     1つ下の行のビスケットのような、ななめのボタンへ飛んでしまう
+
+   ■ ↑ ↓ のとき（③の選びかた）
+
+     まず「いちばん近い行」を見つけて、そのなかで
+     「横の位置がいちばん近いもの」を選ぶ
+
+     たとえばパソコンでグミ（左の列）から↑を押すと、
+     上の行にあるのは「← ひとつ前の画面へ戻る」（左はし）と
+     「サウンドON/OFF」（右はし）の2つ
+     グミは左の列にあるので、横の位置が近い「戻る」が選ばれる
+     チョコ（右の列）から↑なら、同じ理由で「サウンド」が選ばれる
+
+     スマホで1列になると、グミの真上には同じように上の行の2つがあり、
+     カードが画面いっぱいの幅になるぶん、まんなか寄りになる
+     それでも近いほうの「戻る」が選ばれるので、
+     列数を気にしなくても自然な動きになる
+
+   ■ 行き先が無いときは、動かない
+
+     たとえば「← ひとつ前の画面へ戻る」で↑を押しても、
+     その上にはボタンが無いので、その場に残る
+     2個選んでいて、グミの下のせんべいが押せないときも、
+     押せるボタンだけを見るので、変なところへは飛ばない
+
+   rowTolerance（12px）は「同じ行とみなす、たての ずれ」の許容
+   同じ行のボタンは、まんなかの高さがほぼ同じになるが、
+   ボタンの高さがちがうと数pxずれることがあるので、少しだけ余裕を持たせる
+   （行と行のあいだは100px以上あるので、12pxで取りちがえることはない） */
+function moveSnackSelectionByArrow(direction: SnackArrowDirection) {
+  const items = getSnackSelectionFocusItems();
+
+  if (items.length === 0) {
+    return;
+  }
+
+  // いまフォーカスしているボタンを探す
+  const currentButton = items.find((item) => item === document.activeElement);
+
+  /* どこにもフォーカスが無いとき（画面のすきまをクリックしたあとなど）は、
+     最初のおやつから始める */
+  if (!currentButton) {
+    items[0].focus();
+    return;
+  }
+
+  const toNavItem = (button: HTMLButtonElement): SnackNavItem => {
+    const rect = button.getBoundingClientRect();
+
+    return { button, rect, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+  };
+
+  const current = toNavItem(currentButton);
+  const others = items.filter((item) => item !== currentButton).map(toNavItem);
+
+  const rowTolerance = 12;
+
+  // ← → ：同じ行の中で、その向きにあるものだけ
+  if (direction === 'left' || direction === 'right') {
+    // 上下のふちが重なっている＝同じ行にいる
+    const sameRow = others.filter((item) => item.rect.bottom > current.rect.top + 1 && item.rect.top < current.rect.bottom - 1);
+
+    const candidates = sameRow.filter((item) => (direction === 'left' ? item.x < current.x : item.x > current.x));
+
+    focusNearestSnackItem(candidates, current, 'x');
+    return;
+  }
+
+  // ↑ ↓ ：その向きにあるものだけ
+  const candidates = others.filter((item) => (direction === 'up' ? item.y < current.y - rowTolerance : item.y > current.y + rowTolerance));
+
+  if (candidates.length === 0) {
+    return;
+  }
+
+  /* いちばん近い行だけに しぼる
+
+     いちばん近いボタンまでの たての距離を出して、
+     そこから rowTolerance のうちにあるものを「同じ行」とみなす */
+  const nearestRowDistance = Math.min(...candidates.map((item) => Math.abs(item.y - current.y)));
+  const nearestRow = candidates.filter((item) => Math.abs(item.y - current.y) <= nearestRowDistance + rowTolerance);
+
+  // その行の中で、横の位置がいちばん近いものへ
+  focusNearestSnackItem(nearestRow, current, 'x');
+}
+
+/* 候補の中から、いちばん近いものへフォーカスを当てる
+
+   axis … 'x' なら横の位置、'y' ならたての位置で近さを測る
+
+   同じ近さのものが2つあったときは、先に見つけたほう（HTMLで先に書いてあるほう）
+   を選ぶようにしてある
+   たとえば「このおやつで公園へ行く！」は画面の幅いっぱいにあるので、
+   ↑を押すと バナナ と ゼリー がまったく同じ近さになる
+   そのときは、左にある バナナ へ動く（毎回同じ動きになるので迷わない）
+
+   0.5 を引いて くらべているのが、その「同じ近さ」の判定
+   画面の位置は小数で返ってくることがあるので、
+   0.5px くらいの差は「同じ」とみなしている */
+function focusNearestSnackItem(candidates: SnackNavItem[], current: SnackNavItem, axis: 'x' | 'y') {
+  if (candidates.length === 0) {
+    return;
+  }
+
+  let nearest = candidates[0];
+
+  for (const candidate of candidates) {
+    const candidateDistance = Math.abs(candidate[axis] - current[axis]);
+    const nearestDistance = Math.abs(nearest[axis] - current[axis]);
+
+    if (candidateDistance < nearestDistance - 0.5) {
+      nearest = candidate;
+    }
+  }
+
+  nearest.button.focus();
+}
+
+/* マウスを乗せたおやつへ、キーボードの居場所も移す
+
+   この画面の「いまどこを選んでいるか」はフォーカスそのものなので、
+   マウスに合わせるには、そのカードへフォーカスを移せばよい
+
+   preventScroll: true は「フォーカスを当てるときに画面を動かさない」指示
+   これが無いと、マウスを乗せただけで画面が少しスクロールすることがある
+
+   ※ 乗せただけでは、おやつは選ばれない（selectedSnackIds は変わらない）
+     選ぶのは click と、そのボタンの Enter / Space だけ */
+function moveSnackSelectionToHovered(event: MouseEvent) {
+  const hovered = event.currentTarget;
+
+  if (hovered instanceof HTMLButtonElement && !hovered.disabled) {
+    hovered.focus({ preventScroll: true });
+  }
+}
+
+/* おやつ選択画面でキーを押したときの処理 */
 function handleSnackSelectionKeydown(event: KeyboardEvent) {
+  /* ① Escape … B画面へ戻る
+
+     画面のどこにフォーカスがあっても戻れるように、いちばん先に見る
+     「← ひとつ前の画面へ戻る」を押したのと、まったく同じ処理にする
+     （closeSnackSelection() を呼ぶだけなので、
+       選んだおやつは消えないし、ゲームも始まらない） */
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeSnackSelection();
+    return;
+  }
+
+  /* ② ↑ ↓ ← → … 画面のならびどおりに動かす
+
+     矢印キーでページがスクロールしてしまわないように preventDefault() する
+     押しっぱなしは止めない（連続で動いてよいので） */
+  const arrowDirections: Record<string, SnackArrowDirection> = {
+    ArrowUp: 'up',
+    ArrowDown: 'down',
+    ArrowLeft: 'left',
+    ArrowRight: 'right',
+  };
+
+  const direction = arrowDirections[event.key];
+
+  if (direction) {
+    event.preventDefault();
+    moveSnackSelectionByArrow(direction);
+    return;
+  }
+
+  // ③ Enter / Space
   const isDecideKey = event.key === 'Enter' || event.key === ' ';
 
   if (!isDecideKey) {
+    // Tab などは、ブラウザのふつうの動きにまかせる
     return;
   }
 
@@ -5931,15 +6197,30 @@ function handleSnackSelectionKeydown(event: KeyboardEvent) {
      ・出発のボタン   … ゲーム開始が二重に走ってしまう
 
      preventDefault() を呼ぶと、ブラウザは
-     このキーでボタンを押すのをやめてくれる
-     （A画面・B画面の handleTitleKeydown() と同じやりかた）
-
-     ※ 1回目（event.repeat が false）のときは、何もせずに通す
-       preventDefault() を呼ばずに return するのが大事で、
-       呼んでしまうと、そもそもボタンが1回も押せなくなる */
+     このキーでボタンを押すのをやめてくれる */
   if (event.repeat) {
     event.preventDefault();
+    return;
   }
+
+  /* ボタンにフォーカスが当たっているときは、ここでは何もしない
+
+     そのボタンを「押す」のはブラウザの仕事なので、
+     ここでも toggleSnackSelection() などを呼ぶと、2回動いてしまう
+
+     preventDefault() を呼ばずに return するのが大事
+     呼んでしまうと、フォーカスしているボタン自身が押せなくなる */
+  if (document.activeElement instanceof HTMLButtonElement) {
+    return;
+  }
+
+  /* どこにもフォーカスが無いときは、最初のおやつへカーソルを出すだけにする
+
+     ここでいきなり選んでしまうと、
+     「どれが選ばれるのか見えないまま決まった」ことになってしまう
+     いったんカーソルを出して、もう一度Enterで選んでもらう */
+  event.preventDefault();
+  focusFirstSnackOption();
 }
 
 /* A画面・B画面でキーを押したときの処理（ゲーム本編とは分けてある） */
@@ -6060,12 +6341,18 @@ function handleKeydown(event: KeyboardEvent) {
 
   /* ⓪ おやつ選択画面
 
-     この画面のキー操作は、ブラウザ本来のものだけで足りる
-     ・Tab / Shift+Tab … おやつのカード・出発・戻るを行き来する
-     ・Enter / Space   … 選んでいるボタンを押す（選ぶ・解除・決定）
+     この画面は、操作するものが「おやつのカード ＋ 出発 ＋ 戻る ＋ サウンド」で、
+     A画面・B画面ともゲーム本編ともちがう
+     そのため、ここで分けて専用の関数にまかせる
+     ・↑ ↓ ← →     … 画面のならびどおりに、となりのボタンへ動く
+     ・Enter / Space … 選んでいるボタンを押す（選ぶ・解除・決定）
+     ・Escape        … B画面へ戻る
+     ・Tab           … ブラウザのふつうの移動
 
-     そのため専用の関数でやることは「押しっぱなしを止める」1つだけ
-     （次の段階で ↑↓←→ のグリッド移動を足すなら、そこへ書き足す） */
+     ※ A画面・B画面の分岐（この下の⓪）より前に置くのが大事
+       あとに置くと、おやつ選択画面なのに
+       画面に無いB画面のボタンを操作しようとしてしまう
+       （getTitleFocusItems() も、この画面では空を返すようにしてある） */
   if (!gameStarted.value && isSnackSelectionOpen.value) {
     handleSnackSelectionKeydown(event);
     return;
@@ -6462,13 +6749,18 @@ onUnmounted(() => {
              このHTMLはさわらなくてよい
            ============================================================ -->
       <div v-else-if="!gameStarted" key="snack-selection" class="title-screen">
-        <div class="title-card title-card--snack">
-          <!-- おやつのカード6つ
+        <!-- ref="snackSelectionRef" … キーボード操作のための目印
 
-               ref="snackListRef" … この画面が出おわったときに、
-               focusFirstSnackOption() が中の最初の .snack-option
-               （＝🍇 グミ）へフォーカスを当てるための目印 -->
-          <div ref="snackListRef" class="snack-list">
+             この中にある押せるボタンを、画面のどこにあるかも見ながら探して、
+             矢印キーで見た目どおりに行き来させる
+             （getSnackSelectionFocusItems() と moveSnackSelectionByArrow() を見ること）
+
+             おやつのカードだけでなくカード全体に付けているのは、
+             矢印キーの行き先に「このおやつで公園へ行く！」
+             「← ひとつ前の画面へ戻る」「サウンドON/OFF」も入るため -->
+        <div ref="snackSelectionRef" class="title-card title-card--snack">
+          <!-- おやつのカード6つ -->
+          <div class="snack-list">
             <!-- カードまるごとが1つのボタン
 
                  中に小さな「選ぶ」ボタンを置くより、
@@ -6480,7 +6772,12 @@ onUnmounted(() => {
                  もう一度押せば解除できるようにしておく
 
                  :aria-pressed … 読み上げソフトに「押されている（選択中）」
-                 かどうかを伝える（見た目の ✓ 選択中 と同じ意味） -->
+                 かどうかを伝える（見た目で色が変わるのと同じ意味）
+
+                 @mouseenter … マウスを乗せたカードへ、キーボードの居場所も移す
+                 こうしておくと「マウスでチョコまで来て、そこから↓キー」と
+                 続けたときに、その下のビスケットへ進む
+                 （乗せただけでは選ばない。選ぶのは click と Enter / Space だけ） -->
             <button
               v-for="snack in snacks"
               :key="snack.id"
@@ -6489,7 +6786,8 @@ onUnmounted(() => {
               :class="{ 'snack-option--selected': isSnackSelected(snack.id) }"
               :disabled="isSnackBagFull && !isSnackSelected(snack.id)"
               :aria-pressed="isSnackSelected(snack.id)"
-              @click="toggleSnackSelection(snack.id)">
+              @click="toggleSnackSelection(snack.id)"
+              @mouseenter="moveSnackSelectionToHovered">
               <!-- 絵文字と名前は、1行にならべる（「🍇 グミ」の形）
 
                    たてに積むより1行ぶん背が低くなるので、
