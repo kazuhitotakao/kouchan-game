@@ -8,7 +8,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 
    ゲーム本編（pages/index.vue）のBGMとは、わざと作りを分けてある
    ・本編 … 場面に合わせて自動で切り替わる。曲はloopする
-   ・ここ … プレイヤーが「▶ 再生」を押した曲だけが鳴る。loopしない
+   ・ここ … プレイヤーが「▶ 再生」を押した曲だけが鳴る
+            ふだんはloopしないが、「🔁 リピート」を押したときだけくりかえす
 
    そのため、本編のBGMの関数（playParkBgm など）はいっさい使わない
    このページの中だけで完結する、シンプルな作りにしている
@@ -191,6 +192,10 @@ const duration = ref(0);
    ※ 音量スライダーは、矢印キーの移動先に入れない
      矢印キーでそのまま音量を大小させるものなので、
      移動先にしてしまうと「動かすつもりが移動になる」ため（Tabで移れる）
+   ※ 「🔁 リピート」「🔊 サウンド」のボタンも、矢印キーの移動先に入れない
+     音量スライダーととなり合わせの「再生の設定」のまとまりなので、
+     行き来のしかたをTabキーにそろえている
+     （矢印キーは「曲を選んで鳴らす」ための道、と役わりを分けている）
    ============================================================ */
 
 /* 「▶ 全曲再生」と「⏭ 次のトラックへ」を覚えておく箱
@@ -238,6 +243,305 @@ const masterVolumePercent = computed(() => Math.round(masterVolume.value * 100))
    （全曲再生でも、個別再生でも、次のトラックへでも、かならずここを通る） */
 function getTrackVolume(track: SoundtrackTrack) {
   return track.volume * masterVolume.value;
+}
+
+/* ============================================================
+   サウンドON/OFF（このページの音を、まとめて切り替える）
+
+   切り替わるのは、このページで鳴る音のぜんぶ
+   ・曲（mp3）
+   ・効果音「ポン♪」
+
+   ゲーム本編（pages/index.vue）にも同じ形のボタンがあるが、
+   覚えておく場所（localStorageのキー）はわざと別にしてある
+   ここは「曲を聴きに来るページ」なので、
+   本編をOFFにしている人でも、このページでは音を出して聴けるようにするため
+   （音量の設定を本編と別にしてあるのと、同じ考えかた）
+
+   ■ OFFにしたとき
+     鳴っている曲を一時停止するだけ
+     どこまで聴いたか（currentTime）も、全曲再生の途中かどうかも、そのまま残す
+     ※ 音を消したまま曲だけ進める、という作りにはしていない
+       それだと、聴いていないうちに曲が終わってしまうため
+
+   ■ ONに戻したとき
+     OFFのせいで止めた曲があれば、その続きから鳴らしなおす
+     自分で「⏸ 一時停止」しておいた曲は、鳴らさない（止めたのは本人なので）
+
+   ■ OFFのあいだに「▶ 再生」などを押したとき
+     「押しても何も起きない」＝こわれたボタンには見せたくないので、
+     サウンドをONへ戻してから鳴らす（→ ensureSoundEnabled）
+
+   音量スライダー（masterVolume）とは、役わりがちがう
+   ・サウンドON/OFF … 音を出すか、出さないか（ワンタッチで切り替える）
+   ・音量           … 出すときの大きさ（0〜100％）
+   OFFにしても音量の数字はそのまま残るので、ONに戻せば前と同じ大きさで鳴る
+   ============================================================ */
+
+/* いま音を鳴らす設定かどうか（true＝サウンドON。はじめてのときはON）
+   （前に使ったときの設定があれば、下の onMounted で思い出して入れなおす） */
+const soundEnabled = ref(true);
+
+/* サウンドON/OFFを保存しておく名前（localStorageのキー）
+
+   ・ゲーム本編のサウンド設定（kouchan-game-sound-enabled）
+   ・このページの音量（kouchan-soundtrack-volume）
+   のどちらともぶつからない名前にしてある */
+const soundEnabledStorageKey = 'kouchan-soundtrack-sound-enabled';
+
+/* 「OFFにしたせいで止めた曲」があるかどうか
+
+   ONに戻したときに、続きから鳴らしてよいかを見分けるために使う
+   ・OFFで止めた曲       … ONに戻したら続きから鳴らす（勝手に止めたので、勝手に戻す）
+   ・自分で一時停止した曲 … ONに戻しても鳴らさない（止めたのは本人なので、そのまま）
+
+   ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい */
+let pausedBySoundOff = false;
+
+/* いまのON/OFFを覚えておく（次にこのページを開いたときのため）
+
+   localStorage には文字しか入れられないので、
+   true / false を 'true' / 'false' という文字にして入れている */
+function saveSoundSetting() {
+  // サーバー側には localStorage が無いので、ここで終わり
+  if (!import.meta.client) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(soundEnabledStorageKey, String(soundEnabled.value));
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 保存できなくても、このページを開いているあいだのON/OFFは正常に動く
+  }
+}
+
+/* 「🔊 サウンド ON」「🔇 サウンド OFF」のボタンを押したとき */
+function toggleSound() {
+  // ① まず切り替える（ONならOFFへ、OFFならONへ）
+  soundEnabled.value = !soundEnabled.value;
+
+  if (soundEnabled.value) {
+    /* ② ONに戻したとき
+
+       まず「ポン♪」を鳴らす
+       止めていた曲が無いときは、これが「音が戻った」ことの唯一の知らせになる
+       （効果音は soundEnabled を見ているので、ONにしたあとに呼ぶ） */
+    playDecisionSound();
+
+    // OFFのせいで止めた曲があれば、その続きから鳴らしなおす
+    if (pausedBySoundOff) {
+      resumeAfterSoundOn();
+    }
+  } else {
+    // ③ OFFにしたとき … 鳴っている曲を止める（どこまで聴いたかは残す）
+    pauseForSoundOff();
+  }
+
+  // ④ 次に開いたときのために保存しておく
+  saveSoundSetting();
+}
+
+/* OFFにしたときに、鳴っている曲を一時停止する
+
+   画面の表示（選んでいる曲・再生バー・全曲再生の案内）は、いっさい消さない
+   消してしまうと、ONに戻したときに続きから鳴らせなくなるため
+*/
+function pauseForSoundOff() {
+  // 前の「OFFで止めた」の覚えは、いったん忘れる
+  pausedBySoundOff = false;
+
+  // そもそも鳴っていなければ、止めるものはない
+  if (!soundtrackAudio || !isPlaying.value) {
+    return;
+  }
+
+  try {
+    soundtrackAudio.pause();
+  } catch {
+    // 止められなくても、表示だけはそろえる
+  }
+
+  isPlaying.value = false;
+
+  // ONに戻したときに「続きから鳴らしてよい曲」だと分かるようにしておく
+  pausedBySoundOff = true;
+
+  /* 「鳴らしてください」のお願い（play）は、お願いしたしゅんかんには終わらない
+     ▶ を押した直後にOFFにすると、そのお願いから
+     「鳴らせませんでした」という知らせが、あとから遅れて届くことがある
+
+     その古い知らせで、選んでいる曲の表示まで消されてしまわないよう、
+     指示の番号を1つ進めて「もう最新ではない」ことにしておく
+     （→ playTrackAudio。番号が合わない知らせは、そこで無視される） */
+  playRequestId += 1;
+}
+
+/* ONに戻したときに、OFFで止めた曲の続きから鳴らす
+
+   ※ 「■ 全曲再生を停止」などで曲の選択そのものが無くなっていたときは、何も鳴らさない
+*/
+function resumeAfterSoundOn() {
+  pausedBySoundOff = false;
+
+  const track = tracks.find((item) => item.id === playingTrackId.value);
+  const audio = getSoundtrackAudio();
+
+  if (!audio || !track) {
+    return;
+  }
+
+  /* OFFのあいだに音量スライダーを動かしていることもあるので、
+     鳴らす前に、いまの音量を入れなおしておく */
+  try {
+    audio.volume = getTrackVolume(track);
+  } catch {
+    // 何もしない
+  }
+
+  // currentTime はさわらない（止めたところから、そのまま続ける）
+  playTrackAudio(audio, track);
+}
+
+/* 曲を鳴らす前に、サウンドがOFFならONへ戻しておく
+
+   OFFのまま「▶ 再生」を押しても何も起きないと、
+   ボタンがこわれているように見えてしまう
+   ここを通るのは「曲を鳴らそうとしたとき」＝音を聴きたいときなので、
+   サウンドをONへ戻す（画面のボタンも 🔊 ON に変わるので、何が起きたか分かる）
+
+   ※ ここでは曲を鳴らさない。鳴らすのは、呼んだ側（startPlaylist など）
+   ※ すでにONのときは、何もしない
+*/
+function ensureSoundEnabled() {
+  if (soundEnabled.value) {
+    return;
+  }
+
+  soundEnabled.value = true;
+
+  /* このあと呼んだ側が曲を鳴らすので、
+     「OFFで止めた曲を続きから」の出番はもう無い（覚えを忘れる） */
+  pausedBySoundOff = false;
+
+  saveSoundSetting();
+}
+
+/* ============================================================
+   リピート（くりかえし再生）
+
+   「🔁 リピート」のボタンを1回押すごとに、3つの状態を順ぐりに回る
+
+     off（なし）→ all（全曲）→ one（1曲）→ off（なし）→ …
+
+   ■ off … 今までどおり
+     1曲だけの再生 … 曲が終わったら止まる
+     全曲再生       … 6曲を1回ずつ鳴らしたら止まる
+
+   ■ all（全曲リピート）
+     全曲再生が1周したら、また曲順の先頭（＝開始曲）へ戻って鳴らし続ける
+     （→ playNextPlaylistTrack で、最後の曲のあとを 0 に回りこませている）
+     ※ 1曲だけの再生には効かない（押した1曲は、終わったら止まる）
+
+   ■ one（1曲リピート）
+     いま鳴らしている曲を、ずっとくりかえす
+     ブラウザのAudioがもともと持っている loop を true にするだけでよい
+     （自分で「終わったらもう一度鳴らす」を書くより、つなぎ目がなめらか）
+     loop が true のあいだは「曲が終わった」の知らせ（ended）が来ないので、
+     全曲再生の途中でも、次の曲へは進まなくなる
+     ※ 「⏭ 次のトラックへ」を押せば、いつでも次の曲へ進める
+       （そちらの曲が、また1曲リピートで鳴りつづける）
+   ============================================================ */
+
+/* リピートの3つの状態
+
+   文字そのもの（'off' など）を型にしているので、
+   書きまちがえると、その場でエラーとして分かる */
+type RepeatMode = 'off' | 'all' | 'one';
+
+/* ボタンを押したときに進む順番
+   いちばん後ろまで行ったら、先頭（off）へ戻る */
+const repeatOrder: RepeatMode[] = ['off', 'all', 'one'];
+
+/* いまのリピートの設定（はじめは「なし」）
+   （前に使ったときの設定があれば、下の onMounted で思い出して入れなおす） */
+const repeatMode = ref<RepeatMode>('off');
+
+/* リピートの設定を保存しておく名前（localStorageのキー） */
+const repeatStorageKey = 'kouchan-soundtrack-repeat';
+
+/* 読み上げソフト用の説明
+
+   目で見れば「いまOFF」だと分かるが、読み上げでは
+   「押すと次はどうなるのか」まで言ったほうが分かりやすいので、両方を入れている */
+const repeatButtonLabel = computed(() => {
+  if (repeatMode.value === 'all') {
+    return 'リピート：全曲。押すと1曲リピートになります';
+  }
+
+  if (repeatMode.value === 'one') {
+    return 'リピート：1曲。押すとリピートなしになります';
+  }
+
+  return 'リピート：なし。押すと全曲リピートになります';
+});
+
+/* いまのリピートの設定を、Audioへ入れる
+
+   1曲リピートのときだけ loop を true にする
+   ここを通るのは、つぎの2つのとき
+   ・「🔁 リピート」を押して設定を変えたとき（鳴らしている途中でもすぐ効く）
+   ・曲を鳴らしはじめるとき（→ playTrackAudio）
+
+   audio を省いたときは、いま使いまわしているAudioに入れる
+   （鳴らすときは、これから鳴らすAudioをはっきり渡してもらう）
+*/
+function applyRepeatToAudio(audio: HTMLAudioElement | null = soundtrackAudio) {
+  if (!audio) {
+    return;
+  }
+
+  try {
+    audio.loop = repeatMode.value === 'one';
+  } catch {
+    // 何もしない（次に曲を鳴らすときに、あらためて入れなおされる）
+  }
+}
+
+/* いまのリピートの設定を覚えておく（次にこのページを開いたときのため） */
+function saveRepeatSetting() {
+  // サーバー側には localStorage が無いので、ここで終わり
+  if (!import.meta.client) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(repeatStorageKey, repeatMode.value);
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 保存できなくても、このページを開いているあいだのリピートは正常に動く
+  }
+}
+
+/* 「🔁 リピート」を押したとき
+
+   押すたびに off → all → one → off … と、順ぐりに進む
+   （% は「わり算のあまり」。いちばん後ろの次が、先頭（0）に戻る）
+*/
+function toggleRepeat() {
+  /* 決定音「ポン♪」（押しても曲は鳴りはじめないボタンなので、合図を鳴らす）
+     トラック番号を押したときと同じ考えかた */
+  playDecisionSound();
+
+  const currentIndex = repeatOrder.indexOf(repeatMode.value);
+
+  repeatMode.value = repeatOrder[(currentIndex + 1) % repeatOrder.length];
+
+  /* 鳴らしている途中でも、その場で切りかわるようにする
+     （1曲リピートにした瞬間から、その曲はくりかえしになる） */
+  applyRepeatToAudio();
+
+  saveRepeatSetting();
 }
 
 /* ============================================================
@@ -296,6 +600,11 @@ function getEffectAudioContext() {
    曲だけ小さくして効果音がそのまま、ということが起きないようにするため
    0%にしているときは、そもそも鳴らさない */
 function playDecisionSound() {
+  // サウンドOFFのときは、効果音も鳴らさない（曲と同じスイッチでまとめて切り替える）
+  if (!soundEnabled.value) {
+    return;
+  }
+
   const volume = 0.06 * masterVolume.value;
 
   if (volume <= 0) {
@@ -350,7 +659,8 @@ function playDecisionSound() {
 
    曲順は開始曲から後ろへ進み、最後まで行ったら先頭へ回り込む
    （例：03開始 → 03 04 05 06 01 02）
-   6曲を1回ずつ鳴らし終えたら止まる。01へ無限ループはしない
+   6曲を1回ずつ鳴らし終えたら止まる
+   （「🔁 リピート 全曲」のときだけ、また開始曲へ戻ってくりかえす）
 
    次の曲へ進むのは、つぎの2つのとき（どちらも同じ関数を使う）
    ・曲が最後まで流れきったとき
@@ -432,6 +742,9 @@ function handleLoadedMetadata() {
    ・全曲再生の途中なら、次の曲へ進む（最後まで来たら止まる）
      → 「⏭ 次のトラックへ」を押したときと同じ playNextPlaylistTrack() を使う
    ・そうでなければ（1曲だけの再生なら）、そこで停止する
+
+   ※ 「🔁 リピート 1曲」のときは、ここへは来ない
+     Audioの loop が true になっていて、曲が「終わらない」ため
 */
 function handleTrackEnded() {
   /* 「曲が終わった」と「別の曲のボタンを押した」がほぼ同時に起きたとき、
@@ -471,11 +784,16 @@ function getSoundtrackAudio() {
     if (!soundtrackAudio) {
       soundtrackAudio = new Audio();
 
-      /* loop … ゲーム本編のBGMは true（くり返す）にしてあるが、
-         このページは「1曲を最初から最後まで聴く」ページなので false にする
-         ※ ここで false にしているのは、このページで作ったAudioだけ
+      /* loop … ゲーム本編のBGMは、いつも true（くり返す）にしてあるが、
+         このページは「1曲を最初から最後まで聴く」ページなので、ふだんは false
+         「🔁 リピート 1曲」を選んでいるときだけ true になる
+
+         鳴らすたび・設定を変えるたびに入れなおしているので（→ applyRepeatToAudio）、
+         ここでの指定は「作ったばかりのAudioの、最初の状態」を決めているだけ
+
+         ※ ここでさわっているのは、このページで作ったAudioだけ
            ゲーム本編のBGMの設定には、いっさいさわっていない */
-      soundtrackAudio.loop = false;
+      soundtrackAudio.loop = repeatMode.value === 'one';
 
       // 曲が最後まで流れたら教えてもらう
       soundtrackAudio.addEventListener('ended', handleTrackEnded);
@@ -494,6 +812,10 @@ function getSoundtrackAudio() {
 
 /* 曲を鳴らしはじめる（再生できなかったときは、表示を停止中へ戻す） */
 function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
+  /* いまのリピートの設定を入れておく
+     （どこから鳴らしはじめても、かならずここを通る） */
+  applyRepeatToAudio(audio);
+
   // この再生指示の番号を取っておく（あとで「まだ最新の指示か」を見分けるため）
   playRequestId += 1;
 
@@ -670,6 +992,10 @@ function handleOutsideCreditPointerDown(event: PointerEvent) {
    例）03開始 → [03, 04, 05, 06] ＋ [01, 02] → 03 04 05 06 01 02
 */
 function startPlaylist() {
+  /* サウンドOFFのときに押されたら、ONへ戻してから鳴らす
+     （押しても何も起きないボタンにしないため。→ ensureSoundEnabled） */
+  ensureSoundEnabled();
+
   const audio = getSoundtrackAudio();
 
   if (!audio) {
@@ -761,8 +1087,9 @@ function finishPlaylist() {
    ※ playlistTracks（今回の曲順）は作りなおさない
      「▶ 全曲再生」を押したときに作った曲順を、最後までそのまま使う
 
-   1周ぶんを鳴らし終えていたら、そこで全曲再生を終わりにする
-   （開始曲へは戻らない。ぐるぐる無限に鳴りつづけることはない）
+   1周ぶんを鳴らし終えたあとは、リピートの設定で行き先が変わる
+   ・🔁 リピート 全曲 … 曲順の先頭（＝開始曲）へ戻って、もう1周する
+   ・それ以外         … そこで全曲再生を終わりにする
 */
 function playNextPlaylistTrack() {
   /* 全曲再生中でなければ、何もしない
@@ -771,14 +1098,25 @@ function playNextPlaylistTrack() {
     return;
   }
 
-  const nextIndex = playlistIndex.value + 1;
+  // いま鳴らしているのが、1周ぶんの最後の曲かどうか
+  const isLastTrack = playlistIndex.value >= playlistTracks.value.length - 1;
 
-  // 1周ぶんを鳴らし終えた → 全曲再生はここで終わり（無限ループしない）
-  if (nextIndex >= playlistTracks.value.length) {
+  /* 最後の曲まで来たとき、全曲リピートでなければ、ここで終わり
+     （「⏭ 次のトラックへ」で最後の曲を飛ばしたときも、同じように終わる） */
+  if (isLastTrack && repeatMode.value !== 'all') {
     finishPlaylist();
 
     return;
   }
+
+  /* 行き先の曲（曲順の中の番号）
+     ふだんは1つ進める
+     最後の曲だったときは、全曲リピート中なので先頭（0）へ回りこむ */
+  const nextIndex = isLastTrack ? 0 : playlistIndex.value + 1;
+
+  /* サウンドOFFのときに「⏭ 次のトラックへ」を押されたら、ONへ戻してから鳴らす
+     （曲が最後まで流れてここへ来たときは、もうONなので何も起きない） */
+  ensureSoundEnabled();
 
   const audio = getSoundtrackAudio();
 
@@ -848,6 +1186,12 @@ function playNextPlaylistTrack() {
       このときは全曲再生モードから抜けて、1曲だけの再生としてあつかう
 */
 function toggleTrack(track: SoundtrackTrack) {
+  /* サウンドOFFのときに押されたら、ONへ戻してから鳴らす
+
+     ※ 「⏸ 一時停止」のつもりで押されることはない
+       OFFのあいだは曲が止まっているので、ボタンは「▶ 続きから」になっている */
+  ensureSoundEnabled();
+
   const audio = getSoundtrackAudio();
 
   if (!audio) {
@@ -1457,6 +1801,38 @@ onMounted(() => {
      キーボードだけでも、開いてすぐ Enter で全曲再生を始められる */
   playAllButtonRef.value?.focus();
 
+  /* 前に使ったときのリピートの設定を思い出す
+
+     知っている3つの文字（off / all / one）のときだけ入れなおす
+     保存したことが無いとき（null）も、こわれたメモが入っていたときも、
+     初期値の「リピートなし」のままにする */
+  try {
+    const savedRepeat = localStorage.getItem(repeatStorageKey);
+
+    if (savedRepeat === 'off' || savedRepeat === 'all' || savedRepeat === 'one') {
+      repeatMode.value = savedRepeat;
+    }
+  } catch {
+    // 読み込めなくても、初期値の「リピートなし」でふつうに聴ける
+  }
+
+  /* 前に使ったときのサウンドON/OFFを思い出す
+
+     localStorage には文字しか入らないので、'true' / 'false' の文字で戻ってくる
+     保存したことが無いときは null になるので、そのまま初期値のON（true）で始める
+     （こわれたメモが入っていたときも、ONのままにする） */
+  try {
+    const savedSound = localStorage.getItem(soundEnabledStorageKey);
+
+    if (savedSound === 'false') {
+      soundEnabled.value = false;
+    } else if (savedSound === 'true') {
+      soundEnabled.value = true;
+    }
+  } catch {
+    // 読み込めなくても、初期値のONでふつうに聴ける
+  }
+
   /* 前に使ったときの音量を思い出す
 
      ・保存したことが無いときは null になるので、そのまま100％で始める
@@ -1527,6 +1903,7 @@ onUnmounted(() => {
          「▶ 全曲再生」を押すと、開始曲から6曲を続けて鳴らす
          開始曲は、下の一覧でトラック番号を押して選ぶ
          最後まで行くと先頭へ回り込み、6曲を1回ずつ鳴らして止まる
+         （「🔁 リピート 全曲」のときは、止まらずにもう1周する）
 
          全曲再生中だけ、下に2つのボタンが出る
          ・⏭ 次のトラックへ  … いまの曲を飛ばして、次の曲を先頭から鳴らす
@@ -1592,33 +1969,96 @@ onUnmounted(() => {
         </div>
       </template>
 
-      <!-- 音量（このページで鳴らす曲すべての大きさ）
+      <!-- 再生の設定（リピート ＋ サウンドON/OFF ＋ 音量）
 
            「どの曲を・どこから鳴らすか」を決めるこの箱の中に、
-           「どのくらいの大きさで鳴らすか」もまとめて置いてある
+           「どんなふうに鳴らすか」もまとめて置いてある
+
+           ・リピート … 鳴らし終えたあと、くりかえすかどうか
+           ・サウンド … 音を出すか、出さないか（ワンタッチの切り替え）
+           ・音量     … 出すときの大きさ（0〜100％）
 
            曲カードの中にある再生バーとは役わりがちがうので、
-           見まちがえないように「🔊 音量」の文字と、
+           見まちがえないように「音量」の文字と、
            いまの大きさ（％）をかならずそえておく
            ・再生バー … 曲の「どこ」を鳴らすか（時間）
-           ・音量バー … 「どのくらいの大きさ」で鳴らすか -->
-      <div class="st-volume">
-        <p class="st-volume__label">🔊 音量</p>
+           ・音量バー … 「どのくらいの大きさ」で鳴らすか
 
-        <input
-          type="range"
-          class="st-volume__slider"
-          min="0"
-          max="100"
-          step="1"
-          :value="masterVolumePercent"
-          :style="{ '--volume-progress': masterVolumePercent + '%' }"
-          aria-label="サウンドトラックの音量"
-          :aria-valuetext="masterVolumePercent + 'パーセント'"
-          @input="changeMasterVolume" />
+           ※ 🔊 の絵文字は、左のサウンドボタンだけに付けている
+             音量のほうにも付けると、OFF（🔇）のとなりに 🔊 が並んでしまい、
+             いまONなのかOFFなのかが分かりにくくなるため -->
+      <div class="st-settings">
+        <!-- 🔁 リピート（押すたびに OFF → 全曲 → 1曲 → OFF と回る）
 
-        <span class="st-volume__value">{{ masterVolumePercent }}%</span>
+             リピートには3つの状態があるので、サウンドのような
+             aria-pressed（押されている／いない）では言い表せない
+             そこで、いまの状態は data-repeat でCSSへ渡して見た目を変え、
+             読み上げソフトには aria-label で
+             「いまの状態」と「押すとどうなるか」を伝えている -->
+        <button
+          type="button"
+          class="st-repeat"
+          :data-repeat="repeatMode"
+          :aria-label="repeatButtonLabel"
+          @click="toggleRepeat">
+          <span class="st-repeat__icon">🔁</span>
+          <span class="st-repeat__text">リピート</span>
+          <!-- 3つとも置いておき、いまの1つだけをCSSで見せる（押しても幅が変わらない） -->
+          <span class="st-repeat__state">
+            <span class="st-repeat__stateText st-repeat__stateText--off">OFF</span>
+            <span class="st-repeat__stateText st-repeat__stateText--all">全曲</span>
+            <span class="st-repeat__stateText st-repeat__stateText--one">1曲</span>
+          </span>
+        </button>
+
+        <!-- ゲーム本編（pages/index.vue）のサウンドボタンと同じ形にしてある
+
+             aria-pressed … 読み上げソフトへ「いま押されている（＝ON）」を伝える
+                            見た目（色・🔊/🔇）も、この値をもとにCSSで切り替えている
+             ON と OFF の文字は同じ場所に重ねて置き、使わないほうを見えなくする
+             （ボタンの幅がいつも同じになるので、押してもとなりの音量がずれない） -->
+        <button
+          type="button"
+          class="st-soundToggle"
+          :aria-pressed="soundEnabled"
+          :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+          @click="toggleSound">
+          <span class="st-soundToggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+          <span class="st-soundToggle__text">サウンド</span>
+          <span class="st-soundToggle__state">
+            <span class="st-soundToggle__stateText st-soundToggle__stateText--on">ON</span>
+            <span class="st-soundToggle__stateText st-soundToggle__stateText--off">OFF</span>
+          </span>
+        </button>
+
+        <!-- サウンドOFFのあいだは、音量を変えても音が出ないので少し薄くする
+             （さわれなくはしない。OFFのうちに、次に鳴らす大きさを決めておける） -->
+        <div class="st-volume" :class="{ 'st-volume--off': !soundEnabled }">
+          <p class="st-volume__label">音量</p>
+
+          <input
+            type="range"
+            class="st-volume__slider"
+            min="0"
+            max="100"
+            step="1"
+            :value="masterVolumePercent"
+            :style="{ '--volume-progress': masterVolumePercent + '%' }"
+            aria-label="サウンドトラックの音量"
+            :aria-valuetext="masterVolumePercent + 'パーセント'"
+            @input="changeMasterVolume" />
+
+          <span class="st-volume__value">{{ masterVolumePercent }}%</span>
+        </div>
       </div>
+
+      <!-- サウンドOFFのあいだだけ出す案内
+
+           「押しても鳴りません」ではなく「押せばONに戻って鳴ります」と伝える
+           （OFFのまま ▶ を押したときは ensureSoundEnabled がONへ戻す）
+
+           aria-live … この文が出たことを、読み上げソフトにもその場で知らせる -->
+      <p v-if="!soundEnabled" class="st-settings__hint" aria-live="polite">サウンドOFF中です。「▶ 再生」を押すと、サウンドをONに戻して鳴らします</p>
     </section>
 
     <!-- ============================================================
@@ -1821,14 +2261,15 @@ onUnmounted(() => {
 }
 
 /* ============================================================
-   音量バー（全曲再生の箱の中、いちばん下の1行）
+   再生の設定（全曲再生の箱の中、いちばん下の1行）
 
-   音量だけのために箱をもう1つ増やすとページが長くなるので、
+   設定だけのために箱をもう1つ増やすとページが長くなるので、
    同じ「再生まわりの操作」として、この箱の中へ入れてある
    上の行とは、全曲再生中の案内と同じ点線で区切る
-   PCでは「🔊 音量 ／ スライダー ／ 70%」が1行に並ぶ
+   PCでは「🔁 リピート OFF ／ 🔊 サウンド ON ／ 音量 ／ スライダー ／ 70%」が1行に並ぶ
+   せまい画面では、音量のまとまりが次の行へ折り返す
    ============================================================ */
-.st-volume {
+.st-settings {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -1836,6 +2277,137 @@ onUnmounted(() => {
   margin: 10px 0 0;
   padding-top: 10px;
   border-top: 2px dashed #c8d4e6;
+}
+
+/* 「🔁 リピート」と「🔊 サウンド」の2つのボタン
+
+   どちらも「押すたびに状態が変わる、設定のボタン」なので、
+   同じ形（丸い枠のボタン）にして、まとめて指定している
+   ・🔁 リピート … OFF → 全曲 → 1曲 → OFF と順ぐりに回る
+   ・🔊 サウンド … ON ⇄ OFF が入れかわる
+
+   考えかたはゲーム本編（pages/index.vue）の .sound-toggle と同じで、
+   ちがうのは、このページの大きさ・色に合わせてあることだけ
+   （ここは上部バーではなく、指でも押しやすい大きさにしている） */
+.st-repeat,
+.st-soundToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: 2px solid var(--navy);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--navy-deep);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+/* はたらいていないとき（リピートなし・サウンドOFF）は、色をぬく
+   絵文字や文字だけでなく色でも、「いまは何も起きない設定」だと分かるようにする */
+.st-repeat[data-repeat='off'],
+.st-soundToggle[aria-pressed='false'] {
+  border-color: #b9c6d6;
+  background: #eef2f7;
+  color: var(--ink-soft);
+}
+
+.st-repeat:hover,
+.st-soundToggle:hover {
+  background: #e8f4fb;
+}
+
+/* 押した瞬間：ほんの少しだけ沈む */
+.st-repeat:active,
+.st-soundToggle:active {
+  transform: translateY(1px);
+}
+
+/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
+.st-repeat:focus-visible,
+.st-soundToggle:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 3px;
+}
+
+.st-repeat__icon,
+.st-soundToggle__icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* 状態の文字（OFF / 全曲 / 1曲、ON / OFF）が変わっても、
+   ボタンの幅を変えないための工夫（本編と同じ）
+
+   文字をぜんぶ同じマスに重ねて置き、いま使わないものを visibility で見えなくする
+   display: none とちがい visibility は「場所は残したまま消す」ので、
+   幅はいつもいちばん長い文字のままになり、押しても右の音量がずれない */
+.st-repeat__state,
+.st-soundToggle__state {
+  display: grid;
+}
+
+.st-repeat__stateText,
+.st-soundToggle__stateText {
+  grid-area: 1 / 1; /* ぜんぶ同じマスに置いて重ねる */
+  text-align: center;
+}
+
+/* サウンドは2つのうち、いま使わないほうを見えなくする
+   aria-pressed は true＝サウンドON、false＝サウンドOFF */
+.st-soundToggle[aria-pressed='true'] .st-soundToggle__stateText--off,
+.st-soundToggle[aria-pressed='false'] .st-soundToggle__stateText--on {
+  visibility: hidden;
+}
+
+/* リピートは3つあるので、逆に「いまの1つだけ」を見せるようにする
+   data-repeat には、いまの状態（off / all / one）が入っている */
+.st-repeat__stateText {
+  visibility: hidden;
+}
+
+.st-repeat[data-repeat='off'] .st-repeat__stateText--off,
+.st-repeat[data-repeat='all'] .st-repeat__stateText--all,
+.st-repeat[data-repeat='one'] .st-repeat__stateText--one {
+  visibility: visible;
+}
+
+/* 設定についての案内（いまはサウンドOFF中のものだけ）
+
+   リピートの状態は、ボタンの「OFF / 全曲 / 1曲」だけで伝える
+   （文を出すと、設定の行が押すたびに高くなったり低くなったりして落ち着かないため） */
+.st-settings__hint {
+  margin: 8px 0 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 音量のまとまり（「音量 ／ スライダー ／ 70%」）
+
+   flex: 1 … サウンドボタンの右に残った幅を、まるごと使う
+   min-width … これより狭くなるくらいなら、1行まるごと使いたいので、
+               次の行へ折り返させる（サウンドボタンと肩を並べない） */
+.st-volume {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  min-width: 260px;
+}
+
+/* サウンドOFFのあいだは、音量を変えても音が出ないので少し薄くする */
+.st-volume--off {
+  opacity: 0.55;
 }
 
 .st-volume__label {
@@ -2547,13 +3119,30 @@ onUnmounted(() => {
     padding: 16px 18px;
   }
 
-  /* 音量バーは2行に分ける
-     1行目 … 🔊 音量　　　70%
+  /* せまい画面では、設定のボタンと音量を縦に積み直す
+     1行目 … 🔁 リピート OFF　🔊 サウンド ON（入りきらなければ、さらに折り返す）
+     2行目 … 音量　　　70%
+     3行目 … スライダー
+     （音量を次の行へ回すのは、下の .st-volume の flex-basis: 100%）
+     すき間は、上の操作ボタンと同じくらいまで小さくしておく */
+  .st-settings {
+    gap: 8px 12px;
+  }
+
+  /* 音量バーはさらに2行に分ける
+     1行目 … 音量　　　70%
      2行目 … スライダー（横いっぱいで、指でも動かしやすい）
 
-     order で、スライダーだけを最後（下の行）へ回している */
+     order で、スライダーだけを最後（下の行）へ回している
+
+     flex-basis: 100% … いつも1行まるごと使う
+     min-width: 0     … 画面がとても狭いときに、
+                        PC用の min-width（260px）が残っていると、
+                        そこからはみ出してしまうので外しておく */
   .st-volume {
+    flex-basis: 100%;
     gap: 8px 12px;
+    min-width: 0;
   }
 
   .st-volume__label {
