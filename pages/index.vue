@@ -6490,9 +6490,17 @@ onUnmounted(() => {
               :disabled="isSnackBagFull && !isSnackSelected(snack.id)"
               :aria-pressed="isSnackSelected(snack.id)"
               @click="toggleSnackSelection(snack.id)">
-              <span class="snack-option__icon">{{ snack.icon }}</span>
+              <!-- 絵文字と名前は、1行にならべる（「🍇 グミ」の形）
 
-              <span class="snack-option__name">{{ snack.name }}</span>
+                   たてに積むより1行ぶん背が低くなるので、
+                   おやつ6枚をならべてもカードが画面からはみ出しにくい
+                   2列にして1枚が横に広くなったぶん、
+                   横にならべても のびのび置ける
+                   （おやつバッグの「🍇 グミ」とも同じ見た目になる） -->
+              <span class="snack-option__head">
+                <span class="snack-option__icon">{{ snack.icon }}</span>
+                <span class="snack-option__name">{{ snack.name }}</span>
+              </span>
 
               <span class="snack-option__text">{{ snack.description }}</span>
 
@@ -6512,14 +6520,17 @@ onUnmounted(() => {
                 <span class="snack-option__stat">{{ snack.minutes }}分</span>
               </span>
 
-              <!-- 選択中の目じるし
+              <!-- ※ 「✓ 選択中」の札は置いていない
 
-                   出たり消えたりしても、カードの高さが変わらないように、
-                   外側の span で置き場所（高さ）をいつも確保しておく
-                   （上部ステータスの「かかった時間」と同じ考えかた） -->
-              <span class="snack-option__mark">
-                <span v-if="isSnackSelected(snack.id)" class="snack-option__markText">✓ 選択中</span>
-              </span>
+                   選んでいることは、カードの色と枠の変化だけで伝える
+                   （.snack-option--selected … ふちが紺の二重線になり、背景が水色になる）
+
+                   札を出すと、その置き場所のぶんだけカードが縦に大きくなる
+                   下の「🎒 おやつバッグ」に、選んだおやつの名前が出るので、
+                   何を選んでいるかはそちらでも確かめられる
+
+                   読み上げソフトには、上の :aria-pressed が
+                   「押されている（＝選択中）」と伝えている -->
             </button>
           </div>
 
@@ -9129,8 +9140,30 @@ onUnmounted(() => {
      ここの400pxは padding（44px）をふくまない「中身だけ」の高さ
      上部の操作を大きくしてもB画面の中身は400pxに収まるため、
      デスクトップではこの値のままでよい */
+/* flex-shrink: 0 は「カードを押しつぶさせない」ための指定
+
+   .title-screen は display: flex ＋ flex-direction: column なので、
+   その中のカードは「たてに縮められる側」になる
+   flex-shrink は書かないと 1（＝縮んでよい）が既定値なので、
+   中身がその画面の高さより高いとき、カードの箱だけが高さぶんまで縮み、
+   あふれた中身はカードの下わくをつきぬけて出てしまう
+
+   しかもカードの箱は縮んで収まっているので、
+   .title-screen から見ると「あふれていない」ことになり、
+   overflow-y: auto があってもスクロールバーが出ない
+   結果、はみ出した中身は .game の overflow: hidden に切り落とされ、
+   いちばん下にある「このおやつで公園へ行く！」が読めなくなる
+
+   0 にしておくと、カードは中身ぶんの高さを保つ
+   そのぶん .title-screen のほうがあふれるので、
+   今度はちゃんとスクロールできるようになり、
+   ボタンもカードのわくの内側に収まる
+
+   ※ A画面・B画面のカードは中身が少なく、ふだん縮むことはないが、
+     とても背の低い画面では同じことが起きるので、まとめてここで防いでおく */
 .title-card {
   display: flex;
+  flex: none;
   flex-direction: column;
   width: 100%;
   max-width: 620px;
@@ -9362,10 +9395,23 @@ onUnmounted(() => {
    どちらも1行で収まるので、カードの中で折り返しが起きない
    （説明文が変な位置で切れていたのは、幅が足りていなかったのが原因）
 
-   ※ 上下の余白は .title-screen（padding: 32px 24px）が持っていて、
-     背の高さが足りないときは .title-screen が縦にスクロールしてくれる */
+   ■ 上下の余白だけ、A画面・B画面より小さくしている（44px → 32px）
+
+     A画面・B画面のカードは、タイトルとボタンだけの すいた画面なので、
+     44pxのゆったりした余白がちょうどよい
+     こちらはおやつ6枚＋バッグ＋ボタンと中身が多いので、
+     同じ44pxだとカードだけがどんどん縦に伸びてしまう
+
+     このカードは中身だけで900pxちかくあり、
+     ノートパソコンの表示領域（640〜800pxくらい）には収まりきらない
+     収まらないぶんは .title-screen が縦にスクロールしてくれるが、
+     スクロールしないと「このおやつで公園へ行く！」が見えない画面は使いにくいので、
+     見た目をくずさない範囲で、余白を少しずつ削ってある
+     （さらに背の低い画面向けの調整は、ページ下の max-height: 800px のところ） */
 .title-card--snack {
   max-width: 820px;
+  padding-top: 32px;
+  padding-bottom: 32px;
 }
 
 /* この画面だけ、上のツールバーを折り返せるようにしておく
@@ -9464,8 +9510,8 @@ onUnmounted(() => {
 .snack-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 /* おやつ1つぶんのカード（カードまるごとが1つのボタン）
@@ -9485,8 +9531,9 @@ onUnmounted(() => {
   box-sizing: border-box;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: 14px 12px 10px;
+  padding: 14px 12px;
   border: 2px solid var(--navy-line);
   border-bottom-width: 4px;
   border-radius: 14px;
@@ -9503,8 +9550,23 @@ onUnmounted(() => {
     box-shadow 0.12s ease;
 }
 
+/* 絵文字と名前の行（「🍇 グミ」）
+
+   align-items: center で、大きい絵文字と小さい名前の
+   まんなかの高さをそろえる（名前が下にずり落ちて見えないようにする）
+
+   この行の高さは、背の高いほう＝絵文字の32pxぶんだけ
+   たてに積んでいたころ（絵文字32px＋すきま2px＋名前26px＝60px）より
+   1枚あたり28pxひくくなる（6枚だとカード全体で80pxちかく変わる） */
+.snack-option__head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
 .snack-option__icon {
-  font-size: 30px;
+  font-size: 27px;
   line-height: 1.2;
 }
 
@@ -9548,8 +9610,14 @@ onUnmounted(() => {
 
 /* おやつごとの回復量
 
-   これからバランスを調整する数字なので、色はいちばんひかえめなまま
-   （ここが変わっても、カードの印象は変わらない）
+   おやつを選ぶときにいちばん見くらべたい数字なので、
+   説明文と同じ大きさ（15px）まで上げて、はっきり読めるようにしてある
+
+   ・色は紺色（--navy）
+     説明文（--ink のグレー）と同じ色・同じ大きさにすると、
+     2行が同じ見た目になって、どちらが数字の行か分からなくなる
+     紺色は、この画面の「1 / 2」（おやつバッグの数）にも使っている色なので、
+     新しい色を増やさずに「ここは数字の行」と分けられる
 
    ・中央ぞろえ … 上の説明文とちがって「体力 +5 ／ 機嫌 +20 ／ 5分」と
                   区切りのある短い1行なので、まんなかでも読みにくくならない
@@ -9566,11 +9634,11 @@ onUnmounted(() => {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1px 7px;
-  margin-top: auto;
+  gap: 2px 8px;
   padding-top: 6px;
-  color: var(--ink-soft);
-  font-size: 13.5px;
+  color: var(--navy);
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0.01em;
 }
 
@@ -9586,32 +9654,18 @@ onUnmounted(() => {
 
    最後の項目には付けない（うしろに何も続かないため）
 
+   色だけ、数字より うすい水色（--navy-line）に落としてある
+   区切りは「ここで切れている」と分かればよいもので、読むものではない
+   同じ濃さのままだと「／」まで数字と同じ強さで目に入ってきて、
+   かんじんの「体力 +18」が読み取りにくくなる
+
    ※ 「／」を次の項目の前ではなく、前の項目のうしろに付けるのが大事
      前に付けると、折り返したときに「／」が次の行のあたまに来てしまう
      うしろに付けておけば、「／」はいつも前の項目にくっついたまま残る */
 .snack-option__stat:not(:last-child)::after {
   margin-left: 6px;
+  color: var(--navy-line);
   content: '／';
-}
-
-/* 「✓ 選択中」の置き場所
-   選んでいないカードでは中身が空になるが、高さはいつも確保しておく
-   （出たり消えたりしても、カードの高さが変わらないようにするため） */
-.snack-option__mark {
-  display: block;
-  min-height: 20px;
-  margin-top: 6px;
-}
-
-.snack-option__markText {
-  display: inline-block;
-  padding: 1px 10px;
-  border-radius: 999px;
-  background: var(--navy);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
 }
 
 /* PCでカーソルを当てたとき（押せるカードだけ）
@@ -9631,17 +9685,24 @@ onUnmounted(() => {
 
 /* いま選んでいるおやつ
 
-   はっきり分かるように、3つ重ねて変えている
-   ① ふちを紺色の太いものにする
+   「✓ 選択中」のような札は出さず、カードの見た目だけで伝える
+   札を出すと、その置き場所のぶんだけカードが縦に大きくなるため
+
+   そのかわり、2つ重ねてはっきり変える
+   ① ふちを紺色にして、内がわにもう1本（inset 2px）重ねた二重線にする
    ② 背景をうすい水色にする
-   ③ 「✓ 選択中」の札を出す（HTMLのほう）
+
+   ①は「色」ではなく「線の太さ」の変化なので、
+   色の見分けがつきにくい人にも、選んでいるカードが分かる
 
    色は上部バーと同じ紺色と、ゲージに使っているそらいろの系統だけ
-   新しい原色を足さないので、画面から浮かない */
+   新しい原色を足さないので、画面から浮かない
+
+   ※ 何を選んだかは、下の「🎒 おやつバッグ」にも名前で出る */
 .snack-option--selected {
   border-color: var(--navy);
-  background: #e3f2fb;
-  box-shadow: inset 0 0 0 1px var(--navy);
+  background: #d8ecf9;
+  box-shadow: inset 0 0 0 2px var(--navy);
 }
 
 .snack-option--selected:not(:disabled):hover {
@@ -9670,7 +9731,7 @@ onUnmounted(() => {
    B画面の説明文（.title-card__rule）と同じ、うすい青の枠を使う
    「この画面の中のひとまとまり」に見えるので、新しい見た目を増やさずにすむ */
 .snack-bag {
-  padding: 14px 18px;
+  padding: 12px 18px;
   border-radius: 14px;
   background: #f2f6fb;
   text-align: left;
@@ -9700,11 +9761,29 @@ onUnmounted(() => {
 }
 
 /* 選んだおやつの名前（🍇 グミ など）
-   list-style: none ＋ padding-left: 0 で、ul の「・」と左の余白を消す */
+   list-style: none ＋ padding-left: 0 で、ul の「・」と左の余白を消す
+
+   min-height は「バッグの中身が増えても、高さを変えないため」
+
+   ここは中身が3通りに入れかわる場所
+     0個 …「まだ選んでいません」の1行
+     1個 … おやつの名前の札1つ
+     2個 … おやつの名前の札2つ（横にならぶので、高さは1個のときと同じ）
+
+   何もしないと、文字の行（約24px）と札の行（約34px）で高さがちがうので、
+   1つめを選んだしゅんかんにバッグが約10px伸びる
+   バッグが伸びると、その下の「このおやつで公園へ行く！」も押し下げられ、
+   カード全体がふくらんで、画面がガタッと動いてしまう
+
+   そこで、いちばん高くなる「札の行」の高さを最初から確保しておく
+   こうすると 0個 → 1個 → 2個 と選んでも、バッグの高さは変わらない
+   （下の .snack-bag__empty にも同じ値を入れてそろえている） */
 .snack-bag__list {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px 10px;
+  min-height: 34px;
   margin: 8px 0 0;
   padding-left: 0;
   list-style: none;
@@ -9721,8 +9800,16 @@ onUnmounted(() => {
 }
 
 /* まだ1つも選んでいないとき
-   「空っぽ」と分かるだけでよいので、やわらかい色の小さな文字にしておく */
+   「空っぽ」と分かるだけでよいので、やわらかい色の小さな文字にしておく
+
+   min-height は、すぐ上の .snack-bag__list と同じ値にそろえてある
+   （おやつを選んだしゅんかんにバッグの高さが変わらないようにするため）
+   display: flex ＋ align-items: center は、
+   その確保した高さの中で、文字をまんなかに置くためのもの */
 .snack-bag__empty {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
   margin: 8px 0 0;
   color: var(--ink-soft);
   font-size: 14px;
@@ -9733,7 +9820,7 @@ onUnmounted(() => {
    見た目はB画面の「きょうのおやつを選ぶ」と同じ金色のボタン（.cmd--start）
    上のおやつバッグと近づきすぎないように、すき間だけ足している */
 .snack-go {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 /* まだ2種類そろっていないとき（押せない）
@@ -12252,12 +12339,24 @@ onUnmounted(() => {
   /* ===== おやつ選択画面（背の低い画面） =====
 
      おやつ6つ＋バッグ＋出発ボタンとタテに長い画面なので、
-     背の低いパソコン（1280×720 など）では余白と絵文字を少しつめて、
+     背の低いパソコン（1280×720 など）では余白と絵文字をさらにつめて、
      スクロールする量を減らしている
-     （それでも収まらないときは、.title-screen が縦にスクロールしてくれる） */
-  .title-card--snack {
-    padding-top: 32px;
-    padding-bottom: 32px;
+
+     ※ ここで指定するのは「ふつうの高さの画面より、さらに小さくする値」だけ
+       上下の余白（32px）などは、もうカードのほうで小さくしてあるので、
+       同じ値をここへ書き足さない（書いても何も変わらないため）
+
+     ※ 文字そのものは小さくしない
+       小さくすると読みにくくなるので、削るのは余白と絵文字だけにしてある
+       （それでも収まらないときは、.title-screen が縦にスクロールしてくれる） */
+
+  /* カードの外がわの余白も、上下だけ半分にする（32px → 16px）
+
+     背の低い画面では、この上下64pxがそのままスクロール量になってしまう
+     左右は今までどおり24pxのまま（横がせまくなるのは別の問題なので） */
+  .title-screen {
+    padding-top: 16px;
+    padding-bottom: 16px;
   }
 
   .snack-heading {
@@ -12266,24 +12365,29 @@ onUnmounted(() => {
   }
 
   .snack-lead {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
   }
 
   .snack-list {
-    gap: 10px;
-    margin-bottom: 14px;
+    gap: 8px;
+    margin-bottom: 12px;
   }
 
+  /* 上下の余白は同じ値にしておく（中身が上下中央にそろう） */
   .snack-option {
-    padding: 10px 10px 8px;
+    padding: 12px 12px;
   }
 
   .snack-option__icon {
-    font-size: 26px;
+    font-size: 24px;
+  }
+
+  .snack-bag {
+    padding: 10px 16px;
   }
 
   .snack-go {
-    margin-top: 14px;
+    margin-top: 12px;
   }
 
   .status-clock__now {
@@ -12812,9 +12916,10 @@ onUnmounted(() => {
 
   /* 1列になって横はゆったりしたので、左右の余白も10pxに戻す
      （文字がカードのふちに近づきすぎないようにする） */
+  /* 上下の余白は同じ値にしておく（中身が上下中央にそろう） */
   .snack-option {
     gap: 1px;
-    padding: 12px 10px 8px;
+    padding: 12px 10px;
     border-radius: 12px;
   }
 
@@ -12833,18 +12938,11 @@ onUnmounted(() => {
     font-size: 14px;
   }
 
+  /* 回復量も、説明文と同じだけ下げる（15px → 14px）
+     いちばん長い「体力 +18 ／ 機嫌 +6 ／ 10分」は約188pxなので、
+     スマホの文字幅 約257px に1行で収まる */
   .snack-option__effect {
-    font-size: 12.5px;
-  }
-
-  .snack-option__mark {
-    min-height: 18px;
-    margin-top: 4px;
-  }
-
-  .snack-option__markText {
-    padding: 1px 8px;
-    font-size: 11px;
+    font-size: 14px;
   }
 
   /* PCのカーソル用の動きは、指で押す画面では出さない
