@@ -1195,6 +1195,55 @@ const nextPlaceCommandLabel = computed(() => {
 */
 const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 
+/* ===== 「公園の出口へ向かう？」の確認ダイアログ =====
+
+   公園の出口へ向かうと、その日のおでかけはおしまい（結果発表へ進み、公園へは戻れない）
+   ボタンを押しまちがえたり、キーを押しすぎたりして、うっかり終わってしまわないように、
+   公園入口の「公園の出口へ向かう（ゴール）」を選んだときは、いったん確認をはさむ
+
+   ※ 12:00を過ぎて自動でゴールへ向かうとき（goToNextPlace() → goToGoal()）は確認しない
+     時間切れは、プレイヤーが選んだことではないため
+*/
+
+/* 確認ダイアログを開いているかどうか */
+const isGoalConfirmOpen = ref(false);
+
+/* ダイアログの中で、いま選んでいるボタン
+   0 … もう少し遊ぶ（開いたときは、いつもこちら）
+   1 … 出口へ向かう */
+const selectedGoalConfirmIndex = ref(0);
+
+/* ダイアログを実際に画面に出すかどうか
+
+   開いている印に加えて「ゲーム中で、公園入口にいる」ことも見る
+   画面（v-if）・キーボード操作・「出口へ向かう」の実行 の3か所で同じこれを見るので、
+   「画面に無いのにキーだけ効く」ということが起きない（isCareMenuVisible と同じ考えかた） */
+const isGoalConfirmVisible = computed(() => isGoalConfirmOpen.value && gameStarted.value && currentEvent.value === 'parkEntrance');
+
+/* ダイアログに出す「お昼まで、あとどれくらいか」の文
+
+   まだ遊ぶ時間が残っているかを見て決められるように、残り時間を出しておく
+   例）10:40 なら「お昼（12:00）まで、あと1時間20分あります。」 */
+const goalConfirmTimeText = computed(() => {
+  const minutesLeft = 12 * 60 - currentMinutes.value;
+
+  // ふつうは、12:00を過ぎると自動でゴールへ向かうので、ここへは来ない（念のため）
+  if (minutesLeft <= 0) {
+    return 'もうお昼の時間です。';
+  }
+
+  const hours = Math.floor(minutesLeft / 60);
+  const minutes = minutesLeft % 60;
+
+  let timeLeft = `${minutes}分`;
+
+  if (hours > 0) {
+    timeLeft = minutes > 0 ? `${hours}時間${minutes}分` : `${hours}時間`;
+  }
+
+  return `お昼（12:00）まで、あと${timeLeft}あります。`;
+});
+
 /* ===== ゲージのしきい値（目もり） =====
    ゲームのルールで使っている数字を、ここに名前を付けてまとめておく
    ・ゲージの上に線（目もり）を出すときの位置
@@ -6221,6 +6270,54 @@ function goToGoal() {
   playResultBgmSoon();
 }
 
+/* 公園入口の「公園の出口へ向かう（ゴール）」を選んだとき
+
+   すぐにはゴールへ向かわず、「公園の出口へ向かう？」の確認ダイアログを開く
+   （クリックでも Enter / Space でも、ここを通る） */
+function openGoalConfirm() {
+  // 決定音「ポン♪」（押せたことが分かるように。ひとやすみを開くときと同じ）
+  playDecisionSound();
+
+  isGoalConfirmOpen.value = true;
+
+  // 開いたときは、いつも「もう少し遊ぶ」を選んだ状態にする
+  // Enter を続けて押してしまっても、うっかりおでかけが終わらないようにするため
+  selectedGoalConfirmIndex.value = 0;
+
+  // うしろの「どこへ行く？」も「公園の出口へ向かう」を選んだ状態にそろえておく
+  // （マウスで押したときも、閉じたあとにどこから開いたかが分かる）
+  selectedCommandIndex.value = goalCommandIndex.value;
+
+  // マウスで押したときは、うしろのゴールのボタンにフォーカスが残り、枠が出たままになる
+  // ダイアログが手前に出ているのに紛らわしいので、外しておく
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur();
+  }
+}
+
+/* 確認ダイアログを閉じる（「もう少し遊ぶ」・Escape・ダイアログの外のクリック）
+
+   公園入口に戻るだけで、時間もステータスも変わらない
+   うしろの「どこへ行く？」は「公園の出口へ向かう」が選ばれたまま */
+function closeGoalConfirm() {
+  isGoalConfirmOpen.value = false;
+  selectedGoalConfirmIndex.value = 0;
+}
+
+/* 確認ダイアログの「出口へ向かう」
+
+   ダイアログを閉じてから、いつもの goToGoal() を呼ぶ
+   （BGM・ゴール音・結果の判定は、ぜんぶ goToGoal() の中のまま）
+   画面にダイアログが出ていないときは、何もしない（念のため） */
+function confirmGoToGoal() {
+  if (!isGoalConfirmVisible.value) {
+    return;
+  }
+
+  closeGoalConfirm();
+  goToGoal();
+}
+
 /* もう一度あそぶ */
 function resetGame() {
   // 決定音「ポン♪」
@@ -6303,6 +6400,9 @@ function resetGame() {
   // サブメニュー「☕ ひとやすみ」も閉じておく
   // （前回のプレイで開いたままGAME OVERになっていることがあるため）
   closeCareMenu();
+
+  // 「公園の出口へ向かう？」の確認ダイアログも閉じておく（念のため）
+  closeGoalConfirm();
 
   resultMessage.value = '';
   statusChanges.value = null;
@@ -6533,6 +6633,10 @@ function updateEntranceColumns() {
 /* ↑：公園入口では「1行ぶん（列の数ぶん）」上へ動かす
    例）3列のとき 池(3) の1つ上は すべり台(0)
 
+   いちばん上の行（すべり台・砂場・どんぐりの木 など）で↑を押しても、動かない
+   いちばん下の「公園の出口へ向かう」へは回りこまない
+   （↑を押しすぎたときに、うっかりゴールを選んでしまわないようにするため）
+
    ゴールの行から↑を押したときは、entranceColumnBeforeGoal に
    覚えておいた列へ戻る（池で↓→↑なら、ちゃんと池へ帰ってくる）
 
@@ -6569,11 +6673,9 @@ function moveEntranceUp() {
   // 1行ぶん上へ
   const next = selectedCommandIndex.value - columns;
 
-  // 上にはみ出した＝いちばん上の行にいたので、いちばん下のゴールへ回りこむ
+  // 上にはみ出した＝いちばん上の行にいたので、動かさない
+  // （いちばん下の「公園の出口へ向かう」へは回りこまない）
   if (next < 0) {
-    // 回りこむときも、戻ってこられるように列を覚えておく
-    entranceColumnBeforeGoal.value = selectedCommandIndex.value % columns;
-    selectedCommandIndex.value = goalIndex;
     return;
   }
 
@@ -6582,15 +6684,17 @@ function moveEntranceUp() {
 
 /* ↓：公園入口では「1行ぶん（列の数ぶん）」下へ動かす
    行き先のいちばん下の行から↓を押すと、その下にあるゴールへ進む
-   ゴールからさらに↓を押すと、いちばん上のコマンドへ戻る
+
+   ゴール（いちばん下の行）で↓を押しても、動かない
+   いちばん上の「すべり台へ行く」へは回りこまない
+   （↑でゴールへ回りこまないのと同じく、上下のはしで止まるようにそろえている）
 */
 function moveEntranceDown() {
   const columns = entranceColumns.value;
   const goalIndex = goalCommandIndex.value;
 
-  // いまゴールの行にいるなら、いちばん上のコマンドへ戻る
+  // いまゴールの行にいる＝いちばん下なので、動かさない
   if (selectedCommandIndex.value === goalIndex) {
-    selectedCommandIndex.value = 0;
     return;
   }
 
@@ -6623,6 +6727,49 @@ function moveEntranceDown() {
   // ↑で戻ってきたときに同じ列へ帰れるよう、いまの列を覚えておく
   entranceColumnBeforeGoal.value = selectedCommandIndex.value % columns;
   selectedCommandIndex.value = goalIndex;
+}
+
+/* ←：公園入口では1つ前のコマンドへ動かす
+
+   いちばん最初の「すべり台へ行く」で←を押しても、動かない
+   いちばん後ろの「公園の出口へ向かう」へは回りこまない
+   （↑と同じく、うっかりゴールを選んでしまわないようにするため）
+
+   ※ moveCommandUp() はほかの場所の「どうする？」でも使っているので書きかえず、
+     公園入口のためだけに、この関数を分けている */
+function moveEntranceLeft() {
+  if (selectedCommandIndex.value <= 0) {
+    return;
+  }
+
+  selectedCommandIndex.value -= 1;
+}
+
+/* →：公園入口では1つ次のコマンドへ動かす
+
+   いちばん後ろの「公園の出口へ向かう」で→を押しても、動かない
+   いちばん最初の「すべり台へ行く」へは回りこまない
+   （↓と同じく、端で止まるようにそろえている
+     スマホの1列表示では → と ↓ が同じ向きになるので、動きがちがうと迷うため）
+
+   いちばん後ろの行き先から→でゴールへ進んだときは、
+   ↓で進んだときと同じように、いまの列を覚えておく
+   （ゴールから↑で戻ったときに、→を押す前のコマンドへ帰れるようにするため）
+
+   ※ moveCommandDown() はほかの場所の「どうする？」でも使っているので書きかえず、
+     公園入口のためだけに、この関数を分けている */
+function moveEntranceRight() {
+  const goalIndex = goalCommandIndex.value;
+
+  if (selectedCommandIndex.value >= goalIndex) {
+    return;
+  }
+
+  if (selectedCommandIndex.value === goalIndex - 1) {
+    entranceColumnBeforeGoal.value = selectedCommandIndex.value % entranceColumns.value;
+  }
+
+  selectedCommandIndex.value += 1;
 }
 
 /* Enter / Space を押したときに、いま選んでいるコマンドを実行する
@@ -6738,6 +6885,7 @@ function runSelectedCommand() {
 
        ※ 秘密の場所がまだ出ていないときは、その行が画面に無いので
          ゴールが1つくり上がって5番目になる（goalCommandIndex で見る）
+       ※ ゴールは、すぐには向かわず確認ダイアログを開く（クリックしたときと同じ）
     */
     case 'parkEntrance':
       if (index === 0) {
@@ -6753,7 +6901,7 @@ function runSelectedCommand() {
       } else if (index === 5 && canEnterSecretSpot.value) {
         goToPlace('secretSpot');
       } else if (index === goalCommandIndex.value) {
-        goToGoal();
+        openGoalConfirm();
       }
       break;
 
@@ -7524,6 +7672,66 @@ function handleKeydown(event: KeyboardEvent) {
 
   /* ここから下は、ゲーム本編（gameStarted === true）だけの処理 */
 
+  /* ⓪-0 「公園の出口へ向かう？」の確認ダイアログが開いているとき
+
+     画面のいちばん手前に出ているので、ほかのどの操作より先に見る
+     開いているあいだは、キー操作をぜんぶダイアログで受け取る
+     （うしろの「どこへ行く？」のコマンドは動かない）
+
+     ・← ↑           「もう少し遊ぶ」を選ぶ
+     ・→ ↓           「出口へ向かう」を選ぶ
+                       （スマホ幅では2つのボタンが たてに並ぶので、↑↓でも同じ向きになる）
+     ・Tab           2つのボタンを行き来する（うしろの画面へカーソルを逃がさない）
+     ・Enter / Space 選んでいるボタンを押す
+     ・Escape        閉じる（「もう少し遊ぶ」と同じ）
+
+     ※ 長押し（event.repeat）の Enter / Space は受けつけない
+       「公園の出口へ向かう」で Enter を押しっぱなしにしても、
+       ダイアログが開いた直後に、そのまま次のボタンまで押されてしまわないようにする
+     ※ ここにあるキーだけ preventDefault() する
+       それ以外のキー（ブラウザの再読みこみなど）は、じゃましない */
+  if (isGoalConfirmVisible.value) {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeGoalConfirm();
+      return;
+    }
+
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      selectedGoalConfirmIndex.value = 0;
+      return;
+    }
+
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      event.preventDefault();
+      selectedGoalConfirmIndex.value = 1;
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      selectedGoalConfirmIndex.value = selectedGoalConfirmIndex.value === 0 ? 1 : 0;
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+
+      if (event.repeat) {
+        return;
+      }
+
+      if (selectedGoalConfirmIndex.value === 1) {
+        confirmGoToGoal();
+      } else {
+        closeGoalConfirm();
+      }
+    }
+
+    return;
+  }
+
   /* 画面の中のボタンにフォーカスしているときは、ゲームのキー操作をしない
 
      このゲームのキー操作は window 全体で受け取っているため、
@@ -7694,11 +7902,10 @@ function handleKeydown(event: KeyboardEvent) {
     // 矢印キーでページが左右にスクロールしてしまわないようにする
     event.preventDefault();
 
-    // 1つずつ動かすだけなので、たて1列のときの ↑↓ と同じ関数が使える
     if (event.key === 'ArrowLeft') {
-      moveCommandUp(); // ← は1つ前へ
+      moveEntranceLeft(); // ← は1つ前へ（すべり台からゴールへは回りこまない）
     } else {
-      moveCommandDown(); // → は1つ次へ
+      moveEntranceRight(); // → は1つ次へ（ゴールからすべり台へは回りこまない）
     }
     return;
   }
@@ -8358,7 +8565,8 @@ onUnmounted(() => {
                 <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="goToGoal" @mouseenter="selectedCommandIndex = goalCommandIndex">
+              <!-- 押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く） -->
+              <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="openGoalConfirm" @mouseenter="selectedCommandIndex = goalCommandIndex">
                 <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
               </button>
             </nav>
@@ -10795,6 +11003,44 @@ onUnmounted(() => {
         <strong class="tantrum-alert__title">イヤイヤ発生！</strong>
       </div>
     </div>
+
+    <!-- ============================================================
+         「公園の出口へ向かう？」の確認ダイアログ
+
+         公園入口で「公園の出口へ向かう（ゴール）」を選んだときだけ出す
+         ・もう少し遊ぶ … 閉じて、公園入口に戻る（開いたときは、こちらが選ばれている）
+         ・出口へ向かう … ゴールへ（結果発表）
+
+         @click.self … カードの外（うしろの暗いところ）をクリックしたら閉じる
+                       .self なので、カードの中をクリックしたときは閉じない
+         キーボード操作は handleKeydown() の中で受け取っている（←→↑↓・Tab・Enter / Space・Escape）
+
+         role="alertdialog" と aria-modal="true" は、読み上げソフトに
+         「大事な確認のダイアログが、画面の手前に出ている」ことを伝えるためのもの
+         ============================================================ -->
+    <div v-if="isGoalConfirmVisible" class="goal-confirm" @click.self="closeGoalConfirm">
+      <div class="goal-confirm__content" role="alertdialog" aria-modal="true" aria-labelledby="goal-confirm-title" aria-describedby="goal-confirm-text">
+        <p id="goal-confirm-title" class="goal-confirm__title">公園の出口へ向かう？</p>
+
+        <p id="goal-confirm-text" class="goal-confirm__text">
+          出口へ向かうと、今日のおでかけはおしまいです。
+          <br />
+          結果発表へ進みます。
+        </p>
+
+        <p class="goal-confirm__time">{{ goalConfirmTimeText }}</p>
+
+        <div class="goal-confirm__buttons">
+          <button type="button" class="cmd goal-confirm__button" :class="{ 'cmd--selected': selectedGoalConfirmIndex === 0 }" @click="closeGoalConfirm" @mouseenter="selectedGoalConfirmIndex = 0">
+            <span class="cmd__text">もう少し遊ぶ</span>
+          </button>
+
+          <button type="button" class="cmd cmd--goal goal-confirm__button" :class="{ 'cmd--selected': selectedGoalConfirmIndex === 1 }" @click="confirmGoToGoal" @mouseenter="selectedGoalConfirmIndex = 1">
+            <span class="cmd__text">出口へ向かう</span>
+          </button>
+        </div>
+      </div>
+    </div>
   </main>
 </template>
 
@@ -13186,6 +13432,106 @@ onUnmounted(() => {
   100% {
     transform: scale(1) rotate(0deg);
     opacity: 1;
+  }
+}
+
+/* ============================================================
+   「公園の出口へ向かう？」の確認ダイアログ
+
+   ・見た目は、いやいや発生の演出と同じ「紙の色＋太めのまるい枠」にそろえる
+     枠と見出しの色は、「公園の出口へ向かう」のボタンと同じ緑
+   ・うしろは少し暗くして、「いまはこのダイアログに答える場面」だと分かるようにする
+   ・ボタンは、公園入口のコマンドと同じ .cmd（白）と .cmd--goal（緑）を使う
+     選んでいるボタンの見た目（▶ と水色の光）も、そのままそろう
+
+   ※ いやいや発生の演出とちがって pointer-events: none は付けない
+     開いているあいだは、うしろのボタンを押せないようにしたいため
+   ※ 出てくる動きは、いやいや発生の背景（tantrum-alert-in）と、
+     結果カードの浮き上がり（result-in）を使いまわしている
+     動きを減らす設定のときは、ページ下のまとめて止める指定で止まる
+   ============================================================ */
+.goal-confirm {
+  display: grid;
+  position: fixed;
+  z-index: 1100;
+  inset: 0;
+  place-items: center;
+  padding: 24px;
+  animation: tantrum-alert-in 0.2s ease-out;
+  background: rgb(16 29 44 / 45%);
+}
+
+.goal-confirm__content {
+  width: min(480px, 100%);
+  padding: 26px 28px 24px;
+  border: 4px solid #38955f;
+  border-radius: 26px;
+  animation: result-in 0.25s ease-out;
+  background: var(--paper);
+  box-shadow: 0 12px 0 rgb(35 57 94 / 18%);
+  color: var(--ink);
+  text-align: center;
+}
+
+/* 「公園の出口へ向かう？」 */
+.goal-confirm__title {
+  margin: 0 0 10px;
+  color: #2f7d4f;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.goal-confirm__text {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+/* 「お昼（12:00）まで、あと○分あります。」の札 */
+.goal-confirm__time {
+  display: inline-block;
+  margin: 12px 0 0;
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: #eef7f1;
+  color: #2f7d4f;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* ボタン2つ（パソコンでは横にならべる：左「もう少し遊ぶ」・右「出口へ向かう」） */
+.goal-confirm__buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.goal-confirm__button .cmd__text {
+  text-align: center;
+}
+
+/* スマホ幅では、ボタンを たてにならべる（上「もう少し遊ぶ」・下「出口へ向かう」） */
+@media (max-width: 700px) {
+  .goal-confirm {
+    padding: 16px;
+  }
+
+  .goal-confirm__content {
+    padding: 20px 18px 18px;
+    border-radius: 20px;
+  }
+
+  .goal-confirm__title {
+    font-size: 21px;
+  }
+
+  .goal-confirm__text {
+    font-size: 16px;
+  }
+
+  .goal-confirm__buttons {
+    flex-direction: column;
   }
 }
 
