@@ -3347,7 +3347,15 @@ function showTantrumAlert() {
      tired        … 体力が低いほど出やすい
      hungry       … 11:00をすぎたら出る（それより前は0＝出ない）
      frustrated   … 機嫌が低いほど出やすい
-     wantMorePlay … いつでも出る基本の理由。元気なときや、まだ早い時間ほど出やすい
+     wantMorePlay … 11:00をすぎたら出る（それより前は0＝出ない）。元気が残っているほど出やすい
+
+     ※ 11:00より前に「まだ遊びたい」を出さないのは、
+       まだ時間がたっぷりあって、だれも「そろそろ帰ろう」と言っていないのに
+       「まだあそぶー！」とぐずるのは不自然なため
+       お昼が近づいて、帰る時間が気になりだす 11:00 から出るようにしている
+       （checkTantrum() も「11:00をすぎたら『おなかすいた』『まだ帰りたくない』で
+         ぐずることがある」という考え方になっている）
+     ※ そのため 11:00より前のいやいやは、つかれた か 悔しい のどちらかになる
 */
 function chooseTantrumReason(): TantrumReason {
   const isAfterEleven = currentMinutes.value >= 11 * 60;
@@ -3373,15 +3381,16 @@ function chooseTantrumReason(): TantrumReason {
     frustratedWeight = 3;
   }
 
-  // ④ まだ遊びたい：ほかの理由が強くないときの基本の理由
-  let wantMorePlayWeight = 2;
+  // ④ まだ遊びたい：11:00をすぎて、帰る時間が近づいてきたら出る（それより前は出ない）
+  //    元気が残っているほど「まだあそぶー！」になりやすい
+  let wantMorePlayWeight = 0;
 
-  if (childEnergy.value >= 50) {
-    wantMorePlayWeight += 2; // まだ元気がある
-  }
+  if (isAfterEleven) {
+    wantMorePlayWeight = 2;
 
-  if (!isAfterEleven) {
-    wantMorePlayWeight += 1; // まだ早い時間で、遊び足りない
+    if (childEnergy.value >= 50) {
+      wantMorePlayWeight += 2; // まだ元気がある
+    }
   }
 
   const candidates: { reason: TantrumReason; weight: number }[] = [
@@ -3391,7 +3400,7 @@ function chooseTantrumReason(): TantrumReason {
     { reason: 'wantMorePlay', weight: wantMorePlayWeight },
   ];
 
-  // くじの本数の合計（まだ遊びたい は最低でも2あるので、0にはならない）
+  // くじの本数の合計（つかれた・悔しい は最低でも1ずつあるので、0にはならない）
   let totalWeight = 0;
 
   for (const candidate of candidates) {
@@ -3415,7 +3424,8 @@ function chooseTantrumReason(): TantrumReason {
   }
 
   // 小数の計算の誤差でここまで来てしまったときのための念のため（ふつうは通らない）
-  return 'wantMorePlay';
+  // つかれた は、どの時間でも候補に入っている理由なので、これを返しておく
+  return 'tired';
 }
 
 /* いやいや判定
