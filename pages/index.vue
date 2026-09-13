@@ -428,6 +428,150 @@ function removeSnackFromBag(snackId: SnackId) {
   selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
 }
 
+/* ============================================================
+   いやいやの理由（こうちゃんは、なぜ泣いているのか）
+
+   いやいやには4つの理由があり、理由によって「効く対応」がちがう
+   プレイヤーは、こうちゃんのセリフや様子から理由を考えて、対応を選ぶ
+
+   ■ 「発生するか」と「なぜ泣いているか」は別の抽選
+
+     ① checkTantrum()       … いやいやが「そもそも起きるか」を決める
+                               （体力・機嫌・時間から確率を出す。ここは前と同じ）
+     ② chooseTantrumReason() … ①で起きると決まったあとで「なぜ泣いているか」を決める
+
+     ①で起きなかったときは、②は呼ばれない（理由も変わらない）
+
+   ■ 同じいやいやのあいだは、理由を変えない
+
+     理由を決めるのは「新しいいやいやが起きた瞬間」の1回だけ
+     「少し待ってみる」に失敗して いやいや が続いても、理由はそのまま
+     （「おなかすいた」と泣いていたのに、待っていたら急に
+       「まだあそぶ」に変わった、ということが起きないようにする）
+
+   ■ 画面には理由の名前（'hungry' や「空腹」）を出さない
+
+     出すのは tantrumReasonInfo のセリフと様子だけ
+     答えを見せずに、プレイヤーに考えてもらうため
+   ============================================================ */
+
+/* いやいやの理由
+   tired        … つかれた
+   hungry       … おなかすいた
+   frustrated   … うまくできなくて悔しい
+   wantMorePlay … まだ遊びたい */
+type TantrumReason = 'tired' | 'hungry' | 'frustrated' | 'wantMorePlay';
+
+/* いまのいやいやの理由
+
+   null … いやいやしていない（または、まだ理由が決まっていない）
+
+   ※ だっこ・おやつなどで いやいや が終わった瞬間には null に戻さない
+     結果の文章を読んでいるあいだも「何のいやいやだったか」を使うことがあるため
+     null に戻すのは、結果を読み終えて いやいやタイムの画面から出るとき（goToNextPlace()）
+     と、もう一度あそぶとき（resetGame()） */
+const tantrumReason = ref<TantrumReason | null>(null);
+
+/* 理由ごとに、画面や結果の文章に出すことば
+
+   voice          … いやいやタイムのカードに出す、こうちゃんのセリフ
+   scene          … いやいやタイムのカードに出す、こうちゃんの様子
+   complaint      … 対応がずれていたときの結果の文章に出す、短いさけび
+   greatSnackText … ぴったりのおやつ（相性 great）をあげたときに足す文 */
+type TantrumReasonInfo = {
+  voice: string;
+  scene: string;
+  complaint: string;
+  greatSnackText: string;
+};
+
+const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
+  tired: {
+    voice: 'もうあるけない〜！',
+    scene: 'こうちゃんはその場にしゃがみこんで、足をさすっています。',
+    complaint: 'つかれたー！',
+    greatSnackText: '体に元気がもどってきて、また立ち上がれそうな顔になってきました。',
+  },
+  hungry: {
+    voice: 'おなかすいたぁ……！',
+    scene: 'こうちゃんはおなかを押さえながら、その場にぺたんと座りこんでいます。',
+    complaint: 'おなかすいたー！',
+    greatSnackText: 'おなかが満たされて、気持ちももどってきたようです。',
+  },
+  frustrated: {
+    voice: 'できないー！',
+    scene: '思いどおりにいかなかったのが悔しいのか、こうちゃんは目に涙をためています。',
+    complaint: 'できないー！',
+    greatSnackText: '大好きな甘い味で、悔しかった気持ちが少しずつほどけてきたようです。',
+  },
+  wantMorePlay: {
+    voice: 'まだあそぶー！',
+    scene: 'こうちゃんは遊具のほうを指さして、その場から動こうとしません。',
+    complaint: 'まだあそぶー！',
+    greatSnackText: 'おいしいおやつで、遊びたかった気持ちも切りかわってきたようです。',
+  },
+};
+
+/* いまのいやいやの理由に合ったことば（理由が決まっていないときは null） */
+const currentTantrumReasonInfo = computed(() => (tantrumReason.value === null ? null : tantrumReasonInfo[tantrumReason.value]));
+
+/* おやつと いやいやの理由の相性
+
+   great  … ぴったり（いやいや終了 ＋ ナイス対応ボーナス）
+   normal … ふつうに効く（いやいや終了）
+   weak   … 少しずれている（食べてはくれるが、いやいやは続く）
+
+   ※ おやつ選択画面にもおやつバッグにも、この相性は出さない
+     こうちゃんの様子とおやつの説明から、プレイヤーに考えてもらう */
+type TantrumSnackFit = 'great' | 'normal' | 'weak';
+
+/* おやつ × いやいやの理由 の相性表
+
+   おやつの回復量（snacks の energy / mood / minutes）とは別のルールなので、
+   Snack の型には入れず、ここに表として分けて持つ
+   （回復量を変えたいときは snacks、相性を変えたいときはこの表、と見る場所が分かれる）
+
+   読みかた：snackTantrumFits.banana.hungry → バナナは「おなかすいた」に great */
+const snackTantrumFits: Record<SnackId, Record<TantrumReason, TantrumSnackFit>> = {
+  gummy: { tired: 'weak', hungry: 'normal', frustrated: 'great', wantMorePlay: 'normal' },
+  chocolate: { tired: 'normal', hungry: 'normal', frustrated: 'great', wantMorePlay: 'normal' },
+  senbei: { tired: 'normal', hungry: 'great', frustrated: 'weak', wantMorePlay: 'weak' },
+  biscuit: { tired: 'normal', hungry: 'great', frustrated: 'normal', wantMorePlay: 'weak' },
+  banana: { tired: 'great', hungry: 'great', frustrated: 'weak', wantMorePlay: 'weak' },
+  jelly: { tired: 'normal', hungry: 'normal', frustrated: 'normal', wantMorePlay: 'normal' },
+};
+
+/* いまのいやいやの理由に対して、そのおやつの相性はどうか
+
+   理由が決まっていないとき（ふつうは起きない）は normal にしておく
+   ＝ 相性を入れる前と同じく、どのおやつでも いやいや が終わる */
+function getSnackTantrumFit(snackId: SnackId): TantrumSnackFit {
+  if (tantrumReason.value === null) {
+    return 'normal';
+  }
+
+  return snackTantrumFits[snackId][tantrumReason.value];
+}
+
+/* ===== ナイス対応（いやいやの理由に合った対応をしたときのごほうび） =====
+
+   ナイス対応になるのは次のとき（ボーナスを足すのは applyNiceTantrumResponse() の1か所だけ）
+   ・つかれた           ＋ だっこ
+   ・悔しい             ＋ お話する
+   ・まだ遊びたい       ＋ お話する
+   ・悔しい             ＋ 少し待ってみる（成功したとき）
+   ・相性 great のおやつ ＋ そのいやいやの理由 */
+
+/* ナイス対応でもらえるボーナスの量（画面の「おでかけポイント +3」もここを見る） */
+const niceTantrumBonusOutingPoint = 3;
+const niceTantrumBonusParentCalm = 2;
+
+/* ナイス対応の表示に出す文章（演出用）
+
+   空っぽ … 今回の対応はナイス対応ではなかった（結果カードに「✨ ナイス対応！」を出さない）
+   行動をはじめるたび（startStatusChanges()）と、いやいやタイムから出るときに空へ戻す */
+const niceTantrumResponseText = ref('');
+
 /* 突然イベントが起きる確率
    0.2 ＝ 20%（5回に1回くらい）
    ここの数字だけを書きかえれば、起きやすさを変えられる
@@ -807,7 +951,7 @@ function openSnackMenu(context: SnackUseContext) {
    バッグの中身（selectedSnackIds）はさわらない
    閉じると、開く前のメニューがそのまま出てくる
    ・exploring … ☕ ひとやすみ（「おやつをあげる」が選ばれたまま）
-   ・tantrum   … だっこ／おやつ／待つ（「おやつをあげる」が選ばれたまま）
+   ・tantrum   … だっこ／おやつ／お話／待つ（「おやつをあげる」が選ばれたまま）
    ・fallDown  … ころんだ場面の4つのコマンド（「おやつで気をそらす」が選ばれたまま） */
 function closeSnackMenu() {
   snackUseContext.value = null;
@@ -860,12 +1004,14 @@ const commandCount = computed(() => {
     return canEnterSecretSpot.value ? 7 : 6;
   }
 
-  // いやいやが続いているあいだは、おやつが残っていれば3つ、食べきっていれば2つ
-  // 「少し待ってみる」に失敗して結果メッセージが出ているときも、
-  // いやいやはまだ終わっていないので、この3つ（2つ）から選び直す
+  // いやいやが続いているあいだは、おやつが残っていれば4つ、食べきっていれば3つ
+  //   おやつあり  0 だっこ／1 おやつ ＞／2 お話する／3 少し待ってみる
+  //   おやつなし  0 だっこ／1 お話する／2 少し待ってみる
+  // 待つ・お話・おやつが効かずに結果メッセージが出ているときも、
+  // いやいやはまだ終わっていないので、この4つ（3つ）から選び直す
   // ※ 下の「結果表示中は1つ」より先に判定するのがポイント
   if (isTantrumUnsolved.value) {
-    return snackLeft.value > 0 ? 3 : 2;
+    return snackLeft.value > 0 ? 4 : 3;
   }
 
   // 結果表示中は「次の場所を選ぶ」の1つだけ
@@ -904,18 +1050,24 @@ const commandCount = computed(() => {
   return 3;
 });
 
-/* いやいやタイムの「少し待ってみる」が何番目になるか
-   おやつが残っていれば3番目（＝2）
+/* いやいやタイムの「こうちゃんとお話する」「少し待ってみる」が何番目になるか
+
+   おやつあり  0 だっこ／1 おやつ ＞／2 お話する／3 少し待ってみる
+   おやつなし  0 だっこ／1 お話する／2 少し待ってみる
+
    おやつが0個で「おやつをあげる」が画面から消えているときは、
-   1つくり上がって2番目（＝1）になる
+   その下の2つが1つずつくり上がる
+   （2 や 3 と直接書かずにここを見れば、画面とキーボード操作の番号がずれない）
 */
-const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
+const talkCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
+const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 3 : 2));
 
 /* いやいやタイムの「待つ」コマンドに出す文字
    1回目は「少し待ってみる」
-   待つことに失敗して2回目以降になったときは「もう少し待ってみる」
+   なにか対応をしたのに、まだいやいやが続いているときは「もう少し待ってみる」
 
-   いやいやが続いたまま結果メッセージが出ている＝待つことに失敗した直後、
+   いやいやが続いたまま結果メッセージが出ている
+   ＝ 待つ・お話・おやつ のどれかを試したが、まだおさまっていない直後、
    という意味なので、新しい ref を増やさなくても区別できる
 */
 const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し待ってみる' : '少し待ってみる'));
@@ -2733,6 +2885,10 @@ function startStatusChanges() {
   // 演出用：前の行動のいやいや文も空へ戻す
   tantrumText.value = '';
 
+  // 演出用：前の対応の「✨ ナイス対応！」も空へ戻す
+  // （いやいやが続いて対応を選び直したときに、前の表示が残らないようにする）
+  niceTantrumResponseText.value = '';
+
   statusBefore.value = {
     childEnergy: childEnergy.value,
     childMood: childMood.value,
@@ -3170,10 +3326,104 @@ function showTantrumAlert() {
   }, tantrumAlertDuration);
 }
 
+/* いやいやの理由を決める（新しいいやいやが起きると決まったあとに、1回だけ呼ぶ）
+
+   ※ checkTantrum() の「いやいやが起きる確率」とは別もの
+     あちらは「そもそも泣きだすか」、こちらは「泣きだした理由はどれか」を決める
+
+   ■ 重み付きのくじ引き
+
+     4つの理由に「出やすさ（weight）」の数を付けて、くじ引きをする
+     たとえば weight が つかれた 5／おなかすいた 4／悔しい 3／まだ遊びたい 2 なら、
+     くじは全部で 5 + 4 + 3 + 2 = 14 本
+       つかれた     … 14本中 5本（約36%）
+       おなかすいた … 14本中 4本（約29%）
+       悔しい       … 14本中 3本（約21%）
+       まだ遊びたい … 14本中 2本（約14%）
+     weight が大きいほど出やすいが、小さくても0でなければ出ることがある
+     （同じ状態でも、毎回同じ理由になるわけではない）
+
+   ■ 出やすさの決めかた
+     tired        … 体力が低いほど出やすい
+     hungry       … 11:00をすぎたら出る（それより前は0＝出ない）
+     frustrated   … 機嫌が低いほど出やすい
+     wantMorePlay … いつでも出る基本の理由。元気なときや、まだ早い時間ほど出やすい
+*/
+function chooseTantrumReason(): TantrumReason {
+  const isAfterEleven = currentMinutes.value >= 11 * 60;
+
+  // ① つかれた：体力が低いほど出やすい
+  let tiredWeight = 1;
+
+  if (childEnergy.value <= 30) {
+    tiredWeight = 5;
+  } else if (childEnergy.value <= 50) {
+    tiredWeight = 3;
+  }
+
+  // ② おなかすいた：11:00をすぎたら出やすい（それより前は出ない）
+  const hungryWeight = isAfterEleven ? 4 : 0;
+
+  // ③ うまくできなくて悔しい：機嫌が低いほど出やすい
+  let frustratedWeight = 1;
+
+  if (childMood.value <= 30) {
+    frustratedWeight = 5;
+  } else if (childMood.value <= fussMoodLine) {
+    frustratedWeight = 3;
+  }
+
+  // ④ まだ遊びたい：ほかの理由が強くないときの基本の理由
+  let wantMorePlayWeight = 2;
+
+  if (childEnergy.value >= 50) {
+    wantMorePlayWeight += 2; // まだ元気がある
+  }
+
+  if (!isAfterEleven) {
+    wantMorePlayWeight += 1; // まだ早い時間で、遊び足りない
+  }
+
+  const candidates: { reason: TantrumReason; weight: number }[] = [
+    { reason: 'tired', weight: tiredWeight },
+    { reason: 'hungry', weight: hungryWeight },
+    { reason: 'frustrated', weight: frustratedWeight },
+    { reason: 'wantMorePlay', weight: wantMorePlayWeight },
+  ];
+
+  // くじの本数の合計（まだ遊びたい は最低でも2あるので、0にはならない）
+  let totalWeight = 0;
+
+  for (const candidate of candidates) {
+    totalWeight += candidate.weight;
+  }
+
+  // 0以上「合計」未満のランダムな数を出して、前から順に見ていく
+  // ・その理由の weight より小さければ、その理由に決まり
+  // ・大きければ、weight のぶんを引いて次の理由へ
+  //   例）合計14で 7.2 が出たら … つかれた(5)より大きい → 引いて 2.2
+  //                               → おなかすいた(4)より小さい → おなかすいた に決まり
+  // ※ weight が 0 の理由は「小さければ」に当てはまらないので、選ばれない
+  let randomNumber = Math.random() * totalWeight;
+
+  for (const candidate of candidates) {
+    if (randomNumber < candidate.weight) {
+      return candidate.reason;
+    }
+
+    randomNumber -= candidate.weight;
+  }
+
+  // 小数の計算の誤差でここまで来てしまったときのための念のため（ふつうは通らない）
+  return 'wantMorePlay';
+}
+
 /* いやいや判定
    「こうちゃんの体力」「こうちゃんの機嫌」「今の時間」から
    いやいやが起きる確率を計算して、その確率で発生させる
    ※ 体力が71以上のときは、いやいやは起こらない
+   ※ ここで計算するのは「起きるかどうか」の確率だけ
+     起きると決まったあとで、「なぜ泣いているか」を chooseTantrumReason() で別に決める
 */
 function checkTantrum() {
   // すでにいやいや中のときは、もう一度判定しない
@@ -3228,6 +3478,17 @@ function checkTantrum() {
 
   isTantrum.value = true;
   tantrumCount.value += 1;
+
+  /* ここまで来た＝新しいいやいやが起きると決まった
+     このあとで初めて「なぜ泣いているか」を抽選する（上の確率の計算とは別の抽選）
+
+     ※ いやいや発生で機嫌が -15 される（この関数の下のほう）より前に決める
+       泣きだす前の様子（つかれていた・おなかがすいていた…）で理由を選びたいため
+     ※ 抽選に外れた（いやいやが起きなかった）ときは、上の return で終わるので
+       ここは通らず、tantrumReason も変わらない
+     ※ すでにいやいや中のときも、関数のいちばん上で return しているので、
+       同じいやいやのあいだに理由が引きなおされることはない */
+  tantrumReason.value = chooseTantrumReason();
 
   // いやいや発生音「ポヨヨン……」
   // 抽選に当たって、新しいいやいやが始まったこの瞬間だけ鳴らす
@@ -3991,6 +4252,18 @@ function goToNextPlace() {
     if (!isTimeOver.value) {
       playParkBgmSoon();
     }
+
+    /* いやいやタイムを完全に出るので、いやいやの理由とナイス対応の表示もここで片づける
+
+       だっこ・おやつなどで いやいや が終わった瞬間ではなく、
+       結果を読み終えたこのタイミングで戻すのがポイント（いやいやBGMを止めるのと同じ考え方）
+
+       ※ このあと同じ処理の中で、currentEvent が次の画面に変わる
+         <Transition> で消えていくいやいやタイムの画面は、もう描きなおされないので、
+         フェードアウトの途中でセリフや「✨ ナイス対応！」だけが消えてガタつくことはない
+         （この関数の上で resultMessage を空にしているのと同じ） */
+    tantrumReason.value = null;
+    niceTantrumResponseText.value = '';
   }
 
   if (isTimeOver.value) {
@@ -4448,13 +4721,45 @@ function giveSnackWhileExploring(snackId: SnackId) {
   removeSnackFromBag(snack.id);
 }
 
-/* ===== いやいや中（なだめる場面） ===== */
+/* ===== いやいや中（なだめる場面） =====
+
+   対応は4つ。いやいやの理由（tantrumReason）によって、効きかたがちがう
+   ・だっこ   … どの理由でも必ず終わる（つかれた なら ナイス対応）
+   ・おやつ   … おやつとの相性しだい（great は ナイス対応／normal は終わる／weak は続く）
+   ・お話する … 悔しい・まだ遊びたい なら終わる（ナイス対応）／つかれた・おなかすいた は続く
+   ・待つ     … 成功する確率が理由でちがう（悔しい 70%／まだ遊びたい 55%／つかれた 35%／おなかすいた 20%）
+                悔しい で成功したら ナイス対応
+
+   ナイス対応のボーナスは applyNiceTantrumResponse() の1か所だけで足す
+*/
+
+/* ナイス対応のボーナスを足す（おでかけポイント +3 ／ 親の余裕 +2）
+
+   「こうちゃんの気持ちに合った対応ができた」ごほうび
+   ボーナスを足すのはここだけにして、あちこちの関数に += 3 を書かない
+
+   message … 「✨ ナイス対応！」の下に出す文章（省略したら、いつもの文章）
+
+   ※ 必ず saveStatusChanges() より前に呼ぶこと
+     前に呼べば、ボーナスのぶんも「今回の変化（合計）」に入る
+   ※ そのあとの fixAllStatus() と checkGameOver() は、呼んだ側でいつもどおり行う
+     （ボーナスが入っても、GAME OVERの判定は飛ばさない）
+*/
+function applyNiceTantrumResponse(message = 'こうちゃんの気持ちが分かったみたい！') {
+  outingPoint.value += niceTantrumBonusOutingPoint;
+  parentCalm.value += niceTantrumBonusParentCalm;
+
+  niceTantrumResponseText.value = message;
+}
 
 /* ① だっこしてなだめる
 
    いやいや対応の中では、いちばん確実に落ち着かせられる方法
+   理由がどれでも、だっこすれば必ず いやいや は終わる（困ったときの安全策）
    ただし親の体力を16も使ううえ、公園で泣かれているあいだの
    気持ちの消耗まではゼロにならないので、親の余裕は少し減る
+
+   「つかれた」いやいやのときだけは、だっこがぴったりの対応なので ナイス対応 になる
 */
 function hugChild() {
   // 行動する前のステータスを控えておく
@@ -4469,6 +4774,13 @@ function hugChild() {
   isTantrum.value = false;
 
   resultMessage.value = 'ぎゅっとだっこすると、しばらく足をぱたぱたさせていましたが、そのうち肩にことんと頭をあずけてきました。';
+
+  // 「つかれた」いやいやなら、歩きつかれた足を休ませてあげられた＝ナイス対応
+  // ※ saveStatusChanges() より前に呼んで、ボーナスも「今回の変化」に入れる
+  if (tantrumReason.value === 'tired') {
+    resultMessage.value += 'つかれた足を休ませてもらえて、ほっとしたようです。';
+    applyNiceTantrumResponse();
+  }
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -4486,12 +4798,18 @@ function hugChild() {
    「おやつをあげる ＞」→ おやつバッグ で選んだときに呼ばれる
    （引数の snackId が、選んだおやつの名札）
 
-   効果は2つに分けて考える
+   効果は3つに分けて考える
    ・おやつごとにちがう … こうちゃんの体力・機嫌、かかる時間（snack.energy / mood / minutes）
    ・どのおやつでも同じ … いやいや対応としての効果
-                           おでかけポイント +2 ／ 親の体力 -5 ／ 親の余裕 -3 ／ いやいや終了
+                           おでかけポイント +2 ／ 親の体力 -5 ／ 親の余裕 -3
+   ・いやいやの理由との相性（getSnackTantrumFit()）… いやいやが終わるかどうか
+       great  … いやいや終了 ＋ ナイス対応
+       normal … いやいや終了
+       weak   … いやいやは続く（それでも、おやつは食べたのでバッグから減る）
 
-   ※ いまはまだ「どのおやつなら泣きやむか」の相性は無く、どれを選んでもいやいやは終わる
+   ※ weak でも、おやつそのものの効果（体力・機嫌の回復）はそのまま入る
+     こうちゃんは実際に食べているので、おなかや体は回復する
+     ただ「まだあそぶー！」のような気持ちのほうは、おやつではおさまらなかった、という考え方
 */
 function giveSnack(snackId: SnackId) {
   // バッグに入っていないおやつなら、何もしないで終わり
@@ -4518,15 +4836,34 @@ function giveSnack(snackId: SnackId) {
   // そのかわり、おやつはバッグに入れてきた2個しか無い
   parentCalm.value -= 3;
 
-  isTantrum.value = false;
+  // いまのいやいやの理由と、このおやつの相性を調べる
+  const fit = getSnackTantrumFit(snack.id);
 
-  resultMessage.value = `${snack.name}をそっと見せると、涙のたまった目で「……たべる」。ほっぺをふくらませたまま、もぐもぐ食べ始めました。`;
+  if (fit === 'weak') {
+    // 少しずれている：食べてはくれたが、気持ちはおさまらない
+    // isTantrum は true のまま（同じいやいやが続くだけなので、tantrumCount も tantrumReason も変えない）
+    const complaint = currentTantrumReasonInfo.value?.complaint ?? 'いやー！';
+
+    resultMessage.value = `${snack.name}を食べると、少し元気になりました。でも、「${complaint}」という気持ちは、まだおさまっていないようです……。`;
+  } else {
+    // great / normal：落ち着いてくれたので、いやいや終了
+    isTantrum.value = false;
+
+    resultMessage.value = `${snack.name}をそっと見せると、涙のたまった目で「……たべる」。もぐもぐ食べているうちに、こうちゃんは少しずつ落ち着いてきました。`;
+
+    // great：いまの気持ちにぴったりのおやつだった＝ナイス対応
+    // ※ saveStatusChanges() より前に呼んで、ボーナスも「今回の変化」に入れる
+    if (fit === 'great' && currentTantrumReasonInfo.value) {
+      resultMessage.value += currentTantrumReasonInfo.value.greatSnackText;
+      applyNiceTantrumResponse();
+    }
+  }
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
 
-  // おやつは安全な選択だが、念のためここでも判定しておく
+  // おやつは親の負担が軽い選択だが、念のためここでも判定しておく
   checkGameOver();
 
   // ステータスの計算がぜんぶ終わってから、食べたおやつをバッグから出す
@@ -4536,19 +4873,108 @@ function giveSnack(snackId: SnackId) {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 少し待ってみる
-   だっこ・おやつとちがって、これだけは失敗することがある
-   ・50%（0.5）… 落ち着いて、いやいや終了
-   ・50%       … まだ落ち着かないので、いやいやが続く
+/* ③ こうちゃんとお話する
+
+   泣いているこうちゃんに向き合って、気持ちを言葉にしてあげる
+   だっこほど体力は使わないが、向き合うぶん親の余裕は少し使う
+   （親の体力 -2 ／ 親の余裕 -4 ／ 5分 … どの理由でも同じ）
+
+   効くかどうかは いやいやの理由 しだい
+   ・悔しい／まだ遊びたい   … 気持ちを分かってもらえると落ち着ける
+                               → 機嫌 +12 ／ いやいや終了 ／ ナイス対応
+   ・つかれた／おなかすいた … 体のほうが限界なので、お話だけではおさまらない
+                               → 機嫌 +2 だけ ／ いやいやは続く
+
+   ※ いやいやが続いても checkTantrum() は呼ばない
+     新しいいやいやではなく同じいやいやが続いているだけなので、
+     tantrumCount も tantrumReason も変えない（待つに失敗したときと同じ）
+*/
+function talkToChild() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  // お話する共通のコスト（どの理由でも同じ）
+  parentEnergy.value -= 2;
+  parentCalm.value -= 4;
+  addMinutes(5);
+
+  if (tantrumReason.value === 'frustrated') {
+    childMood.value += 12;
+    isTantrum.value = false;
+
+    resultMessage.value = '「うまくできなくて悔しかったんだね」と話しかけると、こうちゃんは少しずつ落ち着いてきました。';
+
+    // ※ saveStatusChanges() より前に呼んで、ボーナスも「今回の変化」に入れる
+    applyNiceTantrumResponse();
+  } else if (tantrumReason.value === 'wantMorePlay') {
+    childMood.value += 12;
+    isTantrum.value = false;
+
+    resultMessage.value = '「まだ遊びたかったんだね」と話すと、こうちゃんは少し考えてから、こくんとうなずいてくれました。';
+
+    applyNiceTantrumResponse();
+  } else {
+    // つかれた・おなかすいた：お話だけでは気持ちがおさまらない（isTantrum は true のまま）
+    childMood.value += 2;
+
+    if (tantrumReason.value === 'tired') {
+      resultMessage.value = 'こうちゃんに話しかけてみましたが、「つかれたー！」と、まだ動きたくないようです……。';
+    } else {
+      resultMessage.value = 'こうちゃんに話しかけてみましたが、「おなかすいたー！」と、まだ気持ちはおさまりません……。';
+    }
+  }
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+
+  // 親の余裕が残り少ないと、お話でもGAME OVERになることがある
+  checkGameOver();
+
+  // いやいやが終わっても続いても、一番上（0＝だっこ）から選べるように戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* 「少し待ってみる」が成功する確率（0.7 なら 70%）
+
+   いやいやの理由によって、待つだけで落ち着けるかどうかがちがう
+   ・悔しい       … 70%（時間がたつと、自分で気持ちを立てなおせることが多い）
+   ・まだ遊びたい … 55%
+   ・つかれた     … 35%（待っていても、体の疲れはとれない）
+   ・おなかすいた … 20%（待っているあいだも、おなかはすいたまま）
+*/
+function getWaitSuccessChance() {
+  switch (tantrumReason.value) {
+    case 'frustrated':
+      return 0.7;
+    case 'wantMorePlay':
+      return 0.55;
+    case 'tired':
+      return 0.35;
+    case 'hungry':
+      return 0.2;
+    default:
+      // 理由が決まっていないとき（ふつうは起きない）は、理由を入れる前と同じ50%
+      return 0.5;
+  }
+}
+
+/* ④ 少し待ってみる
+   だっことちがって、失敗することがある
+   ・成功 … 落ち着いて、いやいや終了
+   ・失敗 … まだ落ち着かないので、いやいやが続く
+   成功する確率は、いやいやの理由でちがう（getWaitSuccessChance()）
+   「悔しい」いやいやで成功したときは、自分で気持ちを立てなおせた＝ナイス対応
 
    成功しても失敗しても、下のステータスの増減と時間（15分）は毎回発生する
-   ＝「もう一度待つか、だっこするか、おやつを使うか」を考える場面になる
+   ＝「もう一度待つか、だっこするか、おやつやお話を試すか」を考える場面になる
 
-   いやいや対応の3つは、どれも親の余裕が減る
+   いやいや対応の4つは、どれも親の余裕が減る
    何で払うかがちがうだけ
-   ・だっこ … 親の体力 -16 ／ 親の余裕 -5（確実に終わる）
-   ・おやつ … おやつ -1   ／ 親の余裕 -3（いちばん軽いが、1日2個まで）
-   ・待つ   … 親の体力 +2 ／ 親の余裕 -18（体力は減らないが、50%で失敗する）
+   ・だっこ   … 親の体力 -16 ／ 親の余裕 -5 （確実に終わる）
+   ・おやつ   … おやつ -1   ／ 親の余裕 -3 （いちばん軽いが、1日2個まで。相性が悪いと続く）
+   ・お話する … 親の体力 -2  ／ 親の余裕 -4 （理由が合えば軽く済むが、合わないと続く）
+   ・待つ     … 親の体力 +2  ／ 親の余裕 -18（体力は減らないが、失敗することがある）
 */
 function waitCalmly() {
   // 行動する前のステータスを控えておく
@@ -4562,20 +4988,31 @@ function waitCalmly() {
   parentCalm.value -= 18;
   addMinutes(15);
 
-  // 0以上1未満のランダムな数を出して、0.5より小さければ成功（＝50%）
-  const calmSuccess = Math.random() < 0.5;
+  // 0以上1未満のランダムな数を出して、成功する確率より小さければ成功
+  // 例）悔しい（0.7）なら、0〜0.7未満が出れば成功（＝70%）
+  const calmSuccess = Math.random() < getWaitSuccessChance();
 
   if (calmSuccess) {
     // 落ち着いてくれたので、いやいや終了
     isTantrum.value = false;
 
-    resultMessage.value = 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
+    if (tantrumReason.value === 'frustrated') {
+      resultMessage.value = 'となりで静かに待っていると、こうちゃんは自分で涙をふいて、少しずつ落ち着いてきました。悔しい気持ちに、自分で区切りをつけられたようです。';
+
+      // 悔しい気持ちを、こうちゃんが自分で立てなおせた＝ナイス対応
+      // ※ saveStatusChanges() より前に呼んで、ボーナスも「今回の変化」に入れる
+      applyNiceTantrumResponse('そっと見守ったのが、よかったみたい！');
+    } else {
+      resultMessage.value = 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
+    }
   } else {
     // 失敗したときは isTantrum を true のままにしておく（false にはしない）
     // ここでは checkTantrum() を呼ばない
     // 新しいいやいやが起きたのではなく、同じいやいやが続いているだけなので、
-    // tantrumCount も増やさない
-    resultMessage.value = 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
+    // tantrumCount も tantrumReason も変えない
+    const complaint = currentTantrumReasonInfo.value?.complaint;
+
+    resultMessage.value = complaint ? `しばらく待ってみましたが、こうちゃんは「${complaint}」と、まだ気持ちがおさまらないようです……。` : 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
   }
 
   // 今回の変化量を記録してから、0〜100に丸める
@@ -5435,6 +5872,10 @@ function resetGame() {
   isTantrum.value = false;
   tantrumCount.value = 0;
 
+  // いやいやの理由も「いやいやしていない」に戻す
+  // （いやいや中にGAME OVERになったときの理由が、次のプレイに残らないようにする）
+  tantrumReason.value = null;
+
   /* きょうのおやつも、選んでいない状態に戻す
 
      次のプレイへ前回のグミ・せんべいが残っていると、
@@ -5477,6 +5918,7 @@ function resetGame() {
   randomEventText.value = '';
   randomEventEffects.value = [];
   tantrumText.value = '';
+  niceTantrumResponseText.value = '';
 
   // 今回追加したGAME OVER用のstateも空に戻す
   gameOverTitle.value = '';
@@ -5981,22 +6423,29 @@ function runSelectedCommand() {
       break;
 
     /* いやいやタイム
-       おやつが残っているとき   0 だっこ／1 おやつをあげる ＞／2 少し待ってみる
-       おやつが0個のとき       0 だっこ／1 少し待ってみる（おやつの行は画面に無い）
+       おやつが残っているとき   0 だっこ／1 おやつをあげる ＞／2 お話する／3 少し待ってみる
+       おやつが0個のとき       0 だっこ／1 お話する／2 少し待ってみる（おやつの行は画面に無い）
 
        「おやつをあげる ＞」はおやつバッグを開くだけ
        食べるのは、バッグの中でおやつを選んだとき（上の isSnackMenuVisible の分岐）
 
        ※ バッグが空のときにバッグを開いてしまわないように、
          必ず snackLeft（バッグの残り）を見てから決める
+       ※ お話・待つ の番号はおやつの有無で変わるので、
+         talkCommandIndex / waitCommandIndex を見る（2 や 3 を直接書かない）
+         おやつが0個のときは 1 が「お話する」になるが、
+         1つ上の分岐は snackLeft も見ているので、まちがってバッグを開くことはない
     */
     case 'tantrum':
       if (index === 0) {
         hugChild();
       } else if (index === 1 && snackLeft.value > 0) {
         openSnackMenu('tantrum');
+      } else if (index === talkCommandIndex.value) {
+        // 「こうちゃんとお話する」は、おやつがあれば3番目（2）、なければ2番目（1）
+        talkToChild();
       } else if (index === waitCommandIndex.value) {
-        // 「少し待ってみる」は、おやつがあれば3番目（2）、なければ2番目（1）
+        // 「少し待ってみる」は、おやつがあれば4番目（3）、なければ3番目（2）
         waitCalmly();
       }
       break;
@@ -8885,7 +9334,17 @@ onUnmounted(() => {
               <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum }">
                 <h2 class="place-card__title">いやいやタイム！</h2>
 
-                <p class="place-card__text">
+                <!-- いやいやの理由に合ったセリフと様子
+                     理由の名前（'hungry' など）は出さず、様子からプレイヤーに考えてもらう
+                     ※ いやいやが終わって結果を読んでいるあいだも、同じセリフのまま残す
+                       （理由を片づけるのは、この画面から出るとき＝goToNextPlace()） -->
+                <template v-if="currentTantrumReasonInfo">
+                  <p class="tantrum-voice">「{{ currentTantrumReasonInfo.voice }}」</p>
+                  <p class="place-card__text">{{ currentTantrumReasonInfo.scene }}</p>
+                </template>
+
+                <!-- 理由が決まっていないとき（ふつうは起きない）は、前からの文章を出す -->
+                <p v-else class="place-card__text">
                   こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
                 </p>
               </article>
@@ -8908,6 +9367,26 @@ onUnmounted(() => {
                   </p>
 
                   <p class="result-card__text">{{ resultMessage }}</p>
+
+                  <!-- ナイス対応（いやいやの理由に合った対応をしたときだけ出す）
+                       「ちいさなできごと」と同じ形の枠を使い、色だけ緑に変えて「いいこと」と分かるようにする
+                       ボーナスの数字は、実際に足している niceTantrumBonus〜 をそのまま出す -->
+                  <div v-if="niceTantrumResponseText" class="event-flash event-flash--nice">
+                    <p class="event-flash__label">✨ ナイス対応！</p>
+
+                    <p class="event-flash__text">{{ niceTantrumResponseText }}</p>
+
+                    <ul class="event-flash__list">
+                      <li class="event-flash__item">
+                        <span class="event-flash__item-label">おでかけポイント</span>
+                        <span class="event-flash__item-value change--good">{{ formatChange(niceTantrumBonusOutingPoint) }}</span>
+                      </li>
+                      <li class="event-flash__item">
+                        <span class="event-flash__item-label">親の余裕</span>
+                        <span class="event-flash__item-value change--good">{{ formatChange(niceTantrumBonusParentCalm) }}</span>
+                      </li>
+                    </ul>
+                  </div>
 
                   <!-- 見つけたものの文
                        アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
@@ -8973,7 +9452,7 @@ onUnmounted(() => {
               <nav class="command-box">
                 <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                      いやいやのコマンドと入れかえて、同じ枠の中に出す
-                     「← もどる」・Escape で、だっこ／おやつ／待つ に戻る -->
+                     「← もどる」・Escape で、だっこ／おやつ／お話／待つ に戻る -->
                 <template v-if="isSnackMenuVisible">
                   <p class="command-box__label">🎒 どのおやつをあげる？</p>
 
@@ -9023,6 +9502,16 @@ onUnmounted(() => {
                   </button>
 
                   <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
+
+                  <!-- こうちゃんとお話する
+                       番号はおやつの有無で変わるので talkCommandIndex を見る（おやつあり 2／なし 1） -->
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === talkCommandIndex }"
+                    @click="talkToChild"
+                    @mouseenter="selectedCommandIndex = talkCommandIndex">
+                    <span class="command-box__text">こうちゃんとお話する</span>
+                  </button>
 
                   <button
                     class="command-box__item"
@@ -11500,6 +11989,17 @@ onUnmounted(() => {
   animation: tantrum-bounce 1.2s ease-in-out infinite;
 }
 
+/* いやいやタイムの、こうちゃんのセリフ（「おなかすいたぁ……！」など）
+   様子の文より少し大きく太くして、まずセリフが目に入るようにする
+   色は、いやいやタイムの見出しとそろえている */
+.tantrum-voice {
+  margin: 0 0 4px;
+  color: #c9412f;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
 /* 突然イベント（急に起きた出来事のカード）
    ふだんの場所は紺色の線だが、こちらは金色にして
    「いつもと違うことが起きた」と分かるようにしている
@@ -12404,6 +12904,27 @@ onUnmounted(() => {
   color: #a33a29;
   font-size: 17px;
   line-height: 1.8;
+}
+
+/* ナイス対応の枠（いやいやの理由に合った対応をしたとき）
+
+   形は「ちいさなできごと」（.event-flash）をそのまま使い、色だけ緑に変える
+   ・緑 … 「今回の変化」のプラスと同じ系統の色で、良いことが起きたと分かる
+   ・アイテム発見（黄色）・ちいさなできごと（水色）・いやいや（さんご）と色がかぶらない
+   ※ 帯の背景は --good より少しだけ濃くして、白い文字を読みやすくしている
+*/
+.event-flash--nice {
+  border-color: #cde9d7;
+  border-left-color: var(--good);
+  background: #f1faf4;
+}
+
+.event-flash--nice .event-flash__label {
+  background: #26844f;
+}
+
+.event-flash--nice .event-flash__item {
+  border-color: #d3eadb;
 }
 
 /* --- 危険なステータスのゆっくりした点滅 --- */
@@ -13737,6 +14258,11 @@ onUnmounted(() => {
 
   .place-card__title {
     font-size: 20px;
+  }
+
+  /* いやいやタイムのセリフも、見出しに合わせて少し小さくする */
+  .tantrum-voice {
+    font-size: 18px;
   }
 
   /* 本文はスマホでも16pxを下まわらないようにする
