@@ -3968,8 +3968,11 @@ function closeSnackSelection() {
 
    ※ バッグがいっぱいのときに、まだ選んでいないおやつを押せないようにするのは
      画面のほう（カードの :disabled）にまかせている
-     ここでも念のため、いっぱいのときは追加しないようにしておく */
-function toggleSnackSelection(snackId: SnackId) {
+     ここでも念のため、いっぱいのときは追加しないようにしておく
+
+   event … そのカードの click イベント
+           キーボードで押したのか、マウス・指で押したのかを見分けるのに使う */
+function toggleSnackSelection(snackId: SnackId, event: MouseEvent) {
   // 決定音「ポン♪」（選ぶときも、解除するときも同じ音）
   playDecisionSound();
 
@@ -3985,6 +3988,24 @@ function toggleSnackSelection(snackId: SnackId) {
   }
 
   selectedSnackIds.value.push(snackId);
+
+  /* キーボードで選んで、バッグがいっぱいになった（＝2個目を選んだ）ときは、
+     そのまま「このおやつで公園へ行く！」へカーソルを移す
+     （あとは Enter / Space を押すだけで出発できる）
+
+     ■ キーボードかどうかの見分けかた
+       Enter / Space でボタンを押したときも click イベントが届くが、
+       そのときの event.detail は 0 になる（マウスや指で押したときは 1 以上）
+
+     ■ マウス・指で選んだときは動かさない
+       マウスの人は、次に押したい場所へ自分でポインタを動かすので、
+       カーソルだけが勝手に飛ぶと、かえって分かりにくくなるため
+
+     ※ 解除したとき（上の return）と、1個目を選んだときは動かさない
+       まだ出発できないので、続けておやつを選べるようにしておく */
+  if (event.detail === 0 && canStartWithSnacks.value) {
+    focusSnackGoButton();
+  }
 }
 
 /* おやつ選択画面の「このおやつで公園へ行く！」
@@ -4040,6 +4061,24 @@ async function focusFirstSnackOption() {
   const firstSnackButton = snackSelectionRef.value?.querySelector<HTMLButtonElement>('.snack-option:not(:disabled)');
 
   firstSnackButton?.focus();
+}
+
+/* おやつ選択画面の「このおやつで公園へ行く！」へフォーカスを当てる
+   （キーボードで2個目のおやつを選んだときに、toggleSnackSelection() から呼ばれる）
+
+   focusFirstSnackOption() と同じく、入れもの（snackSelectionRef）の中から探して当てる
+
+   ※ nextTick() で画面の書きかえを待ってから当てるのが大事
+     2個目を選んだ直後は、ボタンにまだ disabled が付いたまま
+     押せないボタンは focus() してもフォーカスが当たらないので、
+     disabled が外れるのを待ってから当てる
+   ※ ボタンが画面の下にかくれていても、focus() が見える位置までスクロールしてくれる */
+async function focusSnackGoButton() {
+  await nextTick();
+
+  const snackGoButton = snackSelectionRef.value?.querySelector<HTMLButtonElement>('.snack-go:not(:disabled)');
+
+  snackGoButton?.focus();
 }
 
 /* もうサウンドトラックのページへ移動しはじめたかどうか（連打よけ） */
@@ -7581,7 +7620,10 @@ onUnmounted(() => {
                  @mouseenter … マウスを乗せたカードへ、キーボードの居場所も移す
                  こうしておくと「マウスでチョコまで来て、そこから↓キー」と
                  続けたときに、その下のビスケットへ進む
-                 （乗せただけでは選ばない。選ぶのは click と Enter / Space だけ） -->
+                 （乗せただけでは選ばない。選ぶのは click と Enter / Space だけ）
+
+                 @click の $event … キーボードで選んだかどうかを見分けるために渡す
+                 （キーボードで2個目を選んだら「このおやつで公園へ行く！」へカーソルが移る） -->
             <button
               v-for="snack in snacks"
               :key="snack.id"
@@ -7590,7 +7632,7 @@ onUnmounted(() => {
               :class="{ 'snack-option--selected': isSnackSelected(snack.id) }"
               :disabled="isSnackBagFull && !isSnackSelected(snack.id)"
               :aria-pressed="isSnackSelected(snack.id)"
-              @click="toggleSnackSelection(snack.id)"
+              @click="toggleSnackSelection(snack.id, $event)"
               @mouseenter="moveSnackSelectionToHovered">
               <!-- 絵文字と名前は、1行にならべる（「🍇 グミ」の形）
 
