@@ -189,15 +189,20 @@ const duration = ref(0);
    ② 曲の一覧を、ゲームのメニューのように矢印キーで動かせる
       ↑↓＝上下の曲へ、←→＝同じ曲の中の操作へ、Home / End＝最初 / 最後の曲へ
       （→ handleTrackListKeydown。見張りは <ol class="st-list"> の1か所だけ）
-   ③ 上の操作エリア（ツールバー・スターター・アクション）と曲の一覧を、
-      画面の「左列・右列」をたどって矢印キーで動かせる
+   ③ 上の操作エリア（ツールバー・スターター・操作行）と曲の一覧を、
+      画面の位置どおりに矢印キーで動かせる
       （→ handleToolbarKeydown / handlePlayallButtonsKeydown / findPlayallVerticalTarget）
       一覧から上のボタンへ戻る道は findVerticalTarget / findOutsidePlayButton にある
 
-      考えかたは「2列のグリッド」
-      ・左にいるボタンで↑↓しても、行き先は左列のボタン
-      ・右にいるボタンで↑↓しても、行き先は右列のボタン
-      ・← → は、そのならびの中で となりの列へ移るだけ
+      「操作行」（.st-playall__actions）は、曲を選んでいるあいだだけ出る、3つのボタンのならび
+        [ ⏮ 前のトラックへ ] [ ⏭ 次のトラックへ ] [ ■ 停止 ]
+      個別再生・全曲再生・シャッフル再生のどれでも、同じ場所に同じならびで出る
+      （一時停止中・サウンドOFFで止まっているときも、曲を選んでいるので出る）
+
+      考えかたは「左の列・右の列」
+      ・上の2段（ツールバー・スターター）は、左列・右列に1つずつ
+      ・操作行は3つあるが、「前」「次」は左列（▶ 全曲再生の下）、「停止」は右列（🔀 シャッフルの下）
+      ・← → は、そのならびの中で となりへ移るだけ
         （左端で←、右端で→、は移動しない。回り込みはしない）
 
       ■ 止まっているとき（ツールバー → スターター → 曲の一覧）
@@ -212,25 +217,27 @@ const duration = ref(0);
         ・スターターで↑     … 同じ列のツールバー（戻る／サウンド）へ
         ・スターターで↓     … 曲の一覧の01「▶ 再生」へ（左右どちらの列からでも）
 
-      ■ 全曲再生中・シャッフル再生中（ツールバー → スターター → アクション → 曲の一覧）
+      ■ 再生中（個別・全曲・シャッフル。ツールバー → スターター → 操作行 → 曲の一覧）
 
-        あいだに「⏭ 次のトラックへ」「■ 停止」が出てくる
+        一時停止中・サウンドOFFで止まっているときも、曲を選んでいるので、こちらになる
 
-          [ ← 戻る ]        ←→  [ 🔊 サウンド ]
-              ↑↓                     ↑↓
-          [ ▶ 全曲再生 ]   ←→  [ 🔀 シャッフル ]
-              ↑↓                     ↑↓
-          [ ⏭ 次へ ]       ←→  [ ■ 停止 ]
-                      ↓
+          [ ← 戻る ]                    [ 🔊 サウンド ]
+              ↑↓                               ↑↓
+          [ ▶ 全曲再生 ]        ←→        [ 🔀 シャッフル ]
+                  ↑↓                               ↑↓
+          [ ⏮ 前へ ] ←→ [ ⏭ 次へ ]   ←→   [ ■ 停止 ]
+                          ↓
                     曲の一覧（01 ▶ 再生 …）
 
-        左列は 戻る ↑↓ 全曲再生 ↑↓ 次のトラック が一直線、
-        右列は サウンド ↑↓ シャッフル ↑↓ 停止 が一直線になる
-        （↑と↓で、同じ列を行ったり来たりできる）
-        アクション（次へ／停止）で↓ … 曲の一覧の01「▶ 再生」へ
+        ・全曲再生で↓   … ⏭ 次のトラックへ（真下の「次」へ降りる。「前」ではない）
+        ・シャッフルで↓ … ■ 停止
+        ・「⏮ 前のトラックへ」へは、「⏭ 次のトラックへ」から←で入る
+        ・前／次で↑ … ▶ 全曲再生、停止で↑ … 🔀 シャッフル再生
+        ・前／次／停止で↓ … 曲の一覧の01「▶ 再生」へ（3つのどこからでも）
+        ※ 個別再生でも、スターターから↓で曲の一覧へ飛ばさない（あいだの操作行へ降りる）
 
       曲の一覧から↑で戻るときは、直前に一覧へ入ったボタンへ帰る（→ lastOutsideButton）
-      （「■ 停止」から入ったなら「■ 停止」へ、「🔀 シャッフル」から入ったなら「🔀 シャッフル」へ）
+      （「⏮ 前」から入ったなら「⏮ 前」へ、「⏭ 次」なら「⏭ 次」へ、「■ 停止」なら「■ 停止」へ）
       Tabで一覧へ入ったなど、覚えが無いときは、
       再生中なら「⏭ 次のトラックへ」、止まっているなら「▶ 全曲再生」へ帰る（→ findOutsidePlayButton）
 
@@ -252,20 +259,26 @@ const duration = ref(0);
 /* 矢印キーで直接フォーカスを当てるボタンを、それぞれ覚えておく箱
    ref="〜" と書いたボタンが、そのままここに入ってくる（出ていないときは null）
 
-   画面の「左列・右列」でならべると
-     ツールバー（いつも）     … backButtonRef      / soundToggleButtonRef
-     スターター（いつも）     … playAllButtonRef   / shuffleButtonRef
-     アクション（再生中だけ） … nextTrackButtonRef / stopPlaylistButtonRef
+   画面の位置でならべると
+     ツールバー（いつも）   … backButtonRef（左） / soundToggleButtonRef（右）
+     スターター（いつも）   … playAllButtonRef（左） / shuffleButtonRef（右）
+     操作行（再生中だけ）   … previousTrackButtonRef・nextTrackButtonRef（左列の下） / stopPlaybackButtonRef（右列の下）
 
-   ↑↓ で列をたどるとき・← → でとなりの列へ移るときの行き先に使う（左は左、右は右）
+   ↑↓ で列をたどるとき・← → でとなりへ移るときの行き先に使う
    （→ handleToolbarKeydown / handlePlayallButtonsKeydown / findPlayallVerticalTarget）
-   DOMから探すこともできるが、名前で分かるほうが読みやすいので ref にしている */
+   DOMから探すこともできるが、名前で分かるほうが読みやすいので ref にしている
+
+   ※ 操作行は、個別再生・全曲再生・シャッフル再生で、1つのならびを使いまわしている
+     v-if で出し入れするならびは1つだけなので、同じ ref が2つのボタンに付くことはない
+     聴きかたで切りかわるのは、押したときの中身（どの曲順で前後するか）と、停止の文字だけ
+     （→ playPreviousTrack / playNextTrack / stopButtonLabel） */
 const backButtonRef = ref<HTMLButtonElement | null>(null);
 const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
 const playAllButtonRef = ref<HTMLButtonElement | null>(null);
 const shuffleButtonRef = ref<HTMLButtonElement | null>(null);
+const previousTrackButtonRef = ref<HTMLButtonElement | null>(null);
 const nextTrackButtonRef = ref<HTMLButtonElement | null>(null);
-const stopPlaylistButtonRef = ref<HTMLButtonElement | null>(null);
+const stopPlaybackButtonRef = ref<HTMLButtonElement | null>(null);
 
 /* 曲の一覧（<ol class="st-list">）そのものを覚えておく箱
    「▶ 全曲再生」から ↑↓ で曲の一覧へ入るときに、行き先のボタンを探すのに使う */
@@ -274,11 +287,11 @@ const trackListRef = ref<HTMLElement | null>(null);
 /* ↑↓ で曲の一覧へ入るとき、どのボタンから入ったかを覚えておく
 
    一覧の上には、いくつかボタンが出ている
-   ・いつも     … 「▶ 全曲再生」「🔀 シャッフル再生」
-   ・全曲再生中 … ＋「⏭ 次のトラックへ」「■ 全曲再生を停止」
+   ・いつも … 「▶ 全曲再生」「🔀 シャッフル再生」
+   ・再生中 … ＋「⏮ 前のトラックへ」「⏭ 次のトラックへ」「■ 停止」（個別・全曲・シャッフル共通）
 
    一覧のはしで↑↓を押して戻るときは、出てきたボタンへ帰りたい
-   （「■ 全曲再生を停止」から入ったのに「⏭ 次のトラックへ」へ帰ると、
+   （「■ 停止」から入ったのに「⏭ 次のトラックへ」へ帰ると、
      行きと帰りで場所がずれて、どこにいるのか分からなくなるため）
 
    ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい
@@ -443,7 +456,7 @@ function pauseForSoundOff() {
 
 /* ONに戻したときに、OFFで止めた曲の続きから鳴らす
 
-   ※ 「■ 全曲再生を停止」などで曲の選択そのものが無くなっていたときは、何も鳴らさない
+   ※ 「■ 停止」などで曲の選択そのものが無くなっていたときは、何も鳴らさない
 */
 function resumeAfterSoundOn() {
   pausedBySoundOff = false;
@@ -506,6 +519,10 @@ function ensureSoundEnabled() {
      全曲再生が1周したら、また曲順の先頭（＝開始曲）へ戻って鳴らし続ける
      （→ playNextPlaylistTrack で、最後の曲のあとを 0 に回りこませている）
      ※ 1曲だけの再生には効かない（押した1曲は、終わったら止まる）
+       個別再生の「⏮ 前のトラックへ」「⏭ 次のトラックへ」も、全曲リピートの曲順は使わず、
+       画面の一覧のとなりの曲へ移るだけ（→ playAdjacentSingleTrack）
+     ※ 全曲再生・シャッフル再生の「⏮ 前のトラックへ」は、リピートの設定に関係なく、
+       曲順の先頭で押せば、曲順の最後へ回りこむ（手で押したときだけの動き。→ playPreviousPlaylistTrack）
 
    ■ one（1曲リピート）
      いま鳴らしている曲を、ずっとくりかえす
@@ -513,8 +530,9 @@ function ensureSoundEnabled() {
      （自分で「終わったらもう一度鳴らす」を書くより、つなぎ目がなめらか）
      loop が true のあいだは「曲が終わった」の知らせ（ended）が来ないので、
      全曲再生の途中でも、次の曲へは進まなくなる
-     ※ 「⏭ 次のトラックへ」を押せば、いつでも次の曲へ進める
-       （そちらの曲が、また1曲リピートで鳴りつづける）
+     ※ 「⏮ 前のトラックへ」「⏭ 次のトラックへ」を押せば、いつでも となりの曲へ移れる
+       （移った曲が、また1曲リピートで鳴りつづける）
+       個別再生・全曲再生・シャッフル再生のどれでも同じ（→ playPreviousTrack / playNextTrack）
    ============================================================ */
 
 /* リピートの3つの状態
@@ -730,6 +748,9 @@ function playDecisionSound() {
    ・曲が最後まで流れきったとき
    ・「⏭ 次のトラックへ」を押して、いまの曲を飛ばしたとき
    → playNextPlaylistTrack() を見ること
+
+   「⏮ 前のトラックへ」を押したときは、同じ曲順の1つ前へ戻る（シャッフルでも、作った順番のまま）
+   → playPreviousPlaylistTrack() を見ること（前へ戻るのは、手で押したときだけ）
    ============================================================ */
 
 /* 全曲再生の開始曲（はじめは1曲目。トラック番号を押すと変わる） */
@@ -753,7 +774,7 @@ const isPlaylistPlaying = ref(false);
 
    ※ 全曲再生が終わったら（isPlaylistPlaying が false になったら）、
      こちらも かならず false に戻す
-     （→ finishPlaylist / stopSoundtrack / toggleTrack） */
+     （→ finishPlaylist / stopSoundtrack / playSingleTrackFromStart） */
 const isShufflePlaying = ref(false);
 
 /* 今回の1周ぶんの曲順（通常再生なら開始曲から並べ替えたもの、
@@ -767,21 +788,27 @@ const playlistTracks = ref<SoundtrackTrack[]>([]);
 /* その曲順の何曲目か（0はじまり） */
 const playlistIndex = ref(0);
 
-/* 停止ボタンに出す文字
+/* 操作行の停止ボタンに出す文字
 
-   いまの始めかたに合わせて、言いかたを変える
+   いまの聴きかたに合わせて、言いかたを変える
+   ・個別再生       … ■ 停止
    ・通常の全曲再生 … ■ 全曲再生を停止
    ・シャッフル再生 … ■ シャッフル再生を停止
 
-   すぐ上の案内（♪ 全曲再生中 / 🔀 シャッフル再生中）と言いかたをそろえて、
+   すぐ上の案内（♪ 再生中 / ♪ 全曲再生中 / 🔀 シャッフル再生中）と言いかたをそろえて、
    「シャッフル再生中なのに、全曲再生を停止と書いてある」と
    ちぐはぐに見えないようにするため
 
    ※ 変わるのは見た目の文字だけ
-     押したときの動きは、どちらもまったく同じ（→ stopSoundtrack）
-   ※ このページのコメントでは、この2つをまとめて
-     「■ 全曲再生を停止」と呼んでいる */
-const stopButtonLabel = computed(() => (isShufflePlaying.value ? '■ シャッフル再生を停止' : '■ 全曲再生を停止'));
+     押したときの動きは、3つともまったく同じ（→ stopSoundtrack）
+   ※ このページのコメントでは、この3つをまとめて「■ 停止」と呼んでいる */
+const stopButtonLabel = computed(() => {
+  if (!isPlaylistPlaying.value) {
+    return '■ 停止';
+  }
+
+  return isShufflePlaying.value ? '■ シャッフル再生を停止' : '■ 全曲再生を停止';
+});
 
 /* ============================================================
    いま鳴らしている曲を、固定エリアに表示するための3つ（現在曲の表示）
@@ -805,6 +832,22 @@ const stopButtonLabel = computed(() => (isShufflePlaying.value ? '■ シャッ�
    playingTrackId が null（どれも選んでいない）のときは null を返し、
    テンプレート側は、そのあいだ現在曲の表示ごと消す */
 const playingTrack = computed(() => tracks.find((track) => track.id === playingTrackId.value) ?? null);
+
+/* 操作行（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 停止）を出すかどうか
+
+   曲を選んでいるあいだ（playingTrack がある）は、聴きかたに関係なく出す
+   ・個別再生中・個別一時停止中・サウンドOFFで止まっているとき
+   ・全曲再生中・シャッフル再生中（一時停止中もふくむ）
+   止まっているとき（どの曲も選んでいない）は出さない
+
+   isPlaylistPlaying も見ているのは、全曲再生の途中で曲が鳴らせなかったとき
+   （playTrackAudio が playingTrackId を null に戻す）にも、
+   前・次・停止を残して、先へ進んだり止めたりできるようにするため
+   （前の作りでも、全曲再生中は次へ・停止のならびを出したままにしていた）
+
+   テンプレートの v-if と、矢印キーの行き先（findPlayallVerticalTarget / findOutsidePlayButton）で
+   同じこの1つを見るので、画面に出ているならびと、矢印キーの行き先が食いちがわない */
+const hasPlaybackControls = computed(() => playingTrack.value !== null || isPlaylistPlaying.value);
 
 /* 固定エリアに出す「いま何をしているか」の目印
 
@@ -897,14 +940,23 @@ function handleTrackEnded() {
   /* 全曲再生の途中なら、次の曲へ
 
      ボタンで飛ばしたときと、まったく同じ関数を呼んでいる
-     （「次の曲へ進む」書きかたを2か所に分けて持たないようにするため） */
+     （「次の曲へ進む」書きかたを2か所に分けて持たないようにするため）
+     ※ ボタン用の playNextTrack() は通さず、全曲再生用を直接呼ぶ
+       playNextTrack() は、個別再生のときは となりの曲へ移ってしまうが、
+       曲が自然に終わったときに次へ進むのは、全曲再生・シャッフル再生だけにしたいため */
   if (isPlaylistPlaying.value) {
     playNextPlaylistTrack();
 
     return;
   }
 
-  // 1曲だけの再生のときは、そこで停止
+  /* 1曲だけの再生のときは、そこで停止
+
+     個別再生中も操作行（⏮ 前／⏭ 次／■ 停止）は出ているが、
+     前・次は押したときだけ曲を変える、手動の操作（→ playAdjacentSingleTrack）
+     曲が終わったからといって、自動で次の曲へは進めない
+     （続けて聴きたいときは「▶ 全曲再生」「🔀 シャッフル再生」を使う）
+     曲の選択が無くなるので、操作行も画面から消える */
   playingTrackId.value = null;
   isPlaying.value = false;
 }
@@ -983,8 +1035,14 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
 /* 鳴っている曲を完全に止める（次はまた最初から鳴るようにする）
 
    音を止めるだけでなく、「再生中」の表示や再生バーも止まった状態に戻す
+   （playingTrackId が null になるので、現在曲の表示・再生バー・操作行も、自動で画面から消える）
    使うのは、このページを見たまま止めるとき
-   ・「■ 全曲再生を停止」を押したとき
+   ・操作行の「■ 停止」を押したとき
+     個別再生・全曲再生・シャッフル再生のどれでも、この1つの関数を使う
+     （文字は「■ 停止」「■ 全曲再生を停止」「■ シャッフル再生を停止」と変わるが、やることは同じ）
+     個別再生のときに、全曲再生の覚えごと（playlistTracks など）まで戻しても困らない
+     （全曲再生中でなければ使われず、次に全曲再生を始めるときは作り直すため）
+     なので、個別再生用の停止の関数は、わざわざ別に作っていない
    ・このページから離れて、画面が消えたあとの後片付け（onUnmounted）
 
    ※ ページを移る「直前」には使わない
@@ -1015,7 +1073,7 @@ function stopSoundtrack() {
      こうしておくと、次に「▶ 全曲再生」「🔀 シャッフル再生」を押したときは、
      かならず曲順から作り直される（前回の曲順が残らない）
 
-     ※ ここを通るのは「■ 全曲再生を停止」と、ページを離れたあとの
+     ※ ここを通るのは操作行の「■ 停止」と、ページを離れたあとの
        後片づけ（onUnmounted）だけ
        ページを移る直前の stopAudioForNavigation() では、
        表示にかかわるこれらの覚えごとは いっさいさわらない */
@@ -1026,7 +1084,14 @@ function stopSoundtrack() {
   // 再生バーも先頭へ戻しておく
   currentTime.value = 0;
 
-  /* 「■ 全曲再生を停止」で消えたボタンの代わりに、「▶ 全曲再生」へフォーカスを移す
+  /* 「■ 停止」を押すと、操作行（前／次／停止）ごと画面から消えるので、
+     消えたボタンの代わりに「▶ 全曲再生」へフォーカスを移す（個別再生の停止でも同じ）
+
+     ・移すのは、どこにもフォーカスが無くなったときだけ（→ focusAfterPlaylistChange）
+       キーボードで「■ 停止」を押したときは、押したボタンが消えてフォーカスが無くなるので、ここで戻す
+     ・マウス・タッチで押したときも ここを通るが、ブラウザは直前の操作がマウス・タッチなら、
+       プログラムで移したフォーカスに :focus-visible の枠をふつう出さない
+       （キーボードで押したときだけ、どこへ移ったかが枠で分かる。全曲再生の停止と同じ考えかた）
      ※ ページから離れるときの後片付け（onUnmounted）でもここを通るが、
        そのときボタンはもう無い（ref は null）ので、何も起きないだけ */
   focusAfterPlaylistChange(playAllButtonRef);
@@ -1041,7 +1106,7 @@ let isLeavingPage = false;
    上の stopSoundtrack() との違いは、画面の表示にさわるかどうか
 
    ・stopSoundtrack()        … 音を止めて、画面の表示も止まった状態に戻す
-                               （「■ 全曲再生を停止」を押したときなど、
+                               （「■ 停止」を押したときなど、
                                  このページを見たまま止めるとき用）
    ・stopAudioForNavigation() … 音を止めるだけ。表示はいっさいさわらない
                                （タイトル画面へ移るときなど、
@@ -1205,8 +1270,8 @@ function shuffleTracks(list: SoundtrackTrack[]) {
    曲順を受け取ったあとの
    「止める → 曲順を入れる → 先頭の曲を鳴らす」は、まったく同じなので、
    ここ1か所にまとめてある
-   （曲が終わったら次へ、⏭ 次のトラックへ、1周したら終わり、も
-     playNextPlaylistTrack / finishPlaylist を そのまま共通で使う）
+   （曲が終わったら次へ、⏭ 次のトラックへ、⏮ 前のトラックへ、1周したら終わり、も
+     playNextPlaylistTrack / playPreviousPlaylistTrack / finishPlaylist を そのまま共通で使う）
 
    orderedTracks … 今回の1周ぶんの曲順（かならず tracks のコピー）
    shuffled      … その曲順がシャッフルで作ったものかどうか（案内の出し分けに使う）
@@ -1241,10 +1306,11 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 
   /* 曲の一覧へ入るときの「どのボタンから入ったか」の覚えは、いったん忘れる
 
-     ここから上のボタンが3段（ツールバー → スターター → アクション）になり、
-     一覧へ入れるボタンが増えるため
+     ここから上のボタンが3段（ツールバー → スターター → 操作行）になり、
+     一覧へ入れるボタンが変わるため
      前回の「▶ 全曲再生」を覚えたままだと、一覧から↑で戻るときに、
-     いま出ている下段（⏭ 次のトラックへ／■ 停止）を飛びこしてしまう */
+     いま出ている操作行（⏮ 前／⏭ 次／■ 停止）を飛びこしてしまう
+     （個別再生の途中から始めたときも、ここで忘れて「⏭ 次のトラックへ」へ帰すようにそろえる） */
   lastOutsideButton = null;
 
   const firstTrack = playlistTracks.value[playlistIndex.value];
@@ -1273,10 +1339,10 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 
   /* 再生を始めても、フォーカスは動かさない（押した「▶ 全曲再生／🔀 シャッフル再生」に残す）
 
-     再生を始めると「⏭ 次のトラックへ」「■ 停止」が新しく出てくるが、
-     ここで勝手に下段へ飛ばすと、ユーザーが自分で↓を押す前に操作位置が動いてしまう
-     いまいる列（左＝全曲再生／右＝シャッフル）から、
-     ユーザーが↓を押したときにだけ、同じ列の下段（次へ／停止）へ移る */
+     再生を始めると操作行（⏮ 前／⏭ 次／■ 停止）が出てくるが（個別再生の途中なら、もう出ている）、
+     ここで勝手に操作行へ飛ばすと、ユーザーが自分で↓を押す前に操作位置が動いてしまう
+     ユーザーが↓を押したときにだけ、真下の操作行へ移る
+     （▶ 全曲再生 → ⏭ 次のトラックへ／🔀 シャッフル再生 → ■ 停止） */
 }
 
 /* 「▶ 全曲再生」を押したとき
@@ -1364,17 +1430,22 @@ function finishPlaylist() {
 
    この関数は2つの場面から呼ばれる（次の曲へ進む中身は、ここ1か所だけ）
    ① 曲が最後まで流れきったとき      … handleTrackEnded() から
-   ② 「⏭ 次のトラックへ」を押したとき … 画面のボタンから
+   ② 「⏭ 次のトラックへ」を押したとき … 操作行のボタンから（playNextTrack() が、全曲再生中だけ呼ぶ）
 
    どちらの場合も、やることは同じ
    「playlistIndex を1つだけ進めて、その曲を先頭から鳴らす」
 
    ※ playlistTracks（今回の曲順）は作りなおさない
-     「▶ 全曲再生」を押したときに作った曲順を、最後までそのまま使う
+     「▶ 全曲再生」「🔀 シャッフル再生」を押したときに作った曲順を、最後までそのまま使う
 
    1周ぶんを鳴らし終えたあとは、リピートの設定で行き先が変わる
    ・🔁 リピート 全曲 … 曲順の先頭（＝開始曲）へ戻って、もう1周する
    ・それ以外         … そこで全曲再生を終わりにする
+   （最後の曲で「⏭ 次のトラックへ」を押したときも同じ。「前」とちがい、ここは回りこませない）
+
+   ※ 個別再生のときの「⏭ 次のトラックへ」は、この関数を通らない
+     この関数は playlistTracks / playlistIndex（全曲再生の曲順）を前提にしているため
+     個別再生の前後移動は、画面の一覧の順番（tracks）でたどる playAdjacentSingleTrack() が受け持つ
 */
 function playNextPlaylistTrack() {
   /* 全曲再生中でなければ、何もしない
@@ -1399,7 +1470,60 @@ function playNextPlaylistTrack() {
      最後の曲だったときは、全曲リピート中なので先頭（0）へ回りこむ */
   const nextIndex = isLastTrack ? 0 : playlistIndex.value + 1;
 
-  /* サウンドOFFのときに「⏭ 次のトラックへ」を押されたら、ONへ戻してから鳴らす
+  // その曲を先頭から鳴らす（「⏮ 前のトラックへ」と同じ切りかえなので、playPlaylistTrackAt にまとめてある）
+  playPlaylistTrackAt(nextIndex);
+}
+
+/* 全曲再生中に、1つ前の曲へ戻る（「⏮ 前のトラックへ」を押したとき）
+
+   ここへ来るのは、ボタンを押したときだけ（playPreviousTrack() が、全曲再生中だけ呼ぶ）
+   曲が自然に終わったときに、前へ戻ることはない（自然に進むのは playNextPlaylistTrack だけ）
+
+   ■ 戻る先は、今回の曲順（playlistTracks）の1つ前
+     画面の一覧の順番（tracks）ではなく、「▶ 全曲再生」「🔀 シャッフル再生」を押したときに作った曲順を使う
+     たとえばシャッフルで 04 → 01 → 07 → 03 → … という順番になっていたら、
+     07 で「前」→ 01、07 で「次」→ 03
+     （通常の全曲再生なら、開始曲から並べた曲順の1つ前）
+
+   ■ くじは引きなおさない
+     playlistTracks は作りなおさず、playlistIndex を1つ戻すだけ
+     押すたびに新しくシャッフルすると、さっき聴いていた曲へ戻れなくなり、
+     1周のあいだに同じ曲が2回鳴ったり、鳴らない曲が出たりしてしまうため
+
+   ■ 曲順の先頭（playlistIndex が 0）で押したときは、曲順の最後へ回りこむ
+     ユーザーがはっきり「前へ」と押した手動の操作なので、行き止まりにはしない
+     （リピートの設定には関係なく回りこむ。「次」で最後の曲を押したときの動きは、今までどおり変えていない）
+
+   ■ 全曲再生モードのまま
+     isPlaylistPlaying・isShufflePlaying は変えない（案内の「N / 曲数」も1つ戻る）
+*/
+function playPreviousPlaylistTrack() {
+  // 全曲再生中でなければ、何もしない（個別再生の前へは playAdjacentSingleTrack の受け持ち）
+  if (!isPlaylistPlaying.value) {
+    return;
+  }
+
+  // 曲順が空なら、戻る先が無いので何もしない
+  if (playlistTracks.value.length === 0) {
+    return;
+  }
+
+  // 1つ前の番号（0 より前になったら、曲順の最後へ回りこむ）
+  const previousIndex = playlistIndex.value - 1 < 0 ? playlistTracks.value.length - 1 : playlistIndex.value - 1;
+
+  playPlaylistTrackAt(previousIndex);
+}
+
+/* 全曲再生の曲順（playlistTracks）の「index 番目」の曲へ切りかえて、先頭から鳴らす
+
+   「⏭ 次のトラックへ」（→ playNextPlaylistTrack）と
+   「⏮ 前のトラックへ」（→ playPreviousPlaylistTrack）は、行き先の番号の決めかただけがちがい、
+   その曲へ切りかえるところは まったく同じなので、ここ1か所にまとめてある
+
+   index … playlistTracks の何番目か（0はじまり。呼ぶ側で、はみ出さない番号にしてから渡す）
+*/
+function playPlaylistTrackAt(index: number) {
+  /* サウンドOFFのときに「前」「次」を押されたら、ONへ戻してから鳴らす
      （曲が最後まで流れてここへ来たときは、もうONなので何も起きない） */
   ensureSoundEnabled();
 
@@ -1412,14 +1536,14 @@ function playNextPlaylistTrack() {
     return;
   }
 
-  /* 先に「何曲目か」を1つ進める
-     こうしておくと、「2 / 7」の表示のまま音だけ次の曲になる、ということが起きない
-     曲名やトラック番号の表示も、この番号を見ているので一緒に切りかわる */
-  playlistIndex.value = nextIndex;
+  /* 先に「何曲目か」を入れかえる
+     こうしておくと、「2 / 7」の表示のまま音だけ別の曲になる、ということが起きない
+     （「N / 曲数」の表示は、この番号を見ている） */
+  playlistIndex.value = index;
 
-  const nextTrack = playlistTracks.value[nextIndex];
+  const track = playlistTracks.value[index];
 
-  /* 次の曲を先頭から鳴らすので、再生バーの表示もいったん最初の状態に戻す
+  /* 行き先の曲を先頭から鳴らすので、再生バーの表示もいったん最初の状態に戻す
 
      曲の長さ（duration）は、新しいmp3を読み込むまで分からない
      前の曲の長さが残っているとバーの目盛りがずれるので 0 に戻し、
@@ -1438,21 +1562,22 @@ function playNextPlaylistTrack() {
     // 何もしない
   }
 
-  /* 鳴らすファイルを次の曲へ差しかえる
+  /* 鳴らすファイルを行き先の曲へ差しかえる
 
      Audioは1つだけを使いまわしているので、
      「止める → 差しかえる → 鳴らす」の順番を守れば、
      2曲が同時に鳴ることは仕組みのうえで起こらない（連打しても同じ） */
   try {
-    audio.src = nextTrack.src;
-    audio.volume = getTrackVolume(nextTrack);
-    audio.currentTime = 0; // 次の曲も先頭から
+    audio.src = track.src;
+    audio.volume = getTrackVolume(track);
+    audio.currentTime = 0; // 行き先の曲も先頭から
   } catch {
     // 何もしない
   }
 
-  // 次の曲を鳴らす（一時停止中に押したときも、ここで自動的に鳴りはじめる）
-  playTrackAudio(audio, nextTrack);
+  /* 行き先の曲を鳴らす（一時停止中に押したときも、ここで自動的に鳴りはじめる）
+     1曲リピートの設定も playTrackAudio の中で入るので、移った曲がくりかえしになる */
+  playTrackAudio(audio, track);
 }
 
 /* 「▶ 再生」「⏸ 一時停止」を押したときの処理
@@ -1469,6 +1594,7 @@ function playNextPlaylistTrack() {
       いまの曲を完全に止めてから、新しい曲を先頭から鳴らす
       （2曲が重ならないように、かならずこの順番で行う）
       このときは全曲再生モードから抜けて、1曲だけの再生としてあつかう
+      （中身は playSingleTrackFromStart。個別再生の前後移動でも、同じものを使う）
 */
 function toggleTrack(track: SoundtrackTrack) {
   /* サウンドOFFのときに押されたら、ONへ戻してから鳴らす
@@ -1502,9 +1628,35 @@ function toggleTrack(track: SoundtrackTrack) {
     return;
   }
 
-  // ② ちがう曲を押したとき
+  /* ② ちがう曲を押したとき
 
-  /* ちがう曲の「▶ 再生」を押したら、全曲再生モードからは抜ける
+     いまの曲を止めて、押した曲を先頭から、1曲だけの再生として鳴らす
+     個別再生の「⏮ 前のトラックへ」「⏭ 次のトラックへ」と同じ切りかえなので、
+     中身は playSingleTrackFromStart() の1か所にまとめてある */
+  playSingleTrackFromStart(audio, track);
+}
+
+/* 1曲だけの再生として、ちがう曲へ切りかえて、先頭から鳴らす
+
+   ここを通るのは、つぎの2つのとき（どちらも「いまとはちがう曲へ切りかえる」操作）
+   ・曲の一覧で、ちがう曲の「▶ 再生」を押したとき                … toggleTrack() から
+   ・個別再生中に「⏮ 前のトラックへ」「⏭ 次のトラックへ」を押したとき … playAdjacentSingleTrack() から
+
+   やることは、いつも同じ順番
+   ① 全曲再生モードから抜ける（もともと個別再生なら、false のまま変わらない）
+   ② いまの曲を完全に止める
+   ③ 再生バーの表示を最初に戻す
+   ④ 新しい曲を差しかえて、先頭から鳴らす
+
+   Audioは1つだけを使いまわしているので、「止める → 差しかえる → 鳴らす」の順番を守れば、
+   2曲が重なって鳴ることは起こらない（連打しても同じ）
+
+   ※ サウンドON/OFFの確認（ensureSoundEnabled）と、Audioの用意（getSoundtrackAudio）は、
+     呼ぶ側で先にすませて、そのAudioを渡してもらう
+   ※ 全曲再生の曲順（playlistTracks / playlistIndex）には、いっさいさわらない
+*/
+function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrack) {
+  /* ① 全曲再生モードからは抜ける
      （ここからは1曲だけの再生として扱うので、曲が終わっても次へは進まない）
 
      シャッフル再生の途中でも同じで、押した1曲だけの再生に切りかわる
@@ -1517,7 +1669,7 @@ function toggleTrack(track: SoundtrackTrack) {
   isPlaylistPlaying.value = false;
   isShufflePlaying.value = false;
 
-  // まず、いまの曲を完全に止める
+  // ② まず、いまの曲を完全に止める
   try {
     audio.pause();
     audio.currentTime = 0;
@@ -1525,7 +1677,7 @@ function toggleTrack(track: SoundtrackTrack) {
     // 何もしない
   }
 
-  /* 再生バーの表示も、いったん最初の状態に戻す
+  /* ③ 再生バーの表示も、いったん最初の状態に戻す
 
      曲の長さ（duration）は、新しいmp3を読み込むまで分からない
      前の曲の長さが残っていると、バーの目盛りがずれてしまうので 0 に戻し、
@@ -1533,7 +1685,7 @@ function toggleTrack(track: SoundtrackTrack) {
   currentTime.value = 0;
   duration.value = 0;
 
-  // 新しい曲を設定する
+  // ④ 新しい曲を設定する
   try {
     audio.src = track.src;
     audio.volume = getTrackVolume(track);
@@ -1542,8 +1694,140 @@ function toggleTrack(track: SoundtrackTrack) {
     // 何もしない
   }
 
-  // 新しい曲を鳴らす
+  /* 新しい曲を鳴らす
+     （リピートの設定もここで入るので、1曲リピート中なら、新しい曲がくりかえしになる） */
   playTrackAudio(audio, track);
+}
+
+/* ============================================================
+   個別再生中の「⏮ 前のトラックへ」「⏭ 次のトラックへ」（画面の一覧で、となりの曲へ）
+
+   1曲だけ聴いているとき（個別再生中・個別一時停止中）に、操作行の前・次を押すとここへ来る
+   ボタンは全曲再生と同じものだが、ボタンから直接ではなく、
+   playPreviousTrack() / playNextTrack() が「いまは個別再生」と見分けてから呼ぶ
+
+   ■ 曲順は、画面の一覧の順番（tracks）
+     01 02 03 04 05 06 07 と並んでいれば、
+     03で「次」→ 04、03で「前」→ 02
+
+   ■ はしでは回りこむ
+     01で「前」→ いちばん最後の曲
+     いちばん最後の曲で「次」→ 01
+     （サントラを続けて聴きやすいように。曲数は tracks.length で数えるので、曲が増えても直さなくてよい）
+
+   ■ 全曲再生用の playNextPlaylistTrack() / playPreviousPlaylistTrack() を使わない理由
+     あちらは「今回の1周ぶんの曲順（playlistTracks）の、何曲目か（playlistIndex）」で行き先を決める
+     個別再生のときは、その曲順が無い（または、前の全曲再生の残りが入っている）ので、
+     流用すると、画面の並びとちがう曲へ飛んだり、「1周が終わった」として止まったりしてしまう
+     そのため、画面の一覧の順番（tracks）だけを見る、この関数に分けてある
+
+   ■ 押しても、全曲再生モードには入らない
+     isPlaylistPlaying・isShufflePlaying は false のまま
+     playlistTracks・playlistIndex にも、いっさいさわらない
+     あくまで「1曲だけ聴いている状態のまま、となりの曲へ移る」操作
+
+   ■ 移った曲は、かならず先頭から鳴る
+     いまの曲をどこまで聴いていても、一時停止中でも、となりの曲を 0秒から鳴らしはじめる
+     サウンドOFF中に押したときは、「▶ 再生」と同じく、ONへ戻してから鳴らす（→ ensureSoundEnabled）
+
+   ■ リピートとの関係
+     1曲リピート中でも、押せば となりの曲へ移る（移った曲が、また1曲リピートになる）
+     全曲リピートの設定でも、全曲再生の曲順には入らず、ふつうに となりへ移るだけ
+
+   ■ 手で押したときだけ動く
+     個別再生の曲が最後まで流れたときは、今までどおり そこで止まる（→ handleTrackEnded）
+     このボタンがあるからといって、自動で次の曲へは進めない
+
+   ※ 固定エリアの現在曲の表示は、playingTrackId が変わるので、自動で新しい曲になる（→ playingTrack）
+   ※ 曲の一覧は、自動でスクロールしない（見ている場所を勝手に動かさないため）
+     新しい曲を一覧で見たいときは「再生中の曲を見る」を押す
+   ※ フォーカスも動かさない
+     曲を選んでいるあいだ、操作行は出たままなので、押したボタンにそのまま残る
+   ============================================================ */
+function playAdjacentSingleTrack(direction: 'previous' | 'next') {
+  // 全曲再生中は、全曲再生の曲順で前後する（→ playPreviousPlaylistTrack / playNextPlaylistTrack）
+  if (isPlaylistPlaying.value) {
+    return;
+  }
+
+  // いまの曲が、一覧（tracks）の何番目かを探す（どの曲も選んでいなければ、何もしない）
+  const currentIndex = tracks.findIndex((track) => track.id === playingTrackId.value);
+
+  if (currentIndex < 0) {
+    return;
+  }
+
+  /* となりの曲の番号を計算する（はしでは回りこむ）
+
+     次なら +1、前なら -1
+     tracks.length を足してから「わり算のあまり（%）」を出すので、はしで回りこむ
+     （7曲のときの例）
+     ・03で次         … (2 + 1 + 7) % 7 = 3 → 04
+     ・最後の曲で次   … (6 + 1 + 7) % 7 = 0 → 01
+     ・01で前         … (0 - 1 + 7) % 7 = 6 → 07
+     ※ 「7」はじかに書かず、tracks.length を使う（曲が増えても、そのまま動く） */
+  const step = direction === 'next' ? 1 : -1;
+  const adjacentIndex = (currentIndex + step + tracks.length) % tracks.length;
+  const adjacentTrack = tracks[adjacentIndex];
+
+  /* サウンドOFFのときに押されたら、ONへ戻してから鳴らす
+     （「▶ 再生」を押したときと同じ。→ ensureSoundEnabled） */
+  ensureSoundEnabled();
+
+  const audio = getSoundtrackAudio();
+
+  if (!audio) {
+    return;
+  }
+
+  // 一時停止中でも、となりの曲を先頭から鳴らしはじめる
+  playSingleTrackFromStart(audio, adjacentTrack);
+}
+
+/* ============================================================
+   操作行の「⏮ 前のトラックへ」「⏭ 次のトラックへ」を押したとき
+
+   ■ なぜ、3つの聴きかたでボタンをそろえたのか
+     個別再生・全曲再生・シャッフル再生で出てくるボタンがちがうと、
+     聴きかたを変えるたびに「いまはどのボタンがあったっけ？」と探すことになる
+     ふつうの音楽プレイヤーと同じく、どの聴きかたでも
+     [ ⏮ 前 ] [ ⏭ 次 ] [ ■ 停止 ] が同じ場所にあるほうが、迷わず使える
+
+   ■ ボタンは1つずつ。押したときの中身だけを、聴きかたで呼び分ける
+     ・全曲再生・シャッフル再生 … 今回の曲順（playlistTracks）で前後する
+         前 → playPreviousPlaylistTrack()（曲順の先頭で押すと、曲順の最後へ回りこむ）
+         次 → playNextPlaylistTrack()（最後の曲で押すと今までどおり終わる。全曲リピートなら先頭へ）
+     ・個別再生 … 画面の一覧の順番（tracks）で、となりの曲へ（はしでは回りこむ）
+         前・次 → playAdjacentSingleTrack()
+     全曲再生かどうかは isPlaylistPlaying で見分ける
+     （シャッフル再生も isPlaylistPlaying が true なので、全曲再生と同じほうへ行く）
+
+   ■ 曲が自然に終わったときは、ここを通らない
+     handleTrackEnded() は、全曲再生中だけ playNextPlaylistTrack() を直接呼ぶ
+     ここを通すと、個別再生でも自動で次の曲へ進んでしまうため
+
+   ※ どちらの聴きかたでも、移った曲は先頭から鳴り、一時停止中に押しても鳴りはじめる
+     サウンドOFF中なら、ONへ戻してから鳴らす（→ ensureSoundEnabled）
+   ※ 曲の一覧は自動でスクロールしない。フォーカスも動かさない（押したボタンに残る）
+   ============================================================ */
+function playPreviousTrack() {
+  if (isPlaylistPlaying.value) {
+    playPreviousPlaylistTrack();
+
+    return;
+  }
+
+  playAdjacentSingleTrack('previous');
+}
+
+function playNextTrack() {
+  if (isPlaylistPlaying.value) {
+    playNextPlaylistTrack();
+
+    return;
+  }
+
+  playAdjacentSingleTrack('next');
 }
 
 /* 再生バーを動かして、聴く場所を変える（シーク）
@@ -1708,8 +1992,7 @@ function scrollToPlayingTrack() {
 
   /* prefers-reduced-motion（動きを減らす設定）のときは、なめらかな動きをやめてすぐ移動する
      このページのCSSも、同じ設定のときにアニメーションを止めている（→ style の @media） */
-  const prefersReducedMotion =
-    import.meta.client && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const prefersReducedMotion = import.meta.client && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   card.scrollIntoView({
     behavior: prefersReducedMotion ? 'auto' : 'smooth',
@@ -1908,17 +2191,18 @@ function findEdgeTarget(key: string, cards: HTMLElement[], buttonClass: string) 
 
      ▶ 全曲再生 → 01 ▶ 再生 → 02 ▶ 再生 → … → 最後の曲 ▶ 再生 → ▶ 全曲再生
 
-   全曲再生中に「⏭ 次のトラックへ」から入ったとき
+   再生中に「⏭ 次のトラックへ」から入ったとき（個別再生・全曲再生・シャッフル再生、どれでも同じ）
 
      ⏭ 次のトラックへ → 01 ▶ 再生 → 02 ▶ 再生 → … → 最後の曲 ▶ 再生 → ⏭ 次のトラックへ
 
    帰り先は「出てきたボタン」なので、
-   「■ 全曲再生を停止」から↓で入ったときは、↑で「■ 全曲再生を停止」へ帰る
+   「■ 停止」から↓で入ったときは↑で「■ 停止」へ、
+   「⏮ 前のトラックへ」から入ったときは↑で「⏮ 前のトラックへ」へ帰る
 
    Tabで一覧に入ったときなど、出てきたボタンを覚えていないときは、
-   全曲再生中なら「⏭ 次のトラックへ」へ、止まっているなら「▶ 全曲再生」へ帰る
-   （全曲再生中に「▶ 全曲再生」へ帰してしまうと、
-     あいだの「⏭ 次のトラックへ」「■ 全曲再生を停止」を飛びこしてしまうため
+   再生中なら「⏭ 次のトラックへ」へ、止まっているなら「▶ 全曲再生」へ帰る
+   （再生中に「▶ 全曲再生」へ帰してしまうと、
+     あいだの操作行（前／次／停止）を飛びこしてしまうため
      → findOutsidePlayButton）
 
    いちばん使う「聴く」ための列なので、
@@ -1955,36 +2239,44 @@ function findVerticalTarget(key: string, cards: HTMLElement[], currentIndex: num
 
 /* 曲の一覧の「上にある操作ボタン」をさがす（↑↓で一覧から戻るときの行き先）
 
-   ① 直前に一覧へ入ったときのボタンが、まだ画面にあるなら、そこへ帰る
-      「■ 全曲再生を停止」から入ったなら「■ 全曲再生を停止」へ、
-      「⏭ 次のトラックへ」から入ったなら「⏭ 次のトラックへ」へ
+   ① 直前に一覧へ入ったときのボタンが、まだ使えるなら、そこへ帰る
+      「⏮ 前」から入ったなら「⏮ 前」へ、「⏭ 次」なら「⏭ 次」へ、「■ 停止」なら「■ 停止」へ
       （isConnected … その要素が、まだ画面（DOM）にあるかどうか）
 
-   ② 覚えが無いとき（Tabで一覧に来たときなど）や、
-      覚えていたボタンがもう消えているときの行き先は、
-      いま全曲再生中かどうかで変える
+      ただし、スターター（▶ 全曲再生／🔀 シャッフル）を覚えていて、いま操作行が出ているときは使わない
+      操作行が出ているあいだは、スターターから↓で一覧へは入れない（操作行へ降りる）ので、
+      その覚えは「止まっていたとき」の古いもの
+      （止まっているときに 全曲再生↓ で一覧へ入り、そこで曲の「▶ 再生」を押した、など）
+      そのまま帰すと、あいだの操作行を飛びこしてしまう
 
-      全曲再生中 … 一覧のすぐ上にある「⏭ 次のトラックへ」へ
-                   （「▶ 全曲再生」は再生中も出たままなので、
-                     そちらを先に選ぶと、あいだの下段を飛びこして
-                     いちばん上まで戻ってしまう）
-      止まっているとき … いつも出ている「▶ 全曲再生」へ
+   ② 覚えが無いとき（Tabで一覧に来たときなど）や、覚えを使えないときの行き先は、
+      操作行が出ているかどうかで変える
+
+      再生中（操作行あり） … 一覧のすぐ上、「▶ 全曲再生」の真下にある「⏭ 次のトラックへ」へ
+                              （「▶ 全曲再生」は再生中も出たままなので、
+                                そちらを先に選ぶと、あいだの操作行を飛びこして
+                                いちばん上まで戻ってしまう）
+                              個別再生・全曲再生・シャッフル再生、一時停止中、どれでも同じ
+      止まっているとき     … いつも出ている「▶ 全曲再生」へ
 
    ※ null のときに無理にフォーカスを当てないよう、呼ぶ側で確かめている
 */
 function findOutsidePlayButton() {
   if (lastOutsideButton) {
-    if (lastOutsideButton.isConnected) {
+    const isStarterButton = lastOutsideButton === playAllButtonRef.value || lastOutsideButton === shuffleButtonRef.value;
+    const isStaleStarter = isStarterButton && hasPlaybackControls.value;
+
+    if (lastOutsideButton.isConnected && !isStaleStarter) {
       return lastOutsideButton;
     }
 
-    // 画面から消えたボタン（停止して消えた、など）は、もう覚えておかない
+    // 画面から消えたボタン（停止して消えた、など）や、古くなったスターターの覚えは、もう使わない
     lastOutsideButton = null;
   }
 
-  /* 全曲再生中は、下段（すぐ上のならび）を先に選ぶ
+  /* 再生中は、操作行（すぐ上のならび）の「⏭ 次のトラックへ」を先に選ぶ
      まだ画面に出ていない切りかわりの一瞬だけは、「▶ 全曲再生」へ逃がす */
-  if (isPlaylistPlaying.value) {
+  if (hasPlaybackControls.value) {
     return nextTrackButtonRef.value ?? playAllButtonRef.value;
   }
 
@@ -2015,51 +2307,55 @@ function findListPlayButton(key: string) {
   return key === 'ArrowDown' ? playButtons[0] : playButtons[playButtons.length - 1];
 }
 
-/* スターター・アクションの2つのならびで ↑↓ を押したときの行き先
+/* スターター・操作行の2つのならびで ↑↓ を押したときの行き先
 
-   画面の「左列・右列」をそのまま縦にたどる（左は左、右は右）
-   currentIndex … いま選んでいるボタンが、そのならびの何番目か（0＝左、1＝右）
+   画面の位置どおりに、上下の段をたどる
+   button … いま選んでいるボタン（どの ref のボタンかで、左列か右列かを見分ける）
 
    ■ スターター（.st-playall__starters）… ▶ 全曲再生(左) / 🔀 シャッフル再生(右)
 
      ↑ … 同じ列のツールバーへ（左＝← 戻る／右＝🔊 サウンド）
      ↓ …
         止まっているとき … そのまま曲の一覧へ（01の「▶ 再生」）
-        全曲再生中       … 同じ列のアクションへ（左＝⏭ 次のトラックへ／右＝■ 停止）
+        再生中           … 真下の操作行へ（▶ 全曲再生＝⏭ 次のトラックへ／🔀 シャッフル＝■ 停止）
+                           個別再生・全曲再生・シャッフル再生、一時停止中、どれでも同じ
+                           （「⏮ 前のトラックへ」へは、「⏭ 次のトラックへ」から←で入る）
 
-   ■ アクション（.st-playall__actions）… ⏭ 次のトラックへ(左) / ■ 停止(右)
+   ■ 操作行（.st-playall__actions）… ⏮ 前のトラックへ / ⏭ 次のトラックへ / ■ 停止
 
-     ↑ … 同じ列のスターターへ（左＝▶ 全曲再生／右＝🔀 シャッフル再生）
-     ↓ … 曲の一覧へ（01の「▶ 再生」）
+     ↑ … 前・次は左の「▶ 全曲再生」へ、停止は右の「🔀 シャッフル再生」へ
+          （スターターから↓で降りてきた道を、そのまま戻れる）
+     ↓ … 曲の一覧へ（01の「▶ 再生」。3つのどれからでも）
 
-   左右のどちらの列でも、曲の一覧へは01の「▶ 再生」に入る
-   （曲の一覧は「▶ 再生」の1列だけなので、そこは左右の区別がない）
-   通常の全曲再生とシャッフル再生は、どちらも isPlaylistPlaying が true になるので、
-   ここでは その1つだけを見ている（2つの始めかたで、キーボードの動きは同じ）
+   曲の一覧は「▶ 再生」の1列だけなので、一覧へ入るときは、どこからでも01の「▶ 再生」に入る
+   操作行が出ているかどうかは hasPlaybackControls で見る
+   （テンプレートの v-if と同じものを見ているので、画面に出ているならびと食いちがわない）
 */
-function findPlayallVerticalTarget(key: string, row: HTMLElement, currentIndex: number) {
+function findPlayallVerticalTarget(key: string, row: HTMLElement, button: HTMLElement) {
   const isStarterRow = row.classList.contains('st-playall__starters');
 
   if (isStarterRow) {
+    const isPlayAll = button === playAllButtonRef.value;
+
     // ↑ … 同じ列のツールバー（左＝戻る／右＝サウンド）
     if (key === 'ArrowUp') {
-      return currentIndex === 0 ? backButtonRef.value : soundToggleButtonRef.value;
+      return isPlayAll ? backButtonRef.value : soundToggleButtonRef.value;
     }
 
-    // ↓（全曲再生中）… 同じ列のアクション（左＝次のトラックへ／右＝停止）
-    if (isPlaylistPlaying.value) {
-      return currentIndex === 0 ? nextTrackButtonRef.value : stopPlaylistButtonRef.value;
+    // ↓（再生中）… 真下の操作行（全曲再生＝次のトラックへ／シャッフル＝停止）
+    if (hasPlaybackControls.value) {
+      return isPlayAll ? nextTrackButtonRef.value : stopPlaybackButtonRef.value;
     }
 
     // ↓（止まっているとき）… 曲の一覧の01「▶ 再生」へ
     return findListPlayButton(key);
   }
 
-  // ここからはアクションのならび
+  // ここからは操作行（前／次／停止）
 
-  // ↑ … 同じ列のスターター（左＝全曲再生／右＝シャッフル）
+  // ↑ … 停止だけは右の「🔀 シャッフル再生」へ、前・次は左の「▶ 全曲再生」へ
   if (key === 'ArrowUp') {
-    return currentIndex === 0 ? playAllButtonRef.value : shuffleButtonRef.value;
+    return button === stopPlaybackButtonRef.value ? shuffleButtonRef.value : playAllButtonRef.value;
   }
 
   // ↓ … 曲の一覧の01「▶ 再生」へ
@@ -2123,19 +2419,20 @@ function handleToolbarKeydown(event: KeyboardEvent) {
   nextButton.focus();
 }
 
-/* スターター・アクションの「ボタンのならび」のキーボード操作
+/* スターター・操作行の「ボタンのならび」のキーボード操作
 
    一覧の上には、ボタンのならびが2つある（どちらも同じこの関数で動かす）
 
      ふだんから出ている（.st-playall__starters）
        [ ▶ 全曲再生 ]  [ 🔀 シャッフル再生 ]
 
-     全曲再生中だけ出る（.st-playall__actions）
-       [ ⏭ 次のトラックへ ]  [ ■ 停止 ]
+     再生中だけ出る操作行（.st-playall__actions）… 個別再生・全曲再生・シャッフル再生で共通
+       [ ⏮ 前のトラックへ ]  [ ⏭ 次のトラックへ ]  [ ■ 停止 ]
 
-   ・← → … 同じならびの中で、となりの列のボタンへ移るだけ
+   ・← → … 同じならびの中で、となりのボタンへ移るだけ
             左端で←、右端で→、は移動しない（画面の位置どおり。回り込みはしない）
-   ・↑ ↓ … 上の段・下の段・曲の一覧のあいだを、同じ列（左は左・右は右）でたどる
+            ならびのボタンを数えて動くので、2つのならびでも3つのならびでも、同じ書きかたでよい
+   ・↑ ↓ … 上の段・下の段・曲の一覧のあいだをたどる
             行き先の決めかたは findPlayallVerticalTarget にまとめてある
             曲の一覧のはしから↑で戻るときは、出てきたボタンへ帰る
             （→ findVerticalTarget / findOutsidePlayButton。lastOutsideButton で覚える）
@@ -2172,7 +2469,7 @@ function handlePlayallButtonsKeydown(event: KeyboardEvent) {
       nextButton = buttons[targetIndex];
     }
   } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-    nextButton = findPlayallVerticalTarget(event.key, row, currentIndex);
+    nextButton = findPlayallVerticalTarget(event.key, row, buttons[currentIndex]);
   } else {
     return;
   }
@@ -2194,17 +2491,19 @@ function handlePlayallButtonsKeydown(event: KeyboardEvent) {
   nextButton.focus();
 }
 
-/* 全曲再生のボタンが増えたり減ったりしたあと、続きをキーボードで操作できるようにする
+/* 操作行（⏮ 前／⏭ 次／■ 停止）が消えたあと、続きをキーボードで操作できるようにする
 
-   全曲再生を始めると「⏭ 次のトラックへ」「■ 全曲再生を停止」が出て、
-   止めるとその2つは画面から消える
+   曲を鳴らしているあいだは操作行が出ていて、
+   止めると（「■ 停止」を押した・全曲再生が1周して終わった）、その3つは画面から消える
    選んでいたボタンが消えると、フォーカスはどこにも無い状態（body）になってしまい、
    キーボードだけで操作している人は、またTabで探しに行くことになる
    そこで、そのときに出ているボタンへフォーカスを移しておく
 
    ※ どこにもフォーカスが無いときだけ移す
      ユーザーがすでに別のボタンを選んでいるなら、そのじゃまをしない
-     （曲が最後まで流れて自然に終わったときなどは、こちらが勝手に奪わない） */
+     （曲が最後まで流れて自然に終わったときなどは、こちらが勝手に奪わない）
+   ※ 鳴らしはじめたときには使わない
+     押した「▶ 全曲再生」「🔀 シャッフル再生」などに、フォーカスをそのまま残す（→ beginPlaylist） */
 async function focusAfterPlaylistChange(button: Ref<HTMLButtonElement | null>) {
   // ボタンが入れかわるのを待ってから、フォーカスを当てる
   await nextTick();
@@ -2367,7 +2666,7 @@ onUnmounted(() => {
          画面に残る操作エリア（st-fixedArea）
 
          このページは、画面を上と下の2つに分けている
-         ・上（この箱）         … 戻る・サウンド・見出し・全曲再生・次へ・停止・リピート・音量
+         ・上（この箱）         … 戻る・サウンド・見出し・全曲再生・前へ・次へ・停止・リピート・音量
          ・下（st-trackScroll） … 曲の一覧。ここだけが上下にスクロールする
 
          曲をどこまで下へ見ていても、操作が画面から消えないように、
@@ -2470,10 +2769,15 @@ onUnmounted(() => {
                                （画面の曲一覧の順番は変わらない）
            （「🔁 リピート 全曲」のときは、止まらずに同じ順でもう1周する）
 
-           全曲再生中だけ、下に2つのボタンが出る
-           ・⏭ 次のトラックへ  … いまの曲を飛ばして、次の曲を先頭から鳴らす
-           ・■ 全曲再生を停止  … 全曲再生をやめる
-                                  （シャッフル再生中は「■ シャッフル再生を停止」に変わる）
+           曲を選んでいるあいだは、聴きかたに関係なく、下に3つのボタンが出る（操作行）
+           ・⏮ 前のトラックへ … 1つ前の曲を、先頭から鳴らす
+           ・⏭ 次のトラックへ … いまの曲を飛ばして、次の曲を先頭から鳴らす
+           ・■ 停止           … 再生をやめる
+                                （文字は「■ 停止」「■ 全曲再生を停止」「■ シャッフル再生を停止」と変わる）
+
+           前・次がたどる曲順は、聴きかたで変わる
+           ・個別再生         … 画面の一覧の順番（tracks）。はしでは回りこむ。全曲再生にはならない
+           ・全曲／シャッフル … 今回の1周の曲順（playlistTracks）。シャッフルの「前」も、作った順番を戻るだけ
            ============================================================ -->
       <section class="st-playall">
         <!-- 全曲を続けて鳴らす、2つの始めかた
@@ -2496,24 +2800,19 @@ onUnmounted(() => {
              ・← → … 全曲再生 ⇄ シャッフル（左端で←、右端で→、は動かない）
              ・↑   … 同じ列のツールバーへ（全曲再生→戻る／シャッフル→サウンド）
              ・↓   … 止まっているとき＝01の「▶ 再生」へ、
-                     全曲再生中＝同じ列のアクションへ（全曲再生→⏭ 次のトラックへ／シャッフル→■ 停止）
+                     再生中（個別・全曲・シャッフル）＝真下の操作行へ（全曲再生→⏭ 次のトラックへ／シャッフル→■ 停止）
              （このならびは曲の一覧の外にあるので、ここにも見張りを付けている
                くわしくは handlePlayallButtonsKeydown / findPlayallVerticalTarget） -->
         <div class="st-playall__starters" @keydown="handlePlayallButtonsKeydown">
-          <!-- ref … ページを開いたときと、全曲再生を止めたときに
+          <!-- ref … ページを開いたときと、「■ 停止」で止めたときに
                このボタンへフォーカスを当てるための目印 -->
           <button ref="playAllButtonRef" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
 
           <!-- ふつうのbutton要素なので、Tabで移動でき、Enter / Spaceで押せる
                aria-label … 「シャッフル」だけでは何が起きるか分かりにくいので、
                読み上げソフトには「全曲を鳴らす」ことまで伝える
-               ref … 全曲再生中に「■ 全曲再生を停止」から↑で戻ってくる先 -->
-          <button
-            ref="shuffleButtonRef"
-            type="button"
-            class="st-playall__button st-playall__button--shuffle"
-            aria-label="曲順をランダムに並べかえて全曲再生する"
-            @click="startShufflePlaylist">
+               ref … 再生中に「■ 停止」から↑で戻ってくる先 -->
+          <button ref="shuffleButtonRef" type="button" class="st-playall__button st-playall__button--shuffle" aria-label="曲順をランダムに並べかえて全曲再生する" @click="startShufflePlaylist">
             🔀 シャッフル再生
           </button>
         </div>
@@ -2522,7 +2821,9 @@ onUnmounted(() => {
              開始曲を使うのは「▶ 全曲再生」だけなので、そのことも書いておく -->
         <!-- 「▶ 全曲再生」はボタンの名前なので、途中で2行に割れないよう span で1つにまとめている -->
         <p v-if="!isPlaylistPlaying" class="st-playall__hint">
-          下の一覧で番号を押すと、<span class="st-playall__hintButton">「▶ 全曲再生」</span>を始める曲を選べます
+          下の一覧で番号を押すと、
+          <span class="st-playall__hintButton">「▶ 全曲再生」</span>
+          を始める曲を選べます
         </p>
 
         <!-- ============================================================
@@ -2564,33 +2865,50 @@ onUnmounted(() => {
           <button type="button" class="st-playall__see" @click="scrollToPlayingTrack">{{ scrollToTrackLabel }}</button>
         </p>
 
-        <!-- 全曲再生中だけ出す操作（⏭ 次のトラックへ ／ ■ 全曲再生を停止）
+        <!-- ============================================================
+             再生中の操作行（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 停止）
 
-             よく押す「⏭ 次のトラックへ」を先（PCでは左、スマホでは上）に置き、
-             幅も広くとって押しやすくしている
-             一時停止中でも押せて、そのときは次の曲が自動的に鳴りはじめる -->
-        <!-- @keydown … 画面の「左列・右列」をたどって動かす（左＝次のトラックへ／右＝停止）
-             ・← → … 次のトラックへ ⇄ 停止（左端で←、右端で→、は動かない）
-             ・↑   … 同じ列のスターターへ（次のトラックへ→▶ 全曲再生／停止→🔀 シャッフル再生）
-             ・↓   … 曲の一覧の01「▶ 再生」へ
-             （下の音量スライダーへは、矢印キーでは移らない）
-             上の「▶ 全曲再生／🔀 シャッフル再生」のならびと同じ関数を使っている
-             くわしくは handlePlayallButtonsKeydown / findPlayallVerticalTarget -->
-        <div v-if="isPlaylistPlaying" class="st-playall__actions" @keydown="handlePlayallButtonsKeydown">
-          <button
-            ref="nextTrackButtonRef"
-            type="button"
-            class="st-playall__button st-playall__button--next"
-            aria-label="現在の曲を飛ばして次のトラックを再生する"
-            @click="playNextPlaylistTrack">
+             ■ いつ出すか … hasPlaybackControls（曲を選んでいるあいだ）
+               個別再生・個別一時停止・全曲再生・シャッフル再生・サウンドOFFで止まっているとき、
+               どれでも同じ場所に、同じ3つのならびで出す（サウンドトラックプレイヤーとして操作をそろえる）
+               止まっているとき（どの曲も選んでいない）は出さない
+               ならびは この1つだけなので、同じ ref が2つのボタンに付くことはない
+
+             ■ 押したときの中身は、聴きかたで切りかわる
+               ・⏮ 前 / ⏭ 次 … playPreviousTrack / playNextTrack が呼び分ける
+                   個別再生         … 画面の一覧の順番（tracks）で、となりの曲へ。はしでは回りこむ
+                   全曲／シャッフル … 今回の1周の曲順（playlistTracks）で前後へ
+                                       シャッフルの「前」は、作った順番を1つ戻るだけ（くじを引きなおさない）
+                   どちらも、移った曲を先頭から鳴らす（一時停止中に押しても鳴りはじめる）
+               ・■ 停止 … どの聴きかたでも stopSoundtrack（完全に止めて、表示も消す）
+                   文字だけ「■ 停止」「■ 全曲再生を停止」「■ シャッフル再生を停止」と変わる（→ stopButtonLabel）
+
+             ■ 「再生中の曲を見る」とのちがい
+               ・前／次           … 鳴らす曲そのものを変える（曲の一覧はスクロールしない）
+               ・再生中の曲を見る … 曲の一覧の表示位置だけを動かす（鳴らす曲は変えない）
+
+             ■ キーボード
+               3つとも ふつうの button なので、Tab / Shift+Tab で移動し、Enter / Space で押せる（click で動く）
+               @keydown … 画面の位置どおりに動かす（くわしくは handlePlayallButtonsKeydown / findPlayallVerticalTarget）
+               ・← → … 前 ⇄ 次 ⇄ 停止（左端で←、右端で→、は動かない）
+               ・↑   … 前・次＝▶ 全曲再生へ、停止＝🔀 シャッフル再生へ
+               ・↓   … 曲の一覧の01「▶ 再生」へ（↑で戻るときは、入ったボタンへ帰る）
+               （下のリピート・音量スライダーへは、矢印キーでは移らない）
+             ============================================================ -->
+        <div v-if="hasPlaybackControls" class="st-playall__actions" @keydown="handlePlayallButtonsKeydown">
+          <!-- ref … 「⏭ 次のトラックへ」から←で移ってくる先 -->
+          <button ref="previousTrackButtonRef" type="button" class="st-playall__button st-playall__button--previous" aria-label="1つ前のトラックを先頭から再生する" @click="playPreviousTrack">
+            ⏮ 前のトラックへ
+          </button>
+
+          <!-- ref … 上段の「▶ 全曲再生」から↓で降りてくる先 -->
+          <button ref="nextTrackButtonRef" type="button" class="st-playall__button st-playall__button--next" aria-label="現在の曲を飛ばして次のトラックを再生する" @click="playNextTrack">
             ⏭ 次のトラックへ
           </button>
 
-          <!-- ref … 上段の「🔀 シャッフル再生」から↑で降りてくる先
-               文字は、いまの始めかたに合わせて変わる（→ stopButtonLabel）
-               ・通常の全曲再生 … ■ 全曲再生を停止
-               ・シャッフル再生 … ■ シャッフル再生を停止 -->
-          <button ref="stopPlaylistButtonRef" type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">{{ stopButtonLabel }}</button>
+          <!-- ref … 上段の「🔀 シャッフル再生」から↓で降りてくる先
+               文字は、いまの聴きかたに合わせて変わる（→ stopButtonLabel） -->
+          <button ref="stopPlaybackButtonRef" type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">{{ stopButtonLabel }}</button>
         </div>
 
         <!-- 再生の設定（リピート ＋ 音量）
@@ -2623,12 +2941,7 @@ onUnmounted(() => {
                そこで、いまの状態は data-repeat でCSSへ渡して見た目を変え、
                読み上げソフトには aria-label で
                「いまの状態」と「押すとどうなるか」を伝えている -->
-          <button
-            type="button"
-            class="st-repeat"
-            :data-repeat="repeatMode"
-            :aria-label="repeatButtonLabel"
-            @click="toggleRepeat">
+          <button type="button" class="st-repeat" :data-repeat="repeatMode" :aria-label="repeatButtonLabel" @click="toggleRepeat">
             <span class="st-repeat__icon">🔁</span>
             <span class="st-repeat__text">リピート</span>
             <!-- 3つとも置いておき、いまの1つだけをCSSで見せる（押しても幅が変わらない） -->
@@ -2728,10 +3041,7 @@ onUnmounted(() => {
                      ⓘを押しただけで曲が動いてしまわないようにしておく）
 
                    pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
-              <span
-                class="track__info"
-                :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }"
-                @pointerleave="releaseCreditHoverSuppression(track.id)">
+              <span class="track__info" :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }" @pointerleave="releaseCreditHoverSuppression(track.id)">
                 <button
                   type="button"
                   class="track__infoBtn"
@@ -2825,7 +3135,7 @@ onUnmounted(() => {
      ④ 曲の一覧は flex: 1 … 残った高さを、ぜんぶ使う
         そのうえで overflow-y: auto … 入りきらない曲は、この箱の中だけでスクロールする
 
-     全曲再生を始めて「⏭ 次のトラックへ」などが出ると、操作エリアが少し高くなるが、
+     曲を鳴らして「⏭ 次のトラックへ」などが出ると、操作エリアが少し高くなるが、
      そのぶん曲の一覧が、自動で少し低くなる（高さを JavaScript で計算しなくてよい）
 
    ■ position: fixed を使わない理由
@@ -3384,7 +3694,7 @@ onUnmounted(() => {
    どちらも「全曲を続けて鳴らす」ボタンなので、となり合わせに置いて
    ひとまとまりに見せる
    この行にはこの2つしか無いので、真ん中へ寄せる
-   （下に出る「⏭ 次のトラックへ／■ 全曲再生を停止」と、位置をそろえるため）
+   （下に出る操作行「⏮ 前／⏭ 次／■ 停止」と、位置をそろえるため）
    幅が足りないときは折り返し、スマホでは下の指定で縦に積み直す */
 .st-playall__starters {
   display: flex;
@@ -3413,18 +3723,15 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* 「⏭ 次のトラックへ」は、白〜水色＋紺色の文字にする
-   紺色でぬりつぶした「■ 全曲再生を停止」より軽い見た目にして、
-   まちがえて止めてしまわないように見分けやすくしている */
+/* 「⏮ 前のトラックへ」「⏭ 次のトラックへ」は、白〜水色＋紺色の文字にする
+   紺色でぬりつぶした「■ 停止」より軽い見た目にして、
+   まちがえて止めてしまわないように見分けやすくしている
+   （大きさは、下の「操作行の3つのボタンの大きさをそろえる」で、停止ボタンといっしょに決めている） */
+.st-playall__button--previous,
 .st-playall__button--next {
-  /* 横いっぱいには広げず、文字がおさまるぶんの大きさにする
-     （min-width をここだけ外して、停止ボタンより少し小さくしている） */
-  min-width: 0;
-  padding: 9px 16px;
   border-color: var(--navy);
   background: linear-gradient(180deg, #fff 0%, #d6f0fb 100%);
   color: var(--navy-deep);
-  font-size: 15px;
 }
 
 .st-playall__button:hover {
@@ -3566,11 +3873,11 @@ onUnmounted(() => {
   outline-offset: 2px;
 }
 
-/* 全曲再生中の操作ボタンの並び（⏭ 次のトラックへ ／ ■ 全曲再生を停止）
+/* 再生中の操作行（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 停止）
 
-   よく押す「⏭ 次のトラックへ」を先（左）に置く
-   どちらも文字がおさまるぶんの大きさにして、横に並べ、真ん中へ寄せる
-   幅が足りないときは、下のスマホ用の指定で縦に積み直す */
+   個別再生・全曲再生・シャッフル再生のどれでも、このならび1つを使う
+   左から「前 → 次 → 停止」。PCでは横に3つならべて、真ん中へ寄せる
+   幅が足りないときは折り返す（スマホでは、入らなければ2段・3段に積み直す） */
 .st-playall__actions {
   display: flex;
   flex-wrap: wrap;
@@ -3578,6 +3885,25 @@ onUnmounted(() => {
   justify-content: center;
   gap: 10px;
   margin: 10px 0 0;
+}
+
+/* 操作行の3つのボタンの大きさをそろえる
+
+   前・次（水色）と停止（紺色）は、もともと余白や文字の大きさがちがっていたが、
+   3つがバラバラの幅に見えないよう、ここで同じ大きさの「ひとまとまり」にする
+
+   ・flex: 1 1 0            … 3つで横幅を「同じ割合」で分け合う（文字の長さに引っぱられない）
+   ・min-width: max-content … ただし、文字より細くはしない（ボタンから文字がはみ出さない）
+                              3つが入りきらない幅になったら、ならびの flex-wrap で次の段へ折り返す
+   ・max-width: 210px       … 広い画面で横いっぱいにのびすぎないよう、上限を決める
+                              （いちばん長い「■ シャッフル再生を停止」が入る大きさ。停止だけ極端に大きくはならない）
+   ・余白と文字の大きさ     … 3つとも同じにして、高さもそろえる */
+.st-playall__actions .st-playall__button {
+  flex: 1 1 0;
+  min-width: max-content;
+  max-width: 210px;
+  padding: 9px 16px;
+  font-size: 15px;
 }
 
 /* ============================================================
@@ -4083,7 +4409,8 @@ onUnmounted(() => {
     padding: 10px 12px 12px;
   }
 
-  /* 「▶ 全曲再生」「🔀 シャッフル再生」と、「⏭ 次のトラックへ」「■ 全曲再生を停止」
+  /* 「▶ 全曲再生」「🔀 シャッフル再生」のならび
+     （操作行の3つは、PC用の「3つの大きさをそろえる」指定のほうが優先されるので、下の指定もあわせて見ること）
 
      前は、スマホではどちらのならびも縦に積んでいたが、
      それだと操作エリアが高くなりすぎるので、入るときは2つを横にならべる
@@ -4108,13 +4435,19 @@ onUnmounted(() => {
     margin-top: 8px;
   }
 
-  /* 「⏭ 次のトラックへ」「■ 全曲再生を停止」は、文字を1段小さくして、左右の余白もつめる
+  /* 操作行（⏮ 前のトラックへ／⏭ 次のトラックへ／■ 停止）は、文字を1段小さくして、左右の余白もつめる
 
-     幅 360px くらいのスマホでも、2つを横にならべて1段に収めるため
-     1段に収まれば、全曲再生中に操作エリアが高くなりすぎず、曲の一覧が見えるまま残る
-     ※ 高さは約45pxあるので、指での押しやすさはそのまま
-     ※ シャッフル再生中の「■ シャッフル再生を停止」は長いので、せまい画面では自動で2段になる */
+     3つを横に押しこむと文字が入りきらないので、むりに1段にはしない
+     ・幅 360px くらい   … 「前」「次」が1段目、「停止」が2段目（横いっぱい）
+     ・もう少し広いスマホ … 入れば3つが1段にならぶ
+     ・とてもせまい画面   … 1つずつ縦に積む
+     どれも flex-wrap の自動の折り返しなので、横にはみ出すことはない
+     （PC用の min-width: max-content が効いているので、文字もボタンからはみ出さない）
+
+     ※ PC用の上限（max-width: 210px）は外して、段の中では横いっぱいまで広げる（指で押しやすくする）
+     ※ 高さは約45pxあるので、指での押しやすさはそのまま */
   .st-playall__actions .st-playall__button {
+    max-width: none;
     padding: 9px 8px;
     font-size: 14px;
   }
