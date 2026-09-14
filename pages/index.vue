@@ -23,6 +23,10 @@ const gameTitle: string = 'こうちゃんの大冒険';
      （選んだおやつはゲーム中もずっと持っているものなので、
        おやつ選択画面を「閉じた」ことにする必要がない）
      gameStarted が true ならゲーム画面、という順番で見分けている
+
+   ※ この表のほかに「あそびかた」画面がある（isHowToPlayOpen）
+     B画面から一時的に開く説明書のページで、開いているあいだは
+     A画面・B画面・おやつ選択画面より優先して表示する
 */
 const titleEntered = ref(false);
 
@@ -36,6 +40,19 @@ const gameStarted = ref(false);
 */
 const isSnackSelectionOpen = ref(false);
 
+/* 「あそびかた」画面を開いているかどうか
+
+   B画面の「？ あそびかた」で true、「← ひとつ前の画面へ戻る」・Escape で false になる
+   B画面の上に説明書を一時的に広げるだけなので、
+   titleEntered・isSnackSelectionOpen・gameStarted はさわらない
+   （タイトルBGMも鳴ったまま。止めも、最初から鳴らしなおしもしない）
+
+   ※ 画面の出し分け・キー操作・フォーカスのどれも、
+     「!gameStarted && isHowToPlayOpen」を、おやつ選択画面より先に見る
+   ※ 読んだかどうかは保存しない（localStorage は使わない）
+     必要な人が、必要なときに開くためのページ */
+const isHowToPlayOpen = ref(false);
+
 /* ============================================================
    A画面・B画面のボタンを覚えておく箱（キーボード操作用）
 
@@ -44,18 +61,24 @@ const isSnackSelectionOpen = ref(false);
 
    この箱を使ってやることは2つ
    ・画面が切りかわったとき、メインのボタンへフォーカスを当てる
-   ・↑↓←→ で、3つのボタンをぐるぐる選べるようにする
+   ・↑↓←→ で、ボタンをぐるぐる選べるようにする
 
    A画面  … はじめる／♪ サウンドトラック／サウンドON・OFF
-   B画面  … きょうのおやつを選ぶ／はじめの画面へ戻る／サウンドON・OFF
-   ※ サウンドON/OFFはA画面とB画面のどちらか一方しか画面に出ないので、
-     箱は1つだけで足りる
+   B画面  … きょうのおやつを選ぶ／はじめの画面へ戻る／？ あそびかた／サウンドON・OFF
+   あそびかた画面 … ← ひとつ前の画面へ戻る／サウンドON・OFF
+   ※ サウンドON/OFFは、どの画面でも一度に1つしか画面に出ないので、
+     箱は1つだけで足りる（おやつ選択画面・あそびかた画面も同じ箱を使う）
    ============================================================ */
 const startButtonRef = ref<HTMLButtonElement | null>(null);
 const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
 const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
+const howToPlayButtonRef = ref<HTMLButtonElement | null>(null); // B画面の「？ あそびかた」
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
 const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* あそびかた画面の「← ひとつ前の画面へ戻る」（上のツールバーの左）
+   画面が出おわったときに、ここへフォーカスを当てる */
+const howToBackButtonRef = ref<HTMLButtonElement | null>(null);
 
 /* おやつ選択画面のカードまるごと
 
@@ -821,7 +844,9 @@ const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedIt
 /* ===== キーボード操作（「どうする？」コマンドボックス）用の計算 ===== */
 
 /* ※ 画面ごとのキー操作の分けかたは handleKeydown() にまとめてある
-     ・起動画面（A）・タイトル画面（B） … handleTitleKeydown()（ボタン3つを選ぶ）
+     ・起動画面（A）・タイトル画面（B） … handleTitleKeydown()（A画面はボタン3つ、B画面は4つを選ぶ）
+     ・あそびかた画面                    … handleHowToPlayKeydown()
+       （Escape で戻る・←→ で上の2つを行き来。↑↓ はふつうのスクロールのまま）
      ・おやつ選択画面                    … handleSnackSelectionKeydown()
        （Tab と Enter / Space だけのふつうの操作。押しっぱなしを止めるだけ）
      ・ゲーム本編                        … そのまま handleKeydown() の続き
@@ -4238,9 +4263,13 @@ function handleScreenLeaveEnd() {
 /* 次の画面が、出おわったとき
 
    A画面なら「はじめる」、B画面なら「きょうのおやつを選ぶ」、
+   あそびかた画面なら「← ひとつ前の画面へ戻る」、
    おやつ選択画面なら最初のおやつ「🍇 グミ」へフォーカスを当てる
    ゲーム画面のときは、focusTitleMainButton() の中で何も起きない
    （getTitleFocusItems() が、ゲーム中は空っぽを返すため）
+
+   ※ あそびかた画面からB画面へ戻ったときは、ほかの画面から戻ったときと同じく
+     B画面のメインのボタン「きょうのおやつを選ぶ」へ当てる（いちばん下の focusTitleMainButton()）
 
    ※ ページを開いた1回目は、ここは通らない（<Transition> は最初の表示では動かないため）
      そのときは onMounted の focusTitleMainButton() が当ててくれる */
@@ -4248,6 +4277,17 @@ function handleScreenEnterEnd() {
   /* ここまで来ればフェードは終わっているので、キーの受付も念のため戻しておく
      （ふつうは、ひとつ上の handleScreenLeaveEnd() でもう戻っている） */
   isScreenChanging.value = false;
+
+  /* あそびかた画面は、おやつ選択画面より先に見る（画面の出し分けと同じ順番）
+
+     縦に長い説明書なので、いちばん上の「← ひとつ前の画面へ戻る」へ当てる
+     ここにフォーカスがあれば、そのまま Enter で戻れるし、
+     ↑↓ もふつうのスクロールとして使える
+     （@after-enter は画面が出おわってから届くので、ボタンはもう画面にある） */
+  if (isHowToPlayOpen.value && !gameStarted.value) {
+    howToBackButtonRef.value?.focus();
+    return;
+  }
 
   /* おやつ選択画面のときだけ、当てる先がボタン3つの並びではなく
      おやつのカードなので、専用の関数にまかせる
@@ -4316,6 +4356,11 @@ function goBackToBoot() {
      （B画面 ⇄ おやつ選択画面の行き来では、わざと残している） */
   selectedSnackIds.value = [];
   isSnackSelectionOpen.value = false;
+
+  /* あそびかた画面も閉じた状態に戻しておく
+     （いまの画面からは開いたままここへ来ることはないが、
+       A画面へ戻ったのに、中ではあそびかたが開いたまま、という状態を残さないため） */
+  isHowToPlayOpen.value = false;
 
   /* 画面のほうは、この1行だけで切りかわる（表示用のstateはこれ以外いじらない）
      BGMを止める上の2行も、音を止めるだけで画面の中身にはさわらないので、
@@ -4416,6 +4461,53 @@ function closeSnackSelection() {
 
   /* B画面のメインのボタン「きょうのおやつを選ぶ」へのフォーカスは、
      フェードが終わってから handleScreenEnterEnd() が当てる */
+}
+
+/* ============================================================
+   あそびかた画面（B画面 → あそびかた → B画面）
+
+   B画面の「？ あそびかた」から開く、説明書のページ
+   ルールと考えかたは説明するが、攻略の正解（相性表・成功率・解放条件など）は書かない
+
+   ■ 別のページ（route）にはしていない
+
+     /howto のような別ページにすると、ページが作り直されるので
+     鳴っているタイトルBGMが止まってしまう（onUnmounted でぜんぶ止めているため）
+     同じページの中で v-if を切りかえるだけにして、
+     A画面・B画面・おやつ選択画面と同じ screen-fade でフェードさせている
+
+   ■ ここではBGMをいっさいさわらない（おやつ選択画面と同じ）
+
+     ・stopTitleBgm() / playTitleBgmSoon() … 呼ばない
+     ・gameStarted / titleEntered          … 変えない
+     なので、B画面 → あそびかた → B画面 のあいだ、タイトルBGMは途切れずに流れつづける
+
+     サウンドON/OFFも、何も直さなくてそのまま動く
+     toggleSound() は「titleEntered && !gameStarted ならタイトルBGMを再開する」ので、
+     あそびかた画面もその条件にそのまま当てはまる
+   ============================================================ */
+
+/* B画面の「？ あそびかた」
+
+   やることは、あそびかた画面を開くことだけ
+   「← ひとつ前の画面へ戻る」へのフォーカスは、フェードが終わったときに
+   handleScreenEnterEnd() が当ててくれる（おやつ選択画面を開くときと同じ） */
+function openHowToPlay() {
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  isHowToPlayOpen.value = true;
+}
+
+/* あそびかた画面の「← ひとつ前の画面へ戻る」（Escape もここを呼ぶ）
+
+   B画面へ戻るだけ。タイトルBGMは鳴ったままでよい
+   B画面のメインのボタンへのフォーカスは、フェードが終わってから handleScreenEnterEnd() が当てる */
+function closeHowToPlay() {
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  isHowToPlayOpen.value = false;
 }
 
 /* おやつのカードを押したとき（1回で選ぶ・もう1回で解除）
@@ -6701,6 +6793,10 @@ function resetGame() {
   selectedSnackIds.value = [];
   isSnackSelectionOpen.value = false;
 
+  // あそびかた画面も閉じた状態に戻しておく
+  // （もう一度あそぶ・はじめの画面へ戻る のあとに、あそびかたが開いたまま残らないようにする）
+  isHowToPlayOpen.value = false;
+
   // いやいや発生の演出も消しておく
   // （残っていると、タイトル画面の上に前回の「イヤイヤ発生！」が出たままになる）
   hideTantrumAlert();
@@ -7388,9 +7484,9 @@ function runSelectedCommand() {
 /* ============================================================
    起動画面（A）・タイトル画面（B）のキーボード操作
 
-   この2つの画面で操作するものは、どちらも3つだけ
+   この2つの画面で操作するものは、A画面が3つ、B画面が4つ
      A … ① はじめる             ② ♪ サウンドトラック ③ サウンドON/OFF
-     B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ サウンドON/OFF
+     B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
 
    ①がその画面のメインのボタン
    画面が出たときは、いつも①にフォーカスが当たるようにしてある
@@ -7398,7 +7494,7 @@ function runSelectedCommand() {
    ・Tab / Shift+Tab … ブラウザのふつうの移動
                        （はしまで来たら、反対のはしへ回りこませる）
    ・↑ ← ↓ →        … 画面の並びのとおりに動かす、補助の操作
-                       （↑で上の行へ、↓でメインのボタンへ、←→で上の行の左右）
+                       （くわしい行き先は moveTitleFocusByArrow() を見ること）
    ・Enter / Space   … 選んでいるボタンを実行する
 
    ここに書いてあるのはA画面・B画面のことだけで、
@@ -7411,6 +7507,16 @@ function runSelectedCommand() {
    ゲームが始まったあとは、この操作じたいを使わないので空っぽを返す */
 function getTitleFocusItems(): HTMLButtonElement[] {
   if (gameStarted.value) {
+    return [];
+  }
+
+  /* あそびかた画面のときも空っぽを返す（おやつ選択画面と同じ理由）
+
+     この画面にはA画面・B画面のボタンが出ていないので、
+     タイトル側の矢印キー・Tabの回りこみ・メインのボタンへのフォーカスが
+     どれも動かないようにしておく
+     （あそびかた画面のキー操作は handleHowToPlayKeydown() が受け持つ） */
+  if (isHowToPlayOpen.value) {
     return [];
   }
 
@@ -7432,8 +7538,10 @@ function getTitleFocusItems(): HTMLButtonElement[] {
     return [];
   }
 
+  /* 並びは「メイン → 上の行のボタンを左から順に」
+     Tabキーで回る順番（HTMLに書いた順番）と同じにしてある */
   const items = titleEntered.value
-    ? [selectSnacksButtonRef.value, backToBootButtonRef.value, soundToggleButtonRef.value] // B画面
+    ? [selectSnacksButtonRef.value, backToBootButtonRef.value, howToPlayButtonRef.value, soundToggleButtonRef.value] // B画面
     : [startButtonRef.value, soundtrackButtonRef.value, soundToggleButtonRef.value]; // A画面
 
   return items.filter((item): item is HTMLButtonElement => item !== null);
@@ -7441,23 +7549,73 @@ function getTitleFocusItems(): HTMLButtonElement[] {
 
 /* ↑↓←→ でフォーカスを動かす
 
-   ボタンは画面の上でこう並んでいるので、その並びのとおりに動かす
+   ■ A画面（ボタン3つ）
 
-     [ 左上のボタン ]        [ 右上のサウンドON/OFF ]
-            （A画面＝♪ サウンドトラック／B画面＝はじめの画面へ戻る）
+     [ ♪ サウンドトラック ]        [ サウンドON/OFF ]
 
-                  [ メインのボタン ]
-        （A画面＝はじめる／B画面＝きょうのおやつを選ぶ）
+                  [ はじめる ]
 
-   ・↑ ↓ … メインのボタンと、上の行を行き来する
-            （メインで↑を押したら、真上にある左のボタンへ）
-   ・← → … 上の行の2つを行き来する
-            （メインにいるときは、←で左上・→で右上へ）
+     ・↑ ↓ … メインのボタンと、上の行を行き来する
+              （メインで↑を押したら、真上にある左のボタンへ）
+     ・← → … 上の行の2つを行き来する
+              （メインにいるときは、←で左上・→で右上へ）
 
-   どのキーもかならずどこかへ動くので、
-   3つのボタンを矢印キーだけで選べる */
+   ■ B画面（ボタン4つ）
+
+     [ はじめの画面へ戻る ]     [ ？ あそびかた ][ サウンドON/OFF ]
+
+                 [ きょうのおやつを選ぶ ]
+
+     ・↑ ↓ … メインのボタンと、上の行を行き来する（A画面と同じ）
+              （メインからは、左上の「はじめの画面へ戻る」へ）
+     ・← → … 上の行の3つを、となりへ1つずつ動く
+              （はしまで来たら反対のはしへ回りこむ。メインにいるときは、←で左上・→で右上のサウンドへ）
+
+   どちらの画面でも、どのキーもかならずどこかへ動くので、
+   ボタンを矢印キーだけで選べる */
 function moveTitleFocusByArrow(key: string) {
   const items = getTitleFocusItems();
+  const active = document.activeElement;
+
+  // B画面（タイトル画面）
+  if (titleEntered.value) {
+    // 4つそろっていないときは何もしない（画面の切りかわり中など）
+    if (items.length < 4) {
+      return;
+    }
+
+    // getTitleFocusItems() の並びは「メイン → 上の行を左から（戻る → あそびかた → サウンド）」
+    const [mainButton, ...topRow] = items;
+
+    // 上の行の何番目にいるか（上の行にいないときは -1）
+    const topIndex = topRow.findIndex((button) => button === active);
+
+    // ↑ ↓：メインのボタン ⇔ 上の行
+    if (key === 'ArrowUp' || key === 'ArrowDown') {
+      if (active === mainButton) {
+        // 左上の「はじめの画面へ戻る」へ（A画面で ♪ サウンドトラック へ行くのと同じ）
+        topRow[0].focus();
+      } else {
+        mainButton.focus();
+      }
+
+      return;
+    }
+
+    // ←：上の行を1つ左へ（左はしでは右はしへ回りこむ。上の行にいないときは左上へ）
+    if (key === 'ArrowLeft') {
+      const leftIndex = topIndex === -1 ? 0 : (topIndex - 1 + topRow.length) % topRow.length;
+      topRow[leftIndex].focus();
+      return;
+    }
+
+    // →：上の行を1つ右へ（右はしでは左はしへ回りこむ。上の行にいないときは右上のサウンドへ）
+    const rightIndex = topIndex === -1 ? topRow.length - 1 : (topIndex + 1) % topRow.length;
+    topRow[rightIndex].focus();
+    return;
+  }
+
+  // ここから下はA画面（起動画面）
 
   // 3つそろっていないときは何もしない（画面の切りかわり中など）
   if (items.length < 3) {
@@ -7466,7 +7624,6 @@ function moveTitleFocusByArrow(key: string) {
 
   // getTitleFocusItems() の並びは「メイン → 左上 → 右上」
   const [mainButton, leftButton, soundButton] = items;
-  const active = document.activeElement;
 
   // ↑ ↓：メインのボタン ⇔ 上の行
   if (key === 'ArrowUp' || key === 'ArrowDown') {
@@ -7834,6 +7991,68 @@ function handleSnackSelectionKeydown(event: KeyboardEvent) {
   focusFirstSnackOption();
 }
 
+/* ============================================================
+   あそびかた画面のキーボード操作
+
+   ・Escape          … タイトル画面（B画面）へ戻る（「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()）
+   ・← →             … 上の「← ひとつ前の画面へ戻る」と「サウンドON/OFF」を行き来する
+                       （どちらかにフォーカスがあるときだけ）
+   ・↑ ↓             … ここでは何もしない（ブラウザのふつうのスクロールにまかせる）
+   ・Tab / Shift+Tab … ブラウザのふつうの移動（おやつ選択画面と同じく、回りこませない）
+   ・Enter / Space   … ボタンを押すのはブラウザにまかせる。押しっぱなしを止めるだけ
+
+   ■ 横取りするキーを、できるだけ少なくしている
+
+     この画面は、ほかの画面とちがって「読む」ための縦に長いページ
+     ↑↓・Space・PageUp / PageDown・Home / End でふつうにスクロールできるよう、
+     preventDefault() するのは、ここで実際に何かをしたキーだけにしてある
+   ============================================================ */
+function handleHowToPlayKeydown(event: KeyboardEvent) {
+  // ① Escape … どこにフォーカスがあってもB画面へ戻る
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeHowToPlay();
+    return;
+  }
+
+  /* ② ← → … 上のツールバーの2つを行き来する
+
+     どちらかのボタンにフォーカスがあるときだけ動かす
+     本文を読んでいる途中（ほかの場所にフォーカスがあるとき）に←→で上のボタンへ飛ぶと、
+     フォーカスに合わせて画面がいちばん上までスクロールしてしまうため */
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    const backButton = howToBackButtonRef.value;
+    const soundButton = soundToggleButtonRef.value;
+    const active = document.activeElement;
+
+    if (!backButton || !soundButton || (active !== backButton && active !== soundButton)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    // 2つしかないので、←でも→でも「もう片方」へ動く
+    if (active === backButton) {
+      soundButton.focus();
+    } else {
+      backButton.focus();
+    }
+
+    return;
+  }
+
+  /* ③ Enter / Space … ボタンの押しっぱなし（長押し）だけ止める
+
+     ボタンを押すのはブラウザの仕事なので、ここでは closeHowToPlay() などを呼ばない
+     （呼ぶと、ブラウザのclickと合わせて2回動いてしまう）
+     押しっぱなしのときは、サウンドON/OFFがパタパタ切りかわらないように止めておく
+
+     ボタンにフォーカスが無いときの Space は止めない（ページを下へスクロールするふつうの動き） */
+  if ((event.key === 'Enter' || event.key === ' ') && event.repeat && document.activeElement instanceof HTMLButtonElement) {
+    event.preventDefault();
+  }
+}
+
 /* A画面・B画面でキーを押したときの処理（ゲーム本編とは分けてある） */
 function handleTitleKeydown(event: KeyboardEvent) {
   const items = getTitleFocusItems();
@@ -7947,6 +8166,21 @@ function handleKeydown(event: KeyboardEvent) {
      マウスのほうは、消えかけの画面を押せなくするCSSで止めている
      （.screen-fade-leave-active の pointer-events: none） */
   if (isScreenChanging.value) {
+    return;
+  }
+
+  /* ⓪ あそびかた画面
+
+     おやつ選択画面・A画面・B画面より先に見る（画面の出し分けと同じ順番）
+     あとに置くと、あそびかた画面なのに
+     画面に無いB画面のボタンを矢印キーで動かそうとしてしまう
+     （getTitleFocusItems() も、この画面では空を返すようにしてある）
+     ・Escape         … B画面へ戻る
+     ・← →            … 上の「戻る」と「サウンド」を行き来する
+     ・↑ ↓            … 横取りしない（ふつうのスクロール）
+     ・Tab / Enter / Space … ブラウザのふつうの動き */
+  if (!gameStarted.value && isHowToPlayOpen.value) {
+    handleHowToPlayKeydown(event);
     return;
   }
 
@@ -8311,9 +8545,9 @@ onUnmounted(() => {
 <template>
   <main class="game">
     <!-- ============================================================
-         画面の切りかえ（A画面 ⇄ B画面 ⇄ ゲーム画面）
+         画面の切りかえ（A画面 ⇄ B画面 ⇄ あそびかた／おやつ選択 ⇄ ゲーム画面）
 
-         この3つはページを移動しているのではなく、
+         これらの画面はページを移動しているのではなく、
          同じページの中で v-if / v-else-if を切りかえて出し分けている
          そのままだと切りかわった瞬間にパッと入れかわって見えるので、
          Vueの <Transition> で短いフェードをはさんでいる
@@ -8340,6 +8574,231 @@ onUnmounted(() => {
       @after-leave="handleScreenLeaveEnd"
       @after-enter="handleScreenEnterEnd">
       <!-- ============================================================
+           あそびかた画面（B画面から開く説明書）
+
+           B画面の「？ あそびかた」で開き、「← ひとつ前の画面へ戻る」・Escape でB画面へ戻る
+           開いているあいだは、A画面・B画面・おやつ選択画面より優先して出す
+           （そのため、この Transition の中でいちばん先に書いてある。
+             キー操作の handleKeydown()・フォーカスの handleScreenEnterEnd() も同じ順番で見ている）
+
+           ■ ルールと考えかたは教える。ただし正解までは教えない
+
+             次のようなものは、わざと書いていない
+             ・秘密の場所の名前と、行けるようになる条件
+             ・おやつと いやいやの理由 の相性
+             ・「少し待ってみる」の成功率、いやいやレベルごとの数字
+             ・同じ対応をくり返したときの効きにくさの数字
+             ・ナイス対応になる組み合わせ、各行動のステータス増減
+             あとから説明を書き足すときも、ここは守ること
+
+           ■ 縦に長いので、.title-screen の縦スクロールでそのまま読む
+             （スマホ幅では、ページ全体のスクロールになる）
+             ↑↓キーもふつうのスクロールとして使えるよう、キー操作では横取りしない
+           ============================================================ -->
+      <div v-if="!gameStarted && isHowToPlayOpen" key="how-to-play" class="title-screen">
+        <div class="title-card title-card--howto">
+          <!-- 上のツールバー（A画面・B画面・おやつ選択画面と同じ .title-card__tools を使う）
+               左：タイトル画面（B画面）へ戻る
+               右：サウンドON/OFF（ほかの画面と同じ soundEnabled / toggleSound() をそのまま使う）
+
+               ※ この画面は、見た目の順番とHTMLの順番が同じ
+                 Tabは「← ひとつ前の画面へ戻る → サウンド → いちばん下の ← ひとつ前の画面へ戻る」と上から順に進む -->
+          <div class="title-card__tools">
+            <button ref="howToBackButtonRef" type="button" class="title-card__back" @click="closeHowToPlay">← ひとつ前の画面へ戻る</button>
+
+            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+              <span class="sound-toggle__text">サウンド</span>
+              <span class="sound-toggle__state">
+                <!-- ON と OFF を同じ場所に重ねて置いておく
+                     使わないほうは「見えなくする」だけで場所は残るので、
+                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
+                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              </span>
+            </button>
+          </div>
+
+          <h1 class="howto-heading">
+            <span class="howto-heading__icon" aria-hidden="true">?</span>
+            あそびかた
+          </h1>
+
+          <!-- 1. このゲームについて（公園の探検も、ここにまとめて書く）
+
+               秘密の場所の名前や、行けるようになる条件は書かない
+               「特別な場所もあるみたい」までにとどめる -->
+          <section class="howto-section">
+            <h2 class="howto-section__title">
+              <span class="howto-section__num">1</span>
+              こうちゃんと公園を探検しよう
+            </h2>
+
+            <ul class="howto-list">
+              <li>朝9時から12時まで、公園の場所を選んで探検します。</li>
+              <li>選んだ行動によって時間が進み、こうちゃんや親の状態が変わります。</li>
+              <li>アイテムを見つけたり、ちょっとした出来事が起きたりすることも。公園には、少し特別な場所もあるみたい。</li>
+              <li>12時になるか、公園の出口へ向かうとおしまい。結果発表があります。</li>
+            </ul>
+          </section>
+
+          <!-- 2. ステータス
+
+               名前は、ゲーム画面の上部ステータスに出ている言葉にそろえる
+               （「親の余裕」など。parentCalm のような中の名前は出さない）
+               丸い印の色は、ゲーム画面のそれぞれのゲージと同じ色 -->
+          <section class="howto-section">
+            <h2 class="howto-section__title">
+              <span class="howto-section__num">2</span>
+              ステータス
+            </h2>
+
+            <dl class="howto-terms">
+              <div class="howto-terms__row">
+                <dt>
+                  <span class="howto-dot howto-dot--child-energy"></span>
+                  こうちゃんの体力
+                </dt>
+                <dd>元気に動ける力。少なくなりすぎると、探検を続けにくくなります。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>
+                  <span class="howto-dot howto-dot--child-mood"></span>
+                  こうちゃんの機嫌
+                </dt>
+                <dd>どのくらい楽しい気分か。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>
+                  <span class="howto-dot howto-dot--parent-energy"></span>
+                  親の体力
+                </dt>
+                <dd>いっしょに遊んだり、だっこしたりすると減ることがあります。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>
+                  <span class="howto-dot howto-dot--parent-calm"></span>
+                  親の余裕
+                </dt>
+                <dd>親が落ち着いて対応できているか。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>
+                  <span class="howto-dot howto-dot--point"></span>
+                  おでかけポイント
+                </dt>
+                <dd>いろいろ体験すると増えます。結果にも関係します。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>
+                  <span class="howto-dot howto-dot--time"></span>
+                  時間
+                </dt>
+                <dd>行動すると進みます。</dd>
+              </div>
+            </dl>
+
+            <!-- GAME OVER は「こうなると終わることがある」という雰囲気だけ伝える
+                 （「○○が0なら」のような判定の一覧にはしない） -->
+            <p class="howto-note howto-note--caution">
+              <b class="howto-note__title">GAME OVER</b>
+              こうちゃんや親が疲れすぎたり、親が落ち着いて対応できなくなったりすると、冒険が途中で終わることがあります。
+            </p>
+          </section>
+
+          <!-- 3. おやつ
+
+               「どのおやつが、どのいやいやに効くか」は書かない
+               おやつの種類と数は、おやつ選択画面と同じ snacks / maxSnackCount を見ている
+               （おやつが増えたり、持っていける数が変わったりしても、ここは直さなくてよい） -->
+          <section class="howto-section">
+            <h2 class="howto-section__title">
+              <span class="howto-section__num">3</span>
+              おやつ
+            </h2>
+
+            <ul class="howto-list">
+              <li>出発前に、{{ snacks.length }}種類から{{ maxSnackCount }}つ選んで持っていきます。</li>
+              <li>体力が回復しやすいもの、機嫌がよくなりやすいものなど、おやつごとに得意なことが少しちがいます。</li>
+              <li>ひとやすみ・イヤイヤタイム・ころんだときなどに使えます。使うと残りが減ります。</li>
+            </ul>
+          </section>
+
+          <!-- 4. イヤイヤタイム
+
+               4つの対応の「しくみ」だけを書く
+               理由ごとの正解・おやつの相性・待つの成功率・レベルごとの数字・
+               くり返したときの効きにくさの数字・ナイス対応の組み合わせは、どれも書かない
+               （対応の名前は、ゲーム画面のコマンドと同じ言葉にそろえてある） -->
+          <section class="howto-section">
+            <h2 class="howto-section__title">
+              <span class="howto-section__num">4</span>
+              イヤイヤタイム
+            </h2>
+
+            <p class="howto-text">疲れた・おなかがすいた・うまくできなくて悔しい・まだ遊びたい などの理由で、こうちゃんはイヤイヤします。理由の答えは画面に出ません。</p>
+
+            <p class="howto-note howto-note--hint">💡 こうちゃんのセリフや様子をよく見て、どうしてイヤイヤしているのか考えてみよう。</p>
+
+            <h3 class="howto-subheading">4つの対応</h3>
+
+            <dl class="howto-terms">
+              <div class="howto-terms__row">
+                <dt>だっこしてなだめる</dt>
+                <dd>落ち着かせやすいけれど、親の体力を使います。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>おやつをあげる</dt>
+                <dd>おやつを1つ使います。そのときのこうちゃんとの相性があります。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>こうちゃんとお話する</dt>
+                <dd>理由によって、うまくいきやすさが変わります。</dd>
+              </div>
+
+              <div class="howto-terms__row">
+                <dt>少し待ってみる</dt>
+                <dd>落ち着くこともあれば、うまくいかないこともあります。</dd>
+              </div>
+            </dl>
+
+            <ul class="howto-list">
+              <li>対応が合わないと、イヤイヤがもっと強くなることがあります。</li>
+              <li>同じ方法ばかり続けるより、別の方法を考えることも大切です。</li>
+              <li>気持ちにぴったり合った対応ができると「ナイス対応」になることも。</li>
+            </ul>
+          </section>
+
+          <!-- 5. ちょっとしたヒント（攻略の答えにはならない、考えかたのヒントだけ） -->
+          <section class="howto-section">
+            <h2 class="howto-section__title">
+              <span class="howto-section__num">5</span>
+              ちょっとしたヒント
+            </h2>
+
+            <ul class="howto-list">
+              <li>時間と体力を見ながら探検しよう。</li>
+              <li>おやつは使うと減るので、使いどころも大切。</li>
+              <li>いろいろな場所を探検すると、何か見つかるかも？</li>
+            </ul>
+          </section>
+
+          <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるようにする
+               （押したときの処理は、上の「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()） -->
+          <div class="howto-footer">
+            <button type="button" class="title-card__back" @click="closeHowToPlay">← ひとつ前の画面へ戻る</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
            起動画面（いちばん最初の1枚）
 
            この画面をはさむ理由は、ブラウザの決まりへの対応
@@ -8347,7 +8806,7 @@ onUnmounted(() => {
            「▶ はじめる」を1回押してもらい、
            その操作をきっかけにタイトルBGMを鳴らしはじめる
            ============================================================ -->
-      <div v-if="!titleEntered" key="boot" class="title-screen">
+      <div v-else-if="!titleEntered" key="boot" class="title-screen">
         <div class="title-card title-card--boot">
           <!-- ▶ は .cmd--single のCSSがいつも出してくれるので、文字には入れない
                （「きょうのおやつを選ぶ」「もう一度あそぶ」と同じ書き方）
@@ -8400,7 +8859,7 @@ onUnmounted(() => {
         <div class="title-card">
           <!-- この画面のメインのボタン
                A画面と同じ理由で、HTMLではいちばん先に書いてある
-               （Tabで「きょうのおやつを選ぶ → はじめの画面へ戻る → サウンド」と回れるようにするため。
+               （Tabで「きょうのおやつを選ぶ → はじめの画面へ戻る → あそびかた → サウンド」と回れるようにするため。
                  見た目の位置はCSSの order でいちばん下のまま）
 
                ※ このボタンでは、まだゲームは始まらない
@@ -8411,7 +8870,7 @@ onUnmounted(() => {
 
           <!-- 上のツールバー（A画面と同じ .title-card__tools を使う）
                左：はじめの画面（起動画面）へ戻る
-               右：サウンドON/OFF（「きょうのおやつを選ぶ」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
+               右：？ あそびかた ＋ サウンドON/OFF（「きょうのおやつを選ぶ」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
           <div class="title-card__tools">
             <!-- はじめの画面へ戻る（左上の補助操作）
                  A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
@@ -8422,17 +8881,33 @@ onUnmounted(() => {
                    ようにしているため（ボタン側で止める必要はない） -->
             <button ref="backToBootButtonRef" type="button" class="title-card__back" @click="goBackToBoot">はじめの画面へ戻る</button>
 
-            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
-              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-              <span class="sound-toggle__text">サウンド</span>
-              <span class="sound-toggle__state">
-                <!-- ON と OFF を同じ場所に重ねて置いておく
+            <!-- 右上のまとまり（？ あそびかた ＋ サウンドON/OFF）
+                 2つを1つの入れものに入れて、いつも右はしに並んで出るようにしている
+                 （とても細い画面で下の行へ回りこむときも、2ついっしょに右へ寄る） -->
+            <div class="title-card__toolsRight">
+              <!-- ？ あそびかた
+                   押しても、B画面の上に説明書を開くだけ（openHowToPlay）。タイトルBGMも、選んだおやつもそのまま
+
+                   スマホ幅では「あそびかた」の文字を隠して「?」だけにするので、
+                   読み上げ用の名前は aria-label に持たせている
+                   （サウンドON/OFFの「サウンド」の文字を隠すのと同じ考えかた） -->
+              <button ref="howToPlayButtonRef" type="button" class="title-card__howto" aria-label="あそびかた" @click="openHowToPlay">
+                <span class="title-card__howtoIcon" aria-hidden="true">?</span>
+                <span class="title-card__howtoText">あそびかた</span>
+              </button>
+
+              <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+                <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+                <span class="sound-toggle__text">サウンド</span>
+                <span class="sound-toggle__state">
+                  <!-- ON と OFF を同じ場所に重ねて置いておく
                        使わないほうは「見えなくする」だけで場所は残るので、
                        ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
-              </span>
-            </button>
+                  <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
+                  <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+                </span>
+              </button>
+            </div>
           </div>
 
           <h1 class="title-card__name">{{ gameTitle }}</h1>
@@ -11708,6 +12183,7 @@ onUnmounted(() => {
      ここでは .title-card__tools の中にあるものだけを大きくする */
 .title-card__soundtrack,
 .title-card__back,
+.title-card__howto,
 .title-card__tools .sound-toggle {
   gap: 7px;
   min-height: 38px;
@@ -11729,7 +12205,8 @@ onUnmounted(() => {
    ふつうのテキストリンクには見せない（下線なし）、白地に紺文字のpill
 */
 .title-card__soundtrack,
-.title-card__back {
+.title-card__back,
+.title-card__howto {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -11750,7 +12227,8 @@ onUnmounted(() => {
 
 /* PCでカーソルを当てたときだけ、うすい水色になって少し上へ動く（派手にしない） */
 .title-card__soundtrack:hover,
-.title-card__back:hover {
+.title-card__back:hover,
+.title-card__howto:hover {
   border-color: var(--navy);
   background: #e3f2fb;
   color: var(--navy-deep);
@@ -11758,14 +12236,287 @@ onUnmounted(() => {
 }
 
 .title-card__soundtrack:active,
-.title-card__back:active {
+.title-card__back:active,
+.title-card__howto:active {
   transform: translateY(1px);
 }
 
 .title-card__soundtrack:focus-visible,
-.title-card__back:focus-visible {
+.title-card__back:focus-visible,
+.title-card__howto:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
+}
+
+/* B画面の右上のまとまり（？ あそびかた ＋ サウンドON/OFF）
+
+   左の「はじめの画面へ戻る」とは、.title-card__tools の space-between で左右に分かれる
+   この中の2つは、すき間をあけて右はしに並ぶ
+   margin-left: auto は、とても細い画面で下の行へ回りこんだときも右へ寄せるため */
+.title-card__toolsRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* 「？ あそびかた」の「?」を紺色の丸に入れて、説明書のボタンだと分かりやすくする
+
+   「?」を丸のまんなかに置くために、2つだけ気をつけている
+   ・letter-spacing: 0 … ボタンの letter-spacing は文字のうしろにすき間を足すので、
+                         そのままだと「?」が左へずれて見える
+   ・半角の「?」       … 全角の「？」は、フォントによって文字の形が左へ寄っていることがある */
+.title-card__howtoIcon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+/* ============================================================
+   あそびかた画面
+
+   入れものは、ほかのタイトル系の画面と同じ .title-card をそのまま使う
+   （紙の色・紺色のふち・角の丸み・上のツールバーがそろうので、
+     B画面から切りかわっても、同じカードの中身が入れかわったように見える）
+
+   ちがうのは .title-card--howto で足している次のところだけ
+   ① 文章を読む画面なので、横幅を広げて、文字は左ぞろえにする
+   ② 縦に長いので、上下の余白は少しつめる
+      （収まらないぶんは .title-screen が縦にスクロールしてくれる）
+   ============================================================ */
+
+/* box-sizing: border-box にしているのは、横にはみ出さないようにするため
+
+   このゲームは box-sizing を border-box にしていないので、
+   ふつうの .title-card は「width: 100% ＋ 左右の余白とふち」の幅になる
+   B画面（620px）は画面の余白の中に収まるが、この画面は幅が広い（780px）ので、
+   タブレットくらいの幅（768pxなど）では、余白とふちのぶんだけ画面の外へはみ出してしまう
+
+   border-box にすると、余白とふちもふくめて width: 100% ／ max-width: 780px に収まる */
+.title-card--howto {
+  box-sizing: border-box;
+  max-width: 780px;
+  padding-top: 32px;
+  padding-bottom: 36px;
+  text-align: left;
+}
+
+/* ほかの画面ではHTMLの順番と見た目の順番がちがうので、.title-card__tools に order: 1 が付いている
+   この画面はHTMLの順番のまま上から出したいので、0（ほかの中身と同じ）に戻す
+   （1 のままだと、ツールバーが説明のいちばん下へ行ってしまう）
+
+   flex-wrap は、おやつ選択画面と同じく、とても細い画面でのはみ出しよけ */
+.title-card--howto .title-card__tools {
+  order: 0;
+  flex-wrap: wrap;
+}
+
+/* 見出し（？ あそびかた） */
+.howto-heading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  color: var(--navy);
+  font-size: 28px;
+  line-height: 1.35;
+}
+
+.howto-heading__icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 20px;
+  line-height: 1;
+}
+
+/* 項目ひとつぶんのまとまり（B画面の説明文と同じ、うすい青の枠） */
+.howto-section {
+  margin: 0 0 12px;
+  padding: 16px 22px 18px;
+  border-radius: 14px;
+  background: #f2f6fb;
+}
+
+.howto-section > :last-child {
+  margin-bottom: 0;
+}
+
+/* 見出しの前の番号は、紺色の丸に白い数字 */
+.howto-section__title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 8px;
+  color: var(--navy);
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.howto-section__num {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.howto-subheading {
+  margin: 14px 0 6px;
+  color: var(--navy);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.howto-text {
+  margin: 0 0 10px;
+  line-height: 1.85;
+}
+
+/* 箇条書き（点は、うすい水色の丸） */
+.howto-list {
+  display: grid;
+  gap: 4px;
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.howto-list li {
+  position: relative;
+  padding-left: 20px;
+  line-height: 1.8;
+}
+
+.howto-list li::before {
+  position: absolute;
+  top: 0.65em;
+  left: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--navy-line);
+  content: '';
+}
+
+/* 名前と説明の一覧（ステータス・イヤイヤタイムの4つの対応）
+   パソコンでは「左に名前・右に説明」の1行、
+   スマホ幅では名前の下に説明（ページ下の max-width: 700px） */
+.howto-terms {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.howto-terms__row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 0 12px;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.howto-terms dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--navy);
+  font-weight: 700;
+  line-height: 1.7;
+}
+
+.howto-terms dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* ステータス名の前の丸（ゲーム画面のゲージと同じ色） */
+.howto-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border: 1px solid rgb(0 0 0 / 12%);
+  border-radius: 50%;
+}
+
+.howto-dot--child-energy {
+  background: var(--child-energy);
+}
+
+.howto-dot--child-mood {
+  background: var(--child-mood);
+}
+
+.howto-dot--parent-energy {
+  background: var(--parent-energy);
+}
+
+.howto-dot--parent-calm {
+  background: var(--parent-calm);
+}
+
+.howto-dot--point {
+  background: var(--gold);
+}
+
+.howto-dot--time {
+  background: var(--navy);
+}
+
+/* 目立たせたい一文（GAME OVER・基本のヒント）
+   左の太い線の色で、どんな話かを分けている
+   ・注意   … 親の余裕ゲージと同じ さんご色
+   ・ヒント … 金色 */
+.howto-note {
+  margin: 10px 0 0;
+  padding: 10px 14px;
+  border-left: 5px solid var(--navy-line);
+  border-radius: 10px;
+  background: var(--paper);
+  font-weight: 700;
+  line-height: 1.8;
+}
+
+.howto-note__title {
+  margin-right: 6px;
+  color: var(--navy);
+}
+
+.howto-note--caution {
+  border-left-color: var(--parent-calm);
+}
+
+.howto-note--hint {
+  border-left-color: var(--gold);
+}
+
+/* いちばん下の「← ひとつ前の画面へ戻る」 */
+.howto-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 /* ============================================================
@@ -15475,7 +16226,11 @@ onUnmounted(() => {
   /* せまい画面ではカードの余白そのものが小さくなる（上下28px / 左右20px）ので、
      食い込ませる量も小さくしないと、ボタンがカードの外へ出てしまう
      タイトルとのあいだは20pxだけあける */
+  /* flex-wrap は、B画面の右上に「あそびかた」と「サウンド」が2つ並ぶぶんのはみ出しよけ
+     320pxくらいのとても細い画面では、右上の2つが下の行へ回りこむ
+     （A画面は2つだけなので、1行のまま変わらない） */
   .title-card__tools {
+    flex-wrap: wrap;
     gap: 8px;
     margin: -8px -4px 20px;
   }
@@ -15486,6 +16241,7 @@ onUnmounted(() => {
      右側は「🔊 ON」の短い表示になり、左の長いリンクとぶつからない */
   .title-card__soundtrack,
   .title-card__back,
+  .title-card__howto,
   .title-card__tools .sound-toggle {
     gap: 6px;
     min-height: 36px;
@@ -15495,6 +16251,13 @@ onUnmounted(() => {
 
   .title-card__tools .sound-toggle__icon {
     font-size: 15px;
+  }
+
+  /* B画面の「？ あそびかた」も、スマホでは「?」だけの短い表示にする
+     （「サウンド」の文字を隠すのと同じ考えかた。読み上げ用の名前は aria-label にある）
+     こうすると、左の「はじめの画面へ戻る」と3つが1行に収まる */
+  .title-card__howtoText {
+    display: none;
   }
 
   .title-card__name {
@@ -15507,6 +16270,32 @@ onUnmounted(() => {
     padding: 18px 18px;
     font-size: 16.5px;
     line-height: 1.8;
+  }
+
+  /* ===== あそびかた画面（スマホ幅） =====
+
+     文字の大きさはあまり下げずに、枠の余白と見出しを少しだけ小さくする
+     「名前・説明」の一覧は、名前の下に説明を置く形にして折り返しを減らす */
+  .howto-heading {
+    font-size: 24px;
+  }
+
+  .howto-heading__icon {
+    width: 32px;
+    height: 32px;
+    font-size: 18px;
+  }
+
+  .howto-section {
+    padding: 14px 14px 16px;
+  }
+
+  .howto-section__title {
+    font-size: 18px;
+  }
+
+  .howto-terms__row {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   /* ===== おやつ選択画面（スマホ幅） ===== */
