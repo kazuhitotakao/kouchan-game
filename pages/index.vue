@@ -1073,7 +1073,7 @@ function openSnackMenu(context: SnackUseContext) {
    バッグの中身（selectedSnackIds）はさわらない
    閉じると、開く前のメニューがそのまま出てくる
    ・exploring … ☕ ひとやすみ（「おやつをあげる」が選ばれたまま）
-   ・tantrum   … だっこ／おやつ／お話／待つ（「おやつをあげる」が選ばれたまま）
+   ・tantrum   … お話／だっこ／おやつ／待つ（「おやつをあげる」が選ばれたまま）
    ・fallDown  … ころんだ場面の4つのコマンド（「おやつで気をそらす」が選ばれたまま） */
 function closeSnackMenu() {
   snackUseContext.value = null;
@@ -1127,8 +1127,8 @@ const commandCount = computed(() => {
   }
 
   // いやいやが続いているあいだは、おやつが残っていれば4つ、食べきっていれば3つ
-  //   おやつあり  0 だっこ／1 おやつ ＞／2 お話する／3 少し待ってみる
-  //   おやつなし  0 だっこ／1 お話する／2 少し待ってみる
+  //   おやつあり  0 お話する／1 だっこ／2 おやつ ＞／3 少し待ってみる
+  //   おやつなし  0 お話する／1 だっこ／2 少し待ってみる
   // 待つ・お話・おやつが効かずに結果メッセージが出ているときも、
   // いやいやはまだ終わっていないので、この4つ（3つ）から選び直す
   // ※ 下の「結果表示中は1つ」より先に判定するのがポイント
@@ -1172,16 +1172,20 @@ const commandCount = computed(() => {
   return 3;
 });
 
-/* いやいやタイムの「こうちゃんとお話する」「少し待ってみる」が何番目になるか
+/* いやいやタイムの4つ（3つ）のコマンドが、それぞれ何番目になるか
 
-   おやつあり  0 だっこ／1 おやつ ＞／2 お話する／3 少し待ってみる
-   おやつなし  0 だっこ／1 お話する／2 少し待ってみる
+   おやつあり  0 お話する／1 だっこ／2 おやつ ＞／3 少し待ってみる
+   おやつなし  0 お話する／1 だっこ／2 少し待ってみる
+
+   いやいやタイムが始まったときは、いちばん上の「お話する」が選ばれた状態になる
 
    おやつが0個で「おやつをあげる」が画面から消えているときは、
-   その下の2つが1つずつくり上がる
-   （2 や 3 と直接書かずにここを見れば、画面とキーボード操作の番号がずれない）
+   その下の「少し待ってみる」だけが1つくり上がる
+   （0〜3 と直接書かずにここを見れば、画面とキーボード操作の番号がずれない）
 */
-const talkCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
+const talkCommandIndex = 0;
+const hugCommandIndex = 1;
+const snackCommandIndex = 2;
 const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 3 : 2));
 
 /* いやいやタイムの「待つ」コマンドに出す文字
@@ -5321,15 +5325,17 @@ function giveSnackWhileExploring(snackId: SnackId) {
      ・少し落ち着く … レベルが1段下がる（いやいやは続く）
      ・悪化する     … レベルが1段上がる（大いやいやのままなら、親の余裕が減る）
 
+   ※ 並べてある順番は、いやいやタイムの画面に出るコマンドの順番と同じ
+
+   ・お話する … 悔しい・まだ遊びたい なら正解（ナイス対応）
+                ぐずぐず・大泣きなら解決、大いやいやなら少し落ち着くだけ
+                つかれた・おなかすいた には効かず、悪化
    ・だっこ   … 安全策。どのレベルでも必ず解決（はげしいほど親の体力を多く使う）
                 つかれた なら ナイス対応
    ・おやつ   … 相性しだい
                 great  … どのレベルでも解決 ＋ ナイス対応
                 normal … ぐずぐずなら解決、大泣き以上なら少し落ち着くだけ
                 weak   … 悪化
-   ・お話する … 悔しい・まだ遊びたい なら正解（ナイス対応）
-                ぐずぐず・大泣きなら解決、大いやいやなら少し落ち着くだけ
-                つかれた・おなかすいた には効かず、悪化
    ・待つ     … ギャンブル。成功すれば解決（ぐずぐず）か少し落ち着く、失敗すると悪化
                 成功する確率は 理由 → レベル → 待つの連続 の順に計算する（getWaitSuccessChance()）
                 悔しい で成功したら ナイス対応
@@ -5717,7 +5723,7 @@ function talkToChild() {
   // 親の余裕が残り少ないと、お話でもGAME OVERになることがある
   checkGameOver();
 
-  // いやいやが終わっても続いても、一番上（0＝だっこ）から選べるように戻す
+  // いやいやが終わっても続いても、一番上（0＝お話する）から選べるように戻す
   selectedCommandIndex.value = 0;
 }
 
@@ -5801,9 +5807,9 @@ function getWaitSuccessChance() {
 
    いやいや対応の4つは、どれも親の余裕が減る
    何で払うかがちがうだけ（ずれた対応を続けて大いやいやになるほど、さらに重くなる）
+   ・お話する … 親の体力 -2       ／ 親の余裕 -4 （理由が合えば正解、合わないと悪化）
    ・だっこ   … 親の体力 -16〜-24 ／ 親の余裕 -5 （必ず終わる安全策）
    ・おやつ   … おやつ -1         ／ 親の余裕 -3 （相性が合えば効率よく終わる。1日2個まで）
-   ・お話する … 親の体力 -2       ／ 親の余裕 -4 （理由が合えば正解、合わないと悪化）
    ・待つ     … 親の体力 +2       ／ 親の余裕 -18（体力は減らないが、失敗すると悪化）
 */
 function waitCalmly() {
@@ -5867,7 +5873,7 @@ function waitCalmly() {
   //   いやいやが続いていてもGAME OVER画面のほうが優先される
   checkGameOver();
 
-  // 失敗したときも、すぐ次のコマンドを選べるように一番上（0＝だっこ）へ戻す
+  // 失敗したときも、すぐ次のコマンドを選べるように一番上（0＝お話する）へ戻す
   selectedCommandIndex.value = 0;
 }
 
@@ -7379,27 +7385,26 @@ function runSelectedCommand() {
       break;
 
     /* いやいやタイム
-       おやつが残っているとき   0 だっこ／1 おやつをあげる ＞／2 お話する／3 少し待ってみる
-       おやつが0個のとき       0 だっこ／1 お話する／2 少し待ってみる（おやつの行は画面に無い）
+       おやつが残っているとき   0 お話する／1 だっこ／2 おやつをあげる ＞／3 少し待ってみる
+       おやつが0個のとき       0 お話する／1 だっこ／2 少し待ってみる（おやつの行は画面に無い）
 
        「おやつをあげる ＞」はおやつバッグを開くだけ
        食べるのは、バッグの中でおやつを選んだとき（上の isSnackMenuVisible の分岐）
 
        ※ バッグが空のときにバッグを開いてしまわないように、
          必ず snackLeft（バッグの残り）を見てから決める
-       ※ お話・待つ の番号はおやつの有無で変わるので、
-         talkCommandIndex / waitCommandIndex を見る（2 や 3 を直接書かない）
-         おやつが0個のときは 1 が「お話する」になるが、
-         1つ上の分岐は snackLeft も見ているので、まちがってバッグを開くことはない
+       ※ 番号は talkCommandIndex などを見る（0〜3 を直接書かない）
+         待つ の番号だけはおやつの有無で変わるので、waitCommandIndex は computed
+         おやつが0個のときは 2 が「少し待ってみる」になるが、
+         おやつの分岐は snackLeft も見ているので、まちがってバッグを開くことはない
     */
     case 'tantrum':
-      if (index === 0) {
-        hugChild();
-      } else if (index === 1 && snackLeft.value > 0) {
-        openSnackMenu('tantrum');
-      } else if (index === talkCommandIndex.value) {
-        // 「こうちゃんとお話する」は、おやつがあれば3番目（2）、なければ2番目（1）
+      if (index === talkCommandIndex) {
         talkToChild();
+      } else if (index === hugCommandIndex) {
+        hugChild();
+      } else if (index === snackCommandIndex && snackLeft.value > 0) {
+        openSnackMenu('tantrum');
       } else if (index === waitCommandIndex.value) {
         // 「少し待ってみる」は、おやつがあれば4番目（3）、なければ3番目（2）
         waitCalmly();
@@ -8734,7 +8739,9 @@ onUnmounted(() => {
                4つの対応の「しくみ」だけを書く
                理由ごとの正解・おやつの相性・待つの成功率・レベルごとの数字・
                くり返したときの効きにくさの数字・ナイス対応の組み合わせは、どれも書かない
-               （対応の名前は、ゲーム画面のコマンドと同じ言葉にそろえてある） -->
+               （対応の名前も、並べる順番も、ゲーム画面のコマンドとそろえてある
+                 ＝ お話する → だっこ → おやつ → 待つ。
+                 コマンドの順番を変えたときは、ここの並びも合わせて直すこと） -->
           <section class="howto-section">
             <h2 class="howto-section__title">
               <span class="howto-section__num">4</span>
@@ -8749,6 +8756,11 @@ onUnmounted(() => {
 
             <dl class="howto-terms">
               <div class="howto-terms__row">
+                <dt>こうちゃんとお話する</dt>
+                <dd>理由によって、うまくいきやすさが変わります。</dd>
+              </div>
+
+              <div class="howto-terms__row">
                 <dt>だっこしてなだめる</dt>
                 <dd>落ち着かせやすいけれど、親の体力を使います。</dd>
               </div>
@@ -8756,11 +8768,6 @@ onUnmounted(() => {
               <div class="howto-terms__row">
                 <dt>おやつをあげる</dt>
                 <dd>おやつを1つ使います。そのときのこうちゃんとの相性があります。</dd>
-              </div>
-
-              <div class="howto-terms__row">
-                <dt>こうちゃんとお話する</dt>
-                <dd>理由によって、うまくいきやすさが変わります。</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -10859,7 +10866,7 @@ onUnmounted(() => {
               <nav class="command-box">
                 <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                      いやいやのコマンドと入れかえて、同じ枠の中に出す
-                     「← もどる」・Escape で、だっこ／おやつ／お話／待つ に戻る -->
+                     「← もどる」・Escape で、お話／だっこ／おやつ／待つ に戻る -->
                 <template v-if="isSnackMenuVisible">
                   <p class="command-box__label">🎒 どのおやつをあげる？</p>
 
@@ -10893,25 +10900,7 @@ onUnmounted(() => {
                 <template v-else-if="isTantrumUnsolved">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugChild" @mouseenter="selectedCommandIndex = 0">
-                    <span class="command-box__text">だっこしてなだめる</span>
-                  </button>
-
-                  <!-- バッグにおやつが残っているときだけ出す（押すとおやつバッグが開く） -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
-                    @click="openSnackMenu('tantrum')"
-                    @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">おやつをあげる ＞</span>
-                    <span class="command-box__badge">残り{{ snackLeft }}個</span>
-                  </button>
-
-                  <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
-
-                  <!-- こうちゃんとお話する
-                       番号はおやつの有無で変わるので talkCommandIndex を見る（おやつあり 2／なし 1） -->
+                  <!-- こうちゃんとお話する（いちばん上。いやいやタイムが始まったときは、ここが選ばれている） -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === talkCommandIndex }"
@@ -10920,6 +10909,29 @@ onUnmounted(() => {
                     <span class="command-box__text">こうちゃんとお話する</span>
                   </button>
 
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === hugCommandIndex }"
+                    @click="hugChild"
+                    @mouseenter="selectedCommandIndex = hugCommandIndex">
+                    <span class="command-box__text">だっこしてなだめる</span>
+                  </button>
+
+                  <!-- バッグにおやつが残っているときだけ出す（押すとおやつバッグが開く） -->
+                  <button
+                    v-if="snackLeft > 0"
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === snackCommandIndex }"
+                    @click="openSnackMenu('tantrum')"
+                    @mouseenter="selectedCommandIndex = snackCommandIndex">
+                    <span class="command-box__text">おやつをあげる ＞</span>
+                    <span class="command-box__badge">残り{{ snackLeft }}個</span>
+                  </button>
+
+                  <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
+
+                  <!-- 少し待ってみる
+                       番号はおやつの有無で変わるので waitCommandIndex を見る（おやつあり 3／なし 2） -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }"
