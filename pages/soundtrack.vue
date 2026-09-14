@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
+import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
 /* ============================================================
    サウンドトラックページ（/soundtrack）
 
-   ゲームの中で流れる曲（いまは7曲）を、ゆっくり聴くためのページ
+   ゲームの中で流れる曲（いまは7曲 ＋ S+ランクで解放されるボーナストラック1曲）を、ゆっくり聴くためのページ
 
    ゲーム本編（pages/index.vue）のBGMとは、わざと作りを分けてある
    ・本編 … 場面に合わせて自動で切り替わる。曲はloopする
@@ -44,8 +45,12 @@ type SoundtrackTrack = {
    （ゲーム本編でも、曲ごとに音量をそろえている）
    本編のBGMは「後ろで流れる音」なので小さめだが、
    このページは曲そのものを聴くページなので、全体に大きめにしてある
+
+   ※ ここに書くのは、はじめから聴ける曲だけ
+     S+ランクで解放されるボーナストラックは、すぐ下の sPlusBonusTrack に分けてある
+     再生のしくみが使うのは、この2つをあわせた tracks（さらに下）
 */
-const tracks: SoundtrackTrack[] = [
+const baseTracks: SoundtrackTrack[] = [
   {
     id: 1,
     title: 'こうちゃんの大冒険',
@@ -103,6 +108,49 @@ const tracks: SoundtrackTrack[] = [
     credit: '音楽生成：Suno',
   },
 ];
+
+/* ============================================================
+   ボーナストラック（S+ランクで解放される、うた入りエンディングBGM）
+
+   ゲーム本編で一度でもS+ランクを取ると、このブラウザに「解放済み」と保存される
+   （保存のしくみは utils/sPlusSong.ts。ゲーム本編と同じものを使っている）
+
+   ■ 「再生できる曲」と「画面のロック表示」を分けてある
+     ・tracks（すぐ下） … 再生できる曲だけの一覧
+                          解放前は baseTracks の7曲だけ、解放後は最後にボーナストラックを足した8曲
+                          個別再生・全曲再生・シャッフル・前後移動・リピートは、ぜんぶ tracks だけを見る
+     ・ロック表示        … 解放前だけ、テンプレートの曲一覧の最後に「🔒 ？？？」を1枚出す
+                          ボタンを持たない、ただの表示（tracks には入れない）
+     こうしておけば、再生のしくみのあちこちで「ロック中の曲はとばす」と書かなくてよい
+
+   ■ 解放されているかは、ページを開いたとき（onMounted）に localStorage から読む
+     ゲーム本編でS+を取ってからこのページへ来ると、このページは作り直されるので、
+     再読み込みしなくても解放済みとして出る
+   ============================================================ */
+const sPlusBonusTrack: SoundtrackTrack = {
+  id: 8,
+  title: sPlusSongTitle,
+  description: 'S+ランク特別エンディングBGM',
+  src: sPlusSongSrc,
+  // 音量と制作情報は、通常版（06 きょうの大冒険、おしまい！）と同じ
+  // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
+  volume: 0.43,
+  credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
+};
+
+/* ボーナストラックを解放済みかどうか（はじめは false。onMounted で思い出して入れなおす）
+   ※ サーバー側では localStorage を読めないので、ここでは読まない
+   ※ このページでは読むだけで、false に戻すことはない */
+const hasUnlockedSPlusSong = ref(false);
+
+/* 再生できる曲の一覧（画面に並ぶ曲のカードも、この順番）
+
+   解放後は、ボーナストラックを いちばん最後に足す
+   （既存の曲の id と順番は変えないので、全曲再生の開始曲などの覚えごとはくずれない）
+
+   ※ computed なので、使うときは tracks.value と書く（テンプレートの中では .value は要らない）
+   ※ baseTracks そのものは書きかえず、解放後は新しい配列を作って返す */
+const tracks = computed(() => (hasUnlockedSPlusSong.value ? [...baseTracks, sPlusBonusTrack] : baseTracks));
 
 /* ============================================================
    再生のしくみ
@@ -461,7 +509,7 @@ function pauseForSoundOff() {
 function resumeAfterSoundOn() {
   pausedBySoundOff = false;
 
-  const track = tracks.find((item) => item.id === playingTrackId.value);
+  const track = tracks.value.find((item) => item.id === playingTrackId.value);
   const audio = getSoundtrackAudio();
 
   if (!audio || !track) {
@@ -754,7 +802,7 @@ function playDecisionSound() {
    ============================================================ */
 
 /* 全曲再生の開始曲（はじめは1曲目。トラック番号を押すと変わる） */
-const selectedStartTrackId = ref<number>(tracks[0].id);
+const selectedStartTrackId = ref<number>(tracks.value[0].id);
 
 /* いま全曲再生の途中かどうか */
 const isPlaylistPlaying = ref(false);
@@ -831,7 +879,7 @@ const stopButtonLabel = computed(() => {
    （id は tracks の中でただ1つなので、find で1曲に決まる）
    playingTrackId が null（どれも選んでいない）のときは null を返し、
    テンプレート側は、そのあいだ現在曲の表示ごと消す */
-const playingTrack = computed(() => tracks.find((track) => track.id === playingTrackId.value) ?? null);
+const playingTrack = computed(() => tracks.value.find((track) => track.id === playingTrackId.value) ?? null);
 
 /* 操作行（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 停止）を出すかどうか
 
@@ -1356,11 +1404,11 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 */
 function startPlaylist() {
   // 開始曲の位置を探す（見つからなければ先頭から）
-  const startIndex = tracks.findIndex((track) => track.id === selectedStartTrackId.value);
+  const startIndex = tracks.value.findIndex((track) => track.id === selectedStartTrackId.value);
   const begin = startIndex >= 0 ? startIndex : 0;
 
   /* 開始曲から最後まで ＋ 先頭から開始曲の直前まで をつなげて、1周ぶんの曲順にする */
-  beginPlaylist([...tracks.slice(begin), ...tracks.slice(0, begin)], false);
+  beginPlaylist([...tracks.value.slice(begin), ...tracks.value.slice(0, begin)], false);
 }
 
 /* 「🔀 シャッフル再生」を押したとき
@@ -1382,7 +1430,7 @@ function startPlaylist() {
      （shuffleTracks が毎回、新しいコピーを作って並べかえるため）
 */
 function startShufflePlaylist() {
-  beginPlaylist(shuffleTracks(tracks), true);
+  beginPlaylist(shuffleTracks(tracks.value), true);
 }
 
 /* 全曲再生を終わりにする
@@ -1751,7 +1799,7 @@ function playAdjacentSingleTrack(direction: 'previous' | 'next') {
   }
 
   // いまの曲が、一覧（tracks）の何番目かを探す（どの曲も選んでいなければ、何もしない）
-  const currentIndex = tracks.findIndex((track) => track.id === playingTrackId.value);
+  const currentIndex = tracks.value.findIndex((track) => track.id === playingTrackId.value);
 
   if (currentIndex < 0) {
     return;
@@ -1767,8 +1815,8 @@ function playAdjacentSingleTrack(direction: 'previous' | 'next') {
      ・01で前         … (0 - 1 + 7) % 7 = 6 → 07
      ※ 「7」はじかに書かず、tracks.length を使う（曲が増えても、そのまま動く） */
   const step = direction === 'next' ? 1 : -1;
-  const adjacentIndex = (currentIndex + step + tracks.length) % tracks.length;
-  const adjacentTrack = tracks[adjacentIndex];
+  const adjacentIndex = (currentIndex + step + tracks.value.length) % tracks.value.length;
+  const adjacentTrack = tracks.value[adjacentIndex];
 
   /* サウンドOFFのときに押されたら、ONへ戻してから鳴らす
      （「▶ 再生」を押したときと同じ。→ ensureSoundEnabled） */
@@ -1879,7 +1927,7 @@ function changeMasterVolume(event: Event) {
   masterVolume.value = percent / 100;
 
   // いま選んでいる曲（再生中・一時停止中）があれば、その場で音量だけ変える
-  const playingTrack = tracks.find((track) => track.id === playingTrackId.value);
+  const playingTrack = tracks.value.find((track) => track.id === playingTrackId.value);
 
   if (soundtrackAudio && playingTrack) {
     try {
@@ -2622,6 +2670,13 @@ onMounted(() => {
   } catch {
     // 読み込めなくても、初期値の100％でふつうに聴ける
   }
+
+  /* ボーナストラック（S+ランクで解放される、うた入りBGM）を解放済みかを思い出す
+
+     true になると、tracks の最後にボーナストラックが入り、一覧の最後のロック表示と入れかわる
+     サーバー側では localStorage を読めないので、はじめはロック表示で組み立てておき、
+     ブラウザで動くここで読みなおしている（サウンドON/OFFの思い出しかたと同じ） */
+  hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
 });
 
 /* このページから離れるときの後始末
@@ -3092,6 +3147,31 @@ onUnmounted(() => {
               @input="seekTrack" />
 
             <span class="track__time">{{ formatTime(duration) }}</span>
+          </div>
+        </li>
+
+        <!-- ボーナストラックのロック表示（まだS+ランクを取っていないときだけ）
+
+             「まだ何か1曲ある」ことだけ分かるように、曲名は「？？？」にして、一覧の最後に出す
+             解放すると、この場所がそのままボーナストラック（tracks の最後の曲）に置きかわる
+
+             ・ボタンを1つも持たないので、押せない・再生できない・Tabでも止まらない
+             ・再生できる曲の一覧（tracks）には入れていないので、
+               全曲再生・シャッフル・前後移動の曲順には、はじめから入らない
+             ・class に track を付けていないのは、曲の一覧のキーボード操作（handleTrackListKeydown）が
+               .track を「ボタンのある曲のカード」として数えるため
+               ここも数えてしまうと、End で最後の曲へ行けず、↑↓ の回りこみも止まってしまう
+             ・「？？？」は読み上げると記号の連続になるので、読み上げソフトには「まだ聴けない曲」と伝える -->
+        <li v-if="!hasUnlockedSPlusSong" class="st-lockedTrack">
+          <span class="st-lockedTrack__icon" aria-hidden="true">🔒</span>
+
+          <div class="st-lockedTrack__body">
+            <p class="st-lockedTrack__title">
+              <span aria-hidden="true">？？？？？？？？？</span>
+              <span class="st-lockedTrack__srText">まだ聴けない曲</span>
+            </p>
+
+            <p class="st-lockedTrack__description">S+ランクで解放</p>
           </div>
         </li>
       </ol>
@@ -4210,6 +4290,65 @@ onUnmounted(() => {
 }
 
 /* ============================================================
+   ボーナストラックのロック表示（まだS+ランクを取っていないときだけ出る）
+
+   曲のカード（.track）と同じ角の丸み・余白にして、一覧の「最後の1曲」に見せる
+   押せないことが分かるよう、ふちは点線、色はうすくしている
+   （ボタンが無いので、:hover や :focus-visible の見た目も付けない）
+   ============================================================ */
+.st-lockedTrack {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 18px;
+  padding: 10px 20px;
+  border: 2px dashed #c8d4e6;
+  border-radius: 14px;
+  background: #f4f7fb;
+}
+
+/* 🔒 … 上の曲の番号（.track__no）と同じくらいの幅にして、曲名の書きはじめをそろえる */
+.st-lockedTrack__icon {
+  box-sizing: border-box;
+  min-width: 56px;
+  padding: 6px 10px;
+  font-size: 24px;
+  line-height: 1.1;
+  text-align: center;
+}
+
+.st-lockedTrack__body {
+  min-width: 0;
+}
+
+.st-lockedTrack__title {
+  margin: 0 0 2px;
+  color: #8a97aa;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.5;
+}
+
+.st-lockedTrack__description {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* 読み上げソフトにだけ伝える文字（画面には出さない）
+   display: none にすると読み上げからも消えてしまうので、1pxの見えない箱に入れている */
+.st-lockedTrack__srText {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ============================================================
    再生バー（シークバー）
 
    カードの2行目に、横いっぱいで置く
@@ -4553,6 +4692,21 @@ onUnmounted(() => {
   .track__button {
     grid-column: 1 / -1;
     width: 100%;
+  }
+
+  /* ボーナストラックのロック表示も、上の曲のカードと同じ余白・文字の大きさにそろえる */
+  .st-lockedTrack {
+    gap: 10px 12px;
+    padding: 12px 14px;
+  }
+
+  .st-lockedTrack__icon {
+    min-width: 46px;
+    font-size: 20px;
+  }
+
+  .st-lockedTrack__title {
+    font-size: 17px;
   }
 
   /* ⓘ の吹き出し（制作情報）
