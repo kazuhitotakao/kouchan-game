@@ -99,7 +99,7 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    acornArea    = どんぐりの木
    pond         = 池
    hill         = 丘
-   secretSpot   = 秘密の場所
+   secretSpot   = こもれびの広場
    tantrum      = いやいや中（なだめる場面）
    goal         = ゴール（公園の出口）
    gameOver     = ゲームオーバー（限界をむかえて途中で終わった）
@@ -1395,7 +1395,7 @@ function toggleSound() {
        ・タイトル画面              … タイトルBGM
        ・いやいやタイム            … いやいやBGM
        ・いやいや発生の結果を読んでいる最中 … どれも鳴らさない（わざと無音にしている画面）
-       ・秘密の場所                … 秘密の場所BGM
+       ・秘密の場所                … こもれびの広場BGM
        ・公園を探検している最中     … 公園BGM（10:30より前ならBGM1、10:30以降ならBGM2）
        ・ゴール（通常のおしまい）   … リザルトBGM
        ・GAME OVER                 … GAME OVER BGM（ゴールのリザルトBGMとは別の曲）
@@ -1429,11 +1429,11 @@ function toggleSound() {
        ※ 秘密の場所を、公園BGMより先に置くのが大事
          秘密の場所も「ゲーム中で、結果画面ではない」に当てはまってしまうので、
          あとに置くと、秘密の場所なのに公園BGMが鳴りだしてしまう
-         （そのうえ、あとから秘密の場所BGMも鳴ると2曲が重なってしまう）
+         （そのうえ、あとからこもれびの広場BGMも鳴ると2曲が重なってしまう）
 
        ※ 秘密の場所から出たあとにONへ戻したときは、
          currentEvent がもう 'secretSpot' ではないので公園BGMのほうへ進む
-         秘密の場所BGMが勝手に鳴りなおすことはない
+         こもれびの広場BGMが勝手に鳴りなおすことはない
 
        ※ サウンドOFFのまま秘密の場所へ入って、そこでONに戻したときは、
          まだ曲を一度も作っていないので、resumeSecretBgm() の中で
@@ -1709,7 +1709,7 @@ const resultBgmVolume = 0.17;
    （例：少し小さくしたいなら 0.15） */
 const gameOverBgmVolume = 0.17;
 
-/* 秘密の場所BGMの音量
+/* こもれびの広場BGMの音量
 
    音源そのものの録音の大きさがちがうので、公園BGMとは別の数字にしてある
    （ひとまず公園BGMと同じ 0.16 にしてあるが、
@@ -1873,7 +1873,7 @@ let fadingBgmVolume = 0;
    いきなり ふだんの音量で始まると唐突に聞こえるので、
    すっと入ってくるようにするための演出
 
-   ※ タイトルBGM・公園BGM・秘密の場所BGM・いやいやBGM・リザルトBGM・GAME OVER BGMの
+   ※ タイトルBGM・公園BGM・こもれびの広場BGM・いやいやBGM・リザルトBGM・GAME OVER BGMの
      どれにも使える
      2曲が同時に鳴ることはない（切り替えるときは必ず前の曲を止める）ので、
      フェインの係は1つだけ用意しておけば足りる
@@ -3035,11 +3035,11 @@ function stopGameOverBgm() {
 }
 
 /* ============================================================
-   秘密の場所のBGM
+   こもれびの広場のBGM
 
    作りは公園BGM・タイトルBGM・いやいやBGM・リザルトBGMとまったく同じで、
    鳴らす場面だけがちがう
-   ・秘密の場所BGM … 秘密の場所にいるあいだ（currentEvent === 'secretSpot'）
+   ・こもれびの広場BGM … 秘密の場所にいるあいだ（currentEvent === 'secretSpot'）
 
    ここだけ曲を変える理由は「特別な場所に来た」と分かるようにするため
    公園入口・すべり台・砂場などは、ぜんぶ同じ公園のつづきなので公園BGMのまま
@@ -3047,7 +3047,7 @@ function stopGameOverBgm() {
 
    ※ 公園BGMとは必ず「入れかえ」にする（重ねない）
      秘密の場所へ入るときは公園BGMを止めてから、
-     出るときは秘密の場所BGMを止めてから、次の曲を鳴らす
+     出るときはこもれびの広場BGMを止めてから、次の曲を鳴らす
      2曲が同時に鳴ると、どちらもにごって聞こえてしまうため
 
    ※ 秘密の場所を出たら、公園BGM1・BGM2のどちらへ戻るかは時計が決める
@@ -3057,11 +3057,11 @@ function stopGameOverBgm() {
      曲を選ぶ仕事は playParkBgmSoon() → playParkBgm() にまかせる
    ============================================================ */
 
-/* 秘密の場所BGMを入れておく箱
+/* こもれびの広場BGMを入れておく箱
    ほかの4曲と同じく、サーバー側では作れないので null から始める */
 let secretBgm: HTMLAudioElement | null = null;
 
-/* 秘密の場所BGMを用意して返す（初めて必要になったときだけ作る）
+/* こもれびの広場BGMを用意して返す（初めて必要になったときだけ作る）
 
    ※ ほかの4曲と同じく、ここでは soundEnabled を見ない
      OFFにした瞬間に「鳴っている曲を止める」ために必要になるため
@@ -3093,7 +3093,7 @@ function getSecretBgm() {
   }
 }
 
-/* 秘密の場所BGMを「最初から」再生する（秘密の場所へ入ったとき用）
+/* こもれびの広場BGMを「最初から」再生する（秘密の場所へ入ったとき用）
 
    ※ currentTime = 0 で必ず曲の先頭に戻す
      一度出てからまた秘密の場所へ入ったときも、前回の続きではなく
@@ -3130,7 +3130,7 @@ function playSecretBgm() {
   }
 }
 
-/* 秘密の場所BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+/* こもれびの広場BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
    700 で0.7秒。ここだけ書きかえれば、間の長さを調整できる
 
    待つ理由は2つ
@@ -3149,7 +3149,7 @@ const secretBgmStartDelay = 700;
 */
 let secretBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
-/* 秘密の場所BGMを「少し待ってから」最初から鳴らす
+/* こもれびの広場BGMを「少し待ってから」最初から鳴らす
 
    ※ 待たせるのは「音を鳴らすこと」だけ
      秘密の場所の画面は、いつもどおりすぐ表示される
@@ -3190,7 +3190,7 @@ function cancelSecretBgmStart() {
   secretBgmTimer = null;
 }
 
-/* 秘密の場所BGMを「続きから」再生する（サウンドをONに戻したとき用）
+/* こもれびの広場BGMを「続きから」再生する（サウンドをONに戻したとき用）
 
    playSecretBgm() とのちがいは currentTime を 0 に戻さないこと
    OFFにしたところから、そのまま続きを鳴らす
@@ -3217,7 +3217,7 @@ function resumeSecretBgm() {
   }
 }
 
-/* 秘密の場所BGMを一時停止する（どこまで再生したかは覚えたまま）
+/* こもれびの広場BGMを一時停止する（どこまで再生したかは覚えたまま）
    サウンドをOFFにしたときと、ページを離れるときに使う
 
    ※ currentTime（どこまで鳴らしたか）はリセットしない
@@ -3239,7 +3239,7 @@ function pauseSecretBgm() {
   }
 }
 
-/* 秘密の場所BGMを完全に止める（次はまた最初から鳴るようにする）
+/* こもれびの広場BGMを完全に止める（次はまた最初から鳴るようにする）
 
    秘密の場所から出るとき・いやいや発生・GAME OVER・ゴール・
    「もう一度あそぶ」で使う
@@ -3980,9 +3980,9 @@ function checkTantrum() {
        （いやいやをはさんで場面が変わったので、
          曲も「仕切りなおし」にしたほうが切りかわった感じが出る）
 
-     ※ 公園BGMと秘密の場所BGMの両方に声をかける
+     ※ 公園BGMとこもれびの広場BGMの両方に声をかける
        いやいやは、どの場所で行動しても起こる
-       すべり台なら公園BGMが、秘密の場所なら秘密の場所BGMが鳴っているので、
+       すべり台なら公園BGMが、秘密の場所ならこもれびの広場BGMが鳴っているので、
        「いま鳴っているほう」を調べなくてよいように、両方止めてしまう
        （鳴っていない曲に stop を呼んでも、何も起きないだけなので安全）
 
@@ -4026,7 +4026,7 @@ function checkGameOver() {
      BGMは、それまで鳴っていたかもしれない曲（公園・秘密の場所・いやいや・リザルト）をぜんぶ止める
      いやいやタイム中でも、だっこで親の体力が0になるなどでGAME OVERになるため
      秘密の場所で親の体力が0になることもあり、そのときGAME OVER画面へ移ったあとも
-     秘密の場所BGMが鳴りつづけないようにする
+     こもれびの広場BGMが鳴りつづけないようにする
      リザルトBGMはふつうGAME OVERと同時には鳴らないが、
      結果画面の曲どうし（リザルトBGMとGAME OVER BGM）が重ならないように、念のため止めておく
      （鳴っていない曲に stop を呼んでも、何も起きないだけなので安全）
@@ -4697,16 +4697,16 @@ function goToPlace(place: GameEvent) {
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
 
-  /* 秘密の場所へ入るときだけ、公園BGMから秘密の場所BGMへ入れかえる
+  /* 秘密の場所へ入るときだけ、公園BGMからこもれびの広場BGMへ入れかえる
 
-     かならず「公園BGMを止める → 秘密の場所BGMを鳴らす」の順番にする
+     かならず「公園BGMを止める → こもれびの広場BGMを鳴らす」の順番にする
      先に止めておかないと、待っている0.7秒のあいだ公園BGMが鳴りつづけ、
      2曲が重なってどちらもにごって聞こえてしまう
 
      stopParkBgm() は公園BGM1・BGM2の両方を止めてくれるので、
      いまどちらの時間帯かを気にしなくてよい
 
-     秘密の場所BGMは playSecretBgmSoon() で少し間を空けてから鳴らしはじめる
+     こもれびの広場BGMは playSecretBgmSoon() で少し間を空けてから鳴らしはじめる
      ・決定音「ポン♪」が、曲の鳴りはじめにかき消されない
      ・いったん静かになるので「特別な場所へ入った」という感じが出る
      （待つのは音だけで、画面はこの上の行ですでに切りかわっている）
@@ -4750,7 +4750,7 @@ function goToNextPlace() {
 
      このあと currentEvent を書きかえてしまうと、
      「さっきまで秘密の場所にいた」ことが分からなくなる
-     秘密の場所BGMを止めるのも、公園BGMへ戻すのも、この印を見て決める
+     こもれびの広場BGMを止めるのも、公園BGMへ戻すのも、この印を見て決める
 
      ※ 「べつの場所へ行く」でも「次の場所を選ぶ」でも、
        秘密の場所から出る道はこの関数1本だけなので、ここで覚えれば足りる */
@@ -4776,7 +4776,7 @@ function goToNextPlace() {
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
 
-  /* 秘密の場所から出るので、秘密の場所BGMを止める
+  /* 秘密の場所から出るので、こもれびの広場BGMを止める
 
      行き先（いやいやタイム・ゴール・突然イベント・公園入口）に関わらず、
      秘密の場所の画面を離れる時点で、この曲の出番は終わり
@@ -4797,7 +4797,7 @@ function goToNextPlace() {
 
      ここでいやいやBGMを先頭から鳴らしはじめる（フェードイン付き）
 
-     公園BGMと秘密の場所BGMは、いやいやが発生した瞬間（checkTantrum）に
+     公園BGMとこもれびの広場BGMは、いやいやが発生した瞬間（checkTantrum）に
      すでに stop して無音にしてあるので、ここでは止まったまま
      それでも念のためもう一度 stop を呼んでおく
      （いやいやタイムへ来る道はここ1本だが、
@@ -4873,10 +4873,10 @@ function goToNextPlace() {
      ・いやいやではない（上の②で分かれている）
      ・12:00も過ぎていない（すぐ上の④で分かれている）
      ＝ これからも公園の探検が続く、ということ
-     なので、秘密の場所BGMから公園BGMへ戻す
+     なので、こもれびの広場BGMから公園BGMへ戻す
 
      鳴らしかたは playParkBgmSoon()＝「このおやつで公園へ行く！」を押したときと同じ
-     ・秘密の場所BGMは、この関数の上のほうですでに止めてある
+     ・こもれびの広場BGMは、この関数の上のほうですでに止めてある
      ・少し間（700ms）を空けてから鳴らしはじめる
        → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
        → いったん静かになるので「秘密の場所から出てきた」感じが出る
@@ -4897,7 +4897,7 @@ function goToNextPlace() {
 
      ※ 突然イベントの予定があるときも、ここを通ってよい
        救急車・てんとう虫・犬などは、どれも「ふつうの公園での出来事」なので、
-       秘密の場所BGMのままではなく公園BGMへ戻すのが自然 */
+       こもれびの広場BGMのままではなく公園BGMへ戻すのが自然 */
   if (leavingSecretSpot) {
     playParkBgmSoon();
   }
@@ -5150,10 +5150,10 @@ function walkUpHill() {
   finishPlayAction('hill');
 }
 
-/* ===== 秘密の場所 ===== */
+/* ===== こもれびの広場 ===== */
 
-/* ① 秘密基地で遊ぶ */
-function playSecretBase() {
+/* ① 木漏れ日の中を探検する */
+function exploreSunlight() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
@@ -5164,20 +5164,20 @@ function playSecretBase() {
   parentCalm.value -= 4;
   addMinutes(25);
 
-  resultMessage.value = '木のトンネルの奥は秘密基地でした。こうちゃんは目をかがやかせています！';
+  resultMessage.value = '木漏れ日の中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。';
 
-  addCollectedItem('ふしぎな形の枝');
   finishPlayAction('secretSpot');
 }
 
-/* ② 秘密の道をもう少し探検する
+/* ② 広場の奥を見てみる
 
-   前はここに「二人で景色をながめる」があったが、
-   体力も余裕も回復する、ほとんど休憩の行動になっていた
-   休む行動は別枠の「ひとやすみ」にまとめたので、
-   ここは秘密の場所らしい「もう少し奥へ進む」遊びに置きかえている
+   広場のさらに奥を少し探して、木の根元で「ふしぎな形の枝」を見つける
+   （前はここに「二人で景色をながめる」があったが、
+     体力も余裕も回復する、ほとんど休憩の行動になっていた
+     休む行動は別枠の「ひとやすみ」にまとめたので、
+     ここは広場らしい「奥を探してみる」遊びに置きかえている）
 */
-function exploreSecretPath() {
+function exploreClearingDepths() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
@@ -5188,8 +5188,9 @@ function exploreSecretPath() {
   parentCalm.value -= 4;
   addMinutes(20);
 
-  resultMessage.value = '秘密の場所の奥へ、もう少し進んでみました。こうちゃんは細い道を見つけて、わくわくしながら先へ進みます。';
+  resultMessage.value = '広場の奥へ進んでみると、木の根元に変わった形の枝を見つけました。「これなにー？」こうちゃんは不思議そうに拾い上げました。';
 
+  addCollectedItem('ふしぎな形の枝');
   finishPlayAction('secretSpot');
 }
 
@@ -6634,15 +6635,15 @@ function goToGoal() {
        いやいや対応中に12:00を過ぎると、いやいやタイムからそのまま
        ここへ来ることがあるため
 
-     ※ 秘密の場所BGMも止めておく
+     ※ こもれびの広場BGMも止めておく
        秘密の場所で遊んでいるうちに12:00を過ぎることがある
        （11:50に入って20分遊ぶと12:10）
-       そのときは、結果カードを読んでいるあいだは秘密の場所BGMのままにして、
+       そのときは、結果カードを読んでいるあいだはこもれびの広場BGMのままにして、
        「次の場所を選ぶ」を押したこのタイミングで止める
 
        この場合、公園BGMは一瞬も鳴らさない
        goToNextPlace() では「12:00を過ぎていたら公園BGMを鳴らさない」ように
-       分かれているので、秘密の場所BGM → そのままリザルトBGM、となる */
+       分かれているので、こもれびの広場BGM → そのままリザルトBGM、となる */
   stopParkBgm();
   stopSecretBgm();
   stopTantrumBgm();
@@ -6756,7 +6757,7 @@ function resetGame() {
      ゴール音が鳴っているあいだに「もう一度あそぶ」を押しても、
      あとからタイトル画面でリザルトBGMが鳴りだすことはない
 
-     秘密の場所BGMも stop で先頭に戻しておく
+     こもれびの広場BGMも stop で先頭に戻しておく
      GAME OVERになった画面から「もう一度あそぶ」を押すこともあるので、
      再生位置も0に戻して、次に秘密の場所へ入ったときは必ず頭から鳴らす
 
@@ -7383,14 +7384,14 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 秘密の場所
-       0 秘密基地で遊ぶ／1 秘密の道をもう少し探検する
+    /* こもれびの広場
+       0 木漏れ日の中を探検する／1 広場の奥を見てみる
        （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
-        playSecretBase();
+        exploreSunlight();
       } else if (index === 1) {
-        exploreSecretPath();
+        exploreClearingDepths();
       }
       break;
 
@@ -9349,15 +9350,15 @@ onUnmounted(() => {
                      まだ行っていない → はじめて見つけたときの案内
                      もう行った → また行ってみようという案内 -->
                 <template v-if="isVisited('secretSpot')">
-                  <h2 class="place-card__title">秘密の場所</h2>
+                  <h2 class="place-card__title">こもれびの広場</h2>
 
-                  <p class="place-card__text">こうちゃんは、あの秘密の道を覚えているようです。また行ってみよう！</p>
+                  <p class="place-card__text">こうちゃんは、木々のあいだの細い道を覚えているようです。また行ってみよう！</p>
                 </template>
 
                 <template v-else>
-                  <h2 class="place-card__title">秘密の場所を発見！</h2>
+                  <h2 class="place-card__title">細い道を見つけた！</h2>
 
-                  <p class="place-card__text">公園の奥に、知らない道を見つけました。行ってみよう！</p>
+                  <p class="place-card__text">木々のあいだに、細い道があるのを見つけました。この先には何があるのかな？行ってみよう！</p>
                 </template>
               </article>
             </section>
@@ -9396,7 +9397,7 @@ onUnmounted(() => {
                 :class="{ 'cmd--selected': selectedCommandIndex === 5 }"
                 @click="goToPlace('secretSpot')"
                 @mouseenter="selectedCommandIndex = 5">
-                <span class="cmd__text">秘密の場所へ行く</span>
+                <span class="cmd__text">細い道の先へ行く</span>
                 <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
               </button>
 
@@ -10542,9 +10543,11 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
             <section class="stage">
               <article class="place-card place-card--secret">
-                <h2 class="place-card__title">秘密の場所</h2>
+                <h2 class="place-card__title">こもれびの広場</h2>
 
-                <p class="place-card__text">しげみのおくに、細い道を見つけました。こうちゃんが手を引いて進みます。</p>
+                <p class="place-card__text">
+                  木々のあいだの細い道を、こうちゃんと葉っぱをかき分けながら進むと、やわらかな木漏れ日が差しこむ小さな広場に出ました。風がそっと吹いて、葉っぱがきらきら揺れています。「きれいー！」こうちゃんは、目をかがやかせています。
+                </p>
               </article>
 
               <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
@@ -10708,12 +10711,12 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSecretBase" @mouseenter="selectedCommandIndex = 0">
-                      <span class="command-box__text">秘密基地で遊ぶ</span>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="exploreSunlight" @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">木漏れ日の中を探検する</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreSecretPath" @mouseenter="selectedCommandIndex = 1">
-                      <span class="command-box__text">秘密の道をもう少し探検する</span>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreClearingDepths" @mouseenter="selectedCommandIndex = 1">
+                      <span class="command-box__text">広場の奥を見てみる</span>
                     </button>
 
                     <!-- ここから下は「どこでも同じコマンド」という区切り

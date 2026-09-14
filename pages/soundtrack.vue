@@ -72,8 +72,8 @@ const tracks: SoundtrackTrack[] = [
   },
   {
     id: 4,
-    title: 'こもれびのひみつきち',
-    description: '秘密の場所BGM',
+    title: 'こもれびの奥で',
+    description: 'こもれびの広場 BGM',
     src: '/audio/secret-bgm.mp3',
     volume: 0.4,
     credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
