@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
 const gameTitle: string = 'こうちゃんの大冒険';
 
@@ -754,6 +755,26 @@ const statusBefore = ref({
 const endingRank = ref('');
 const endingTitle = ref('');
 const endingMessage = ref('');
+
+/* S+ランク限定の「うた入りエンディングBGM」を、このブラウザで解放済みかどうか
+
+   一度でもS+ランクを取ると true になり、localStorage にも保存される
+   （保存のしくみは utils/sPlusSong.ts。サウンドトラックのページも同じものを使う）
+
+   ※ 体力や機嫌とちがって「ゲームのステータス」ではなく「実績・解放情報」なので、
+     resetGame（もう一度あそぶ／はじめの画面へ戻る）では false に戻さない
+     （サウンドの設定 soundEnabled と同じあつかい）
+   ※ 前に解放しているかは、onMounted で localStorage から思い出す
+*/
+const hasUnlockedSPlusSong = ref(false);
+
+/* 今回のゴールで、うた入りBGMを「このブラウザではじめて」解放したかどうか
+
+   true のときだけ、リザルト画面に「✨ サウンドトラックに新しい曲が追加されました！」を出す
+   2回目以降のS+では出さない（曲そのものは毎回流す）
+   こちらはその1プレイだけの表示なので、resetGame() で false に戻す
+*/
+const isSPlusSongNewlyUnlocked = ref(false);
 
 /* 今回のプレイの総合スコア（0〜100点）
    ゴールしたときに calculateFinalScore() で計算して入れる
@@ -2630,8 +2651,13 @@ function stopTantrumBgm() {
    ※ GAME OVER画面で流すのは、この曲ではない
      GAME OVERは「途中で帰ることになってしまった」場面なので、
      別の専用曲（GAME OVER BGM）を流す（すぐ下の「GAME OVER画面のBGM」を参照）
-     ・ゴール（currentEvent === 'goal'）        … リザルトBGM（result-bgm.mp3）
+     ・ゴール（currentEvent === 'goal'）        … リザルトBGM（result-bgm.mp3。S+ランクだけ result-bgm-splus.mp3）
      ・GAME OVER（currentEvent === 'gameOver'） … GAME OVER BGM（game-over-bgm.mp3）
+
+   ※ S+ランクのときだけ、うた入りの曲「きょうの大冒険、おしまい！ ～うた入り～」を流す
+     曲がちがうだけで、同じリザルトBGMとしてあつかう
+     （入れもの resultBgm も、鳴らす・止める・再開する関数も、ぜんぶ同じものを使う）
+     鳴らす前に getResultBgm() が、今回のランクに合わせて src を差しかえる
 
    ※ ゴール音「タタターン♪」とは重ねない
      goToGoal() で「タタターン♪」を鳴らしたあと、
@@ -2642,10 +2668,27 @@ function stopTantrumBgm() {
    ほかの3曲と同じく、サーバー側では作れないので null から始める */
 let resultBgm: HTMLAudioElement | null = null;
 
+/* 通常のリザルトBGMの音源（Sランク以下と、特殊エンドで流す）
+   public/audio/result-bgm.mp3 は、URLでは /audio/result-bgm.mp3 になる
+   （S+ランク用の sPlusSongSrc は、サウンドトラックと共用なので utils/sPlusSong.ts にある） */
+const resultBgmSrc = '/audio/result-bgm.mp3';
+
+/* 今回のランクに合ったリザルトBGMの音源を返す
+
+   S+ランクのときだけ、うた入り
+   Sランクもふくめ、それ以外（A〜D・特殊エンド）はぜんぶ通常版 */
+function getResultBgmSrc() {
+  return endingRank.value === 'S+ランク' ? sPlusSongSrc : resultBgmSrc;
+}
+
 /* リザルトBGMを用意して返す（初めて必要になったときだけ作る）
 
    ※ ほかの3曲と同じく、ここでは soundEnabled を見ない
      OFFにした瞬間に「鳴っている曲を止める」ために必要になるため
+
+   ※ 入れもの（Audio）は1つだけ作って使いまわすが、鳴らす曲は今回のランクで変わる
+     同じページのまま何回も遊ぶと、「1回目 S+ → 2回目 A → 3回目 S+」のように
+     前回とちがう曲が必要になるので、呼ばれるたびに src が今回のランクに合っているかを確かめる
 */
 function getResultBgm() {
   // サーバー側には Audio が無いので、ここで終わり
@@ -2654,10 +2697,11 @@ function getResultBgm() {
   }
 
   try {
+    const src = getResultBgmSrc();
+
     // まだ無いときだけ作る（2回目からは、この行は通らない）
     if (!resultBgm) {
-      // public/audio/result-bgm.mp3 は、URLでは /audio/result-bgm.mp3 になる
-      resultBgm = new Audio('/audio/result-bgm.mp3');
+      resultBgm = new Audio(src);
 
       // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
       // （結果をゆっくり読んでいても、曲が途切れないようにするため）
@@ -2665,6 +2709,17 @@ function getResultBgm() {
 
       // volume … 音の大きさ（上の resultBgmVolume で決めている）
       resultBgm.volume = resultBgmVolume;
+    } else if (resultBgm.getAttribute('src') !== src) {
+      /* 前のゴールとランクがちがって、鳴らす曲が変わるときだけ差しかえる
+
+         ・同じ曲のときは差しかえない
+           サウンドをONに戻して「続きから」鳴らすとき（resumeResultBgm）に、先頭へ戻ってしまうため
+         ・src を差しかえると再生位置は先頭に戻るが、loop と volume はそのまま残る
+
+         ※ resultBgm.src ではなく getAttribute('src') で比べるのは、
+           .src だと「http://〜/audio/result-bgm.mp3」のような長い形で返ってきて、
+           同じ曲でも文字が食いちがってしまうため */
+      resultBgm.src = src;
     }
 
     return resultBgm;
@@ -7383,6 +7438,41 @@ function judgeResult() {
   endingMessage.value = '公園に着いたばかりなのに、もう帰り道。こうちゃんはまだ遊びたそうです。次はもっと探検してみよう！';
 }
 
+/* S+ランクになったら、うた入りエンディングBGMをサウンドトラックに解放する
+
+   ・S+ランクでなければ、何もしない（Sランク・特殊エンドなどでは解放しない）
+   ・このブラウザではじめての解放なら、リザルト画面に「新しい曲が追加されました！」を出す
+   ・すでに解放済みなら、お知らせは出さない
+     （うた入りの曲そのものは、解放済みかどうかに関係なく、S+ランクなら毎回流す → getResultBgmSrc）
+
+   ※ 解放したかどうかは、ゲームの記録とは別の「実績」として localStorage に残す
+     もう一度あそんでも、ブラウザを閉じても、ロックには戻らない
+
+   ※ judgeResult() でランクが決まったあとに呼ぶこと（→ goToGoal）
+*/
+function unlockSPlusSongIfEarned() {
+  // 前のゴールのお知らせが残らないように、まず消しておく
+  isSPlusSongNewlyUnlocked.value = false;
+
+  if (endingRank.value !== 'S+ランク') {
+    return;
+  }
+
+  /* もう解放済みなら、お知らせは出さない
+     保存場所（localStorage）も読みなおしているのは、
+     このページを開いたあとに、別のタブでS+を取っていることもあるため */
+  if (hasUnlockedSPlusSong.value || loadHasUnlockedSPlusSong()) {
+    hasUnlockedSPlusSong.value = true;
+
+    return;
+  }
+
+  // このブラウザで、はじめての解放
+  hasUnlockedSPlusSong.value = true;
+  isSPlusSongNewlyUnlocked.value = true;
+  saveSPlusSongUnlocked();
+}
+
 /* ゴールへ向かう（判定して結果画面へ） */
 function goToGoal() {
   // GAME OVERになったときは、S+〜Dランクの判定はしない
@@ -7428,6 +7518,11 @@ function goToGoal() {
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
   judgeResult();
+
+  /* S+ランクなら、うた入りエンディングBGMを解放する（はじめてなら、お知らせも出す）
+     ランクが決まった直後に呼ぶ（このあと鳴らすリザルトBGMも、同じランクで曲を選ぶ） */
+  unlockSPlusSongIfEarned();
+
   currentEvent.value = 'goal';
 
   /* リザルトBGMを鳴らしはじめる
@@ -7597,6 +7692,12 @@ function resetGame() {
   endingRank.value = '';
   endingTitle.value = '';
   endingMessage.value = '';
+
+  /* うた入りBGMの「新しい曲が追加されました！」のお知らせも消す（その1プレイだけの表示）
+
+     ※ hasUnlockedSPlusSong（解放済みかどうか）と、localStorage の解放情報は、ここでは戻さない
+       一度解放した曲は、もう一度あそんでも、はじめの画面へ戻っても、ロックに戻さないため */
+  isSPlusSongNewlyUnlocked.value = false;
 
   // 前回の総合スコアと内訳が残らないように、0と空の配列に戻す
   finalScore.value = 0;
@@ -9309,6 +9410,11 @@ onMounted(() => {
   } catch {
     // 読み込めなくても、初期値のONで普通に遊べる
   }
+
+  /* S+ランク限定のうた入りBGMを、前に解放しているかを思い出す
+     （サーバー側では localStorage を読めないので、ブラウザで動くここで読む）
+     解放済みなら、次にS+を取っても「新しい曲が追加されました！」は出ない */
+  hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
 
   /* ※ ここではBGMを鳴らさない
 
@@ -12584,6 +12690,20 @@ onUnmounted(() => {
                 <h3 class="ending-card__title">{{ endingTitle }}</h3>
 
                 <p class="ending-card__text">{{ endingMessage }}</p>
+
+                <!-- S+ランクのときだけ出す、うた入りエンディングBGMの小さな表示
+
+                     出すのは、どちらか1つだけ（スコア・ランク・結果の文をじゃましないように）
+                     ・このブラウザではじめて解放したとき … 「✨ サウンドトラックに新しい曲が追加されました！」＋ 曲名
+                     ・もう解放済みのとき                 … 「♪ 曲名」だけ（いま流れている曲の案内）
+
+                     role="status" … 解放のお知らせが出たことを、読み上げソフトにも伝える -->
+                <p v-if="isSPlusSongNewlyUnlocked" class="ending-card__song ending-card__song--new" role="status">
+                  <span>✨ サウンドトラックに新しい曲が追加されました！</span>
+                  <span>「{{ sPlusSongTitle }}」</span>
+                </p>
+
+                <p v-else-if="endingRank === 'S+ランク'" class="ending-card__song">♪ {{ sPlusSongTitle }}</p>
               </article>
 
               <!-- スコア内訳（何で何点もらったか）
@@ -15164,6 +15284,36 @@ onUnmounted(() => {
   color: #b08a3c;
   font-size: 16px;
   font-weight: 700;
+}
+
+/* S+ランクのときだけ出す、うた入りエンディングBGMの小さな表示
+   主役（スコア・ランク・結果の文）より目立たないよう、結果の文の下に小さな帯で出す
+   ・ランクのバッジと同じ rank-in の動きで、少しおくれて、ふわっと出す
+   ・せまい画面では「お知らせ」と「曲名」が2行に分かれる（flex-wrap）
+     2行になっても形がくずれないよう、角の丸みは まんまるにせず 12px にしている */
+.ending-card__song {
+  animation: rank-in 0.5s ease-out 0.6s backwards;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 6px;
+  box-sizing: border-box;
+  max-width: 100%;
+  margin: 12px 0 0;
+  padding: 4px 14px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: rgb(255 255 255 / 60%);
+  color: #8a5a00;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* はじめて解放したときだけ、金色のふちを付けて「ごほうび」だと分かるようにする */
+.ending-card__song--new {
+  border-color: var(--gold);
+  background: #fffaf0;
 }
 
 /* スコア内訳（何で何点もらったかの一覧） */
