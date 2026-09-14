@@ -100,6 +100,7 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    pond         = 池
    hill         = 丘
    secretSpot   = こもれびの広場
+   secretPath   = 秘密の小道（こもれびの広場へ続くミニゲーム。そのプレイではじめて広場へ行くときだけ通る）
    tantrum      = いやいや中（なだめる場面）
    goal         = ゴール（公園の出口）
    gameOver     = ゲームオーバー（限界をむかえて途中で終わった）
@@ -112,7 +113,7 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    fallDown       = こうちゃんがころぶ
    fountain       = 噴水が突然出る
 */
-type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'tantrum' | 'goal' | 'gameOver' | 'emergencySiren' | 'ladybug' | 'dog' | 'fallDown' | 'fountain';
+type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'secretPath' | 'tantrum' | 'goal' | 'gameOver' | 'emergencySiren' | 'ladybug' | 'dog' | 'fallDown' | 'fountain';
 
 /* 現在いる場所
    最初は「公園入口」からスタート
@@ -841,6 +842,21 @@ const parkEntranceText = computed(() => {
 */
 const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedItems.value.length >= 3);
 
+/* こもれびの広場（secretSpot）を、このプレイでもう見つけたかどうか
+
+   false … まだ見つけていない
+           公園入口の「細い道の先へ行く」を選ぶと、まずミニゲーム「秘密の小道」へ進む
+   true  … 秘密の小道を最後まで進んで、広場を見つけた
+           同じプレイのあいだは、ミニゲームをもう一度やらずに、そのまま広場へ入る
+
+   ※ visitedPlaces（探検済み）とは別もの
+     探検済みになるのは広場で遊んだときなので、
+     「広場を見つけたけれど、何もせずに出た」ときは探検済みにならない
+     それでもミニゲームをくり返さないように、見つけたことだけを別に覚えておく
+   ※ false に戻すのは resetGame()（もう一度あそぶ／はじめの画面へ戻る）だけ
+*/
+const hasDiscoveredSecretSpot = ref(false);
+
 /* ===== キーボード操作（「どうする？」コマンドボックス）用の計算 ===== */
 
 /* ※ 画面ごとのキー操作の分けかたは handleKeydown() にまとめてある
@@ -1159,6 +1175,12 @@ const commandCount = computed(() => {
     return 4;
   }
 
+  // 秘密の小道は「小道へ進む」か「先へ進む」の1つだけ
+  // （遊んでいる最中は ← → を handleSecretPathKeydown() が受け取るので、ここの数は使わない）
+  if (currentEvent.value === 'secretPath') {
+    return 1;
+  }
+
   // 突然イベント「こうちゃんがころんだ」だけは、
   // おやつが残っていれば4つ、食べきっていれば3つになる
   // （4番目の「おやつで気をそらす」が画面から消えるため）
@@ -1453,6 +1475,7 @@ function toggleSound() {
     } else if (gameStarted.value && currentEvent.value === 'secretSpot') {
       resumeSecretBgm();
     } else if (gameStarted.value && !isResultScene.value) {
+      // 秘密の小道（ミニゲーム）もここ。こもれびの広場へ着くまでは公園BGMのまま
       resumeParkBgm();
     }
   } else {
@@ -1652,6 +1675,39 @@ function playGoalSound() {
   playTone(659.25, start + 0.12, 0.14, 0.08, 'triangle'); // ミ
   playTone(783.99, start + 0.24, 0.14, 0.08, 'triangle'); // ソ
   playTone(1046.5, start + 0.38, 0.42, 0.09, 'triangle'); // 高いド
+}
+
+/* ⑤ 木漏れ日を取った音「ピコッ♪」（ミニゲーム「秘密の小道」用）
+
+   アイテム発見音「キラリン♪」を小さくしたような、高い音を2つだけ
+   15秒のあいだに何度も鳴るので、キラリン♪より短く・小さくしてある
+*/
+function playSunlightSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const start = context.currentTime;
+
+  playTone(1318.5, start, 0.08, 0.04, 'sine'); // 高いミ
+  playTone(1760, start + 0.06, 0.12, 0.04, 'sine'); // 高いラ
+}
+
+/* ⑥ 枝に当たった音「ぽこっ」（ミニゲーム「秘密の小道」用）
+
+   いやいや発生音と同じ「音程が下がる」形だが、ずっと短くして
+   「ちょっとぶつかっただけ」に聞こえるようにしている
+*/
+function playBranchBumpSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  playTone(300, context.currentTime, 0.12, 0.05, 'triangle', 190);
 }
 
 /* ============================================================
@@ -5195,6 +5251,712 @@ function exploreClearingDepths() {
 }
 
 /* ============================================================
+   秘密の小道（こもれびの広場へ続くミニゲーム）
+
+   公園入口の「細い道の先へ行く」を、そのプレイではじめて選んだときだけ通る
+   左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、木漏れ日を集める
+
+   ■ 流れ（secretPathPhase）
+     ready    … 説明と「小道へ進む」ボタン（まだ何も動かない）
+     playing  … ミニゲーム中（15秒）
+     finished … 結果の文章と「先へ進む」ボタン
+                「先へ進む」で secretSpot（こもれびの広場）へ入る
+
+   ■ ご褒美として楽しむミニゲーム
+     ・枝に当たっても GAME OVER にはならない（集めた木漏れ日が1つ減るだけ。0より下にはならない）
+       本編のステータス（体力・機嫌・余裕）にはダメージを与えず、左右にもそのまま動ける
+     ・木漏れ日をいくつ取っても、かならず広場へ行ける
+     ・親子のステータスと時間は、いっさい変えない
+     ・木漏れ日をたくさん集めたときだけ、おでかけポイントを少しだけボーナス（getSecretPathBonusPoint()）
+       （集められなくても損はしない。木漏れ日の数で変わるのは、結果の文章とボーナスだけ）
+
+   ■ BGM
+     小道のあいだは公園BGMのまま（ここではBGMにさわらない）
+     こもれびの広場BGMが始まるのは、広場へ入ったとき（goToPlace('secretSpot') の中）
+
+   ■ 動かしかた
+     requestAnimationFrame で、1コマごとに枝と木漏れ日の位置を進める
+     位置は「フィールドの高さの何%か」で持っているので、
+     画面の大きさが変わっても、こうちゃんの所まで届く時間は同じ
+
+     ※ CSSの animation で動かさないのは、ページ下の「動きを減らす設定」の指定で
+       animation がぜんぶ一瞬で終わるようになっていて、遊べなくなってしまうため
+
+     ループが残らないように、次のときにかならず止める
+     ・時間が終わったとき（finishSecretPathGame()）
+     ・もう一度あそぶ／はじめの画面へ戻る（resetGame() → resetSecretPathGame()）
+     ・ページから離れたとき（onUnmounted）
+     ・そのほか、なにかの理由で「小道で遊んでいる最中」ではなくなったとき
+       （1コマごとに確かめて、ちがえばその場で止まる。
+         小道の画面からは GAME OVER・ゴールへ直接は行けないが、万一のときもループは残らない）
+   ============================================================ */
+
+/* レーンの番号
+   0 = 左、1 = まん中、2 = 右 */
+type SecretPathLane = 0 | 1 | 2;
+
+/* ミニゲームの進み具合
+   ready    … はじまる前
+   playing  … 遊んでいる最中
+   finished … 小道をぬけた */
+type SecretPathPhase = 'ready' | 'playing' | 'finished';
+
+/* 上から流れてくるものの種類
+   branch   … 枝 🌿（よけるもの）
+   sunlight … 木漏れ日 ✨（集めるもの） */
+type SecretPathItemKind = 'branch' | 'sunlight';
+
+/* 流れてくるもの1つぶん
+
+   id   … v-for の key にするための番号
+   kind … 枝か木漏れ日か
+   lane … どのレーンを流れてくるか
+   y    … フィールドの上から何%の位置にいるか（0 = いちばん上、100 = いちばん下）
+   hit  … もう当たった（枝）／取った（木漏れ日）か
+          1つにつき1回だけ数えるための印 */
+type SecretPathItem = {
+  id: number;
+  kind: SecretPathItemKind;
+  lane: SecretPathLane;
+  y: number;
+  hit: boolean;
+};
+
+/* 「始まってから何ミリ秒たったら、どのレーンに何を出すか」の予定1つぶん */
+type SecretPathSpawn = {
+  at: number;
+  kind: SecretPathItemKind;
+  lane: SecretPathLane;
+};
+
+const secretPathLanes: SecretPathLane[] = [0, 1, 2];
+
+/* ミニゲームの長さ（ミリ秒）。15000 で15秒 */
+const secretPathDuration = 15000;
+
+/* 1プレイで流れてくる木漏れ日の数（「✨ 木漏れ日 3 / 5」の 5）
+   下の secretPathSunlightRows の数とそろえること */
+const secretPathSunlightTotal = 5;
+
+/* 流れてくる速さ（1秒で、フィールドの高さの何%進むか）
+   60 なら、出てきてから こうちゃんの所まで 約1.5秒
+   （40・約2.3秒 → 48・約1.9秒 → 60 と、テンポと難しさを上げてきた） */
+const secretPathSpeed = 60;
+
+/* こうちゃんの位置（フィールドの上から何%か） */
+const secretPathPlayerY = 84;
+
+/* 出てくる位置と、片づける位置（どちらもフィールドの外） */
+const secretPathSpawnY = -8;
+const secretPathRemoveY = 110;
+
+/* 流れてくる「行」の予定
+
+   600ミリ秒後から、800ミリ秒ごとに16行
+   いちばん最後の行（約12.6秒）でも、15秒になる前に こうちゃんの所まで届く
+   （行の数や間隔を変えるときは「最後の行の時間 ＋ 届くまでの約1.5秒」が15秒を超えないようにする）
+
+   ・ふつうの行 … 枝を1本。secretPathDoubleBranchChance の割合で2本にして、空いているレーンを1つだけにする
+   ・secretPathSunlightRows の行 … 木漏れ日を1つ。secretPathSunlightBranchChance の割合で、べつのレーンに枝もいっしょ
+   ・secretPathRowJitter … 行ごとに少しだけ時間をずらして、同じリズムになりすぎないようにする
+
+   どの行も、少なくとも1つのレーンは空いている（3本とも枝の行は作らない）ので、よけられない形にはならない */
+const secretPathFirstRowAt = 600;
+const secretPathRowInterval = 800;
+const secretPathRowCount = 16;
+const secretPathRowJitter = 120;
+const secretPathSunlightRows = [1, 4, 7, 10, 13];
+const secretPathDoubleBranchChance = 0.35;
+const secretPathSunlightBranchChance = 0.7;
+
+/* 枝に当たったときの「いたっ！」「✨ -1」を出しておく長さ（ミリ秒）
+
+   見た目だけの長さで、このあいだも左右にはふつうに動ける
+   （枝のペナルティは「木漏れ日 -1」だけにして、動きは止めない） */
+const secretPathBumpEffectDuration = 600;
+
+/* 道（レーン）をクリック・タップしたとき、押したレーンを光らせておく長さ（ミリ秒） */
+const secretPathTapFlashDuration = 200;
+
+/* 木漏れ日を取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
+const secretPathSparkleDuration = 600;
+
+/* 結果が出てから「先へ進む」を受けつけるまでの待ち時間（ミリ秒）
+
+   時間切れのしゅんかんに ← → ボタンを押していた指やキーで、
+   結果を読む前に先へ進んでしまわないようにする */
+const secretPathLeaveGuard = 600;
+
+/* 木漏れ日ボーナス（おでかけポイント）
+
+   結果の文章と同じ3段階で、たくさん集めたときだけ少しだけ足す
+   ・4〜5個 … +3（いやいやの「ナイス対応」と同じくらい）
+   ・2〜3個 … +1
+   ・0〜1個 … なし
+   量を変えたくなったら、ここの2つだけを書きかえればよい */
+const secretPathBonusGreatPoint = 3;
+const secretPathBonusGoodPoint = 1;
+
+/* いまの進み具合（小道へ入るたびに ready から始める） */
+const secretPathPhase = ref<SecretPathPhase>('ready');
+
+/* こうちゃんのレーン（はじめは、まん中） */
+const secretPathPlayerLane = ref<SecretPathLane>(1);
+
+/* いまフィールドに出ている枝と木漏れ日 */
+const secretPathItems = ref<SecretPathItem[]>([]);
+
+/* 集めた木漏れ日の数 */
+const secretPathSunlightCount = ref(0);
+
+/* 小道をぬけたときにもらった木漏れ日ボーナス（結果カードに「+3」と出すため。0 = なし） */
+const secretPathBonusPoint = ref(0);
+
+/* 始まってから何ミリ秒たったか（ゲームの時計）
+
+   タブを切りかえているあいだは requestAnimationFrame が止まるので、この時計も止まる
+   （戻ってきたときに、いきなり何秒も進んでしまわない） */
+const secretPathElapsed = ref(0);
+
+/* 「いたっ！」を出しておくのは、ゲームの時計が何ミリ秒になるまでか（0 = 出していない） */
+const secretPathBumpUntil = ref(0);
+
+/* 直前に枝に当たったとき、木漏れ日が本当に1つ減ったか
+
+   0個のときに当たっても減らない（0のまま）ので、そのときは「✨ -1」を出さない
+   （数が変わっていないのに「-1」と出ると、何が起きたか分かりにくくなるため） */
+const secretPathBumpLost = ref(false);
+
+/* 「いたっ！」の番号
+   続けて枝に当たったときに、ふきだしを最初から出しなおすための key */
+const secretPathBumpId = ref(0);
+
+/* 道（レーン）をクリック・タップしたときに光らせるレーンと、ゲームの時計が何ミリ秒になるまで光らせるか
+   （見た目だけ。指で押したときは「マウスを乗せる」が無いので、押したことをこれで伝える） */
+const secretPathTapLane = ref<SecretPathLane | null>(null);
+const secretPathTapUntil = ref(0);
+
+/* マウスを乗せているレーン（乗せていないときは null）
+   マウスのときだけ使う（指で押したときは「乗せる」が無いので、ここは変えない） */
+const secretPathHoverLane = ref<SecretPathLane | null>(null);
+
+/* 「✨ +1」を出しておくのは、ゲームの時計が何ミリ秒になるまでか */
+const secretPathSparkleUntil = ref(0);
+
+/* 「✨ +1」の番号
+   続けて木漏れ日を取ったときに、ふわっと上がる動きを最初からやりなおすための key */
+const secretPathSparkleId = ref(0);
+
+/* 遊んでいる最中のカード（スマホ幅で、遊びはじめに画面の上へスクロールするための目印） */
+const secretPathPlayRef = ref<HTMLElement | null>(null);
+
+/* ここから下は画面に出さない入れもの（ref にしなくてよい） */
+let secretPathFrameId: number | null = null; // requestAnimationFrame の予約番号
+let secretPathLastTimestamp: number | null = null; // 前のコマの時刻
+let secretPathSpawnQueue: SecretPathSpawn[] = []; // まだ出していない予定（時間の早い順）
+let secretPathNextItemId = 0;
+let secretPathFinishedAt = 0; // 結果が出た時刻（performance.now()）
+
+/* いま「小道で遊んでいる最中」かどうか
+   キー操作・左右ボタン・1コマごとの処理は、どれもこれを見てから動く */
+const isSecretPathPlaying = computed(() => currentEvent.value === 'secretPath' && secretPathPhase.value === 'playing');
+
+/* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない） */
+const isSecretPathBumped = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathBumpUntil.value);
+
+/* 木漏れ日を取った直後かどうか（「✨ +1」と光を出しているあいだ） */
+const isSecretPathSparkling = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathSparkleUntil.value);
+
+/* いま光らせているレーン（道をクリック・タップした直後だけ。それ以外は null） */
+const secretPathFlashLane = computed(() => (isSecretPathPlaying.value && secretPathElapsed.value < secretPathTapUntil.value ? secretPathTapLane.value : null));
+
+/* マウスを乗せているレーンを押したときに、こうちゃんが動く先のレーン
+
+   押したレーンの方向へ1レーンだけ動くので、遠いレーンに乗せているときは「まん中」が動く先になる
+   乗せていない・いまいるレーンに乗せているときは null（目印をはっきりさせない） */
+const secretPathHoverDestination = computed(() => {
+  const hoverLane = secretPathHoverLane.value;
+  const currentLane = secretPathPlayerLane.value;
+
+  if (!isSecretPathPlaying.value || hoverLane === null || hoverLane === currentLane) {
+    return null;
+  }
+
+  return hoverLane < currentLane ? currentLane - 1 : currentLane + 1;
+});
+
+/* 残り時間（秒）。「あと 12秒」のように出す */
+const secretPathTimeLeft = computed(() => Math.max(0, Math.ceil((secretPathDuration - secretPathElapsed.value) / 1000)));
+
+/* 集めた木漏れ日の数に合わせた、結果の文章 */
+const secretPathResultText = computed(() => {
+  if (secretPathSunlightCount.value >= 4) {
+    return '✨ 木漏れ日が道を照らしています！「きらきらー！」こうちゃんはうれしそうに奥へ走っていきます。';
+  }
+
+  if (secretPathSunlightCount.value >= 2) {
+    return '木漏れ日を追いかけながら、こうちゃんと小道の奥へ進みました！';
+  }
+
+  return '木々のあいだをゆっくり進みました。道の奥が少し明るくなっています。';
+});
+
+/* 集めた木漏れ日の数から、ボーナスのおでかけポイントを決める（結果の文章と同じ区切り） */
+function getSecretPathBonusPoint(sunlightCount: number) {
+  if (sunlightCount >= 4) {
+    return secretPathBonusGreatPoint;
+  }
+
+  if (sunlightCount >= 2) {
+    return secretPathBonusGoodPoint;
+  }
+
+  return 0;
+}
+
+/* レーンの番号を、フィールドの左はしからの位置（%）にする
+   0 → 16.7%（左のまん中）、1 → 50%、2 → 83.3%（右のまん中） */
+function getSecretPathLaneLeft(lane: SecretPathLane) {
+  return `${((lane * 2 + 1) / 6) * 100}%`;
+}
+
+/* 公園入口の「細い道の先へ行く」
+
+   ・このプレイで、まだ広場を見つけていない … 秘密の小道（ミニゲーム）へ
+   ・もう見つけている                     … 今までどおり、そのまま こもれびの広場へ
+
+   ※ 秘密の小道へ行くときは、BGMは変えない（公園BGMのまま）
+     goToPlace() がBGMを入れかえるのは、行き先が secretSpot のときだけ */
+function goToSecretArea() {
+  if (hasDiscoveredSecretSpot.value) {
+    goToPlace('secretSpot');
+    return;
+  }
+
+  resetSecretPathGame();
+  goToPlace('secretPath');
+}
+
+/* requestAnimationFrame のループを止める（予約が無ければ何もしない） */
+function stopSecretPathLoop() {
+  if (secretPathFrameId !== null) {
+    cancelAnimationFrame(secretPathFrameId);
+    secretPathFrameId = null;
+  }
+
+  secretPathLastTimestamp = null;
+}
+
+/* 秘密の小道を、はじまる前の状態に戻す
+
+   ループ・流れてくるもの・木漏れ日の数・こうちゃんの位置・時計を、まとめて片づける
+   （hasDiscoveredSecretSpot はここでは戻さない。戻すのは resetGame() だけ） */
+function resetSecretPathGame() {
+  stopSecretPathLoop();
+
+  secretPathPhase.value = 'ready';
+  secretPathPlayerLane.value = 1;
+  secretPathItems.value = [];
+  secretPathSunlightCount.value = 0;
+  secretPathBonusPoint.value = 0;
+  secretPathElapsed.value = 0;
+  secretPathBumpUntil.value = 0;
+  secretPathBumpLost.value = false;
+  secretPathSparkleUntil.value = 0;
+  secretPathTapLane.value = null;
+  secretPathTapUntil.value = 0;
+  secretPathHoverLane.value = null;
+  secretPathSpawnQueue = [];
+  secretPathFinishedAt = 0;
+}
+
+/* 候補のレーンから、ランダムに1つ選ぶ */
+function pickRandomSecretPathLane(candidates: SecretPathLane[] = secretPathLanes): SecretPathLane {
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? 1;
+}
+
+/* 1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
+
+   木漏れ日の数（5つ）は毎回同じにして、出てくるレーンだけをランダムにする
+   どの行も、少なくとも1つのレーンは空いているので、よけられない形にはならない */
+function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
+  const queue: SecretPathSpawn[] = [];
+
+  for (let row = 0; row < secretPathRowCount; row++) {
+    const at = secretPathFirstRowAt + row * secretPathRowInterval + (Math.random() * 2 - 1) * secretPathRowJitter;
+
+    if (secretPathSunlightRows.includes(row)) {
+      const sunlightLane = pickRandomSecretPathLane();
+
+      queue.push({ at, kind: 'sunlight', lane: sunlightLane });
+
+      // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
+      if (Math.random() < secretPathSunlightBranchChance) {
+        queue.push({ at, kind: 'branch', lane: pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== sunlightLane)) });
+      }
+
+      continue;
+    }
+
+    // ふつうの行は枝を1本。ときどき2本にして、空いているレーンを1つだけにする（3本にはしない）
+    const branchLane = pickRandomSecretPathLane();
+
+    queue.push({ at, kind: 'branch', lane: branchLane });
+
+    if (Math.random() < secretPathDoubleBranchChance) {
+      queue.push({ at, kind: 'branch', lane: pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== branchLane)) });
+    }
+  }
+
+  return queue.sort((a, b) => a.at - b.at);
+}
+
+/* 「小道へ進む」（ミニゲームを始める）
+
+   押すまでは何も動かないので、プレイヤーは説明を読んでから始められる */
+function startSecretPathGame() {
+  if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
+    return;
+  }
+
+  // 決定音「ポン♪」
+  playDecisionSound();
+
+  resetSecretPathGame();
+  secretPathSpawnQueue = buildSecretPathSpawnQueue();
+  secretPathPhase.value = 'playing';
+
+  secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
+
+  scrollSecretPathIntoView();
+}
+
+/* スマホ幅のときだけ、遊ぶカードを画面のいちばん上へスクロールする
+
+   スマホ幅ではページ全体がスクロールするので、
+   フィールドと ← → ボタンがいっしょに見える位置へ合わせておく
+   （パソコンでは中央エリアの中に収まるので、何もしない） */
+async function scrollSecretPathIntoView() {
+  if (!import.meta.client || !window.matchMedia('(max-width: 700px)').matches) {
+    return;
+  }
+
+  // カードが画面に出るのを待ってから
+  await nextTick();
+
+  secretPathPlayRef.value?.scrollIntoView({ block: 'start' });
+}
+
+/* 1コマぶんの処理（requestAnimationFrame から呼ばれる） */
+function runSecretPathFrame(timestamp: number) {
+  secretPathFrameId = null;
+
+  // もう小道で遊んでいる最中ではない（リセット・画面が変わった など）ときは、ここで止まる
+  if (!gameStarted.value || !isSecretPathPlaying.value) {
+    stopSecretPathLoop();
+    return;
+  }
+
+  /* 前のコマからの時間
+
+     50ミリ秒より長くあいたときは、50ミリ秒ぶんだけ進める
+     処理が重くなったときなどに、枝がこうちゃんを「すり抜けて」しまわないようにするため */
+  const delta = secretPathLastTimestamp === null ? 0 : Math.min(Math.max(timestamp - secretPathLastTimestamp, 0), 50);
+
+  secretPathLastTimestamp = timestamp;
+
+  advanceSecretPath(delta);
+
+  // 時間切れで終わっていなければ、次のコマを予約する
+  if (isSecretPathPlaying.value) {
+    secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
+  }
+}
+
+/* ゲームの時計を delta ミリ秒進めて、出す・動かす・当たりを見る・片づける */
+function advanceSecretPath(delta: number) {
+  const elapsed = Math.min(secretPathElapsed.value + delta, secretPathDuration);
+
+  secretPathElapsed.value = elapsed;
+
+  // ① 予定の時間になったものを、フィールドのいちばん上に出す
+  let nextSpawn = secretPathSpawnQueue[0];
+
+  while (nextSpawn && nextSpawn.at <= elapsed) {
+    secretPathSpawnQueue.shift();
+    secretPathNextItemId += 1;
+    secretPathItems.value.push({ id: secretPathNextItemId, kind: nextSpawn.kind, lane: nextSpawn.lane, y: secretPathSpawnY, hit: false });
+    nextSpawn = secretPathSpawnQueue[0];
+  }
+
+  // ② ぜんぶ下へ進めて、こうちゃんに当たったかを見る
+  const distance = (secretPathSpeed * delta) / 1000;
+  let needsCleanup = false;
+
+  for (const item of secretPathItems.value) {
+    item.y += distance;
+
+    if (item.y > secretPathRemoveY) {
+      needsCleanup = true;
+      continue;
+    }
+
+    // 当たり判定は「同じレーン ＋ こうちゃんの高さのあたりまで来た」だけで見る
+    if (item.hit || item.lane !== secretPathPlayerLane.value) {
+      continue;
+    }
+
+    // マイナス … まだ こうちゃんより上／プラス … こうちゃんより下
+    const offset = item.y - secretPathPlayerY;
+
+    // ③ 木漏れ日：こうちゃんに重なったら取る（枝より少しゆるめに見る）
+    if (item.kind === 'sunlight' && offset >= -10 && offset <= 6) {
+      item.hit = true;
+      needsCleanup = true;
+
+      secretPathSunlightCount.value += 1;
+      secretPathSparkleUntil.value = elapsed + secretPathSparkleDuration;
+      secretPathSparkleId.value += 1;
+
+      // 「✨ +1」と「いたっ！」は同じ場所（こうちゃんの上）に出るので、
+      // 重なって読めなくならないように、あとから起きたほうだけを出す
+      secretPathBumpUntil.value = 0;
+
+      playSunlightSound();
+      continue;
+    }
+
+    // ④ 枝：こうちゃんの所まで来たら当たる → 集めた木漏れ日を1つ減らす（0より下にはしない）
+    //    ・本編のステータス（体力・機嫌・余裕）には、いっさいさわらない（小道の中だけのペナルティ）
+    //    ・枝1本につき1回だけ（item.hit）なので、同じ枝で何度も減ることはない
+    //    ・当たったあとも、左右にはそのまま動ける
+    if (item.kind === 'branch' && offset >= -7 && offset <= 3) {
+      item.hit = true;
+
+      const hasSunlightToLose = secretPathSunlightCount.value > 0;
+
+      secretPathSunlightCount.value = Math.max(0, secretPathSunlightCount.value - 1);
+      secretPathBumpLost.value = hasSunlightToLose;
+      secretPathBumpUntil.value = elapsed + secretPathBumpEffectDuration;
+      secretPathBumpId.value += 1;
+
+      // 木漏れ日を取った直後の「✨ +1」が残っていたら消す（「いたっ！」と重ならないように、あとから起きたほうだけを出す）
+      secretPathSparkleUntil.value = 0;
+
+      playBranchBumpSound();
+    }
+  }
+
+  // ⑤ 下へ出ていったものと、取った木漏れ日を片づける
+  if (needsCleanup) {
+    secretPathItems.value = secretPathItems.value.filter((item) => item.y <= secretPathRemoveY && !(item.kind === 'sunlight' && item.hit));
+  }
+
+  // ⑥ 15秒たったら、おしまい
+  if (elapsed >= secretPathDuration) {
+    finishSecretPathGame();
+  }
+}
+
+/* 時間切れ（小道をぬけた）
+
+   ここで「こもれびの広場を見つけた」ことになる
+   このあと同じプレイのあいだは、ミニゲームをくり返さない */
+function finishSecretPathGame() {
+  stopSecretPathLoop();
+
+  secretPathPhase.value = 'finished';
+  secretPathItems.value = [];
+  secretPathSpawnQueue = [];
+  secretPathBumpUntil.value = 0;
+  secretPathBumpLost.value = false;
+  secretPathSparkleUntil.value = 0;
+  secretPathFinishedAt = performance.now();
+
+  /* 木漏れ日ボーナス
+
+     ・addOutingPoint() ではなく、そのまま足す
+       （「2回目の場所は半分」は場所の探検のためのルールで、小道は場所ではないため）
+     ・上部ステータスの「おでかけポイント」の横にも +3 と出るように、今回の変化にも入れておく
+       ほかのステータスと時間は動かしていないので 0 のまま（上部には何も出ない）
+       statusChanges は、広場へ入るとき goToPlace() の中で null に戻る
+     ・時間切れは1回の小道につき1回だけなので、ボーナスが二重に入ることはない */
+  const bonusPoint = getSecretPathBonusPoint(secretPathSunlightCount.value);
+
+  secretPathBonusPoint.value = bonusPoint;
+
+  if (bonusPoint > 0) {
+    outingPoint.value += bonusPoint;
+    statusChanges.value = { childEnergy: 0, childMood: 0, outingPoint: bonusPoint, parentEnergy: 0, parentCalm: 0, minutes: 0 };
+  }
+
+  hasDiscoveredSecretSpot.value = true;
+
+  // 「先へ進む」だけの画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+
+  // 「木々のすき間から、まぶしい光が…」に合わせて、キラリン♪
+  playItemSound();
+}
+
+/* 「先へ進む」（こもれびの広場へ）
+
+   BGMの入れかえ（公園BGMを止める → こもれびの広場BGM）は、goToPlace() の中のまま
+   ＝ 広場へ着いたこの瞬間に「こもれびの奥で」が始まる */
+function enterSecretSpotFromPath() {
+  if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'finished') {
+    return;
+  }
+
+  if (performance.now() - secretPathFinishedAt < secretPathLeaveGuard) {
+    return;
+  }
+
+  goToPlace('secretSpot');
+
+  /* 小道の状態は、画面が変わってから片づける
+     <Transition> で消えていく小道の画面は、もう描きなおされないので、
+     フェードアウトの途中で結果の文章が変わって見えることはない */
+  resetSecretPathGame();
+}
+
+/* こうちゃんを左（-1）か右（+1）へ、1レーンだけ動かす
+
+   ・遊んでいる最中でなければ動かさない
+   ・枝に当たった直後も、ふつうに動ける（枝のペナルティは木漏れ日 -1 だけ）
+   ・左はしでさらに左、右はしでさらに右は、その場のまま */
+function moveSecretPathPlayer(direction: -1 | 1) {
+  if (!isSecretPathPlaying.value) {
+    return;
+  }
+
+  const nextLane = secretPathPlayerLane.value + direction;
+
+  if (nextLane === 0 || nextLane === 1 || nextLane === 2) {
+    secretPathPlayerLane.value = nextLane;
+  }
+}
+
+/* 「← ひだり」「みぎ →」ボタンを、指やマウスで押したとき
+
+   click を待たずに、押したしゅんかん（pointerdown）に動かす
+   click は指をはなしたときに届くので、よけるゲームでは少し遅く感じるため
+
+   preventDefault() は、長押しのメニューや、ボタンへのフォーカス移動を起こさないためのもの
+   （このあと届く click は、下の handleSecretPathButtonClick() で無視する） */
+function handleSecretPathButtonPointerDown(event: PointerEvent, direction: -1 | 1) {
+  // 右クリックなどでは動かさない
+  if (event.button !== 0) {
+    return;
+  }
+
+  event.preventDefault();
+  moveSecretPathPlayer(direction);
+}
+
+/* 「← ひだり」「みぎ →」ボタンの click
+
+   指やマウスで押したとき（event.detail が 1 以上）は、pointerdown でもう動かしてあるので何もしない
+   読み上げソフトなど、pointerdown を通らずに押されたとき（event.detail が 0）だけ動かす */
+function handleSecretPathButtonClick(event: MouseEvent, direction: -1 | 1) {
+  if (event.detail !== 0) {
+    return;
+  }
+
+  moveSecretPathPlayer(direction);
+}
+
+/* 道（レーン）を、マウスでクリック・指でタップしたとき
+
+   ・押したレーンの方向へ、1レーンだけ動く（キーやボタンと同じ「1回で1レーン」）
+     左はしで右はしのレーンを押すと まん中へ、もう1回押すと右はしへ
+     （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、道を押す操作だけ有利になるため）
+   ・いまいるレーンを押したときは、何もしない（光らせもしない）
+   ・ボタンと同じく、押したしゅんかん（pointerdown）に動かす
+   ・押したレーンを一瞬光らせて、どこを押したかが目で分かるようにする
+   ・preventDefault() … 長押しのメニュー・文字の選択・フォーカス移動を起こさないため */
+function handleSecretPathLanePointerDown(event: PointerEvent, lane: SecretPathLane) {
+  // 右クリックなど、遊んでいる最中以外では動かさない
+  if (event.button !== 0 || !isSecretPathPlaying.value) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const currentLane = secretPathPlayerLane.value;
+
+  if (lane === currentLane) {
+    return;
+  }
+
+  moveSecretPathPlayer(lane < currentLane ? -1 : 1);
+
+  secretPathTapLane.value = lane;
+  secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
+}
+
+/* マウスがレーンに乗った・はなれたとき（動く先の目印をはっきりさせるため）
+   指のときは、押したしゅんかんにも pointerenter が届くので、マウスのときだけ見る */
+function handleSecretPathLanePointerEnter(event: PointerEvent, lane: SecretPathLane) {
+  if (event.pointerType !== 'mouse') {
+    return;
+  }
+
+  secretPathHoverLane.value = lane;
+}
+
+function handleSecretPathLanePointerLeave(event: PointerEvent, lane: SecretPathLane) {
+  if (event.pointerType !== 'mouse' || secretPathHoverLane.value !== lane) {
+    return;
+  }
+
+  secretPathHoverLane.value = null;
+}
+
+/* 小道で遊んでいる最中のキー操作（handleKeydown() から呼ばれる）
+
+   ・← / A … 左へ1レーン
+   ・→ / D … 右へ1レーン
+   ・↑ ↓ / Enter / Space … 何もしない（ページのスクロールや、ボタンの押しまちがいを止めるだけ）
+   ・それ以外（Tab など）… ブラウザのふつうの動きにまかせる
+
+   ※ 押しっぱなし（event.repeat）では続けて動かさない（1回押すと1レーン）
+   ※ はじまる前・終わったあとは、ここへは来ない（ふつうのコマンド操作に戻る） */
+function handleSecretPathKeydown(event: KeyboardEvent) {
+  // Ctrl + A（ぜんぶ選択）などのショートカットは、じゃましない
+  const hasModifier = event.ctrlKey || event.metaKey || event.altKey;
+  const isLeftKey = event.key === 'ArrowLeft' || (!hasModifier && event.code === 'KeyA');
+  const isRightKey = event.key === 'ArrowRight' || (!hasModifier && event.code === 'KeyD');
+
+  if (isLeftKey || isRightKey) {
+    event.preventDefault();
+
+    if (event.repeat) {
+      return;
+    }
+
+    moveSecretPathPlayer(isLeftKey ? -1 : 1);
+    return;
+  }
+
+  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+    event.preventDefault();
+    return;
+  }
+
+  if (event.key === 'Enter' || event.key === ' ') {
+    // サウンドON/OFFのボタンを選んでいるときだけは、ボタン本来の操作にまかせる
+    const target = event.target as HTMLElement | null;
+
+    if (target?.closest?.('.sound-toggle')) {
+      return;
+    }
+
+    event.preventDefault();
+  }
+}
+
+/* ============================================================
    ひとやすみ（どの場所でも使える共通のケア行動）
 
    通常の場所では、コマンドを2つの枠に分けている
@@ -6784,6 +7546,11 @@ function resetGame() {
   collectedItems.value = [];
   playCount.value = 0;
 
+  // 秘密の小道も「まだ広場を見つけていない」状態に戻す
+  // （ミニゲームのループ・流れてくるもの・木漏れ日の数・こうちゃんの位置も、まとめて片づける）
+  resetSecretPathGame();
+  hasDiscoveredSecretSpot.value = false;
+
   isTantrum.value = false;
   tantrumCount.value = 0;
 
@@ -7323,7 +8090,8 @@ function runSelectedCommand() {
       } else if (index === 4) {
         goToPlace('hill');
       } else if (index === 5 && canEnterSecretSpot.value) {
-        goToPlace('secretSpot');
+        // はじめてのときは秘密の小道へ、見つけたあとは そのまま こもれびの広場へ
+        goToSecretArea();
       } else if (index === goalCommandIndex.value) {
         openGoalConfirm();
       }
@@ -7392,6 +8160,17 @@ function runSelectedCommand() {
         exploreSunlight();
       } else if (index === 1) {
         exploreClearingDepths();
+      }
+      break;
+
+    /* 秘密の小道
+       0 小道へ進む（はじまる前）／先へ進む（終わったあと）
+       ※ 遊んでいる最中は、キー操作を handleSecretPathKeydown() が受け取るので、ここへは来ない */
+    case 'secretPath':
+      if (index === 0 && secretPathPhase.value === 'ready') {
+        startSecretPathGame();
+      } else if (index === 0 && secretPathPhase.value === 'finished') {
+        enterSecretSpotFromPath();
       }
       break;
 
@@ -8233,6 +9012,16 @@ function handleKeydown(event: KeyboardEvent) {
 
   /* ここから下は、ゲーム本編（gameStarted === true）だけの処理 */
 
+  /* ⓪-00 秘密の小道（ミニゲーム）で遊んでいる最中
+
+     ← → / A D はミニゲームの操作だけに使い、ふつうのコマンド操作（↑↓・Enter）は動かさない
+     はじまる前（小道へ進む）と終わったあと（先へ進む）は、ここを通らずに
+     いつもどおりのコマンド操作になる（commandCount は 1） */
+  if (isSecretPathPlaying.value) {
+    handleSecretPathKeydown(event);
+    return;
+  }
+
   /* ⓪-0 「公園の出口へ向かう？」の確認ダイアログが開いているとき
 
      画面のいちばん手前に出ているので、ほかのどの操作より先に見る
@@ -8555,6 +9344,9 @@ onUnmounted(() => {
 
   // いやいや発生の演出の「あとで消す」予約も取り消しておく
   hideTantrumAlert();
+
+  // 秘密の小道（ミニゲーム）の requestAnimationFrame も止めておく
+  stopSecretPathLoop();
 });
 </script>
 
@@ -9137,7 +9929,9 @@ onUnmounted(() => {
       <!-- ============================================================
            ゲーム画面（上部ステータス／中央イベント／下部コマンド）
            ============================================================ -->
-      <div v-else key="game" class="game-screen">
+      <!-- game-screen--secret-path … 秘密の小道のあいだだけ付ける
+           スマホ幅で、上部ステータスを画面の上に固定しないようにするため（CSSの max-width: 700px を参照） -->
+      <div v-else key="game" class="game-screen" :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' }">
         <!-- ==========================================================
              【上部】常時表示のステータスエリア
              ========================================================== -->
@@ -9346,10 +10140,12 @@ onUnmounted(() => {
 
               <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
               <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
-                <!-- 探検済みかどうかで文言を切り替える
-                     まだ行っていない → はじめて見つけたときの案内
-                     もう行った → また行ってみようという案内 -->
-                <template v-if="isVisited('secretSpot')">
+                <!-- 広場をもう見つけたかどうかで文言を切り替える
+                     まだ見つけていない → はじめて見つけたときの案内（この先は秘密の小道）
+                     もう見つけた → また行ってみようという案内（そのまま広場へ入る）
+                     ※ 探検済み（isVisited）ではなく hasDiscoveredSecretSpot を見る
+                       広場を見つけて何もせずに出たときも、もう小道はくり返さないため -->
+                <template v-if="hasDiscoveredSecretSpot">
                   <h2 class="place-card__title">こもれびの広場</h2>
 
                   <p class="place-card__text">こうちゃんは、木々のあいだの細い道を覚えているようです。また行ってみよう！</p>
@@ -9395,7 +10191,7 @@ onUnmounted(() => {
                 v-if="canEnterSecretSpot"
                 class="cmd cmd--secret"
                 :class="{ 'cmd--selected': selectedCommandIndex === 5 }"
-                @click="goToPlace('secretSpot')"
+                @click="goToSecretArea"
                 @mouseenter="selectedCommandIndex = 5">
                 <span class="cmd__text">細い道の先へ行く</span>
                 <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
@@ -10536,6 +11332,181 @@ onUnmounted(() => {
                   </template>
                 </nav>
               </div>
+            </section>
+          </div>
+
+          <!-- 秘密の小道（こもれびの広場へ続くミニゲーム）
+
+               そのプレイではじめて「細い道の先へ行く」を選んだときだけ、ここを通る
+               secretPathPhase で、中身を3つに切りかえる
+               ・ready    … 説明と「小道へ進む」（まだ何も動かない）
+               ・playing  … 3レーンのフィールドと「← ひだり」「みぎ →」
+               ・finished … 結果の文章と「先へ進む」（押すと こもれびの広場へ） -->
+          <div v-else-if="currentEvent === 'secretPath'" class="scene" key="secretPath">
+            <!-- stage--secret-path … スマホ幅で、カードとコマンドボックスを横にはみ出させないための目印 -->
+            <section class="stage stage--secret-path">
+              <!-- はじまる前 -->
+              <article v-if="secretPathPhase === 'ready'" class="place-card place-card--secret">
+                <h2 class="place-card__title">🌿 秘密の小道</h2>
+
+                <p class="place-card__text">木々のあいだの細い道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
+
+                <p class="secret-path-lead">
+                  えだをよけながら
+                  <br />
+                  ✨ こもれびをあつめよう！
+                </p>
+
+                <ul class="secret-path-rules">
+                  <li>👆 道（レーン）をクリック・タップすると、その方向へ1レーン動きます。</li>
+                  <li>← → キー（A・D）や「← ひだり」「みぎ →」ボタンでも、左・まん中・右に動かせます。</li>
+                  <li>🌿 えだに当たると、集めたこもれびが1つへります（0より下にはなりません）。</li>
+                  <li>15秒たつと、小道の奥に着きます。ぜんぶ取れなくても大丈夫！</li>
+                  <li>✨ こもれびをたくさん集めると、おでかけポイントが少しもらえます。</li>
+                </ul>
+              </article>
+
+              <!-- 遊んでいる最中 -->
+              <article v-else-if="secretPathPhase === 'playing'" ref="secretPathPlayRef" class="place-card place-card--secret secret-path">
+                <div class="secret-path-hud">
+                  <span class="secret-path-hud__sunlight" :class="{ 'secret-path-hud__sunlight--sparkle': isSecretPathSparkling, 'secret-path-hud__sunlight--lost': isSecretPathBumped && secretPathBumpLost }" aria-live="polite">
+                    ✨ 木漏れ日
+                    <!-- key を数にしておくと、取るたびに数字がぽんっと出なおす -->
+                    <b :key="secretPathSunlightCount" class="secret-path-hud__count">{{ secretPathSunlightCount }}</b>
+                    / {{ secretPathSunlightTotal }}
+                  </span>
+
+                  <span class="secret-path-hud__time" :class="{ 'secret-path-hud__time--soon': secretPathTimeLeft <= 3 }">あと {{ secretPathTimeLeft }}秒</span>
+                </div>
+
+                <!-- フィールド（左・まん中・右の3レーン）
+                     枝と木漏れ日の位置は、JavaScript が1コマごとに top を書きかえて動かしている
+                     aria-hidden … 流れてくる絵文字を、ひとつずつ読み上げないようにする -->
+                <div class="secret-path-field" aria-hidden="true">
+                  <!-- 道（レーン）の押せる場所
+                       マウスでクリック・指でタップすると、こうちゃんが押したレーンの方向へ1レーン動く
+                       ・--next        … 1回で動ける「となりのレーン」。こうちゃんの高さに、うすい点線の丸と矢印（行き先の目印）を出す
+                       ・--destination … マウスを乗せたレーンを押したときの動く先。目印がはっきりする
+                                         （遠いレーンに乗せたときは、まん中の目印がはっきりする）
+                       ・--flash       … 押したレーンが一瞬光る
+                       ※ 枝・木漏れ日・こうちゃんは pointer-events: none なので、上に重なっていても押せる -->
+                  <div
+                    v-for="lane in secretPathLanes"
+                    :key="`lane-${lane}`"
+                    class="secret-path-lane"
+                    :class="{
+                      'secret-path-lane--current': lane === secretPathPlayerLane,
+                      'secret-path-lane--next': Math.abs(lane - secretPathPlayerLane) === 1,
+                      'secret-path-lane--destination': lane === secretPathHoverDestination,
+                      'secret-path-lane--flash': lane === secretPathFlashLane,
+                    }"
+                    :style="{ left: `${(lane / 3) * 100}%` }"
+                    @pointerdown="handleSecretPathLanePointerDown($event, lane)"
+                    @pointerenter="handleSecretPathLanePointerEnter($event, lane)"
+                    @pointerleave="handleSecretPathLanePointerLeave($event, lane)">
+                    <span class="secret-path-lane__target" :style="{ top: `${secretPathPlayerY}%` }">{{ secretPathPlayerLane > lane ? '←' : '→' }}</span>
+                  </div>
+
+                  <span
+                    v-for="item in secretPathItems"
+                    :key="item.id"
+                    class="secret-path-item"
+                    :class="[`secret-path-item--${item.kind}`, { 'secret-path-item--hit': item.hit }]"
+                    :style="{ left: getSecretPathLaneLeft(item.lane), top: `${item.y}%` }">{{ item.kind === 'branch' ? '🌿' : '✨' }}</span>
+
+                  <div class="secret-path-player" :style="{ left: getSecretPathLaneLeft(secretPathPlayerLane), top: `${secretPathPlayerY}%` }">
+                    <!-- 枝に当たったとき：「いたっ！」と、木漏れ日が減ったときだけ「✨ -1」
+                         key を当たった回数にしておくと、続けて当たったときも出なおす -->
+                    <span v-if="isSecretPathBumped" :key="secretPathBumpId" class="secret-path-player__bump">
+                      いたっ！
+                      <span v-if="secretPathBumpLost" class="secret-path-player__minus">✨ -1</span>
+                    </span>
+                    <span v-if="isSecretPathSparkling" :key="secretPathSparkleId" class="secret-path-player__plus">✨ +1</span>
+                    <span
+                      class="secret-path-player__face"
+                      :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">
+                      👦
+                    </span>
+                  </div>
+                </div>
+              </article>
+
+              <!-- 小道をぬけたあと -->
+              <article v-else class="place-card place-card--secret">
+                <p class="place-card__flash">小道をぬけた！</p>
+
+                <h2 class="place-card__title">🌿 秘密の小道</h2>
+
+                <p class="secret-path-result">
+                  ✨ 木漏れ日
+                  <b>{{ secretPathSunlightCount }}</b>
+                  / {{ secretPathSunlightTotal }}
+                </p>
+
+                <p class="place-card__text">{{ secretPathResultText }}</p>
+
+                <p class="place-card__text secret-path-light">木々のすき間から、まぶしい光が差しこんできました。</p>
+
+                <!-- 木漏れ日ボーナス（2個以上集めたときだけ）
+                     見た目は、いやいやタイムの「✨ ナイス対応！」と同じ緑の枠を使う -->
+                <div v-if="secretPathBonusPoint > 0" class="event-flash event-flash--nice">
+                  <p class="event-flash__label">✨ 木漏れ日ボーナス！</p>
+
+                  <ul class="event-flash__list">
+                    <li class="event-flash__item">
+                      <span class="event-flash__item-label">おでかけポイント</span>
+                      <span class="event-flash__item-value change--good">{{ formatChange(secretPathBonusPoint) }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </article>
+
+              <!-- コマンドボックス
+                   遊んでいる最中は、コマンドのかわりに「← ひだり」「みぎ →」を出す
+                   （スマホでは画面の下のほうに来るので、親指で押しやすい） -->
+              <nav class="command-box">
+                <template v-if="secretPathPhase === 'playing'">
+                  <p class="command-box__label">こうちゃんを動かそう</p>
+
+                  <div class="secret-path-controls">
+                    <button
+                      type="button"
+                      class="secret-path-controls__button"
+                      aria-label="左へ動く"
+                      @pointerdown="handleSecretPathButtonPointerDown($event, -1)"
+                      @click="handleSecretPathButtonClick($event, -1)">
+                      ← ひだり
+                    </button>
+
+                    <button
+                      type="button"
+                      class="secret-path-controls__button"
+                      aria-label="右へ動く"
+                      @pointerdown="handleSecretPathButtonPointerDown($event, 1)"
+                      @click="handleSecretPathButtonClick($event, 1)">
+                      みぎ →
+                    </button>
+                  </div>
+
+                  <p class="secret-path-controls__hint">道のクリックや ← → ・ A / D キーでも動かせます</p>
+                </template>
+
+                <template v-else-if="secretPathPhase === 'ready'">
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="startSecretPathGame" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">小道へ進む</span>
+                  </button>
+                </template>
+
+                <template v-else>
+                  <p class="command-box__label">どうする？</p>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="enterSecretSpotFromPath" @mouseenter="selectedCommandIndex = 0">
+                    <span class="command-box__text">先へ進む</span>
+                  </button>
+                </template>
+              </nav>
             </section>
           </div>
 
@@ -15475,6 +16446,467 @@ onUnmounted(() => {
 }
 
 /* ============================================================
+   秘密の小道（こもれびの広場へ続くミニゲーム）
+
+   こもれびの広場と同じ紫のカード（.place-card--secret）の中に、
+   森の小道のフィールドを置く形にしている
+   ・フィールド … まん中は土の色、左右のはしは草の色。点線でレーンを3つに分ける
+   ・枝 🌿 と 木漏れ日 ✨ … JavaScript が top（上から何%か）を1コマごとに書きかえて動かす
+     （CSSの animation で動かすと、動きを減らす設定のときに止まって遊べなくなるため）
+   ・「← ひだり」「みぎ →」… コマンドボックス（紺色の枠）の中に置く
+   ============================================================ */
+
+/* はじまる前の「えだをよけながら ✨ こもれびをあつめよう！」 */
+.secret-path-lead {
+  margin: 14px 0 0;
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #e6dbfa;
+  color: #6b4fb0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* 遊びかたの箇条書き（点は、うすい紫の丸） */
+.secret-path-rules {
+  display: grid;
+  gap: 2px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.secret-path-rules li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+.secret-path-rules li::before {
+  position: absolute;
+  top: 0.62em;
+  left: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #bd9bef;
+  content: '';
+}
+
+/* 遊んでいる最中のカード
+
+   中央エリアの高さに合わせて伸び、あいた高さをフィールドにまわす
+   （.stage > * の flex: none を、ここだけ上書きしている）
+   max-height は、背の高い画面でフィールドが縦に長くなりすぎないようにするため */
+.stage > .secret-path {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 640px;
+  padding: 14px 18px 18px;
+}
+
+/* 木漏れ日の数と残り時間 */
+.secret-path-hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto;
+}
+
+.secret-path-hud__sunlight {
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: #fff6e0;
+  box-shadow: inset 0 0 0 1px #f5e2be;
+  color: #7a5410;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: box-shadow 0.2s ease;
+}
+
+/* 木漏れ日を取った直後だけ、金色にふわっと光る */
+.secret-path-hud__sunlight--sparkle {
+  box-shadow:
+    inset 0 0 0 2px var(--gold),
+    0 0 12px 2px rgb(255 209 102 / 70%);
+}
+
+/* 枝に当たって木漏れ日が減った直後だけ、さんご色にふわっと光る */
+.secret-path-hud__sunlight--lost {
+  box-shadow:
+    inset 0 0 0 2px var(--parent-calm),
+    0 0 12px 2px rgb(255 163 163 / 70%);
+}
+
+.secret-path-hud__count {
+  display: inline-block;
+  min-width: 1ch;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  animation: status-pop 0.35s ease-out;
+}
+
+.secret-path-hud__time {
+  padding: 3px 14px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* のこり3秒からは、さんご色の濃いほうにして「もうすぐ終わり」を伝える */
+.secret-path-hud__time--soon {
+  background: #c9412f;
+}
+
+/* フィールド（森の小道）
+
+   ・box-sizing: border-box … 枠のぶんだけカードから横にはみ出さないようにする
+   ・まるい光の模様 … 地面に落ちている木漏れ日
+   ・touch-action: none … 指でフィールドをさわっても、ページがスクロールしないようにする */
+.secret-path-field {
+  position: relative;
+  flex: 1 1 auto;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 460px;
+  min-height: 220px;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 3px solid #7aa874;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 22% 16%, rgb(255 246 196 / 75%) 0 16px, transparent 44px),
+    radial-gradient(circle at 80% 40%, rgb(255 246 196 / 60%) 0 12px, transparent 38px),
+    radial-gradient(circle at 36% 66%, rgb(255 246 196 / 50%) 0 14px, transparent 40px),
+    linear-gradient(90deg, #a9d59f 0%, #efe4c6 9%, #efe4c6 91%, #a9d59f 100%);
+  box-shadow: inset 0 10px 18px rgb(47 94 60 / 22%);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* レーンの区切りの点線（左から 1/3 と 2/3 の位置） */
+.secret-path-field::before,
+.secret-path-field::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  width: 3px;
+  margin-left: -1.5px;
+  background: repeating-linear-gradient(180deg, rgb(122 168 116 / 55%) 0 16px, transparent 16px 34px);
+  content: '';
+}
+
+.secret-path-field::before {
+  left: 33.333%;
+}
+
+.secret-path-field::after {
+  left: 66.667%;
+}
+
+/* 道（レーン）の押せる場所（左・まん中・右の3つ）
+
+   重なりの順番（下から）
+   0 … この押せる場所（マウスを乗せたとき・押したときの明るさ）
+   1 … レーンの区切りの点線
+   2 … 枝・木漏れ日
+   3 … こうちゃん */
+.secret-path-lane {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 0;
+  width: 33.334%;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.secret-path-lane--current {
+  cursor: default;
+}
+
+/* 行き先の目印（こうちゃんの高さに出す、点線の丸と矢印）
+   ふだんは出さず、1回で動ける「となりのレーン」（--next）にだけ うすく出して、
+   「ここを押すと、こっちへ動ける」ことが分かるようにする */
+.secret-path-lane__target {
+  position: absolute;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 46px;
+  height: 46px;
+  border: 3px dashed rgb(95 143 90 / 60%);
+  border-radius: 50%;
+  color: rgb(79 125 74);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition:
+    opacity 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+  pointer-events: none;
+}
+
+/* となりのレーン（1回で動ける先）にだけ、目印をうすく出す
+   いまいるレーンと、2つ先の遠いレーンには出さない */
+.secret-path-lane--next .secret-path-lane__target {
+  opacity: 0.5;
+}
+
+/* マウスを乗せたレーン（マウスなど、乗せられる端末だけ）は、少し明るくなる */
+@media (hover: hover) {
+  .secret-path-lane:not(.secret-path-lane--current):hover {
+    background: rgb(255 255 255 / 32%);
+  }
+}
+
+/* マウスを乗せたレーンを押したときの「動く先」の目印は、紺色の丸ではっきり出す
+   遠いレーンに乗せているときは、まん中のレーン（1レーン先）の目印がはっきりする */
+.secret-path-lane--destination .secret-path-lane__target {
+  border-style: solid;
+  border-color: var(--navy);
+  background: rgb(255 255 255 / 85%);
+  color: var(--navy);
+  opacity: 1;
+}
+
+/* 押した直後のレーン（クリック・タップどちらも）は、木漏れ日の色で一瞬光る */
+.secret-path-lane--flash {
+  background: rgb(255 241 168 / 60%);
+}
+
+/* 流れてくる枝と木漏れ日（left と top は、レーンと y から JavaScript が入れる） */
+.secret-path-item {
+  position: absolute;
+  z-index: 2;
+  font-size: 34px;
+  line-height: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.secret-path-item--branch {
+  filter: drop-shadow(0 2px 0 rgb(47 94 60 / 35%));
+}
+
+.secret-path-item--sunlight {
+  filter: drop-shadow(0 0 6px rgb(255 214 90 / 95%));
+}
+
+/* 当たった枝は、うすくして「もう当たらない」ことが分かるようにする */
+.secret-path-item--hit {
+  opacity: 0.35;
+}
+
+/* こうちゃん（レーンを動くときだけ、すっと横へすべる） */
+.secret-path-player {
+  position: absolute;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  transition: left 0.1s ease-out;
+  pointer-events: none;
+}
+
+.secret-path-player__face {
+  display: block;
+  font-size: 42px;
+  line-height: 1;
+  filter: drop-shadow(0 3px 0 rgb(47 94 60 / 30%));
+}
+
+/* 枝に当たったとき：小さく2回ゆれる（いやいや発生の結果カードと同じ shake） */
+.secret-path-player__face--bumped {
+  animation: shake 0.25s ease-in-out 2;
+}
+
+/* 木漏れ日を取ったとき：金色に光る */
+.secret-path-player__face--sparkle {
+  filter: drop-shadow(0 0 10px rgb(255 214 90));
+}
+
+/* 「いたっ！」のふきだし（木漏れ日が減ったときは、その下に「✨ -1」も並ぶ）
+
+   2行になっても右のレーンでフィールドからはみ出さないように、横ではなくたてに積む */
+.secret-path-player__bump {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 4px;
+  padding: 1px 10px;
+  border: 2px solid var(--parent-calm);
+  border-radius: 12px;
+  background: #fff;
+  color: #c9412f;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: secret-path-pop 0.2s ease-out;
+}
+
+/* 「✨ -1」（「いたっ！」の下に出す） */
+.secret-path-player__minus {
+  color: #c9412f;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+/* 「✨ +1」（ふわっと上へ上がりながら消える） */
+.secret-path-player__plus {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  color: #8a5a00;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-shadow:
+    0 0 6px #fff,
+    0 0 2px #fff;
+  transform: translateX(-50%);
+  animation: secret-path-plus 0.6s ease-out forwards;
+}
+
+@keyframes secret-path-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px) scale(0.8);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes secret-path-plus {
+  from {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate(-50%, -26px);
+  }
+}
+
+/* 「← ひだり」「みぎ →」ボタン
+
+   親指で押しやすいように、横いっぱいの2つならびで、高さもたっぷりとる
+   ・touch-action: none … ボタンの上で指を動かしても、ページがスクロールしない
+   ・user-select / -webkit-touch-callout … 連打や長押しで文字が選ばれたり、メニューが出たりしない */
+.secret-path-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.secret-path-controls__button {
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 2px solid #c8d4e6;
+  border-bottom-width: 4px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.3;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.secret-path-controls__button:hover {
+  background: #f2f9fd;
+}
+
+.secret-path-controls__button:active {
+  border-bottom-width: 2px;
+  background: #e3f2fb;
+  transform: translateY(2px);
+}
+
+.secret-path-controls__button:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.secret-path-controls__hint {
+  margin: 8px 0 0;
+  color: #b8dfef;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* 指で遊ぶ端末では、キーボードの案内を出さない */
+@media (hover: none) and (pointer: coarse) {
+  .secret-path-controls__hint {
+    display: none;
+  }
+}
+
+/* 小道をぬけたあとの「✨ 木漏れ日 4 / 5」 */
+.secret-path-result {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 2px 14px;
+  border-radius: 999px;
+  background: #fff6e0;
+  box-shadow: inset 0 0 0 1px #f5e2be;
+  color: #7a5410;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.secret-path-result b {
+  font-size: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 「木々のすき間から、まぶしい光が差しこんできました。」 */
+.secret-path-light {
+  margin-top: 10px;
+  padding: 8px 14px;
+  border-left: 4px solid var(--gold);
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgb(255 241 201 / 90%) 0%, rgb(255 241 201 / 0%) 100%);
+  color: #7a5410;
+  font-weight: 700;
+}
+
+/* ============================================================
    【下部】コマンド欄（公園入口・ゴール・GAME OVER）
    横長を活かして、選択肢を2〜3列のグリッドで並べる
    ============================================================ */
@@ -15753,6 +17185,13 @@ onUnmounted(() => {
    上部ステータス〜下部コマンドが一画面に収まるようにする
    ============================================================ */
 @media (max-height: 800px) {
+  /* 秘密の小道の「← ひだり」「みぎ →」も少しだけ低くして、フィールドの高さにまわす
+     （スマホ幅では、下の max-width: 700px で押しやすい高さに戻す） */
+  .secret-path-controls__button {
+    min-height: 46px;
+    font-size: 17px;
+  }
+
   /* 上下の余白は、目もりの説明（.gauge-legend）を残す場所をつくるために
      2pxずつつめてある */
   .status-area {
@@ -16052,6 +17491,13 @@ onUnmounted(() => {
   .care-menu__item--selected::after {
     animation: none !important;
   }
+
+  /* 秘密の小道の「✨ +1」は、消える動きをやめて、出ているあいだはその場に見せておく
+     （forwards のまま一瞬で終わると、出たとたんに見えなくなってしまうため）
+     ※ 枝と木漏れ日そのものは JavaScript で動かしているので、この設定でも止まらずに遊べる */
+  .secret-path-player__plus {
+    animation: none !important;
+  }
 }
 
 /* ============================================================
@@ -16062,6 +17508,12 @@ onUnmounted(() => {
 @media (max-width: 900px) {
   .command {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 秘密の小道のカードは、padding と border をふくめて中央エリアの幅に収める
+     （content-box のままだと、タブレット幅で左右が少しはみ出してしまうため） */
+  .stage--secret-path > .place-card {
+    box-sizing: border-box;
   }
 
   /* ※ おやつ（.snack-list）は、パソコンのときからすでに2列なので
@@ -16489,6 +17941,64 @@ onUnmounted(() => {
   .cmd--next,
   .cmd--back {
     max-width: none;
+  }
+
+  /* ===== 秘密の小道（スマホ幅） =====
+
+     ・上部ステータスを、小道の画面のあいだだけ固定しない（ページといっしょに流れる）
+       固定したままだと、画面の半分近くを上部ステータスが使ってしまい、
+       フィールドと「← ひだり」「みぎ →」が同時に見えなくなるため
+     ・遊びはじめたら、カードが画面のいちばん上に来るようにスクロールする（scrollSecretPathIntoView()）
+     ・フィールドは、カードとボタンがいっしょに画面に収まる高さにする
+       （iPhone SE ほどの背の低い画面でも、ボタンまで見える） */
+  .game-screen--secret-path .status-area {
+    position: static;
+  }
+
+  /* カードとコマンドボックスの幅は、stretch にまかせる
+
+     このゲームは box-sizing を border-box にしていないので、
+     .stage > * や .command-box の width: 100% のままだと、
+     padding と border のぶんだけ画面の右へはみ出してしまう
+     （.command-area の中のコマンドボックスと同じ考えかた） */
+  .stage--secret-path > * {
+    align-self: stretch;
+    width: auto;
+  }
+
+  .stage > .secret-path {
+    flex: none;
+    max-height: none;
+    padding: 12px 12px 14px;
+    scroll-margin-top: 8px;
+  }
+
+  .secret-path-field {
+    flex: none;
+    height: clamp(240px, calc(100vh - 280px), 400px);
+    height: clamp(240px, calc(100dvh - 280px), 400px);
+    min-height: 0;
+  }
+
+  .secret-path-item {
+    font-size: 30px;
+  }
+
+  .secret-path-player__face {
+    font-size: 38px;
+  }
+
+  .secret-path-lead {
+    font-size: 17px;
+  }
+
+  .secret-path-rules li {
+    font-size: 14.5px;
+  }
+
+  .secret-path-controls__button {
+    min-height: 56px;
+    font-size: 18px;
   }
 }
 </style>
