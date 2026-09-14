@@ -574,9 +574,9 @@ const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
     greatSnackText: 'おなかが満たされて、気持ちももどってきたようです。',
   },
   frustrated: {
-    voices: { 1: 'できないー！', 2: 'できないー！！', 3: 'できないーーー！！！' },
-    scene: '思いどおりにいかなかったのが悔しいのか、こうちゃんは目に涙をためています。',
-    complaint: 'できないー！',
+    voices: { 1: 'なんかちがうー！', 2: 'なんかちがうー！！', 3: 'ちがうのーーー！！！' },
+    scene: '思っていたのとちがったのか、こうちゃんは納得できない様子で目に涙をためています。',
+    complaint: 'なんかちがうー！',
     greatSnackText: '大好きな甘い味で、悔しかった気持ちが少しずつほどけてきたようです。',
   },
   wantMorePlay: {
@@ -5513,7 +5513,8 @@ function hugChild() {
   if (tantrumLevel.value === 1) {
     resultMessage.value = 'ぎゅっとだっこすると、しばらく足をぱたぱたさせていましたが、そのうち肩にことんと頭をあずけてきました。';
   } else {
-    resultMessage.value = '大泣きしているこうちゃんをぎゅっとだっこして、背中をとんとん。しばらくあばれていましたが、そのうち肩にことんと頭をあずけてきました。落ち着くまでだっこするのは、ひと苦労でした。';
+    resultMessage.value =
+      '大泣きしているこうちゃんをぎゅっとだっこして、背中をとんとん。しばらくあばれていましたが、そのうち肩にことんと頭をあずけてきました。落ち着くまでだっこするのは、ひと苦労でした。';
   }
 
   // 「つかれた」いやいやなら、歩きつかれた足を休ませてあげられた＝ナイス対応
@@ -5683,7 +5684,10 @@ function talkToChild() {
       // ぐずぐず・大泣き：気持ちを分かってもらえて、解決
       isTantrum.value = false;
 
-      resultMessage.value = tantrumReason.value === 'frustrated' ? '「うまくできなくて悔しかったんだね」と話しかけると、こうちゃんは少しずつ落ち着いてきました。' : '「まだ遊びたかったんだね」と話すと、こうちゃんは少し考えてから、こくんとうなずいてくれました。';
+      resultMessage.value =
+        tantrumReason.value === 'frustrated'
+          ? '「うまくできなくて悔しかったんだね」と話しかけると、こうちゃんは少しずつ落ち着いてきました。'
+          : '「まだ遊びたかったんだね」と話すと、こうちゃんは少し考えてから、こくんとうなずいてくれました。';
     }
 
     if (isRepeatedTalk) {
@@ -5836,12 +5840,16 @@ function waitCalmly() {
       // ぐずぐず：落ち着いてくれたので、いやいや終了
       isTantrum.value = false;
 
-      resultMessage.value = isFrustrated ? 'となりで静かに待っていると、こうちゃんは自分で涙をふいて、少しずつ落ち着いてきました。悔しい気持ちに、自分で区切りをつけられたようです。' : 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
+      resultMessage.value = isFrustrated
+        ? 'となりで静かに待っていると、こうちゃんは自分で涙をふいて、少しずつ落ち着いてきました。悔しい気持ちに、自分で区切りをつけられたようです。'
+        : 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
     } else {
       // 大泣き・大いやいや：少し落ち着くが、まだ続く → 1段下がる
       decreaseTantrumLevel();
 
-      resultMessage.value = isFrustrated ? 'となりで静かに待っていると、こうちゃんは自分で涙をふこうとしはじめました。さっきより少し、泣き声が小さくなってきました。' : 'となりで静かに待っていると、さっきより少し、泣き声が小さくなってきました。でも、まだ完全には落ち着いていないようです。';
+      resultMessage.value = isFrustrated
+        ? 'となりで静かに待っていると、こうちゃんは自分で涙をふこうとしはじめました。さっきより少し、泣き声が小さくなってきました。'
+        : 'となりで静かに待っていると、さっきより少し、泣き声が小さくなってきました。でも、まだ完全には落ち着いていないようです。';
     }
 
     // 悔しい気持ちを、こうちゃんが自分で立てなおそうとできた＝ナイス対応（1回のいやいやで1回だけ）
@@ -5854,7 +5862,9 @@ function waitCalmly() {
     // ここでは checkTantrum() を呼ばない（新しいいやいやではないので、tantrumCount も tantrumReason も変えない）
     const complaint = currentTantrumReasonInfo.value?.complaint;
 
-    resultMessage.value = complaint ? `しばらく待ってみましたが、こうちゃんは「${complaint}」と、まだ気持ちがおさまらないようです……。` : 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
+    resultMessage.value = complaint
+      ? `しばらく待ってみましたが、こうちゃんは「${complaint}」と、まだ気持ちがおさまらないようです……。`
+      : 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
 
     // 待つを続けていると、だんだん効きにくくなることを、文章でも伝える
     if (repeatedTantrumActionCount.value > 0) {
@@ -8572,12 +8582,7 @@ onUnmounted(() => {
          ・フェード中は、キーの操作を受けつけない（→ isScreenChanging）
          ・次の画面が出おわったら、その画面のメインのボタンへフォーカスを当てる
          ============================================================ -->
-    <Transition
-      name="screen-fade"
-      mode="out-in"
-      @before-leave="handleScreenLeaveStart"
-      @after-leave="handleScreenLeaveEnd"
-      @after-enter="handleScreenEnterEnd">
+    <Transition name="screen-fade" mode="out-in" @before-leave="handleScreenLeaveStart" @after-leave="handleScreenLeaveEnd" @after-enter="handleScreenEnterEnd">
       <!-- ============================================================
            あそびかた画面（B画面から開く説明書）
 
@@ -8611,7 +8616,13 @@ onUnmounted(() => {
           <div class="title-card__tools">
             <button ref="howToBackButtonRef" type="button" class="title-card__back" @click="closeHowToPlay">← ひとつ前の画面へ戻る</button>
 
-            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+            <button
+              ref="soundToggleButtonRef"
+              type="button"
+              class="sound-toggle"
+              :aria-pressed="soundEnabled"
+              :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+              @click="toggleSound">
               <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
               <span class="sound-toggle__text">サウンド</span>
               <span class="sound-toggle__state">
@@ -8838,7 +8849,13 @@ onUnmounted(() => {
                    ようにしているため（ボタン側で止める必要はない） -->
             <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" @click="goToSoundtrack">♪ サウンドトラック</button>
 
-            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+            <button
+              ref="soundToggleButtonRef"
+              type="button"
+              class="sound-toggle"
+              :aria-pressed="soundEnabled"
+              :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+              @click="toggleSound">
               <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
               <span class="sound-toggle__text">サウンド</span>
               <span class="sound-toggle__state">
@@ -8903,7 +8920,13 @@ onUnmounted(() => {
                 <span class="title-card__howtoText">あそびかた</span>
               </button>
 
-              <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+              <button
+                ref="soundToggleButtonRef"
+                type="button"
+                class="sound-toggle"
+                :aria-pressed="soundEnabled"
+                :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+                @click="toggleSound">
                 <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
                 <span class="sound-toggle__text">サウンド</span>
                 <span class="sound-toggle__state">
@@ -9081,7 +9104,13 @@ onUnmounted(() => {
                  さっき選んだおやつがそのまま入っている） -->
             <button type="button" class="title-card__back" @click="closeSnackSelection">← ひとつ前の画面へ戻る</button>
 
-            <button ref="soundToggleButtonRef" type="button" class="sound-toggle" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+            <button
+              ref="soundToggleButtonRef"
+              type="button"
+              class="sound-toggle"
+              :aria-pressed="soundEnabled"
+              :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+              @click="toggleSound">
               <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
               <span class="sound-toggle__text">サウンド</span>
               <span class="sound-toggle__state">
@@ -9118,7 +9147,12 @@ onUnmounted(() => {
             <div class="status-area__titleRow">
               <span class="status-area__title">{{ gameTitle }}</span>
 
-              <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'" @click="toggleSound">
+              <button
+                type="button"
+                class="sound-toggle sound-toggle--bar"
+                :aria-pressed="soundEnabled"
+                :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+                @click="toggleSound">
                 <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
                 <span class="sound-toggle__text">サウンド</span>
                 <span class="sound-toggle__state">
@@ -9356,7 +9390,12 @@ onUnmounted(() => {
                 <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button v-if="canEnterSecretSpot" class="cmd cmd--secret" :class="{ 'cmd--selected': selectedCommandIndex === 5 }" @click="goToPlace('secretSpot')" @mouseenter="selectedCommandIndex = 5">
+              <button
+                v-if="canEnterSecretSpot"
+                class="cmd cmd--secret"
+                :class="{ 'cmd--selected': selectedCommandIndex === 5 }"
+                @click="goToPlace('secretSpot')"
+                @mouseenter="selectedCommandIndex = 5">
                 <span class="cmd__text">秘密の場所へ行く</span>
                 <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
               </button>
@@ -10744,7 +10783,10 @@ onUnmounted(() => {
               <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum, 'place-card--tantrum-big': tantrumLevel === 3 }">
                 <!-- 見出しは、いやいやの激しさで変わる（数字の「Lv」は出さない）
                      😫 いやいやタイム → 😭 いやいやタイム！ → 😭💥 大いやいやタイム！ -->
-                <h2 class="place-card__title"><span class="tantrum-title__icon" aria-hidden="true">{{ currentTantrumLevelInfo.icon }}</span>{{ currentTantrumLevelInfo.title }}</h2>
+                <h2 class="place-card__title">
+                  <span class="tantrum-title__icon" aria-hidden="true">{{ currentTantrumLevelInfo.icon }}</span>
+                  {{ currentTantrumLevelInfo.title }}
+                </h2>
 
                 <!-- いやいやの理由とレベルに合ったセリフと様子
                      理由の名前（'hungry' など）は出さず、様子からプレイヤーに考えてもらう
@@ -11836,7 +11878,12 @@ onUnmounted(() => {
             <span class="cmd__text">もう少し遊ぶ</span>
           </button>
 
-          <button type="button" class="cmd cmd--goal goal-confirm__button" :class="{ 'cmd--selected': selectedGoalConfirmIndex === 1 }" @click="confirmGoToGoal" @mouseenter="selectedGoalConfirmIndex = 1">
+          <button
+            type="button"
+            class="cmd cmd--goal goal-confirm__button"
+            :class="{ 'cmd--selected': selectedGoalConfirmIndex === 1 }"
+            @click="confirmGoToGoal"
+            @mouseenter="selectedGoalConfirmIndex = 1">
             <span class="cmd__text">出口へ向かう</span>
           </button>
         </div>
