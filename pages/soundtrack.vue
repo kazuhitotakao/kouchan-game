@@ -4,7 +4,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 /* ============================================================
    サウンドトラックページ（/soundtrack）
 
-   ゲームの中で流れる6曲を、ゆっくり聴くためのページ
+   ゲームの中で流れる曲（いまは7曲）を、ゆっくり聴くためのページ
 
    ゲーム本編（pages/index.vue）のBGMとは、わざと作りを分けてある
    ・本編 … 場面に合わせて自動で切り替わる。曲はloopする
@@ -19,7 +19,7 @@ const gameTitle: string = 'こうちゃんの大冒険';
 
 /* 1曲ぶんの情報のかたち
 
-   id          … 曲番号（01〜06の表示にも使う）
+   id          … 曲番号（01・02… の表示にも使う）
    title       … 曲名
    description … 曲の雰囲気をひとことで説明する文
    src         … 音声ファイルの場所（public/audio/ の中のファイル）
@@ -93,6 +93,14 @@ const tracks: SoundtrackTrack[] = [
     src: '/audio/result-bgm.mp3',
     volume: 0.43,
     credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
+  },
+  {
+    id: 7,
+    title: 'きょうはここまで',
+    description: 'GAME OVER画面BGM',
+    src: '/audio/game-over-bgm.mp3',
+    volume: 0.43,
+    credit: '音楽生成：Suno',
   },
 ];
 
@@ -181,70 +189,79 @@ const duration = ref(0);
    ② 曲の一覧を、ゲームのメニューのように矢印キーで動かせる
       ↑↓＝上下の曲へ、←→＝同じ曲の中の操作へ、Home / End＝最初 / 最後の曲へ
       （→ handleTrackListKeydown。見張りは <ol class="st-list"> の1か所だけ）
-   ③ 曲の一覧と、その上にある操作ボタンとを ↑↓ で行き来できる
-      ふだんから出ている「▶ 全曲再生」「🔀 シャッフル再生」と、
-      全曲再生中だけ出る「⏭ 次のトラックへ」「■ 全曲再生を停止」の
-      どちらのならびからでも行き来できる（← → でとなりのボタンへも移れる）
-      （→ handlePlayallButtonsKeydown。2つのならびで同じ関数を使う）
-      一覧から上のボタンへ戻る道は findVerticalTarget にある
+   ③ 上の操作エリア（ツールバー・スターター・アクション）と曲の一覧を、
+      画面の「左列・右列」をたどって矢印キーで動かせる
+      （→ handleToolbarKeydown / handlePlayallButtonsKeydown / findPlayallVerticalTarget）
+      一覧から上のボタンへ戻る道は findVerticalTarget / findOutsidePlayButton にある
 
-      ■ 止まっているときは2段（上のボタン → 曲の一覧）
+      考えかたは「2列のグリッド」
+      ・左にいるボタンで↑↓しても、行き先は左列のボタン
+      ・右にいるボタンで↑↓しても、行き先は右列のボタン
+      ・← → は、そのならびの中で となりの列へ移るだけ
+        （左端で←、右端で→、は移動しない。回り込みはしない）
 
-          ▶ 全曲再生  ←→  🔀 シャッフル再生
-                    ↓（↑は最後の曲へ）
-                01 ▶ 再生
-                    ↓
-                02 ▶ 再生
-                    …
+      ■ 止まっているとき（ツールバー → スターター → 曲の一覧）
 
-      ■ 全曲再生中・シャッフル再生中は3段になる
-
-        あいだに「⏭ 次のトラックへ」「■ 全曲再生を停止」が出てくる
-        この2つは、鳴っているあいだ いちばんよく使う操作なので、
-        上から↓を押したときに 飛びこさないようにしてある
-
-          ▶ 全曲再生            🔀 シャッフル再生
+          [ ← 戻る ]        ←→  [ 🔊 サウンド ]
               ↑↓                     ↑↓
-          ⏭ 次のトラックへ  ←→  ■ 全曲再生を停止
-              ↓                       ↓
-                      01 ▶ 再生
-                          ↓
-                      02 ▶ 再生
-                          …
+          [ ▶ 全曲再生 ]   ←→  [ 🔀 シャッフル ]
+                      ↓
+                    曲の一覧（01 ▶ 再生 …）
 
-        ・上段から↓ … 直前に↑で上がってきた下段のボタンへ戻る
-                       （まだ一度も上がっていなければ「⏭ 次のトラックへ」）
-        ・上段から↑ … 「■ 全曲再生を停止」
-        ・下段から↑ … 上段の、同じ側のボタンへ（左は左、右は右）
+        ・戻る／サウンドで↓ … 同じ列のスターター（全曲再生／シャッフル）へ
+        ・スターターで↑     … 同じ列のツールバー（戻る／サウンド）へ
+        ・スターターで↓     … 曲の一覧の01「▶ 再生」へ（左右どちらの列からでも）
 
-        上と下で行き先がそろうので、↑と↓で同じ場所を行ったり来たりできる
+      ■ 全曲再生中・シャッフル再生中（ツールバー → スターター → アクション → 曲の一覧）
 
-          ■ 全曲再生を停止 → ↑ → 🔀 シャッフル再生 → ↓ → ■ 全曲再生を停止
-          ⏭ 次のトラックへ → ↑ → ▶ 全曲再生       → ↓ → ⏭ 次のトラックへ
+        あいだに「⏭ 次のトラックへ」「■ 停止」が出てくる
 
-      通常の全曲再生とシャッフル再生で、動きはまったく同じ
-      （どちらも isPlaylistPlaying が true になるので、そこだけを見ている）
+          [ ← 戻る ]        ←→  [ 🔊 サウンド ]
+              ↑↓                     ↑↓
+          [ ▶ 全曲再生 ]   ←→  [ 🔀 シャッフル ]
+              ↑↓                     ↑↓
+          [ ⏭ 次へ ]       ←→  [ ■ 停止 ]
+                      ↓
+                    曲の一覧（01 ▶ 再生 …）
 
-   ※ document や window では矢印キーを見張らない
-     ページのスクロールや、再生バー・音量バーの操作をじゃましないため
+        左列は 戻る ↑↓ 全曲再生 ↑↓ 次のトラック が一直線、
+        右列は サウンド ↑↓ シャッフル ↑↓ 停止 が一直線になる
+        （↑と↓で、同じ列を行ったり来たりできる）
+        アクション（次へ／停止）で↓ … 曲の一覧の01「▶ 再生」へ
+
+      曲の一覧から↑で戻るときは、直前に一覧へ入ったボタンへ帰る（→ lastOutsideButton）
+      （「■ 停止」から入ったなら「■ 停止」へ、「🔀 シャッフル」から入ったなら「🔀 シャッフル」へ）
+      Tabで一覧へ入ったなど、覚えが無いときは、
+      再生中なら「⏭ 次のトラックへ」、止まっているなら「▶ 全曲再生」へ帰る（→ findOutsidePlayButton）
+
+   ※ document や window では矢印キーを見張らない（曲の一覧のスクロールや、
+     再生バー・音量バーの操作をじゃましないため）
+     見張りは3か所だけ
+     （.st-toolbar ／ .st-playall__starters・.st-playall__actions ／ <ol class="st-list">）
    ※ 音量スライダーは、矢印キーの移動先に入れない
      矢印キーでそのまま音量を大小させるものなので、
      移動先にしてしまうと「動かすつもりが移動になる」ため（Tabで移れる）
-   ※ 「🔁 リピート」「🔊 サウンド」のボタンも、矢印キーの移動先に入れない
-     音量スライダーととなり合わせの「再生の設定」のまとまりなので、
-     行き来のしかたをTabキーにそろえている
-     （矢印キーは「曲を選んで鳴らす」ための道、と役わりを分けている）
+   ※ 「🔁 リピート」のボタンも、矢印キーの移動先に入れない
+     音量スライダーととなり合わせの「再生の設定」のまとまりなので、Tabで移る
+   ※ 「再生中の曲を見る」（.st-playall__see）も、矢印キーの移動先に入れない
+     曲の一覧の現在曲までスクロールするだけの補助操作なので、Tab / Enter / Space で使う
+   ※ Escape は「ⓘ 制作情報」の吹き出しを閉じるだけ（→ handleTrackListKeydown）
+     はじめの画面へ戻るのには使わない（理由はテンプレートの st-toolbar のコメント）
    ============================================================ */
 
-/* 上のボタン4つを、それぞれ覚えておく箱
+/* 矢印キーで直接フォーカスを当てるボタンを、それぞれ覚えておく箱
    ref="〜" と書いたボタンが、そのままここに入ってくる（出ていないときは null）
 
-   上段（いつも出ている）   … playAllButtonRef  / shuffleButtonRef
-   下段（全曲再生中だけ出る） … nextTrackButtonRef / stopPlaylistButtonRef
+   画面の「左列・右列」でならべると
+     ツールバー（いつも）     … backButtonRef      / soundToggleButtonRef
+     スターター（いつも）     … playAllButtonRef   / shuffleButtonRef
+     アクション（再生中だけ） … nextTrackButtonRef / stopPlaylistButtonRef
 
-   ↑↓ で上段と下段を行き来するとき、左右の位置をそろえた行き先へ移すのに使う
-   （⏭ 次のトラックへ ↑ ▶ 全曲再生 ／ ■ 全曲再生を停止 ↑ 🔀 シャッフル再生）
+   ↑↓ で列をたどるとき・← → でとなりの列へ移るときの行き先に使う（左は左、右は右）
+   （→ handleToolbarKeydown / handlePlayallButtonsKeydown / findPlayallVerticalTarget）
    DOMから探すこともできるが、名前で分かるほうが読みやすいので ref にしている */
+const backButtonRef = ref<HTMLButtonElement | null>(null);
+const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
 const playAllButtonRef = ref<HTMLButtonElement | null>(null);
 const shuffleButtonRef = ref<HTMLButtonElement | null>(null);
 const nextTrackButtonRef = ref<HTMLButtonElement | null>(null);
@@ -267,22 +284,6 @@ const trackListRef = ref<HTMLElement | null>(null);
    ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい
    ※ そのボタンが画面から消えていたら、この覚えは使わない（→ findOutsidePlayButton） */
 let lastOutsideButton: HTMLElement | null = null;
-
-/* 全曲再生中に↑で上段へ上がるとき、下段のどのボタンから上がったかを覚えておく
-
-   上（↑）と下（↓）で、行ったり来たりが合うようにするための覚えごと
-
-     ■ 全曲再生を停止 → ↑ → 🔀 シャッフル再生 → ↓ → ■ 全曲再生を停止
-     ⏭ 次のトラックへ → ↑ → ▶ 全曲再生       → ↓ → ⏭ 次のトラックへ
-
-   これが無いと、↓はいつも「⏭ 次のトラックへ」へ行ってしまい、
-   「■ 全曲再生を停止」から上がったのに、ちがうボタンへ降りることになる
-
-   ※ 覚えが無いとき（再生を始めた直後など）は、
-     いちばんよく使う「⏭ 次のトラックへ」へ降りる（→ findActionsButtonForDown）
-   ※ 上の lastOutsideButton と考えかたは同じで、
-     こちらは「上段 ↔ 下段」、あちらは「上のボタン ↔ 曲の一覧」を覚えている */
-let lastActionsButton: HTMLElement | null = null;
 
 /* ページ全体の音量（0〜1）。はじめは100％＝今までと同じ音量
    （前に使ったときの音量があれば、下の onMounted で思い出して入れなおす） */
@@ -499,7 +500,7 @@ function ensureSoundEnabled() {
 
    ■ off … 今までどおり
      1曲だけの再生 … 曲が終わったら止まる
-     全曲再生       … 6曲を1回ずつ鳴らしたら止まる
+     全曲再生       … 全曲を1回ずつ鳴らしたら止まる
 
    ■ all（全曲リピート）
      全曲再生が1周したら、また曲順の先頭（＝開始曲）へ戻って鳴らし続ける
@@ -713,7 +714,7 @@ function playDecisionSound() {
 }
 
 /* ============================================================
-   全曲再生（6曲を1周ぶん、続けて鳴らす）のしくみ
+   全曲再生（全曲を1周ぶん、続けて鳴らす）のしくみ
 
    ・selectedStartTrackId … どの曲から1周を始めるか（トラック番号を押して選ぶ）
    ・isPlaylistPlaying    … いま全曲再生の途中かどうか
@@ -721,8 +722,8 @@ function playDecisionSound() {
    ・playlistIndex        … その曲順の何曲目を鳴らしているか（0はじまり）
 
    曲順は開始曲から後ろへ進み、最後まで行ったら先頭へ回り込む
-   （例：03開始 → 03 04 05 06 01 02）
-   6曲を1回ずつ鳴らし終えたら止まる
+   （例：03開始 → 03 04 05 06 07 01 02）
+   全曲を1回ずつ鳴らし終えたら止まる
    （「🔁 リピート 全曲」のときだけ、また開始曲へ戻ってくりかえす）
 
    次の曲へ進むのは、つぎの2つのとき（どちらも同じ関数を使う）
@@ -766,9 +767,6 @@ const playlistTracks = ref<SoundtrackTrack[]>([]);
 /* その曲順の何曲目か（0はじまり） */
 const playlistIndex = ref(0);
 
-/* いま全曲再生で鳴らしている曲（案内の「N / 6　01 タイトル」に使う） */
-const currentPlaylistTrack = computed(() => playlistTracks.value[playlistIndex.value] ?? null);
-
 /* 停止ボタンに出す文字
 
    いまの始めかたに合わせて、言いかたを変える
@@ -784,6 +782,50 @@ const currentPlaylistTrack = computed(() => playlistTracks.value[playlistIndex.v
    ※ このページのコメントでは、この2つをまとめて
      「■ 全曲再生を停止」と呼んでいる */
 const stopButtonLabel = computed(() => (isShufflePlaying.value ? '■ シャッフル再生を停止' : '■ 全曲再生を停止'));
+
+/* ============================================================
+   いま鳴らしている曲を、固定エリアに表示するための3つ（現在曲の表示）
+
+   曲の一覧を下へスクロールしていると、いま鳴っている曲のカードは、
+   スクロール範囲の外へ隠れてしまう
+   そこで「いま何が鳴っているか」を、いつも見えている固定エリアにも出す
+   （→ テンプレートの st-playall__status。全曲再生中だけでなく、個別再生でも出す）
+
+   ※ ここは「表示するだけ」で、曲の一覧は自動でスクロールさせない
+     曲が変わるたびに勝手にスクロールすると、
+     ユーザーが見ている曲（06や07）の位置を奪ってしまうため
+     一覧を動かすのは「再生中の曲を見る」を押したときだけ（→ scrollToPlayingTrack）
+   ============================================================ */
+
+/* いま選んでいる曲そのもの（個別再生・全曲再生・シャッフル、どれでも使える）
+
+   playingTrackId から tracks を引くので、全曲再生中だけの曲順（playlistTracks）に頼らず、
+   個別再生でも一時停止中でも「いまの曲」を取れる
+   （id は tracks の中でただ1つなので、find で1曲に決まる）
+   playingTrackId が null（どれも選んでいない）のときは null を返し、
+   テンプレート側は、そのあいだ現在曲の表示ごと消す */
+const playingTrack = computed(() => tracks.find((track) => track.id === playingTrackId.value) ?? null);
+
+/* 固定エリアに出す「いま何をしているか」の目印
+
+   一時停止中（自分で「⏸ 一時停止」した／サウンドOFFで止まった）は、
+   「再生中」と偽らずに「⏸ 一時停止中」と出す（→ isPlaying を先に見ている）
+   鳴っているときだけ、始めかたに合わせて 全曲再生／シャッフル／個別 を出し分ける */
+const playingStatusLabel = computed(() => {
+  if (!isPlaying.value) {
+    return '⏸ 一時停止中';
+  }
+
+  if (isPlaylistPlaying.value) {
+    return isShufflePlaying.value ? '🔀 シャッフル再生中' : '♪ 全曲再生中';
+  }
+
+  return '♪ 再生中';
+});
+
+/* 「再生中の曲を見る」ボタンの文字（一時停止中は「この曲を見る」）
+   押しても再生状態は変えず、その曲カードまで一覧をスクロールするだけ（→ scrollToPlayingTrack） */
+const scrollToTrackLabel = computed(() => (isPlaying.value ? '再生中の曲を見る' : 'この曲を見る'));
 
 /* 制作情報（ⓘ）の吹き出しについての、2つの覚えごと
 
@@ -1123,7 +1165,7 @@ function handleOutsideCreditPointerDown(event: PointerEvent) {
        ④ 1つ手前の席へ移って、①へ戻る（先頭まで来たら終わり）
 
      こうすると、どの並びも同じ確率で出てくる
-     入れかえる回数も、曲数ぶんだけ（6曲なら5回）で終わる
+     入れかえる回数も、曲数ぶんだけ（7曲なら6回）で終わる
 
    ■ list.sort(() => Math.random() - 0.5) を使わない理由
      いっけん短く書けるが、並びのかたよりが出てしまう
@@ -1197,16 +1239,13 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
   isPlaylistPlaying.value = true;
   isShufflePlaying.value = shuffled;
 
-  /* 矢印キーの「どこから来たか」の覚えは、2つとも いったん忘れる
+  /* 曲の一覧へ入るときの「どのボタンから入ったか」の覚えは、いったん忘れる
 
-     ここから上のボタンは2段になり、行き来のしかたが変わるため
-
-     ・lastOutsideButton … 止まっていたときの「▶ 全曲再生」を覚えたままだと、
-       一覧から↑で戻るときに、あいだの下段を飛びこして上まで戻ってしまう
-     ・lastActionsButton … 前回の全曲再生のときの覚えを引きずらないようにする
-       （始めた直後の↓は、いちばんよく使う「⏭ 次のトラックへ」から） */
+     ここから上のボタンが3段（ツールバー → スターター → アクション）になり、
+     一覧へ入れるボタンが増えるため
+     前回の「▶ 全曲再生」を覚えたままだと、一覧から↑で戻るときに、
+     いま出ている下段（⏭ 次のトラックへ／■ 停止）を飛びこしてしまう */
   lastOutsideButton = null;
-  lastActionsButton = null;
 
   const firstTrack = playlistTracks.value[playlistIndex.value];
 
@@ -1232,18 +1271,18 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 
   playTrackAudio(audio, firstTrack);
 
-  /* キーボードで操作している人が、そのまま続きを操作できるようにする
+  /* 再生を始めても、フォーカスは動かさない（押した「▶ 全曲再生／🔀 シャッフル再生」に残す）
 
-     ここで「⏭ 次のトラックへ」「■ 全曲再生を停止」が新しく出てくるので、
-     キーボードで始めた人は、その「⏭ 次のトラックへ」へ移す
-     （マウスで押したときは、フォーカスを動かさない → focusAfterPlaylistStart） */
-  focusAfterPlaylistStart();
+     再生を始めると「⏭ 次のトラックへ」「■ 停止」が新しく出てくるが、
+     ここで勝手に下段へ飛ばすと、ユーザーが自分で↓を押す前に操作位置が動いてしまう
+     いまいる列（左＝全曲再生／右＝シャッフル）から、
+     ユーザーが↓を押したときにだけ、同じ列の下段（次へ／停止）へ移る */
 }
 
 /* 「▶ 全曲再生」を押したとき
 
    開始曲から1周ぶんの曲順を作り、その先頭から鳴らしはじめる
-   例）03開始 → [03, 04, 05, 06] ＋ [01, 02] → 03 04 05 06 01 02
+   例）03開始 → [03, 04, 05, 06, 07] ＋ [01, 02] → 03 04 05 06 07 01 02
 
    ※ slice は「切り取ったコピー」を返すので、元の tracks は書きかわらない
    ※ シャッフル再生の途中で押されたときも、ここを通って通常順に切りかわる
@@ -1261,13 +1300,13 @@ function startPlaylist() {
 /* 「🔀 シャッフル再生」を押したとき
 
    曲順をランダムに並べかえて、その先頭から鳴らしはじめる
-   例）[03, 01, 04, 06, 02, 05] のような順で、6曲を1回ずつ
+   例）[03, 07, 01, 04, 06, 02, 05] のような順で、全曲を1回ずつ
 
    ■ 順番は「始めるとき」に1回だけ決める
      次の曲へ進むたびに くじを引く作りにはしていない
      そうすると同じ曲が2回鳴ったり、鳴らない曲が出たりするため
      先に順番を決めておけば、あとは通常の全曲再生とまったく同じしくみで、
-     6曲を1回ずつ鳴らして終われる
+     全曲を1回ずつ鳴らして終われる
 
    ■ 開始曲（selectedStartTrackId）は使わない
      どの曲から始まるかも、シャッフルにまかせるため
@@ -1283,7 +1322,7 @@ function startShufflePlaylist() {
 /* 全曲再生を終わりにする
 
    ここへ来るのは、つぎの2つのとき
-   ・1周ぶん（6曲）を鳴らし終えたとき
+   ・1周ぶん（全曲）を鳴らし終えたとき
    ・最後の曲で「⏭ 次のトラックへ」を押したとき
 
    鳴っている曲を止めて、全曲再生のための覚えごとをまっさらに戻す
@@ -1374,7 +1413,7 @@ function playNextPlaylistTrack() {
   }
 
   /* 先に「何曲目か」を1つ進める
-     こうしておくと、「2 / 6」の表示のまま音だけ次の曲になる、ということが起きない
+     こうしておくと、「2 / 7」の表示のまま音だけ次の曲になる、ということが起きない
      曲名やトラック番号の表示も、この番号を見ているので一緒に切りかわる */
   playlistIndex.value = nextIndex;
 
@@ -1624,6 +1663,60 @@ function formatTrackNumber(id: number) {
   return String(id).padStart(2, '0');
 }
 
+/* 「再生中の曲を見る」を押したときだけ、その曲カードまで曲の一覧をスクロールする
+
+   ■ なぜ「押したときだけ」なのか（自動スクロールをしない理由）
+     再生中の曲は、曲の一覧を下へスクロールしていると、見えない位置に隠れることがある
+     かといって、曲が変わるたびに自動でスクロールしてしまうと、
+     ユーザーが06や07の曲情報を読んでいる最中に、一覧が勝手に02へ戻ってしまい、
+     「自分が見ていた場所」を奪ってしまう
+     そこで、再生と「一覧を見る操作」を分け、このボタンを押したときだけ移動する
+     （playingTrackId を watch して scrollIntoView する処理は、わざと入れていない）
+
+   ■ なぜ block: 'nearest' なのか
+     'center' にすると、すでにほぼ見えている曲でも、中央まで大きく動いてしまう
+     'nearest' なら、すでに見えていればほとんど動かず、
+     見切れているぶんだけ、必要な最小限だけ移動する
+
+   ■ scrollIntoView とは
+     「この要素が見える位置まで、いちばん近いスクロールする箱を動かして」とブラウザに頼む命令
+     ここでは対象カードをふくむ いちばん近いスクロール領域＝曲の一覧（st-trackScroll）が動くので、
+     ページ全体（固定エリアまで）が不自然に動くことはない
+
+   ※ playingTrackId が無い（どの曲も選んでいない）ときは、何もしない
+   ※ スクロールするだけで、曲一覧の別ボタンへフォーカスは移さない
+     （スクロールのつもりで押したのに、急にキーボードの操作位置が飛ぶと分かりにくいため）
+*/
+function scrollToPlayingTrack() {
+  // どの曲も選んでいなければ、見せる相手がいないので何もしない
+  if (playingTrackId.value === null) {
+    return;
+  }
+
+  const list = trackListRef.value;
+
+  if (!list) {
+    return;
+  }
+
+  // data-track-id で、いま鳴っている曲のカードを1つだけ探す
+  const card = list.querySelector<HTMLElement>(`[data-track-id="${playingTrackId.value}"]`);
+
+  if (!card) {
+    return;
+  }
+
+  /* prefers-reduced-motion（動きを減らす設定）のときは、なめらかな動きをやめてすぐ移動する
+     このページのCSSも、同じ設定のときにアニメーションを止めている（→ style の @media） */
+  const prefersReducedMotion =
+    import.meta.client && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  card.scrollIntoView({
+    behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    block: 'nearest',
+  });
+}
+
 /* ============================================================
    曲の一覧のキーボード操作（ゲームのメニューのように動かす）
 
@@ -1662,7 +1755,7 @@ function formatTrackNumber(id: number) {
      ブラウザ本来の操作をそのまま残すため
      （音量スライダーはこの一覧の外にあるので、そもそもここへは来ない）
    ※ 曲の3種類のボタン以外を選んでいるときも、何もしない
-     そのときの ↑↓ は、いままでどおりページのスクロールになる
+     そのときの ↑↓ は、いままでどおりブラウザにまかせる（曲の一覧の箱のスクロールなど）
    ※ 見張りは <ol class="st-list"> の1か所だけでよい
      押されたキーは、ボタンからこの ol まで伝わってくるので、
      ボタン1つずつに @keydown を付けて回る必要はない
@@ -1688,7 +1781,11 @@ function handleTrackListKeydown(event: KeyboardEvent) {
 
      再生を止めたり、タイトルへ戻ったりはしない
      押しまちがいで曲が止まってしまうと、こまるため
-     開いていないときは、何もしない */
+     開いていないときは、何もしない
+
+     ※ はじめの画面へ戻るのは、上部ツールバーの「← はじめの画面へ戻る」を押したときだけ
+       Escape でも戻れるようにすると、吹き出しを閉じるつもりで2回押したときに、
+       聴いていた曲が止まって、ページごと移動してしまうため */
   if (event.key === 'Escape') {
     if (openedCreditTrackId.value !== null) {
       openedCreditTrackId.value = null;
@@ -1744,9 +1841,11 @@ function handleTrackListKeydown(event: KeyboardEvent) {
     openedCreditTrackId.value = null;
   }
 
-  /* 曲の移動を優先するので、ページがスクロールしないようにする
-     ※ 行き先が画面の外にあるときは、focus() にともなう
-       ブラウザふつうのスクロールにまかせる（大げさな演出は足さない） */
+  /* 曲の移動を優先するので、矢印キー本来のスクロール（曲の一覧の箱が少し動く）は止める
+     ※ 行き先が、曲の一覧の箱（st-trackScroll）の見えている範囲の外にあるときは、
+       focus() にともなうブラウザふつうのスクロールにまかせる（大げさな演出は足さない）
+       ブラウザは、ボタンをふくむ いちばん近いスクロールする箱＝曲の一覧を動かして、
+       選んだボタンが見える位置まで出してくれるので、scrollIntoView は呼んでいない */
   event.preventDefault();
   nextButton.focus();
 }
@@ -1892,30 +1991,6 @@ function findOutsidePlayButton() {
   return playAllButtonRef.value;
 }
 
-/* 上段から↓で降りるとき、下段のどちらのボタンへ行くかをさがす（全曲再生中だけ）
-
-   ① 直前に↑で上がってきたボタンが、まだ画面にあるなら、そこへ帰る
-      「■ 全曲再生を停止」から↑で上がったなら、↓で「■ 全曲再生を停止」へ戻る
-      （行きと帰りの場所がそろうので、どこにいるのか分からなくならない）
-
-   ② 覚えが無いとき（再生を始めたばかりのときなど）は、
-      いちばんよく使う「⏭ 次のトラックへ」へ降りる
-
-   ※ 全曲再生を止めると下段のボタンは画面から消えるので、
-     その覚えはここで忘れる（isConnected … まだ画面にあるかどうか）
-*/
-function findActionsButtonForDown() {
-  if (lastActionsButton) {
-    if (lastActionsButton.isConnected) {
-      return lastActionsButton;
-    }
-
-    lastActionsButton = null;
-  }
-
-  return nextTrackButtonRef.value;
-}
-
 /* 曲の一覧のいちばん上・いちばん下の「▶ 再生」をさがす
 
    ↓ なら01の「▶ 再生」、↑ なら最後の曲の「▶ 再生」
@@ -1940,63 +2015,115 @@ function findListPlayButton(key: string) {
   return key === 'ArrowDown' ? playButtons[0] : playButtons[playButtons.length - 1];
 }
 
-/* 上のボタンのならびで ↑↓ を押したときの行き先
+/* スターター・アクションの2つのならびで ↑↓ を押したときの行き先
 
-   行き先は「どちらのならびにいるか」と「いま全曲再生中かどうか」で変わる
-
-   ■ 上段（.st-playall__starters）… ▶ 全曲再生 / 🔀 シャッフル再生
-
-     止まっているとき（下段が出ていない）
-       そのまま曲の一覧へ（↓で01の「▶ 再生」、↑で最後の曲の「▶ 再生」）
-
-     全曲再生中（下段が出ている）
-       あいだにある下段へ移る（曲の一覧へは、まだ行かない）
-       ↓ … ⏭ 次のトラックへ  … どちらのボタンから降りても、ここへ集める
-                                鳴っているあいだ いちばんよく使う操作なので、
-                                ↓を1回押しただけで届くようにしてある
-       ↑ … ■ 全曲再生を停止
-
-   ■ 下段（.st-playall__actions）… ⏭ 次のトラックへ / ■ 全曲再生を停止
-
-     ↓ … 曲の一覧へ（01の「▶ 再生」）
-     ↑ … 上段へ。左右の位置をそろえて戻る
-          ⏭ 次のトラックへ → ▶ 全曲再生
-          ■ 全曲再生を停止 → 🔀 シャッフル再生
-
-   通常の全曲再生とシャッフル再生は、どちらも isPlaylistPlaying が true になる
-   だから、ここでは その1つだけを見ていて、
-   isShufflePlaying（シャッフルかどうか）は いっさい見ていない
-   ＝ 2つの始めかたで、キーボードの動きはまったく同じになる
-
+   画面の「左列・右列」をそのまま縦にたどる（左は左、右は右）
    currentIndex … いま選んでいるボタンが、そのならびの何番目か（0＝左、1＝右）
+
+   ■ スターター（.st-playall__starters）… ▶ 全曲再生(左) / 🔀 シャッフル再生(右)
+
+     ↑ … 同じ列のツールバーへ（左＝← 戻る／右＝🔊 サウンド）
+     ↓ …
+        止まっているとき … そのまま曲の一覧へ（01の「▶ 再生」）
+        全曲再生中       … 同じ列のアクションへ（左＝⏭ 次のトラックへ／右＝■ 停止）
+
+   ■ アクション（.st-playall__actions）… ⏭ 次のトラックへ(左) / ■ 停止(右)
+
+     ↑ … 同じ列のスターターへ（左＝▶ 全曲再生／右＝🔀 シャッフル再生）
+     ↓ … 曲の一覧へ（01の「▶ 再生」）
+
+   左右のどちらの列でも、曲の一覧へは01の「▶ 再生」に入る
+   （曲の一覧は「▶ 再生」の1列だけなので、そこは左右の区別がない）
+   通常の全曲再生とシャッフル再生は、どちらも isPlaylistPlaying が true になるので、
+   ここでは その1つだけを見ている（2つの始めかたで、キーボードの動きは同じ）
 */
 function findPlayallVerticalTarget(key: string, row: HTMLElement, currentIndex: number) {
   const isStarterRow = row.classList.contains('st-playall__starters');
 
   if (isStarterRow) {
-    /* 止まっているときは、下段が無いので、今までどおり曲の一覧へ */
-    if (!isPlaylistPlaying.value) {
-      return findListPlayButton(key);
+    // ↑ … 同じ列のツールバー（左＝戻る／右＝サウンド）
+    if (key === 'ArrowUp') {
+      return currentIndex === 0 ? backButtonRef.value : soundToggleButtonRef.value;
     }
 
-    /* 全曲再生中は、あいだの下段へ降りる
-       ↓ … 直前に↑で上がってきたボタンへ戻る（覚えが無ければ「⏭ 次のトラックへ」）
-       ↑ … 「■ 全曲再生を停止」へ */
-    return key === 'ArrowDown' ? findActionsButtonForDown() : stopPlaylistButtonRef.value;
-  }
+    // ↓（全曲再生中）… 同じ列のアクション（左＝次のトラックへ／右＝停止）
+    if (isPlaylistPlaying.value) {
+      return currentIndex === 0 ? nextTrackButtonRef.value : stopPlaylistButtonRef.value;
+    }
 
-  // ここからは下段にいるとき
-
-  // ↓ … 曲の一覧の01へ
-  if (key === 'ArrowDown') {
+    // ↓（止まっているとき）… 曲の一覧の01「▶ 再生」へ
     return findListPlayButton(key);
   }
 
-  // ↑ … 上段の、同じ側（左は左・右は右）のボタンへ
-  return currentIndex === 0 ? playAllButtonRef.value : shuffleButtonRef.value;
+  // ここからはアクションのならび
+
+  // ↑ … 同じ列のスターター（左＝全曲再生／右＝シャッフル）
+  if (key === 'ArrowUp') {
+    return currentIndex === 0 ? playAllButtonRef.value : shuffleButtonRef.value;
+  }
+
+  // ↓ … 曲の一覧の01「▶ 再生」へ
+  return findListPlayButton(key);
 }
 
-/* 曲の一覧の「上にあるボタンのならび」のキーボード操作
+/* 上部ツールバー（← はじめの画面へ戻る ／ 🔊 サウンド）のキーボード操作
+
+   画面の位置どおりに動かす（左＝戻る／右＝サウンド。ツールバーはいちばん上の段）
+
+   ・→ … 左（戻る）から右（サウンド）へ。右にいるときは動かない（回り込みなし）
+   ・← … 右（サウンド）から左（戻る）へ。左にいるときは動かない（回り込みなし）
+   ・↓ … 同じ列の下＝スターターへ（戻る→▶ 全曲再生／サウンド→🔀 シャッフル再生）
+   ・↑ … いちばん上の段なので、何もしない
+
+   ※ 見張りは、ボタンを囲む箱（.st-toolbar）だけ
+   ※ Enter / Space は受け取らない（button本来の click にまかせる。二重実行を避ける）
+   ※ 実際にフォーカスを移すときだけ preventDefault する（移動しないときはブラウザにまかせる）
+*/
+function handleToolbarKeydown(event: KeyboardEvent) {
+  const target = event.target;
+
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+
+  // いま左（戻る）と右（サウンド）のどちらにいるか
+  const onBack = Boolean(target.closest('.st-back'));
+  const onSound = Boolean(target.closest('.st-soundToggle'));
+
+  if (!onBack && !onSound) {
+    return;
+  }
+
+  let nextButton: HTMLElement | null = null;
+
+  if (event.key === 'ArrowRight') {
+    // 左 → 右（右にいるときは行き先が無いので動かない）
+    if (onBack) {
+      nextButton = soundToggleButtonRef.value;
+    }
+  } else if (event.key === 'ArrowLeft') {
+    // 右 → 左（左にいるときは行き先が無いので動かない）
+    if (onSound) {
+      nextButton = backButtonRef.value;
+    }
+  } else if (event.key === 'ArrowDown') {
+    // 同じ列の下＝スターターへ（左＝▶ 全曲再生／右＝🔀 シャッフル再生）
+    nextButton = onBack ? playAllButtonRef.value : shuffleButtonRef.value;
+  } else {
+    // ↑ やそのほかのキーは、ここでは何もしない（いちばん上の段なので上は無い）
+    return;
+  }
+
+  if (!nextButton) {
+    return;
+  }
+
+  // 実際にフォーカスを移すときだけ、矢印キー本来のスクロールを止める
+  event.preventDefault();
+  nextButton.focus();
+}
+
+/* スターター・アクションの「ボタンのならび」のキーボード操作
 
    一覧の上には、ボタンのならびが2つある（どちらも同じこの関数で動かす）
 
@@ -2004,30 +2131,19 @@ function findPlayallVerticalTarget(key: string, row: HTMLElement, currentIndex: 
        [ ▶ 全曲再生 ]  [ 🔀 シャッフル再生 ]
 
      全曲再生中だけ出る（.st-playall__actions）
-       [ ⏭ 次のトラックへ ]  [ ■ 全曲再生を停止 ]
+       [ ⏭ 次のトラックへ ]  [ ■ 停止 ]
 
-   ・← → … 同じならびの中で、となりのボタンへ（2つだけなので行ったり来たり）
-   ・↑ ↓ … 上の段・下の段・曲の一覧のあいだを行き来する
+   ・← → … 同じならびの中で、となりの列のボタンへ移るだけ
+            左端で←、右端で→、は移動しない（画面の位置どおり。回り込みはしない）
+   ・↑ ↓ … 上の段・下の段・曲の一覧のあいだを、同じ列（左は左・右は右）でたどる
             行き先の決めかたは findPlayallVerticalTarget にまとめてある
-            一覧のはしから↑↓を押すと、出てきたボタンへ戻ってくる
-            （「🔀 シャッフル再生」から入れば「🔀 シャッフル再生」へ帰る）
-            （帰りの道は findVerticalTarget と findOutsidePlayButton にある）
+            曲の一覧のはしから↑で戻るときは、出てきたボタンへ帰る
+            （→ findVerticalTarget / findOutsidePlayButton。lastOutsideButton で覚える）
 
-   findVerticalTarget といっしょになって、
-   止まっているときは
-   「▶ 全曲再生 → 01 → 02 → … → 最後の曲 → ▶ 全曲再生」という輪になり、
-   全曲再生中は、そのあいだに下段の2つが入った3段の輪になる
-
-   2つのならびで、← → の動きは同じなので、関数も1つだけにしてある
-   （ボタンが増えても、querySelectorAll が数えなおすので直さなくてよい）
-
-   ※ この下にある音量スライダーへは、矢印キーでは移らない
-     音量は矢印キーでそのまま大小を変えるものなので、
-     キーボードの移動先に入れてしまうと、動かすつもりが移動になってしまう
-     音量へ行きたいときは Tab で移る（いままでどおり）
+   ※ この下にある音量スライダーへは、矢印キーでは移らない（Tabで移る）
+     音量は矢印キーでそのまま大小を変えるものなので、移動先にすると「動かすつもりが移動」になる
    ※ 見張りは、ボタンを囲む箱（.st-playall__starters / .st-playall__actions）だけ
-   ※ Enter / Space は受け取らない（button本来の動きのまま）
-     だから「🔀 シャッフル再生」も、Tabで移動して Enter / Space で押せる
+   ※ Enter / Space は受け取らない（button本来の click にまかせる。二重実行を避ける）
 */
 function handlePlayallButtonsKeydown(event: KeyboardEvent) {
   const target = event.target;
@@ -2047,9 +2163,14 @@ function handlePlayallButtonsKeydown(event: KeyboardEvent) {
   let nextButton: HTMLElement | null = null;
 
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    /* となりの列へ、1つだけ動く（回り込みなし）
+       左端で←（-1）や右端で→（ならびの外）は、行き先が無いので動かない */
     const step = event.key === 'ArrowRight' ? 1 : -1;
+    const targetIndex = currentIndex + step;
 
-    nextButton = buttons[(currentIndex + step + buttons.length) % buttons.length];
+    if (targetIndex >= 0 && targetIndex < buttons.length) {
+      nextButton = buttons[targetIndex];
+    }
   } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
     nextButton = findPlayallVerticalTarget(event.key, row, currentIndex);
   } else {
@@ -2061,27 +2182,14 @@ function handlePlayallButtonsKeydown(event: KeyboardEvent) {
   }
 
   /* 曲の一覧へ入るときだけ、どのボタンから入ったかを覚えておく
-
-     一覧のはしから↑↓で戻るときに、ここで覚えたボタンへ帰る
-     （→ findOutsidePlayButton）
-
+     一覧のはしから↑で戻るときに、ここで覚えたボタンへ帰る（→ findOutsidePlayButton）
      行き先が一覧の中かどうかで見分けているので、
-     ← → でとなりへ移ったときも、上段と下段を行き来しただけのときも、
-     前の覚えはそのまま残る */
+     ← → でとなりへ移ったときや、段を行き来しただけのときは、前の覚えはそのまま残る */
   if (trackListRef.value?.contains(nextButton)) {
     lastOutsideButton = buttons[currentIndex];
   }
 
-  /* 下段から↑で上段へ上がるときは、どのボタンから上がったかを覚えておく
-
-     つぎに上段で↓を押したとき、この覚えたボタンへ戻る
-     （「■ 全曲再生を停止」から上がったなら、↓で「■ 全曲再生を停止」へ）
-     → findActionsButtonForDown */
-  if (event.key === 'ArrowUp' && row.classList.contains('st-playall__actions')) {
-    lastActionsButton = buttons[currentIndex];
-  }
-
-  // ボタンの移動を優先するので、ページがスクロールしないようにする
+  // 実際にフォーカスを移すときだけ、矢印キー本来のスクロールを止める
   event.preventDefault();
   nextButton.focus();
 }
@@ -2108,56 +2216,11 @@ async function focusAfterPlaylistChange(button: Ref<HTMLButtonElement | null>) {
   button.value?.focus();
 }
 
-/* そのボタンに、キーボード操作の目印（:focus-visible）が付いているか
+/* 「← はじめの画面へ戻る」（上部ツールバーの左のボタン）
 
-   :focus-visible は「キーボードで操作している人にだけ」付く
-   （このページのボタンに出る、太い枠と同じ目印）
-   マウスでクリックしたときには付かないので、
-   「キーボードで押したのか、マウスで押したのか」を これで見分けられる
-
-   ※ 古いブラウザは :focus-visible を知らず、matches() がエラーになることがある
-     そのときは「キーボードではない」とあつかって、フォーカスを動かさない
-*/
-function isKeyboardFocused(element: HTMLElement) {
-  try {
-    return element.matches(':focus-visible');
-  } catch {
-    return false;
-  }
-}
-
-/* 全曲再生・シャッフル再生を始めたあとの、フォーカスの行き先
-
-   始めると「⏭ 次のトラックへ」「■ 全曲再生を停止」が新しく出てくる
-
-   ■ キーボードで始めたとき（Enter / Space）
-     「▶ 全曲再生」を押したボタンにフォーカスが残ったままなので、
-     上の focusAfterPlaylistChange は何もしてくれない（すでに誰かが選んでいるため）
-     すると、出てきたばかりの2つを飛びこして操作することになってしまうので、
-     ここでいちばんよく使う「⏭ 次のトラックへ」へ移しておく
-
-   ■ マウス・指で押したとき
-     フォーカスを動かさない
-     押していないボタンに、急にキーボードの枠が出たように見えてしまうため
-     （どこにもフォーカスが無いときだけ移す、今までどおりの動きにまかせる）
-*/
-async function focusAfterPlaylistStart() {
-  const active = document.activeElement;
-  const startedByKeyboard = active instanceof HTMLElement && isKeyboardFocused(active);
-
-  if (!startedByKeyboard) {
-    focusAfterPlaylistChange(nextTrackButtonRef);
-
-    return;
-  }
-
-  // 「⏭ 次のトラックへ」が画面に出てくるのを待ってから、フォーカスを当てる
-  await nextTick();
-
-  nextTrackButtonRef.value?.focus();
-}
-
-/* 「← はじめの画面へ戻る」
+   ※ 前は曲の一覧のいちばん下にあったが、曲が増えるほど遠くなるので、
+     曲の一覧をスクロールしても画面に残る、上部ツールバー（st-toolbar）へ移した
+     ボタンの場所を変えただけで、押したときの処理（この関数）は変えていない
 
    ここでやるのは2つだけ
 
@@ -2301,112 +2364,219 @@ onUnmounted(() => {
 <template>
   <main class="soundtrack">
     <!-- ============================================================
-         ページの見出し
+         画面に残る操作エリア（st-fixedArea）
+
+         このページは、画面を上と下の2つに分けている
+         ・上（この箱）         … 戻る・サウンド・見出し・全曲再生・次へ・停止・リピート・音量
+         ・下（st-trackScroll） … 曲の一覧。ここだけが上下にスクロールする
+
+         曲をどこまで下へ見ていても、操作が画面から消えないように、
+         曲のカード以外の操作は、ぜんぶこちら側に置いている
+         （しくみは CSS の .soundtrack に書いてある）
          ============================================================ -->
-    <header class="st-head">
-      <p class="st-head__badge">ORIGINAL SOUNDTRACK</p>
+    <div class="st-fixedArea">
+      <!-- ============================================================
+           上部ツールバー（← はじめの画面へ戻る ／ 🔊 サウンド ON/OFF）
 
-      <h1 class="st-head__name">{{ gameTitle }}</h1>
-    </header>
+           ■ なぜ戻るボタンを、いちばん上へ移したのか
+             前は「← はじめの画面へ戻る」が、曲の一覧のいちばん下にあった
+             曲数が増えるほど一覧は長くなるので、
+             10曲・20曲と増えると、戻るためだけに いちばん下までスクロールすることになる
+             そこで、いつでもすぐ押せるように、ページのいちばん上へ移した
+             （下にあったボタンは消して、ここ1か所だけにしてある）
 
-    <!-- ============================================================
-         全曲再生
+           ■ 曲を下のほうまで見ていても、押せる理由
+             このツールバーは、画面に残る操作エリア（st-fixedArea）のいちばん上にある
+             上下にスクロールするのは、下の曲の一覧（st-trackScroll）だけなので、
+             何曲目を見ていても、ツールバーは画面から消えない
+             （しくみのくわしい説明は、CSS の .soundtrack を見ること）
 
-         始めかたは2つ（どちらも6曲を1回ずつ鳴らして止まる）
-         ・▶ 全曲再生     … 開始曲から、一覧に出ている登録順のまま
-                             開始曲は、下の一覧でトラック番号を押して選ぶ
-                             最後まで行くと先頭へ回り込む（例：03 04 05 06 01 02）
-         ・🔀 シャッフル再生 … 押すたびにランダムな順番を作って、その順で1周
-                             （画面の曲一覧の順番は変わらない）
-         （「🔁 リピート 全曲」のときは、止まらずに同じ順でもう1周する）
+           ■ なぜ 🔊 サウンド ON/OFF も、ここへ移したのか
+             サウンドは「このページの音を出す／出さない」をまとめて決める、ページ全体の設定
+             曲の一覧のどこを見ていても、すぐ消したり戻したりできるほうが便利なので、
+             いつも見えているこのツールバーに置いた
+             ゲーム本編のA画面・B画面も「左に戻る側のボタン、右にサウンド」なので、並びもそろう
+             ※ 前は下の「再生の設定」にあったボタンを、そのまま移しただけ
+               しくみ（soundEnabled / toggleSound）は、何も変えていない
 
-         全曲再生中だけ、下に2つのボタンが出る
-         ・⏭ 次のトラックへ  … いまの曲を飛ばして、次の曲を先頭から鳴らす
-         ・■ 全曲再生を停止  … 全曲再生をやめる
-                                （シャッフル再生中は「■ シャッフル再生を停止」に変わる）
-         ============================================================ -->
-    <section class="st-playall">
-      <!-- 全曲を続けて鳴らす、2つの始めかた
+           ■ Escape キーでは、はじめの画面へ戻らない
+             このページの Escape は、「ⓘ 制作情報」の吹き出しを閉じるために使っている
+             （→ handleTrackListKeydown）
+             同じキーで戻れるようにすると、吹き出しを閉じるつもりで押しすぎたときに、
+             聴いていた曲が止まって、ページごと移動してしまう
+             そのため、戻るのは このボタンを押したときだけにしている
+             （ページ全体でキーを見張る window / document の keydown も付けていない）
 
-           ・▶ 全曲再生     … 開始曲から、一覧に出ている登録順のまま
-           ・🔀 シャッフル再生 … 毎回ランダムに並べかえた順で、全曲を1回ずつ
+           ■ キーボード
+             2つとも ふつうの button なので、Tab / Shift+Tab で移動し、Enter / Space で押せる
+             テンプレートのいちばん上にあるので、Tabの順番は
+             「戻る → サウンド → 再生の操作 → 曲の一覧」になる
 
-           鳴らしはじめたあとの動き（曲が終わったら次へ・⏭ 次のトラックへ・
-           1周したら終わり）は、2つともまったく同じしくみを使っている
+             矢印キーでも動かせる（→ handleToolbarKeydown）
+             画面の位置どおりに、左＝戻る／右＝サウンドの2列で考える
+             ・← → … 戻る ⇄ サウンド（左端で←、右端で→、は動かない）
+             ・↓   … 同じ列の下＝スターターへ（戻る→▶ 全曲再生／サウンド→🔀 シャッフル再生）
+             ・↑   … いちばん上の段なので、何もしない
 
-           再生中も出したままにしてあるので、いつでも押しかえられる
-           （シャッフル中に「▶ 全曲再生」を押せば通常順で始めなおし、
-             通常再生中に「🔀 シャッフル再生」を押せば新しい順で始めなおす）
+             ただし、ページを開いたときのフォーカスは、今までどおり「▶ 全曲再生」
+             このページの主役は曲を聴くことなので、戻るボタンから始めない（→ onMounted）
+           ============================================================ -->
+      <div class="st-toolbar" @keydown="handleToolbarKeydown">
+        <!-- 押したときの処理は、前に一覧の下にあったボタンと同じ goToTitle()
+             （決定音「ポン♪」 → 曲の音だけ止める → はじめの画面へ。連打しても移動は1回だけ）
+             ref … 矢印キーで「▶ 全曲再生」から↑で戻る先、サウンドから←で移る先 -->
+        <button ref="backButtonRef" type="button" class="st-back" @click="goToTitle">← はじめの画面へ戻る</button>
 
-           ※ ここには「開始曲：03 ひるまえのぼうけん」の案内は出さない
-             どの曲から始まるかは、下の一覧で番号に色が付いているので分かる
-             （同じことを2か所に出すと、目で追う場所が増えてしまう）
+        <!-- ゲーム本編（pages/index.vue）のサウンドボタンと同じ形にしてある
 
-           @keydown … ← → でとなりのボタンへ
-           ↑↓ の行き先は、いま全曲再生中かどうかで変わる
-           ・止まっているとき … ↓で01の「▶ 再生」、↑で最後の曲の「▶ 再生」
-           ・全曲再生中       … ↓で下段へ、↑で「■ 全曲再生を停止」
-             （下に出ている、よく使う操作を飛びこさないようにするため）
-             ↓の行き先は、直前に↑で上がってきたボタン
-             （まだなら「⏭ 次のトラックへ」）
-           （このならびは曲の一覧の外にあるので、ここにも見張りを付けている
-             くわしくは handlePlayallButtonsKeydown） -->
-      <div class="st-playall__starters" @keydown="handlePlayallButtonsKeydown">
-        <!-- ref … ページを開いたときと、全曲再生を止めたときに
-             このボタンへフォーカスを当てるための目印 -->
-        <button ref="playAllButtonRef" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
-
-        <!-- ふつうのbutton要素なので、Tabで移動でき、Enter / Spaceで押せる
-             aria-label … 「シャッフル」だけでは何が起きるか分かりにくいので、
-             読み上げソフトには「全曲を鳴らす」ことまで伝える
-             ref … 全曲再生中に「■ 全曲再生を停止」から↑で戻ってくる先 -->
+             aria-pressed … 読み上げソフトへ「いま押されている（＝ON）」を伝える
+                            見た目（色・🔊/🔇）も、この値をもとにCSSで切り替えている
+             ON と OFF の文字は同じ場所に重ねて置き、使わないほうを見えなくする
+             （ボタンの幅がいつも同じになるので、押してもツールバーの並びがずれない）
+             ref … 矢印キーで「🔀 シャッフル再生」から↑で戻る先、戻るから→で移る先 -->
         <button
-          ref="shuffleButtonRef"
+          ref="soundToggleButtonRef"
           type="button"
-          class="st-playall__button st-playall__button--shuffle"
-          aria-label="曲順をランダムに並べかえて全曲再生する"
-          @click="startShufflePlaylist">
-          🔀 シャッフル再生
+          class="st-soundToggle"
+          :aria-pressed="soundEnabled"
+          :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+          @click="toggleSound">
+          <span class="st-soundToggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+          <span class="st-soundToggle__text">サウンド</span>
+          <span class="st-soundToggle__state">
+            <span class="st-soundToggle__stateText st-soundToggle__stateText--on">ON</span>
+            <span class="st-soundToggle__stateText st-soundToggle__stateText--off">OFF</span>
+          </span>
         </button>
       </div>
 
-      <!-- どの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える）
-           開始曲を使うのは「▶ 全曲再生」だけなので、そのことも書いておく -->
-      <p v-if="!isPlaylistPlaying" class="st-playall__hint">
-        下の一覧で番号を押すと、「▶ 全曲再生」を始める曲を選べます
-      </p>
+      <!-- ============================================================
+           ページの見出し
+           ============================================================ -->
+      <header class="st-head">
+        <p class="st-head__badge">ORIGINAL SOUNDTRACK</p>
 
-      <!-- ここから下は、全曲再生中だけ出す（1曲だけの再生中は出さない） -->
-      <template v-else>
-        <!-- いま曲順の何曲目か＋実際のトラック番号と曲名
+        <h1 class="st-head__name">{{ gameTitle }}</h1>
+      </header>
 
-             どちらの始めかたで鳴らしているかが分かるよう、
-             左の目印だけ「♪ 全曲再生中」「🔀 シャッフル再生中」で出し分ける
-             （出す中身も、そのあとの動きも、2つでまったく同じ） -->
-        <p v-if="currentPlaylistTrack" class="st-playall__status" aria-live="polite">
-          <span
-            class="st-playall__badge"
-            :class="{ 'st-playall__badge--shuffle': isShufflePlaying }">
-            {{ isShufflePlaying ? '🔀 シャッフル再生中' : '♪ 全曲再生中' }}
-          </span>
-          <span class="st-playall__count">{{ playlistIndex + 1 }} / {{ playlistTracks.length }}</span>
-          <span class="st-playall__track">{{ formatTrackNumber(currentPlaylistTrack.id) }} {{ currentPlaylistTrack.title }}</span>
+      <!-- ============================================================
+           全曲再生
+
+           始めかたは2つ（どちらも全曲を1回ずつ鳴らして止まる）
+           ・▶ 全曲再生     … 開始曲から、一覧に出ている登録順のまま
+                               開始曲は、下の一覧でトラック番号を押して選ぶ
+                               最後まで行くと先頭へ回り込む（例：03 04 05 06 07 01 02）
+           ・🔀 シャッフル再生 … 押すたびにランダムな順番を作って、その順で1周
+                               （画面の曲一覧の順番は変わらない）
+           （「🔁 リピート 全曲」のときは、止まらずに同じ順でもう1周する）
+
+           全曲再生中だけ、下に2つのボタンが出る
+           ・⏭ 次のトラックへ  … いまの曲を飛ばして、次の曲を先頭から鳴らす
+           ・■ 全曲再生を停止  … 全曲再生をやめる
+                                  （シャッフル再生中は「■ シャッフル再生を停止」に変わる）
+           ============================================================ -->
+      <section class="st-playall">
+        <!-- 全曲を続けて鳴らす、2つの始めかた
+
+             ・▶ 全曲再生     … 開始曲から、一覧に出ている登録順のまま
+             ・🔀 シャッフル再生 … 毎回ランダムに並べかえた順で、全曲を1回ずつ
+
+             鳴らしはじめたあとの動き（曲が終わったら次へ・⏭ 次のトラックへ・
+             1周したら終わり）は、2つともまったく同じしくみを使っている
+
+             再生中も出したままにしてあるので、いつでも押しかえられる
+             （シャッフル中に「▶ 全曲再生」を押せば通常順で始めなおし、
+               通常再生中に「🔀 シャッフル再生」を押せば新しい順で始めなおす）
+
+             ※ ここには「開始曲：03 ひるまえのぼうけん」の案内は出さない
+               どの曲から始まるかは、下の一覧で番号に色が付いているので分かる
+               （同じことを2か所に出すと、目で追う場所が増えてしまう）
+
+             @keydown … 画面の「左列・右列」をたどって動かす（左＝全曲再生／右＝シャッフル）
+             ・← → … 全曲再生 ⇄ シャッフル（左端で←、右端で→、は動かない）
+             ・↑   … 同じ列のツールバーへ（全曲再生→戻る／シャッフル→サウンド）
+             ・↓   … 止まっているとき＝01の「▶ 再生」へ、
+                     全曲再生中＝同じ列のアクションへ（全曲再生→⏭ 次のトラックへ／シャッフル→■ 停止）
+             （このならびは曲の一覧の外にあるので、ここにも見張りを付けている
+               くわしくは handlePlayallButtonsKeydown / findPlayallVerticalTarget） -->
+        <div class="st-playall__starters" @keydown="handlePlayallButtonsKeydown">
+          <!-- ref … ページを開いたときと、全曲再生を止めたときに
+               このボタンへフォーカスを当てるための目印 -->
+          <button ref="playAllButtonRef" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
+
+          <!-- ふつうのbutton要素なので、Tabで移動でき、Enter / Spaceで押せる
+               aria-label … 「シャッフル」だけでは何が起きるか分かりにくいので、
+               読み上げソフトには「全曲を鳴らす」ことまで伝える
+               ref … 全曲再生中に「■ 全曲再生を停止」から↑で戻ってくる先 -->
+          <button
+            ref="shuffleButtonRef"
+            type="button"
+            class="st-playall__button st-playall__button--shuffle"
+            aria-label="曲順をランダムに並べかえて全曲再生する"
+            @click="startShufflePlaylist">
+            🔀 シャッフル再生
+          </button>
+        </div>
+
+        <!-- どの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える）
+             開始曲を使うのは「▶ 全曲再生」だけなので、そのことも書いておく -->
+        <!-- 「▶ 全曲再生」はボタンの名前なので、途中で2行に割れないよう span で1つにまとめている -->
+        <p v-if="!isPlaylistPlaying" class="st-playall__hint">
+          下の一覧で番号を押すと、<span class="st-playall__hintButton">「▶ 全曲再生」</span>を始める曲を選べます
         </p>
 
-        <!-- 全曲再生中の操作
+        <!-- ============================================================
+             現在再生中の曲（固定エリアに残る「いま鳴っている曲」の表示）
+
+             ■ いつ出すか … playingTrack があるあいだ（＝ playingTrackId が null でない）
+               個別再生・個別一時停止・全曲再生・シャッフル再生・サウンドOFFで止まっているとき、
+               すべてで出す。停止して playingTrackId が null に戻れば、自動で消える
+               （曲一覧側の「♪ 再生中」の色や枠（track--current）は、今までどおり別で出す）
+
+             ■ なぜ、ここに置くのか
+               曲の一覧を下へスクロールしていると、鳴っている曲のカードが見えなくなる
+               そこで「いま何が鳴っているか」を、いつも見えるこの固定エリアにも出す
+
+             ■ 表示の中身（全曲再生でも個別再生でも、この1か所にまとめる）
+               ・目印   … playingStatusLabel（♪ 再生中／⏸ 一時停止中／♪ 全曲再生中／🔀 シャッフル再生中）
+               ・N / 曲数 … 全曲再生中だけ出す（個別再生では出さない）
+               ・曲名   … playingTrack（同じ曲名を上下に2回出さないよう、ここ1か所だけ）
+               ・見るボタン … 押したときだけ、その曲カードまで一覧をスクロールする（→ scrollToPlayingTrack）
+
+             aria-live … 曲が変わったこと・一時停止したことを、読み上げソフトにもその場で知らせる -->
+        <p v-if="playingTrack" class="st-playall__status" aria-live="polite">
+          <!-- ♪ 全曲再生中 は金色、🔀 シャッフル再生中 は紺色（曲一覧側の色分けと合わせる）
+               一時停止中は、始めかたによらず金色（default）の目印にそろえる（→ isPlaying を見る） -->
+          <span class="st-playall__badge" :class="{ 'st-playall__badge--shuffle': isShufflePlaying && isPlaying }">
+            {{ playingStatusLabel }}
+          </span>
+
+          <!-- 「3 / 7」は全曲再生中だけの情報なので、そのときだけ出す（個別再生では出さない） -->
+          <span v-if="isPlaylistPlaying" class="st-playall__count">{{ playlistIndex + 1 }} / {{ playlistTracks.length }}</span>
+
+          <span class="st-playall__track">{{ formatTrackNumber(playingTrack.id) }} {{ playingTrack.title }}</span>
+
+          <!-- 「再生中の曲を見る」… 押したときだけ、その曲カードまで曲の一覧をスクロールする
+               ・自動スクロールはしない（見ている場所を勝手に動かさないため）
+               ・block: 'nearest' なので、すでに見えている曲は大きく動かない
+               ・押しても再生状態は変えず、曲一覧の別ボタンへフォーカスも移さない
+               くわしくは scrollToPlayingTrack のコメント -->
+          <button type="button" class="st-playall__see" @click="scrollToPlayingTrack">{{ scrollToTrackLabel }}</button>
+        </p>
+
+        <!-- 全曲再生中だけ出す操作（⏭ 次のトラックへ ／ ■ 全曲再生を停止）
 
              よく押す「⏭ 次のトラックへ」を先（PCでは左、スマホでは上）に置き、
              幅も広くとって押しやすくしている
              一時停止中でも押せて、そのときは次の曲が自動的に鳴りはじめる -->
-        <!-- @keydown … ← → で「⏭ 次のトラックへ」と「■ 全曲再生を停止」を行き来する
-             ↓ … 曲の一覧の01「▶ 再生」へ
-             ↑ … 上の段へ。左右の位置をそろえて戻る
-                  ⏭ 次のトラックへ → ▶ 全曲再生
-                  ■ 全曲再生を停止 → 🔀 シャッフル再生
+        <!-- @keydown … 画面の「左列・右列」をたどって動かす（左＝次のトラックへ／右＝停止）
+             ・← → … 次のトラックへ ⇄ 停止（左端で←、右端で→、は動かない）
+             ・↑   … 同じ列のスターターへ（次のトラックへ→▶ 全曲再生／停止→🔀 シャッフル再生）
+             ・↓   … 曲の一覧の01「▶ 再生」へ
              （下の音量スライダーへは、矢印キーでは移らない）
              上の「▶ 全曲再生／🔀 シャッフル再生」のならびと同じ関数を使っている
-             くわしくは handlePlayallButtonsKeydown -->
-        <div class="st-playall__actions" @keydown="handlePlayallButtonsKeydown">
+             くわしくは handlePlayallButtonsKeydown / findPlayallVerticalTarget -->
+        <div v-if="isPlaylistPlaying" class="st-playall__actions" @keydown="handlePlayallButtonsKeydown">
           <button
             ref="nextTrackButtonRef"
             type="button"
@@ -2422,208 +2592,199 @@ onUnmounted(() => {
                ・シャッフル再生 … ■ シャッフル再生を停止 -->
           <button ref="stopPlaylistButtonRef" type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">{{ stopButtonLabel }}</button>
         </div>
-      </template>
 
-      <!-- 再生の設定（リピート ＋ サウンドON/OFF ＋ 音量）
+        <!-- 再生の設定（リピート ＋ 音量）
 
-           「どの曲を・どこから鳴らすか」を決めるこの箱の中に、
-           「どんなふうに鳴らすか」もまとめて置いてある
+             「どの曲を・どこから鳴らすか」を決めるこの箱の中に、
+             「どんなふうに鳴らすか」もまとめて置いてある
 
-           ・リピート … 鳴らし終えたあと、くりかえすかどうか
-           ・サウンド … 音を出すか、出さないか（ワンタッチの切り替え）
-           ・音量     … 出すときの大きさ（0〜100％）
+             ・リピート … 鳴らし終えたあと、くりかえすかどうか
+             ・音量     … 出すときの大きさ（0〜100％）
 
-           曲カードの中にある再生バーとは役わりがちがうので、
-           見まちがえないように「音量」の文字と、
-           いまの大きさ（％）をかならずそえておく
-           ・再生バー … 曲の「どこ」を鳴らすか（時間）
-           ・音量バー … 「どのくらいの大きさ」で鳴らすか
+             ※ 前はここに「🔊 サウンド ON/OFF」もあったが、
+               ページ全体の設定なので、いつも画面に残る上部ツールバー（st-toolbar）へ移した
+               サウンドOFFのときの案内（この箱のすぐ下）と、音量を薄くする表示は、
+               今までどおり soundEnabled を見て、ここに出る
 
-           ※ 🔊 の絵文字は、左のサウンドボタンだけに付けている
-             音量のほうにも付けると、OFF（🔇）のとなりに 🔊 が並んでしまい、
-             いまONなのかOFFなのかが分かりにくくなるため -->
-      <div class="st-settings">
-        <!-- 🔁 リピート（押すたびに OFF → 全曲 → 1曲 → OFF と回る）
+             曲カードの中にある再生バーとは役わりがちがうので、
+             見まちがえないように「音量」の文字と、
+             いまの大きさ（％）をかならずそえておく
+             ・再生バー … 曲の「どこ」を鳴らすか（時間）
+             ・音量バー … 「どのくらいの大きさ」で鳴らすか
 
-             リピートには3つの状態があるので、サウンドのような
-             aria-pressed（押されている／いない）では言い表せない
-             そこで、いまの状態は data-repeat でCSSへ渡して見た目を変え、
-             読み上げソフトには aria-label で
-             「いまの状態」と「押すとどうなるか」を伝えている -->
-        <button
-          type="button"
-          class="st-repeat"
-          :data-repeat="repeatMode"
-          :aria-label="repeatButtonLabel"
-          @click="toggleRepeat">
-          <span class="st-repeat__icon">🔁</span>
-          <span class="st-repeat__text">リピート</span>
-          <!-- 3つとも置いておき、いまの1つだけをCSSで見せる（押しても幅が変わらない） -->
-          <span class="st-repeat__state">
-            <span class="st-repeat__stateText st-repeat__stateText--off">OFF</span>
-            <span class="st-repeat__stateText st-repeat__stateText--all">全曲</span>
-            <span class="st-repeat__stateText st-repeat__stateText--one">1曲</span>
-          </span>
-        </button>
+             ※ 🔊 の絵文字は、上部ツールバーのサウンドボタンだけに付けている
+               音量のほうにも付けると、OFF（🔇）のときも 🔊 が見えてしまい、
+               いまONなのかOFFなのかが分かりにくくなるため -->
+        <div class="st-settings">
+          <!-- 🔁 リピート（押すたびに OFF → 全曲 → 1曲 → OFF と回る）
 
-        <!-- ゲーム本編（pages/index.vue）のサウンドボタンと同じ形にしてある
-
-             aria-pressed … 読み上げソフトへ「いま押されている（＝ON）」を伝える
-                            見た目（色・🔊/🔇）も、この値をもとにCSSで切り替えている
-             ON と OFF の文字は同じ場所に重ねて置き、使わないほうを見えなくする
-             （ボタンの幅がいつも同じになるので、押してもとなりの音量がずれない） -->
-        <button
-          type="button"
-          class="st-soundToggle"
-          :aria-pressed="soundEnabled"
-          :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
-          @click="toggleSound">
-          <span class="st-soundToggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-          <span class="st-soundToggle__text">サウンド</span>
-          <span class="st-soundToggle__state">
-            <span class="st-soundToggle__stateText st-soundToggle__stateText--on">ON</span>
-            <span class="st-soundToggle__stateText st-soundToggle__stateText--off">OFF</span>
-          </span>
-        </button>
-
-        <!-- サウンドOFFのあいだは、音量を変えても音が出ないので少し薄くする
-             （さわれなくはしない。OFFのうちに、次に鳴らす大きさを決めておける） -->
-        <div class="st-volume" :class="{ 'st-volume--off': !soundEnabled }">
-          <p class="st-volume__label">音量</p>
-
-          <input
-            type="range"
-            class="st-volume__slider"
-            min="0"
-            max="100"
-            step="1"
-            :value="masterVolumePercent"
-            :style="{ '--volume-progress': masterVolumePercent + '%' }"
-            aria-label="サウンドトラックの音量"
-            :aria-valuetext="masterVolumePercent + 'パーセント'"
-            @input="changeMasterVolume" />
-
-          <span class="st-volume__value">{{ masterVolumePercent }}%</span>
-        </div>
-      </div>
-
-      <!-- サウンドOFFのあいだだけ出す案内
-
-           「押しても鳴りません」ではなく「押せばONに戻って鳴ります」と伝える
-           （OFFのまま ▶ を押したときは ensureSoundEnabled がONへ戻す）
-
-           aria-live … この文が出たことを、読み上げソフトにもその場で知らせる -->
-      <p v-if="!soundEnabled" class="st-settings__hint" aria-live="polite">サウンドOFF中です。「▶ 再生」を押すと、サウンドをONに戻して鳴らします</p>
-    </section>
-
-    <!-- ============================================================
-         曲の一覧
-
-         上の tracks（配列）をそのまま並べている
-         曲を増やしたり、曲名を変えたりしたいときは
-         tracks を書きかえるだけでよい
-         ============================================================ -->
-    <!-- @keydown … 曲のボタンを選んでいるときだけ、キーボードで動かせるようにする
-         ↑↓＝上下の曲へ、←→＝同じ曲の中の操作へ、Home / End＝最初 / 最後の曲へ
-         （キーは押されたボタンからこの ol まで伝わってくるので、
-           見張りはここ1か所でよい。くわしくは handleTrackListKeydown）
-
-         ref … 「▶ 全曲再生」から↑↓で入ってくるときに、
-         行き先の「▶ 再生」を探すために使う -->
-    <ol ref="trackListRef" class="st-list" @keydown="handleTrackListKeydown">
-      <li v-for="track in tracks" :key="track.id" class="track" :class="{ 'track--current': playingTrackId === track.id }">
-        <button
-          type="button"
-          class="track__no"
-          :class="{ 'track__no--start': selectedStartTrackId === track.id }"
-          :aria-label="track.title + 'を全曲再生の開始曲にする'"
-          :aria-pressed="selectedStartTrackId === track.id"
-          @click="selectStartTrack(track)">
-          <span class="track__noNum">{{ formatTrackNumber(track.id) }}</span>
-        </button>
-
-        <div class="track__body">
-          <p class="track__title">
-            {{ track.title }}
-
-            <!-- いま鳴っている曲にだけ出す目印 -->
-            <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
-
-            <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
-
-                 出しかたは3とおり
-                 ・マウスを乗せているあいだだけ出す       … CSSの :hover
-                 ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
-                 ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
-
-                 @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
-                 （曲のカードに、あとから押したときの処理が増えても、
-                   ⓘを押しただけで曲が動いてしまわないようにしておく）
-
-                 pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
-            <span
-              class="track__info"
-              :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }"
-              @pointerleave="releaseCreditHoverSuppression(track.id)">
-              <button
-                type="button"
-                class="track__infoBtn"
-                :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
-                :aria-label="track.title + 'の制作情報を表示'"
-                :aria-expanded="openedCreditTrackId === track.id"
-                @click.stop="toggleCredit(track.id)"
-                @blur="releaseCreditHoverSuppression(track.id)"></button>
-
-              <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+               リピートには3つの状態があるので、サウンドのような
+               aria-pressed（押されている／いない）では言い表せない
+               そこで、いまの状態は data-repeat でCSSへ渡して見た目を変え、
+               読み上げソフトには aria-label で
+               「いまの状態」と「押すとどうなるか」を伝えている -->
+          <button
+            type="button"
+            class="st-repeat"
+            :data-repeat="repeatMode"
+            :aria-label="repeatButtonLabel"
+            @click="toggleRepeat">
+            <span class="st-repeat__icon">🔁</span>
+            <span class="st-repeat__text">リピート</span>
+            <!-- 3つとも置いておき、いまの1つだけをCSSで見せる（押しても幅が変わらない） -->
+            <span class="st-repeat__state">
+              <span class="st-repeat__stateText st-repeat__stateText--off">OFF</span>
+              <span class="st-repeat__stateText st-repeat__stateText--all">全曲</span>
+              <span class="st-repeat__stateText st-repeat__stateText--one">1曲</span>
             </span>
-          </p>
+          </button>
 
-          <p class="track__description">{{ track.description }}</p>
+          <!-- サウンドOFFのあいだは、音量を変えても音が出ないので少し薄くする
+               （さわれなくはしない。OFFのうちに、次に鳴らす大きさを決めておける） -->
+          <div class="st-volume" :class="{ 'st-volume--off': !soundEnabled }">
+            <p class="st-volume__label">音量</p>
+
+            <input
+              type="range"
+              class="st-volume__slider"
+              min="0"
+              max="100"
+              step="1"
+              :value="masterVolumePercent"
+              :style="{ '--volume-progress': masterVolumePercent + '%' }"
+              aria-label="サウンドトラックの音量"
+              :aria-valuetext="masterVolumePercent + 'パーセント'"
+              @input="changeMasterVolume" />
+
+            <span class="st-volume__value">{{ masterVolumePercent }}%</span>
+          </div>
         </div>
 
-        <!-- button要素なので、Tabキーで移動でき、Enter / Spaceで押せる -->
-        <button type="button" class="track__button" :class="{ 'track__button--playing': isTrackPlaying(track) }" :aria-label="trackButtonLabel(track)" @click="toggleTrack(track)">
-          <template v-if="isTrackPlaying(track)">⏸ 一時停止</template>
+        <!-- サウンドOFFのあいだだけ出す案内
 
-          <!-- 同じ曲を一時停止しているときは、続きから鳴ることが分かるようにする -->
-          <template v-else-if="playingTrackId === track.id">▶ 続きから</template>
+             「押しても鳴りません」ではなく「押せばONに戻って鳴ります」と伝える
+             （OFFのまま ▶ を押したときは ensureSoundEnabled がONへ戻す）
 
-          <template v-else>▶ 再生</template>
-        </button>
-
-        <!-- 再生バー（いま選んでいる曲にだけ出す）
-
-             一時停止中も出したままにしてあるので、
-             止めたまま聴きたいところへ動かすこともできる
-
-             input type="range" を使っているので、
-             Tabキーで移動でき、← → キーでも動かせる -->
-        <div v-if="playingTrackId === track.id" class="track__player">
-          <span class="track__time">{{ formatTime(currentTime) }}</span>
-
-          <input
-            type="range"
-            class="track__seek"
-            min="0"
-            :max="duration"
-            step="1"
-            :value="currentTime"
-            :disabled="duration <= 0"
-            :style="{ '--seek-progress': seekPercent() + '%' }"
-            :aria-label="track.title + 'の再生位置'"
-            :aria-valuetext="formatTime(currentTime) + ' / ' + formatTime(duration)"
-            @input="seekTrack" />
-
-          <span class="track__time">{{ formatTime(duration) }}</span>
-        </div>
-      </li>
-    </ol>
+             aria-live … この文が出たことを、読み上げソフトにもその場で知らせる -->
+        <p v-if="!soundEnabled" class="st-settings__hint" aria-live="polite">サウンドOFF中です。「▶ 再生」を押すと、サウンドをONに戻して鳴らします</p>
+      </section>
+    </div>
 
     <!-- ============================================================
-         はじめの画面へ戻る
+         曲の一覧のスクロールエリア（st-trackScroll）
+
+         曲が7曲・20曲・30曲と増えても、長くなるのはこの箱の中だけ
+         マウスホイール・トラックパッド・指のスワイプで、この中だけが上下に動く
+         （ページ全体はのびないので、上の操作エリアは画面に残ったまま）
+
+         ※ キーボードで曲を移ったときは、ブラウザがこの箱を自動でスクロールして、
+           選んだボタンを見える位置へ出してくれる（→ handleTrackListKeydown）
+         ※ 曲が自動で次へ進んでも、一覧を勝手にスクロールはしない
+           （いま見ている場所を、こちらから動かさない）
          ============================================================ -->
-    <div class="st-foot">
-      <button type="button" class="st-back" @click="goToTitle">← はじめの画面へ戻る</button>
+    <div class="st-trackScroll">
+      <!-- ============================================================
+           曲の一覧
+
+           上の tracks（配列）をそのまま並べている
+           曲を増やしたり、曲名を変えたりしたいときは
+           tracks を書きかえるだけでよい
+           ============================================================ -->
+      <!-- @keydown … 曲のボタンを選んでいるときだけ、キーボードで動かせるようにする
+           ↑↓＝上下の曲へ、←→＝同じ曲の中の操作へ、Home / End＝最初 / 最後の曲へ
+           （キーは押されたボタンからこの ol まで伝わってくるので、
+             見張りはここ1か所でよい。くわしくは handleTrackListKeydown）
+
+           ref … 「▶ 全曲再生」から↑↓で入ってくるときに、
+           行き先の「▶ 再生」を探すために使う -->
+      <ol ref="trackListRef" class="st-list" @keydown="handleTrackListKeydown">
+        <li v-for="track in tracks" :key="track.id" class="track" :class="{ 'track--current': playingTrackId === track.id }" :data-track-id="track.id">
+          <button
+            type="button"
+            class="track__no"
+            :class="{ 'track__no--start': selectedStartTrackId === track.id }"
+            :aria-label="track.title + 'を全曲再生の開始曲にする'"
+            :aria-pressed="selectedStartTrackId === track.id"
+            @click="selectStartTrack(track)">
+            <span class="track__noNum">{{ formatTrackNumber(track.id) }}</span>
+          </button>
+
+          <div class="track__body">
+            <p class="track__title">
+              {{ track.title }}
+
+              <!-- いま鳴っている曲にだけ出す目印 -->
+              <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
+
+              <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
+
+                   出しかたは3とおり
+                   ・マウスを乗せているあいだだけ出す       … CSSの :hover
+                   ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
+                   ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
+
+                   @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
+                   （曲のカードに、あとから押したときの処理が増えても、
+                     ⓘを押しただけで曲が動いてしまわないようにしておく）
+
+                   pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
+              <span
+                class="track__info"
+                :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }"
+                @pointerleave="releaseCreditHoverSuppression(track.id)">
+                <button
+                  type="button"
+                  class="track__infoBtn"
+                  :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
+                  :aria-label="track.title + 'の制作情報を表示'"
+                  :aria-expanded="openedCreditTrackId === track.id"
+                  @click.stop="toggleCredit(track.id)"
+                  @blur="releaseCreditHoverSuppression(track.id)"></button>
+
+                <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+              </span>
+            </p>
+
+            <p class="track__description">{{ track.description }}</p>
+          </div>
+
+          <!-- button要素なので、Tabキーで移動でき、Enter / Spaceで押せる -->
+          <button type="button" class="track__button" :class="{ 'track__button--playing': isTrackPlaying(track) }" :aria-label="trackButtonLabel(track)" @click="toggleTrack(track)">
+            <template v-if="isTrackPlaying(track)">⏸ 一時停止</template>
+
+            <!-- 同じ曲を一時停止しているときは、続きから鳴ることが分かるようにする -->
+            <template v-else-if="playingTrackId === track.id">▶ 続きから</template>
+
+            <template v-else>▶ 再生</template>
+          </button>
+
+          <!-- 再生バー（いま選んでいる曲にだけ出す）
+
+               一時停止中も出したままにしてあるので、
+               止めたまま聴きたいところへ動かすこともできる
+
+               input type="range" を使っているので、
+               Tabキーで移動でき、← → キーでも動かせる -->
+          <div v-if="playingTrackId === track.id" class="track__player">
+            <span class="track__time">{{ formatTime(currentTime) }}</span>
+
+            <input
+              type="range"
+              class="track__seek"
+              min="0"
+              :max="duration"
+              step="1"
+              :value="currentTime"
+              :disabled="duration <= 0"
+              :style="{ '--seek-progress': seekPercent() + '%' }"
+              :aria-label="track.title + 'の再生位置'"
+              :aria-valuetext="formatTime(currentTime) + ' / ' + formatTime(duration)"
+              @input="seekTrack" />
+
+            <span class="track__time">{{ formatTime(duration) }}</span>
+          </div>
+        </li>
+      </ol>
     </div>
   </main>
 </template>
@@ -2641,11 +2802,48 @@ onUnmounted(() => {
 }
 
 /* ============================================================
-   サウンドトラックページの枠
+   サウンドトラックページの枠（画面を「操作エリア」と「曲の一覧」の2つに分ける）
 
-   ゲーム画面（.game）は高さを100vhに固定してスクロールさせないが、
-   このページは「読みもの」なので、縦に普通にスクロールさせる
-   （6曲を無理に一画面へ押し込まない）
+     上：操作エリア（.st-fixedArea）
+         ツールバー／見出し／全曲再生・次へ・停止・リピート・音量 … 動かない
+     下：曲の一覧（.st-trackScroll）
+         01 / 02 / 03 …                                          … ここだけ上下にスクロール
+
+   ■ なぜ、ページ全体をスクロールする作りをやめたのか
+     前はページ全体が、曲の数だけ下へのびる「縦に長いページ」だった
+     曲が増えるほどページが長くなり、曲を下のほうまで見ていると、
+     戻る・全曲再生・次へ・停止・リピート・音量が、画面の上へ消えてしまう
+     このページは「曲を選びながら、操作する」ページなので、
+     操作はいつも画面に残し、長くなる曲の一覧だけをスクロールさせる
+     （ゲーム画面の .game も、高さを画面にぴったり合わせて、ページ全体はスクロールさせていない）
+
+   ■ しくみ（Flexbox）
+     ① このページの枠（.soundtrack）を、画面の高さぴったり（100dvh）にする
+        overflow: hidden で、ページ全体が曲の数に合わせてのびたり、スクロールしたりしないようにする
+     ② 中身を flex-direction: column で、上から下へならべる
+     ③ 操作エリアは flex: none … 中身ぶんの高さのまま、のびも縮みもしない
+     ④ 曲の一覧は flex: 1 … 残った高さを、ぜんぶ使う
+        そのうえで overflow-y: auto … 入りきらない曲は、この箱の中だけでスクロールする
+
+     全曲再生を始めて「⏭ 次のトラックへ」などが出ると、操作エリアが少し高くなるが、
+     そのぶん曲の一覧が、自動で少し低くなる（高さを JavaScript で計算しなくてよい）
+
+   ■ position: fixed を使わない理由
+     fixed は、ページの流れから抜けて、画面の同じ場所に浮く
+     ・浮いたぶん、曲の一覧が操作エリアの下にもぐらないように、
+       操作エリアの高さぶんのすき間を、自分で計算して空けなければならない
+     ・操作エリアの高さは、全曲再生中・サウンドOFF中・画面の幅で変わるので、その計算がすぐにずれる
+     Flexbox なら、2つの箱を上下にならべるだけで、高さの分けかたはブラウザがやってくれる
+
+   ■ height を2回書いている理由
+     ・100vh  … 画面の高さ（古いブラウザでも分かる）
+     ・100dvh … スマホでアドレスバーが出たり引っこんだりしても、いま見えている高さに合わせてくれる
+     新しいブラウザは、あとに書いた 100dvh を使い、知らないブラウザは 100vh のまま使う
+
+   ※ 左右の余白は、この枠ではなく、中の2つの箱（.st-fixedArea / .st-trackScroll）に持たせている
+     曲の一覧のスクロールバーを、枠のいちばん右はしに出すため
+   ※ 縦にとても低い画面と、とても幅のせまい画面では、この分けかたをやめて、ページ全体のスクロールに戻す
+     （→ いちばん下の @media (max-height: 580px), (max-width: 359px)）
    ============================================================ */
 .soundtrack {
   /* 色はゲーム画面と同じものを使う */
@@ -2656,13 +2854,15 @@ onUnmounted(() => {
   --ink-soft: #8d949b;
   --gold: #ffd166;
 
+  display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   width: 100%;
   max-width: 1180px;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   margin: 0 auto;
-  padding: 16px 24px 24px;
   background: linear-gradient(180deg, #d6f0fb 0%, #e8f6ee 45%, #fffdf2 100%);
   color: var(--ink);
   font-family:
@@ -2677,13 +2877,197 @@ onUnmounted(() => {
   box-shadow: 0 0 60px rgb(42 118 143 / 35%);
 }
 
+/* 画面に残る操作エリア（ツールバー・見出し・全曲再生・次へ・停止・リピート・音量）
+
+   flex: none … 中身ぶんの高さのまま、のびも縮みもしない
+                （ここが縮むと、ボタンが切れて押せなくなるため）
+   上下の余白 … 上は画面のふちとのすき間、下は曲の一覧とのすき間
+
+   overflow: hidden ＋ scrollbar-gutter: stable
+   … 下の曲の一覧と同じだけ、右がわにスクロールバーの場所を空けておくための指定
+     曲の一覧にスクロールバーが出ると、そのぶん一覧の中身がせまくなり、
+     まんなかに置いた曲カードが、上の操作エリアのカードと左右にずれてしまう
+     こちらにも同じ場所を空けておけば、上と下で、カードの左右のはしがそろったままになる
+     （scrollbar-gutter は overflow が hidden / auto / scroll の箱にしか効かないので、hidden を付けている
+       この箱は中身ぶんの高さなので、hidden にしても中身が切れることはない）
+     ※ スマホのように、スクロールバーが中身の上に重なって出る機械では、どちらも場所を空けないので、同じくそろう */
+.st-fixedArea {
+  flex: none;
+  overflow: hidden;
+  scrollbar-gutter: stable;
+  padding: 12px 24px;
+}
+
+/* 曲の一覧のスクロールエリア（このページで、上下にスクロールするのは この箱だけ）
+
+   flex: 1 … 操作エリアを置いて、残った高さをぜんぶこの箱が使う
+             （「あまった場所は、この箱が受け取る」という意味）
+
+   min-height: 0 … 「中身より低くなってもよい」という指定
+     Flexbox の中の箱は、ふつう「中身をぜんぶ出せる高さ」より低くならない
+     曲の一覧は中身（曲のカード）が長いので、それだと箱が中身ぶんまでのびてしまい、
+     画面の下へはみ出して、下の曲が .soundtrack の overflow: hidden で切れてしまう
+     （overflow-y: auto の箱は、ブラウザがはじめから縮めてくれることが多いが、
+       何のための指定かが読んで分かるように、あえて書いておく
+       あとで overflow を別の箱へ移したときも、ここがこわれない）
+
+   overflow-y: auto … 入りきらないときだけスクロールバーが出て、この箱の中だけが上下に動く
+                      曲が7曲でも30曲でも、長くなるのはこの箱の中身だけ
+
+   scrollbar-gutter: stable … 上の操作エリアと、スクロールバーの場所をそろえる（→ .st-fixedArea）
+
+   border-top … 「ここから下が曲の一覧」と分かるように、うすい線を1本だけ引く
+   上下の余白 … 1曲目が線にくっつかないように上を少し、最後の曲の下にも少し空ける
+               （最後の曲の ⓘ の吹き出しも、この余白の中に出るので切れない） */
+.st-trackScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 12px 24px 24px;
+  border-top: 1px solid rgb(42 118 143 / 16%);
+}
+
+/* ============================================================
+   カードの横幅をそろえる（ツールバー・見出し・全曲再生・曲の一覧）
+
+   4枚とも「いちばん広くても760px」にして、まんなかに置いている
+
+   ■ 前は、4枚とも max-width: 760px と書いてあったのに、見た目の幅がばらばらだった
+       ツールバー 804px ／ 見出し 822px ／ 全曲再生 804px ／ 曲の一覧 760px
+
+   ■ なぜずれていたのか
+     CSSの幅は、ふつう（box-sizing: content-box）だと「中身だけの幅」を指す
+     そこへ、内がわの余白（padding）と枠線（border）が、外がわに足される
+       見出し   … 760 ＋ 余白 28×2 ＋ 枠線 3×2 ＝ 822px
+       全曲再生 … 760 ＋ 余白 20×2 ＋ 枠線 2×2 ＝ 804px
+       曲の一覧 … 余白も枠線も無いので、760px のまま
+     余白や枠線の太さがカードごとにちがうので、外がわの幅もそろわなかった
+
+   ■ box-sizing: border-box にすると
+     幅が「枠線までふくめた、外がわの幅」になる
+     余白や枠線がどれだけあっても、外がわはぴったり760pxで止まるので、
+     4枚のカードの左右のはしが、たてに一直線にそろう
+
+   ※ 幅の数字は、ここ1か所だけに書いてある（それぞれのカードには書かない）
+     あとで幅を変えたいときも、ここを直せば4枚がいっしょに変わるので、またずれることがない
+   ※ スマホなど画面がせまいときは、4枚とも画面の幅いっぱいに広がるので、
+     もともと同じ幅にそろっている（ここの指定が効いてくるのは、広い画面のとき）
+   ※ 上の操作エリアと下の曲の一覧は、スクロールバーの場所を同じだけ空けている
+     （→ .st-fixedArea / .st-trackScroll の scrollbar-gutter）
+     曲の一覧にスクロールバーが出ても、上と下のカードの左右のはしは、ずれない
+   ============================================================ */
+.st-toolbar,
+.st-head,
+.st-playall,
+.st-list {
+  box-sizing: border-box;
+  max-width: 760px;
+}
+
+/* ============================================================
+   上部ツールバー（← はじめの画面へ戻る ／ 🔊 サウンド ON/OFF）
+
+   画面に残る操作エリア（.st-fixedArea）の、いちばん上に置いている
+   操作エリアはスクロールしないので、曲の一覧をどこまで見ていても、
+   「戻る」と「音を消す・戻す」が、いつでも押せる
+
+   ■ 見た目
+     大きなナビゲーションバーにはせず、「操作用の小さな上部カード」にしている
+     ・幅は、見出し・全曲再生・曲の一覧とぴったり同じ（→ 上の「カードの横幅をそろえる」）
+     ・枠は、すぐ下の「全曲再生」カードと同じ紺色（--navy）＋下だけ太い枠にそろえる
+       前は うすい水色（#c8d4e6）の細い枠だったが、他のカードが紺色の枠なので、
+       ここだけ枠が弱くて浮いて見えた。同じ紺色にして、下の太い枠で紙の厚みを出す
+     ・ただし枠の太さ・角丸は 見出し（.st-head。3px・角丸20px）より ひかえめにして、
+       このツールバーが見出しより目立たないようにする
+     ・上下の余白と、見出し（.st-head）とのすき間（10px）は、
+       操作エリアが高くなりすぎないよう、少しひかえめにしてある
+   ============================================================ */
+.st-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 auto 10px;
+  padding: 7px 20px;
+  border: 2px solid var(--navy);
+  border-bottom-width: 4px;
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 4px 12px rgb(35 57 94 / 14%);
+}
+
+/* 右のサウンドボタンは、いつも右はしに置く
+
+   margin-left: auto … 左がわの余りを、ぜんぶこのボタンの左に入れる
+   1行に収まっているときは、justify-content: space-between と同じ見た目
+   （スマホでは、2つのボタンが幅を分け合って広がるので、余りが無く、ここは効かない
+     → スマホ用の指定（@media (max-width: 600px)）の .st-back を参照）
+
+   ※ ボタンの形そのものは、下の「.st-repeat, .st-soundToggle」をそのまま使っている */
+.st-toolbar .st-soundToggle {
+  margin-left: auto;
+}
+
+/* 「← はじめの画面へ戻る」
+
+   前は曲の一覧の下にあったボタンの見た目を、そのまま使っている
+   （紺色の枠・白い背景・丸いボタン・hover / active / focus-visible）
+
+   ツールバーに入れたので、変えたのは次の3つだけ
+   ・高さ     … となりのサウンドボタンとそろえる
+                 （上下の余白 7px と 行の高さ 1.4 は、サウンドボタンと同じ値）
+   ・折り返し … 「← はじめの画面へ戻る」がボタンの中で2行に割れないようにする
+                 （入りきらないときは、ボタンの中ではなく、ツールバーごと2段になる）
+   ・hover   … 紙の色のツールバーの上では、白に変えても見分けがつかないので、
+                 サウンドボタンと同じ うすい水色にする */
+.st-back {
+  padding: 7px 16px;
+  border: 2px solid var(--navy);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 70%);
+  color: var(--navy-deep);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.st-back:hover {
+  background: #e8f4fb;
+}
+
+.st-back:active {
+  transform: translateY(1px);
+}
+
+.st-back:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+
 /* ============================================================
    ページの見出し
    ============================================================ */
 .st-head {
-  max-width: 760px;
-  margin: 0 auto 12px;
-  padding: 16px 28px 14px;
+  /* 下のすき間だけ、影のぶん（12px）を足してある
+
+     このカードには、下へ12pxずらした影（box-shadow: 0 12px 0）が付いていて、
+     紙の厚みのように見せている
+     すき間を影と同じ12pxにすると、その影がすき間をぜんぶ埋めてしまい、
+     下の全曲再生のカードに、くっついて見える
+     影の12px ＋ すき間10px にして、見た目のすき間を、ツールバーとのすき間（10px）とそろえている
+
+     上下の余白（padding）は、操作エリアが高くなりすぎないよう、少しひかえめにしてある
+     （ツールバーが1段増えたぶん、曲の一覧に使える高さを残すため） */
+  margin: 0 auto 22px;
+  padding: 12px 28px 10px;
   border: 3px solid var(--navy);
   border-radius: 20px;
   background: var(--paper);
@@ -2693,7 +3077,7 @@ onUnmounted(() => {
 
 .st-head__badge {
   display: inline-block;
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   padding: 4px 18px;
   border-radius: 999px;
   background: var(--navy);
@@ -2705,7 +3089,7 @@ onUnmounted(() => {
 .st-head__name {
   margin: 0;
   color: var(--navy);
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.35;
 }
 
@@ -2721,8 +3105,9 @@ onUnmounted(() => {
    設定だけのために箱をもう1つ増やすとページが長くなるので、
    同じ「再生まわりの操作」として、この箱の中へ入れてある
    上の行とは、全曲再生中の案内と同じ点線で区切る
-   PCでは「🔁 リピート OFF ／ 🔊 サウンド ON ／ 音量 ／ スライダー ／ 70%」が1行に並ぶ
+   PCでは「🔁 リピート OFF ／ 音量 ／ スライダー ／ 70%」が1行に並ぶ
    せまい画面では、音量のまとまりが次の行へ折り返す
+   （🔊 サウンド ON/OFF は、上部ツールバー（.st-toolbar）へ移した）
    ============================================================ */
 .st-settings {
   display: flex;
@@ -2738,12 +3123,16 @@ onUnmounted(() => {
 
    どちらも「押すたびに状態が変わる、設定のボタン」なので、
    同じ形（丸い枠のボタン）にして、まとめて指定している
-   ・🔁 リピート … OFF → 全曲 → 1曲 → OFF と順ぐりに回る
-   ・🔊 サウンド … ON ⇄ OFF が入れかわる
+   ・🔁 リピート … OFF → 全曲 → 1曲 → OFF と順ぐりに回る（再生の設定の中）
+   ・🔊 サウンド … ON ⇄ OFF が入れかわる（上部ツールバーの右）
+
+   サウンドは上部ツールバーへ移したが、見た目は前と同じものを使うので、
+   置き場所が分かれても、ここでまとめて指定したままにしてある
+   （ツールバーの中での並べかたは、.st-toolbar のところに書いてある）
 
    考えかたはゲーム本編（pages/index.vue）の .sound-toggle と同じで、
    ちがうのは、このページの大きさ・色に合わせてあることだけ
-   （ここは上部バーではなく、指でも押しやすい大きさにしている） */
+   本編の上部バーのボタンは小さめだが、こちらは指でも押しやすい大きさにしている */
 .st-repeat,
 .st-soundToggle {
   display: inline-flex;
@@ -2848,9 +3237,9 @@ onUnmounted(() => {
 
 /* 音量のまとまり（「音量 ／ スライダー ／ 70%」）
 
-   flex: 1 … サウンドボタンの右に残った幅を、まるごと使う
+   flex: 1 … リピートボタンの右に残った幅を、まるごと使う
    min-width … これより狭くなるくらいなら、1行まるごと使いたいので、
-               次の行へ折り返させる（サウンドボタンと肩を並べない） */
+               次の行へ折り返させる（リピートボタンと肩を並べない） */
 .st-volume {
   display: flex;
   flex: 1;
@@ -2960,9 +3349,9 @@ onUnmounted(() => {
 /* ============================================================
    全曲再生の操作バー
    ============================================================ */
+/* 下の曲の一覧とのすき間は、このカードではなく、操作エリア（.st-fixedArea）の下の余白で空ける */
 .st-playall {
-  max-width: 760px;
-  margin: 0 auto 12px;
+  margin: 0 auto;
   padding: 12px 20px;
   border: 2px solid var(--navy);
   border-bottom-width: 4px;
@@ -3054,22 +3443,46 @@ onUnmounted(() => {
   outline-offset: 2px;
 }
 
+/* 「下の一覧で番号を押すと…」の案内
+
+   すぐ上の「▶ 全曲再生」「🔀 シャッフル再生」が真ん中にならんでいるので、
+   案内も真ん中にそろえて、そのボタンについての説明だと、ひと目で分かるようにする
+   （左はしに置くと、ボタンの列とずれて、別の話に見えてしまう）
+
+   text-wrap: balance … 2行に折り返すときに、行の長さをそろえる
+   （スマホで「…始／める曲を選べます」のように、1〜2文字だけ次の行へ落ちるのを防ぐ
+     対応していないブラウザでは、ふつうに折り返すだけ） */
 .st-playall__hint {
   margin: 8px 0 0;
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.6;
+  text-align: center;
+  text-wrap: balance;
+}
+
+/* 案内の中の「▶ 全曲再生」（ボタンの名前）は、途中で行を変えない
+
+   日本語は文字と文字のあいだのどこでも改行できるので、
+   せまい画面だと「「▶ 全」と「曲再生」」のように、ボタンの名前が2行に割れてしまう
+   ここだけ white-space: nowrap にして、ひとかたまりのまま次の行へ送る */
+.st-playall__hintButton {
+  white-space: nowrap;
 }
 
 /* 全曲再生中の案内（今回の何曲目か＋実際のトラック番号）
 
    align-items: baseline … 3つは文字の大きさがちがうので、
-   中央でそろえると「6 / 6」と曲名の数字が縦にずれて見える
-   文字の下の線（ベースライン）でそろえて、数字の高さを合わせている */
+   中央でそろえると「7 / 7」と曲名の数字が縦にずれて見える
+   文字の下の線（ベースライン）でそろえて、数字の高さを合わせている
+
+   justify-content: center … 上の「▶ 全曲再生」も、下の「⏭ 次のトラックへ」も
+   真ん中にならんでいるので、あいだにあるこの案内も真ん中にそろえる */
 .st-playall__status {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
+  justify-content: center;
   gap: 10px;
   margin: 10px 0 0;
   padding-top: 10px;
@@ -3096,9 +3509,9 @@ onUnmounted(() => {
   color: #fff;
 }
 
-/* 「6 / 6」は曲名と同じ大きさにして、となりの数字とそろえる
+/* 「7 / 7」は曲名と同じ大きさにして、となりの数字とそろえる
    font-variant-numeric: tabular-nums … 数字の幅をそろえて、
-   曲が進んでも「6 / 6」の位置が動かないようにする */
+   曲が進んでも「7 / 7」の位置が動かないようにする */
 .st-playall__count {
   color: var(--navy-deep);
   font-size: 16px;
@@ -3110,6 +3523,47 @@ onUnmounted(() => {
   color: var(--ink);
   font-size: 16px;
   font-weight: 700;
+}
+
+/* 「再生中の曲を見る」ボタン（現在曲の表示のとなりに置く補助ボタン）
+
+   これは「いま鳴っている曲まで、曲の一覧をスクロールするだけ」の補助操作
+   メインの「▶ 全曲再生」（金色）ほど目立たせず、
+   白系の背景＋紺色の枠の、軽い見た目にして、
+   「現在曲を確認するための補助」という優先度にしている
+   （上部ツールバーの「← はじめの画面へ戻る」と同じ考えかたの、丸みのある小さなボタン）
+
+   ※ 文字は「再生中の曲を見る」「この曲を見る」と短く決まっているので、
+     white-space: nowrap で1行のままにしてよい
+     （長くなって折り返す心配があるのは曲名のほうで、そちらは nowrap を付けていない） */
+.st-playall__see {
+  padding: 4px 12px;
+  border: 2px solid var(--navy);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 80%);
+  color: var(--navy-deep);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.st-playall__see:hover {
+  background: #e8f4fb;
+}
+
+.st-playall__see:active {
+  transform: translateY(1px);
+}
+
+.st-playall__see:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
 }
 
 /* 全曲再生中の操作ボタンの並び（⏭ 次のトラックへ ／ ■ 全曲再生を停止）
@@ -3133,7 +3587,6 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 760px;
   margin: 0 auto;
   padding: 0;
   list-style: none;
@@ -3376,17 +3829,25 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-/* 再生ボタン
-   タイトルの「公園へ行く」と同じ金色だが、ひとまわり小さくしている
+/* 曲ごとの再生ボタン
+
+   白〜うすい水色＋紺色の文字にしている
+   （「🔀 シャッフル再生」「⏭ 次のトラックへ」と同じ見た目）
+
+   前は「▶ 全曲再生」と同じ金色だったが、曲の数だけ金色のボタンがならぶと、
+   ページでいちばん大事な「▶ 全曲再生」が、どれなのか分かりにくくなる
+   そこで、金色は「▶ 全曲再生」だけに使い、曲ごとのボタンは一段ひかえめにしている
+   （鳴っている曲のボタンは、今までどおり紺色になるので、どれが鳴っているかはすぐ分かる）
+
    ※ 小さくしすぎると押しにくいので、高さは指でも押せる大きさを保つ */
 .track__button {
   min-width: 132px;
   padding: 11px 18px;
-  border: 2px solid #e8b23c;
+  border: 2px solid var(--navy);
   border-bottom-width: 4px;
   border-radius: 10px;
-  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
-  color: #4a3208;
+  background: linear-gradient(180deg, #fff 0%, #d6f0fb 100%);
+  color: var(--navy-deep);
   font-family: inherit;
   font-size: 16px;
   font-weight: 700;
@@ -3535,46 +3996,6 @@ onUnmounted(() => {
 }
 
 /* ============================================================
-   はじめの画面へ戻る
-   ============================================================ */
-.st-foot {
-  max-width: 760px;
-  margin: 14px auto 0;
-  text-align: center;
-}
-
-/* メインの操作ではないので、ボタンらしさは控えめにする
-   ただし、指でも押せる大きさは残しておく */
-.st-back {
-  padding: 10px 22px;
-  border: 2px solid var(--navy);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 70%);
-  color: var(--navy-deep);
-  font-family: inherit;
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.6;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    transform 0.1s ease;
-}
-
-.st-back:hover {
-  background: #fff;
-}
-
-.st-back:active {
-  transform: translateY(1px);
-}
-
-.st-back:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 2px;
-}
-
-/* ============================================================
    動きを減らす設定にしている人への配慮
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {
@@ -3590,89 +4011,197 @@ onUnmounted(() => {
    横にはみ出さないようにする
    ============================================================ */
 @media (max-width: 600px) {
-  .soundtrack {
-    padding: 24px 16px 40px;
+  /* ============================================================
+     スマホでは、操作エリアが高くなりすぎないように、全体をひと回りコンパクトにする
+
+     スマホの縦画面は、PCより ずっと背が低いのに、
+     全曲再生・シャッフル・次へ・停止などが縦に積まれやすい
+     そのまま操作エリアに入れると、曲の一覧がほとんど見えなくなってしまう
+
+     ボタンそのものは小さくしすぎない（指で押しやすい高さは残す）
+     そのかわり、つめるのは次のようなところ
+     ・画面のふち・カードの上下の余白
+     ・見出しの文字と余白
+     ・カードどうしのすき間、説明文の上の余白
+     ・横にならべられるボタンは、2つを横にならべる（入りきらないときだけ、自動で2段になる）
+     ============================================================ */
+  .st-fixedArea {
+    padding: 8px 16px;
+  }
+
+  .st-trackScroll {
+    padding: 8px 16px 24px;
+  }
+
+  /* 上部ツールバー（スマホ）
+
+     「← はじめの画面へ戻る」「🔊 サウンド ON」を、なるべく1行に並べる
+
+     戻るボタンの文字は「← 戻る」に短くしない
+     PCとスマホで、ボタンの意味がちがって見えないようにするため
+     そのかわり、文字・余白・すき間を少しずつ小さくして横に収める
+     （幅360pxくらいの画面までは、1行に収まる大きさを目安にしてある）
+
+     それでも入りきらない、とても狭い画面では、
+     ボタンを押しにくいほど小さくするより、ツールバーごと2段に折り返す
+     （.st-toolbar の flex-wrap: wrap。2段のときは、それぞれのボタンが1段まるごとの幅になる）
+
+     min-height: 36px … 小さくしても、指で押せる高さは残す
+     ツールバーのカードの上下の余白と、見出しとのすき間は、少しつめる（操作エリアを低くするため） */
+  .st-toolbar {
+    gap: 6px 8px;
+    margin-bottom: 8px;
+    padding: 4px 6px;
+  }
+
+  /* flex: 1 1 auto … 2つのボタンで、ツールバーの横幅を分け合って広がる
+     ・1行に収まるとき           … 2つが横にならび、どちらも指で押しやすい幅になる
+     ・とても狭い画面で2段のとき … それぞれが1段まるごとの幅になり、
+                                   左上と右下に分かれた「階段」のような見た目にならない
+     （全曲再生・曲ごとの ▶ 再生 も、スマホでは横いっぱいなので、見た目もそろう）
+
+     justify-content: center … 広がったボタンの中で、アイコンと文字を真ん中に置く
+     （サウンドボタンは inline-flex なので、この指定が要る。戻るボタンは、もともと真ん中） */
+  .st-back,
+  .st-toolbar .st-soundToggle {
+    flex: 1 1 auto;
+    justify-content: center;
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .st-toolbar .st-soundToggle {
+    gap: 5px;
+  }
+
+  .st-toolbar .st-soundToggle__icon {
+    font-size: 14px;
   }
 
   .st-playall {
-    padding: 16px 18px;
+    padding: 10px 12px 12px;
   }
 
-  /* せまい画面では、設定のボタンと音量を縦に積み直す
-     1行目 … 🔁 リピート OFF　🔊 サウンド ON（入りきらなければ、さらに折り返す）
-     2行目 … 音量　　　70%
-     3行目 … スライダー
-     （音量を次の行へ回すのは、下の .st-volume の flex-basis: 100%）
-     すき間は、上の操作ボタンと同じくらいまで小さくしておく */
+  /* 「▶ 全曲再生」「🔀 シャッフル再生」と、「⏭ 次のトラックへ」「■ 全曲再生を停止」
+
+     前は、スマホではどちらのならびも縦に積んでいたが、
+     それだと操作エリアが高くなりすぎるので、入るときは2つを横にならべる
+     ・flex: 1 1 auto … 2つで横幅を分け合って広がる
+     ・min-width: 0   … PC用の最低幅（148px）をやめて、文字ぶんの幅から広がるようにする
+     ・入りきらない幅のときは、ならびの flex-wrap: wrap で自動で2段になり、
+       それぞれが1段まるごとの幅になる（文字を小さくしてまで、むりに横にはならべない）
+
+     上下の余白は少しだけつめるが、指で押しやすい高さ（約48px）は残す */
+  .st-playall__button {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 9px 12px;
+  }
+
+  .st-playall__starters,
+  .st-playall__actions {
+    gap: 8px;
+  }
+
+  .st-playall__actions {
+    margin-top: 8px;
+  }
+
+  /* 「⏭ 次のトラックへ」「■ 全曲再生を停止」は、文字を1段小さくして、左右の余白もつめる
+
+     幅 360px くらいのスマホでも、2つを横にならべて1段に収めるため
+     1段に収まれば、全曲再生中に操作エリアが高くなりすぎず、曲の一覧が見えるまま残る
+     ※ 高さは約45pxあるので、指での押しやすさはそのまま
+     ※ シャッフル再生中の「■ シャッフル再生を停止」は長いので、せまい画面では自動で2段になる */
+  .st-playall__actions .st-playall__button {
+    padding: 9px 8px;
+    font-size: 14px;
+  }
+
+  /* 説明文（番号を押すと…／サウンドOFF中です…）は、上のすき間と文字を少しつめる */
+  .st-playall__hint,
+  .st-settings__hint {
+    margin-top: 6px;
+    font-size: 13px;
+  }
+
+  /* 全曲再生中の案内も、上のすき間を少しつめる */
+  .st-playall__status {
+    gap: 2px 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+  }
+
+  /* 再生の設定（リピートと音量）
+
+     前は「🔁 リピート」「音量　70%」「スライダー」の3行に分けていたが、
+     操作エリアを低くするため、音量の文字とスライダーと％を1行にまとめて、2行にする
+       1行目 … 🔁 リピート OFF
+       2行目 … 音量 ━━━━━━━━ 70%（スライダーは、残りの幅をぜんぶ使う）
+
+     flex-basis: 100% … 音量のまとまりは、いつも1行まるごと使う
+     min-width: 0     … PC用の min-width（音量 260px・スライダー 180px）が残っていると、
+                        とても狭い画面ではみ出してしまうので外しておく */
   .st-settings {
     gap: 8px 12px;
+    margin-top: 8px;
+    padding-top: 8px;
   }
 
-  /* 音量バーはさらに2行に分ける
-     1行目 … 音量　　　70%
-     2行目 … スライダー（横いっぱいで、指でも動かしやすい）
-
-     order で、スライダーだけを最後（下の行）へ回している
-
-     flex-basis: 100% … いつも1行まるごと使う
-     min-width: 0     … 画面がとても狭いときに、
-                        PC用の min-width（260px）が残っていると、
-                        そこからはみ出してしまうので外しておく */
   .st-volume {
     flex-basis: 100%;
     gap: 8px 12px;
     min-width: 0;
   }
 
-  .st-volume__label {
-    flex: 1;
-  }
-
   .st-volume__slider {
-    flex-basis: 100%;
-    order: 1;
     min-width: 0;
   }
 
-  .st-playall__button {
-    width: 100%;
+  .st-volume__value {
+    min-width: 44px;
   }
 
-  /* 横に並べる幅が足りないので、1列にして縦に積み直す
-     （ボタンは上の .st-playall__button で横いっぱいになり、押しやすくなる） */
-  .st-playall__actions {
-    flex-direction: column;
-  }
+  /* 見出し（ORIGINAL SOUNDTRACK ／ こうちゃんの大冒険）
 
-  /* 「▶ 全曲再生」「🔀 シャッフル再生」も、同じように縦に積み直す
-
-     この2つを横に並べたままだと、スマホの幅では画面からはみ出してしまう
-     （どちらも文字を折り返さない設定なので、せまくても縮まない）
-
-     width: 100% … ならび全体で1行まるごと使う
-                   （そのうえで、ボタン1つ1つが横いっぱいになって押しやすくなる） */
-  .st-playall__starters {
-    flex-direction: column;
-    width: 100%;
-  }
-
+     サウンドトラックのページの名前なので、スマホでも消さずに残す
+     そのかわり、文字・余白・下の影を ひと回り小さくして、操作エリアを低くする
+     （影を6pxにしたので、下のすき間も「影6px ＋ すき間8px」にそろえている） */
   .st-head {
-    padding: 24px 20px 22px;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    box-shadow: 0 6px 0 rgb(35 57 94 / 18%);
+  }
+
+  .st-head__badge {
+    margin-bottom: 4px;
+    padding: 2px 12px;
+    font-size: 11px;
   }
 
   .st-head__name {
-    font-size: 26px;
+    font-size: 21px;
   }
 
   .st-head__lead {
     font-size: 16px;
   }
 
-  /* 「番号」「曲名と説明」「再生ボタン」を縦に並べる */
+  /* 曲のカード（スマホ）
+
+     1行目 … [01] 曲名 ⓘ ／ 説明
+     2行目 … ▶ 再生（横いっぱい）
+     3行目 … 再生バー（いま選んでいる曲だけ）
+
+     前は「番号」「曲名と説明」「再生ボタン」を ぜんぶ縦に積んでいたので、
+     番号が横いっぱいの帯になって浮いて見え、1曲ぶんのカードも縦に長かった
+     番号を曲名の左にならべると、PCの一覧と同じ並びのまま、1曲ぶんが低くなる
+     （曲が増えても、スクロールする量が少なくてすむ） */
   .track {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 10px;
-    padding: 16px 18px;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 10px 12px;
+    padding: 12px 14px;
   }
 
   .track__no {
@@ -3686,8 +4215,10 @@ onUnmounted(() => {
     font-size: 17px;
   }
 
-  /* ボタンは横いっぱいに広げて、押しやすくする */
+  /* ボタンは、番号の下から右はしまで横いっぱいに広げて、押しやすくする
+     （1 / -1 … 1列目から最後の列まで、ぜんぶ使う） */
   .track__button {
+    grid-column: 1 / -1;
     width: 100%;
   }
 
@@ -3695,22 +4226,26 @@ onUnmounted(() => {
      スマホでは1行のままだと横幅が広いので、
      「ⓘ の真下に中央ぞろえ」だと画面の左右へはみ出してしまう。
      そこで基準を ⓘ から「曲名の行」（上の .track__title）に変えて、
-     カードの左はしにそろえて出す。
-     こうすると曲名の長さや ⓘ の位置に関係なく、
-     いつもカードの中に収まり、画面の外へ大きくはみ出さない */
+     曲名の行の右はし（＝カードの中身の右はし）にそろえて、左へのばして出す。
+
+     曲名の行は、左に番号があるぶん右から始まるので、
+     左はしにそろえると、長い制作情報が画面の右へはみ出してしまう
+     右はしにそろえておけば、曲名の長さや ⓘ の位置に関係なく、いつもカードの中に収まる */
   .track__info {
     position: static;
   }
 
   .track__tooltip {
-    left: 0;
+    right: 0;
+    left: auto;
     max-width: calc(100vw - 40px);
     transform: none;
   }
 
-  /* 三角は、曲名の行の左寄り（ⓘ のだいたいの位置）を指すようにする */
+  /* 三角は、吹き出しの右寄りに置く（ⓘ は曲名のうしろ＝右がわにあるため） */
   .track__tooltip::before {
-    left: 24px;
+    right: 24px;
+    left: auto;
     transform: none;
   }
 }
@@ -3719,13 +4254,13 @@ onUnmounted(() => {
    小さめのスマホ（iPhone SE くらいまで）
 
    全曲再生中の案内は
-   「♪ 全曲再生中 ／ 6 / 6 ／ 06 きょうの大冒険、おしまい！」の3つ
+   「♪ 全曲再生中 ／ 6 / 7 ／ 06 きょうの大冒険、おしまい！」の3つ
 
    この幅では、曲名が短い曲は1行に収まり、長い曲だけ折り返すので、
    曲によって見え方がそろわない
    そこで、曲名はいつも2行目へ落として、見え方を統一する
 
-     1行目 … ♪ 全曲再生中　6 / 6
+     1行目 … ♪ 全曲再生中　6 / 7
      2行目 … 06 きょうの大冒険、おしまい！
 
    flex-basis: 100% は「1行まるごと使う」という意味
@@ -3733,8 +4268,10 @@ onUnmounted(() => {
    （481px 以上なら、どの曲名でも1行に収まるので、そのまま横に並べる）
    ============================================================ */
 @media (max-width: 480px) {
+  /* 2行目に落とした曲名も、1行目と同じく真ん中にそろえる */
   .st-playall__track {
     flex-basis: 100%;
+    text-align: center;
   }
 }
 
@@ -3748,6 +4285,43 @@ onUnmounted(() => {
   .track__tooltip {
     padding: 7px 10px;
     font-size: 12px;
+  }
+}
+
+/* ============================================================
+   縦にとても低い画面（高さ 580px 以下）と、とても幅のせまい画面（幅 360px 未満）
+
+   スマホを横向きにしたときや、ブラウザの窓をとても低くしたときは、
+   操作エリアだけで画面がほとんど埋まってしまい、
+   曲の一覧の箱が、ほとんど高さ0になって見えなくなる
+
+   幅 360px 未満の小さなスマホも同じで、
+   ツールバーや全曲再生のボタンが2段に折り返すぶん、操作エリアが高くなり、
+   全曲再生中は、操作エリアだけで画面の高さを超えてしまう（下の音量が切れて押せなくなる）
+
+   そういう画面では、上と下に分けるのをやめて、
+   前と同じ「ページ全体を縦にスクロールする」作りに戻す
+   （カンマで区切った @media は「どちらか1つに当てはまれば」という意味）
+   ・.soundtrack     … 画面の高さに合わせるのをやめ、中身ぶんまでのびる（ページがスクロールする）
+   ・.st-trackScroll … 自分ではスクロールせず、曲のカードをぜんぶならべる
+   ・.st-fixedArea   … 曲の一覧にスクロールバーが出ないので、その場所を空けておくのもやめる
+   ============================================================ */
+@media (max-height: 580px), (max-width: 359px) {
+  .soundtrack {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .st-fixedArea {
+    scrollbar-gutter: auto;
+  }
+
+  .st-trackScroll {
+    flex: none;
+    overflow-y: visible;
+    scrollbar-gutter: auto;
   }
 }
 </style>

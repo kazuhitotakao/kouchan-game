@@ -1369,7 +1369,7 @@ function toggleSound() {
        ・秘密の場所                … 秘密の場所BGM
        ・公園を探検している最中     … 公園BGM（10:30より前ならBGM1、10:30以降ならBGM2）
        ・ゴール（通常のおしまい）   … リザルトBGM
-       ・GAME OVER                 … どれも鳴らさない（もともと無音の画面）
+       ・GAME OVER                 … GAME OVER BGM（ゴールのリザルトBGMとは別の曲）
 
        止めたところからの続きなので、play〜ではなく resume〜 を使う
 
@@ -1381,6 +1381,12 @@ function toggleSound() {
          いやいや対応の途中でお昼になってゴールすると、
          結果画面なのに isTantrum が true のまま残っていることがある
          あとに置くと、そこに当てはまってリザルトBGMが鳴らなくなってしまう
+
+       ※ GAME OVERも、同じ理由で いやいや関連より先に置く
+         いやいやタイム中に「少し待ってみる」などで親の余裕が0になると、
+         isTantrum が true のままGAME OVER画面になる
+         あとに置くと「いやいや発生の結果を読んでいる最中」に当てはまり、
+         GAME OVER BGMが鳴らなくなってしまう
 
        ※ いやいや関連の2つを、公園BGMより先に置くのが大事
          あとにすると「公園を探検している最中」にも当てはまってしまい、
@@ -1409,6 +1415,8 @@ function toggleSound() {
       resumeTitleBgm();
     } else if (gameStarted.value && currentEvent.value === 'goal') {
       resumeResultBgm();
+    } else if (gameStarted.value && currentEvent.value === 'gameOver') {
+      resumeGameOverBgm();
     } else if (gameStarted.value && currentEvent.value === 'tantrum') {
       resumeTantrumBgm();
     } else if (gameStarted.value && isTantrum.value) {
@@ -1427,6 +1435,7 @@ function toggleSound() {
     pauseSecretBgm();
     pauseTantrumBgm();
     pauseResultBgm();
+    pauseGameOverBgm();
   }
 
   // サーバー側には localStorage が無いので、ここで終わり
@@ -1663,6 +1672,14 @@ const tantrumBgmVolume = 0.17;
    大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる */
 const resultBgmVolume = 0.17;
 
+/* GAME OVER BGMの音量（ひとまずリザルトBGMと同じ 0.17 にしてある）
+
+   リザルトBGMとは別の曲なので、音源そのものの録音の大きさもちがう
+   そのため resultBgmVolume を使いまわさず、専用の数字にしてある
+   大きい・小さいと感じたら、ここの数字だけを書きかえれば調整できる
+   （例：少し小さくしたいなら 0.15） */
+const gameOverBgmVolume = 0.17;
+
 /* 秘密の場所BGMの音量
 
    音源そのものの録音の大きさがちがうので、公園BGMとは別の数字にしてある
@@ -1827,7 +1844,7 @@ let fadingBgmVolume = 0;
    いきなり ふだんの音量で始まると唐突に聞こえるので、
    すっと入ってくるようにするための演出
 
-   ※ タイトルBGM・公園BGM・秘密の場所BGM・いやいやBGM・リザルトBGMの
+   ※ タイトルBGM・公園BGM・秘密の場所BGM・いやいやBGM・リザルトBGM・GAME OVER BGMの
      どれにも使える
      2曲が同時に鳴ることはない（切り替えるときは必ず前の曲を止める）ので、
      フェインの係は1つだけ用意しておけば足りる
@@ -2525,9 +2542,11 @@ function stopTantrumBgm() {
    「午前中に親子で公園をたくさん探検して、お昼になったので帰る」という
    おしまいの場面に合う曲を流す
 
-   ※ GAME OVERでは鳴らさない
-     こちらは「途中で帰ることになってしまった」場面なので、
-     これまでどおり無音のままにする
+   ※ GAME OVER画面で流すのは、この曲ではない
+     GAME OVERは「途中で帰ることになってしまった」場面なので、
+     別の専用曲（GAME OVER BGM）を流す（すぐ下の「GAME OVER画面のBGM」を参照）
+     ・ゴール（currentEvent === 'goal'）        … リザルトBGM（result-bgm.mp3）
+     ・GAME OVER（currentEvent === 'gameOver'） … GAME OVER BGM（game-over-bgm.mp3）
 
    ※ ゴール音「タタターン♪」とは重ねない
      goToGoal() で「タタターン♪」を鳴らしたあと、
@@ -2721,6 +2740,266 @@ function stopResultBgm() {
   try {
     resultBgm.pause();
     resultBgm.currentTime = 0;
+  } catch {
+    // 何もしない
+  }
+}
+
+/* ============================================================
+   GAME OVER画面のBGM
+
+   作りはリザルトBGM（すぐ上）とまったく同じで、鳴らす場面だけがちがう
+   ・GAME OVER BGM … GAME OVER画面にいるあいだ（currentEvent === 'gameOver'）
+
+   ■ なぜGAME OVER画面だけの専用曲にするのか
+
+     おでかけの終わりかたは2つあり、気持ちがまったくちがう
+     ・ゴール     … 12時まで遊びきった「きょうの大冒険、おしまい！」 → リザルトBGM
+     ・GAME OVER … 途中で限界になって帰る「きょうはここまで。また遊ぼう」 → この曲
+
+     同じ曲を使いまわすと、どちらの終わりかたなのかが音から伝わらなくなる
+     そこで、入れもの（gameOverBgm）も関数も音量も、リザルトBGMとはぜんぶ別にしてある
+     （リザルトBGMの関数は、GAME OVERを鳴らすためには1つも使わない）
+
+   ■ 鳴るまでの流れ
+
+     ① checkGameOver() で GAME OVER が決まる
+        → 画面はその場でGAME OVER画面へ切りかわる
+        → それまで鳴っていた曲（公園・秘密の場所・いやいや・リザルト）を止める
+     ② playGameOverBgmSoon() で「0.7秒あとに鳴らす」予約をする
+     ③ 0.7秒の無音のあと、playGameOverBgm() が曲の先頭からフェードインで鳴らす
+
+   ※ GAME OVER専用の短い効果音は付けていない
+     「少し無音 → GAME OVER BGM」という、しずかな切りかわりにしている
+   ============================================================ */
+
+/* GAME OVER BGMを入れておく箱
+
+   null は「まだ作っていない」という意味
+
+   ※ ここで new Audio('/audio/game-over-bgm.mp3') と書かないのが大事
+     Nuxtは、ページを作るときにサーバー側でも一度このコードを読む
+     サーバーには Audio が無いので、ここで作るとエラーになってしまう
+     そこで箱だけ用意しておき、ブラウザで必要になったとき
+     （getGameOverBgm() が初めて呼ばれたとき）に作る */
+let gameOverBgm: HTMLAudioElement | null = null;
+
+/* GAME OVER BGMを用意して返す（初めて必要になったときだけ作る）
+
+   ※ ほかの曲と同じく、ここでは soundEnabled を見ない
+     OFFにした瞬間に「鳴っている曲を止める」ためにも、この関数が必要になるため
+*/
+function getGameOverBgm() {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return null;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    if (!gameOverBgm) {
+      // public/audio/game-over-bgm.mp3 は、URLでは /audio/game-over-bgm.mp3 になる
+      gameOverBgm = new Audio('/audio/game-over-bgm.mp3');
+
+      /* loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
+
+         曲は2分ほどあるので、ふつうはその前に「もう一度あそぶ」などを押して止まる
+         それでも、記録をゆっくり読んでいたり、画面をそのまま置いておいたりしたときに、
+         とちゅうで急に無音にならないように、くり返しておく */
+      gameOverBgm.loop = true;
+
+      // volume … 音の大きさ（上の gameOverBgmVolume で決めている）
+      gameOverBgm.volume = gameOverBgmVolume;
+    }
+
+    return gameOverBgm;
+  } catch {
+    // BGMが使えない環境でも、ゲームは続けられるようにする
+    return null;
+  }
+}
+
+/* GAME OVER BGMを「最初から」再生する（GAME OVERになったとき用）
+
+   ■ play と resume のちがい
+     ・playGameOverBgm()   … currentTime を 0 にして、曲の先頭から鳴らす
+                             GAME OVERになるたびに、いつも同じ始まりかたにしたいため
+     ・resumeGameOverBgm() … currentTime はさわらず、止めたところの続きから鳴らす
+                             サウンドを OFF → ON に戻したとき用
+
+   前の曲が止まったあとに、いきなり曲がいつもの音量で始まると唐突なので、
+   ほかのBGMと同じ startBgmFadeIn() で、無音からふわっと大きくしていく
+*/
+function playGameOverBgm() {
+  // サウンドOFFのときは、ここで終わり
+  // ※ getGameOverBgm() より先に見ることで、OFFのあいだは
+  //   mp3の読み込みそのものが起きないようにしている
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getGameOverBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.currentTime = 0; // 曲の先頭へ戻す
+
+    /* 無音から少しずつ大きくしていく
+
+       ※ フェードインの係（startBgmFadeIn / cancelBgmFade）は、ほかの曲と共用で問題ない
+         2曲が同時に鳴ることはなく（GAME OVERになるときに、前の曲はぜんぶ止めてある）、
+         startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
+    startBgmFadeIn(bgm, gameOverBgmVolume);
+
+    bgm.play().catch(() => {});
+  } catch {
+    // BGMが鳴らなくても、ゲームは止めない
+  }
+}
+
+/* GAME OVER BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+   700 で0.7秒。ここだけ書きかえれば、間の長さを調整できる
+
+   待つ理由は2つ
+   ・GAME OVERになる直前の決定音「ポン♪」や、いやいや発生の音などが、
+     曲の鳴りはじめと重ならないようにするため
+   ・前の曲が止まったあと、いったん「しん」とする間を作るため
+     この短い無音があることで、「今日の遊びはここでおしまい」という区切りが伝わる
+
+   ※ 待たせるのは「音」だけ
+     GAME OVER画面そのものは、この待ち時間とは関係なく、すぐに表示される */
+const gameOverBgmStartDelay = 700;
+
+/* 「あとで鳴らす」の予約票（リザルトBGMのものと同じ仕組み）
+
+   null は「予約していない」という意味
+   setTimeout() は予約すると番号を返してくれるので、それを取っておく
+   （あとで「やっぱり鳴らさない」と取り消すのに必要）
+*/
+let gameOverBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* GAME OVER BGMを「少し待ってから」最初から鳴らす（checkGameOver() から呼ぶ）
+
+   ■ 最初に、前の予約を取り消す理由
+     予約が2つ残っていると、0.7秒後に「先頭から鳴らす」が2回はたらき、
+     鳴りはじめた曲が頭からやりなおしになってしまう
+     先に cancelGameOverBgmStart() で消しておけば、予約はいつも1つだけになる
+
+   ■ 鳴らす直前に、まだGAME OVER画面にいるかを確かめる理由
+     0.7秒待っているあいだに「もう一度あそぶ」などを押して、画面が変わっていることがある
+     確かめずに鳴らすと、タイトル画面でGAME OVERの曲が流れてしまう
+*/
+function playGameOverBgmSoon() {
+  // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+  cancelGameOverBgmStart();
+
+  // サーバー側では音を鳴らさないので、予約もしない
+  if (!import.meta.client) {
+    return;
+  }
+
+  gameOverBgmTimer = setTimeout(() => {
+    gameOverBgmTimer = null;
+
+    // 待っているあいだにGAME OVER画面から出ていたら、もう鳴らさない
+    if (currentEvent.value !== 'gameOver') {
+      return;
+    }
+
+    playGameOverBgm();
+  }, gameOverBgmStartDelay);
+}
+
+/* 「あとで鳴らす」の予約を取り消す */
+function cancelGameOverBgmStart() {
+  if (gameOverBgmTimer === null) {
+    return;
+  }
+
+  clearTimeout(gameOverBgmTimer);
+  gameOverBgmTimer = null;
+}
+
+/* GAME OVER BGMを「続きから」再生する（サウンドをONに戻したとき用）
+
+   playGameOverBgm() とのちがいは currentTime を 0 に戻さないこと
+   OFFにしたところから、そのまま続きを鳴らす
+
+   ※ サウンドOFFのままGAME OVERになり、GAME OVER画面でONに戻したときは、
+     まだ曲を一度も作っていない（gameOverBgm が null）
+     その場合は getGameOverBgm() がここで初めて作るので、曲の先頭から鳴りはじめる
+*/
+function resumeGameOverBgm() {
+  if (!soundEnabled.value) {
+    return;
+  }
+
+  const bgm = getGameOverBgm();
+
+  if (!bgm) {
+    return;
+  }
+
+  try {
+    bgm.play().catch(() => {});
+  } catch {
+    // 何もしない
+  }
+}
+
+/* GAME OVER BGMを一時停止する（どこまで再生したかは覚えたまま）
+   サウンドをOFFにしたときと、ページを離れるときに使う
+
+   ■ pause と stop のちがい
+     ・pauseGameOverBgm() … その場で止めるだけ。currentTime（どこまで鳴らしたか）は残す
+                            → サウンドを ON に戻したとき、止めた位置から続けられる
+     ・stopGameOverBgm()  … 止めたうえで、currentTime を 0（曲の先頭）へ戻す
+                            → GAME OVER画面から出るとき用。次のGAME OVERでは、また先頭から鳴る
+*/
+function pauseGameOverBgm() {
+  // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す
+  // （こうしないと、次に再開したとき小さい音のままになる）
+  cancelBgmFade();
+
+  if (!gameOverBgm) {
+    return;
+  }
+
+  try {
+    gameOverBgm.pause();
+  } catch {
+    // 何もしない
+  }
+}
+
+/* GAME OVER BGMを完全に止める（次はまた最初から鳴るようにする）
+   GAME OVER画面から出るとき（resetGame() ＝ もう一度あそぶ／はじめの画面へ戻る）に使う */
+function stopGameOverBgm() {
+  /* 「あとで鳴らす」の予約も取り消す
+
+     ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
+       GAME OVERになってすぐ（0.7秒待っている最中に）「もう一度あそぶ」を押すと、
+       予約だけして、まだ曲を作っていない状態のことがあるため
+       あとに置くと、取り消せずに タイトル画面で鳴りだしてしまう */
+  cancelGameOverBgmStart();
+
+  // フェードインの途中で止めることもあるので、フェードもやめておく
+  cancelBgmFade();
+
+  if (!gameOverBgm) {
+    return;
+  }
+
+  try {
+    gameOverBgm.pause();
+    gameOverBgm.currentTime = 0; // 次のGAME OVERでは、また曲の先頭から
+
+    // 音量も、決めてある大きさへ戻しておく
+    // （フェードインの途中で止めると、小さい音量のまま残ることがあるため）
+    gameOverBgm.volume = gameOverBgmVolume;
   } catch {
     // 何もしない
   }
@@ -3703,6 +3982,7 @@ function checkTantrum() {
 
    ※ GAME OVERになったら currentEvent を 'gameOver' にする
      これで画面がすぐGAME OVER画面に切り替わり、続きは遊べなくなる
+     BGMは前の曲を止めてから、少しあとにGAME OVER BGMを鳴らす（playGameOverBgmSoon()）
 */
 function checkGameOver() {
   // すでにGAME OVERになっているときは、理由を上書きしない
@@ -3714,11 +3994,20 @@ function checkGameOver() {
        （いちばん上に「すでにGAME OVERなら return」もあるので、
         BGMを止める処理が動くのも1回だけ）
 
-     BGMは公園・秘密の場所・いやいやの3曲とも止める
+     BGMは、それまで鳴っていたかもしれない曲（公園・秘密の場所・いやいや・リザルト）をぜんぶ止める
      いやいやタイム中でも、だっこで親の体力が0になるなどでGAME OVERになるため
      秘密の場所で親の体力が0になることもあり、そのときGAME OVER画面へ移ったあとも
      秘密の場所BGMが鳴りつづけないようにする
+     リザルトBGMはふつうGAME OVERと同時には鳴らないが、
+     結果画面の曲どうし（リザルトBGMとGAME OVER BGM）が重ならないように、念のため止めておく
      （鳴っていない曲に stop を呼んでも、何も起きないだけなので安全）
+
+     止めたあとで playGameOverBgmSoon() を呼び、
+     少し無音の間をおいてから、GAME OVER画面専用のBGMを鳴らしはじめる
+     ・画面は、currentEvent を 'gameOver' にした時点ですぐ切りかわる（待つのは音だけ）
+     ・同じ行動のあとに checkGameOver() がもう一度呼ばれても、
+       いちばん上の「すでにGAME OVERなら return」で止まるので、予約は1回しかされない
+       （playGameOverBgmSoon() の中でも、前の予約を取り消してから予約しなおしている）
 
      どの理由でも、いやいや発生の演出（hideTantrumAlert）は必ず消す
      いやいやが起きた行動でそのままGAME OVERになることがあり、
@@ -3732,11 +4021,15 @@ function checkGameOver() {
     stopParkBgm();
     stopSecretBgm();
     stopTantrumBgm();
+    stopResultBgm();
     hideTantrumAlert();
 
     // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
     // （行動の途中でGAME OVERになるので、前の画面で選んでいた番号が残っている）
     selectedCommandIndex.value = 0;
+
+    // 少し無音の間をおいてから、GAME OVER画面専用のBGMを鳴らす
+    playGameOverBgmSoon();
     return;
   }
 
@@ -3748,11 +4041,15 @@ function checkGameOver() {
     stopParkBgm();
     stopSecretBgm();
     stopTantrumBgm();
+    stopResultBgm();
     hideTantrumAlert();
 
     // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
     // （行動の途中でGAME OVERになるので、前の画面で選んでいた番号が残っている）
     selectedCommandIndex.value = 0;
+
+    // 少し無音の間をおいてから、GAME OVER画面専用のBGMを鳴らす
+    playGameOverBgmSoon();
     return;
   }
 
@@ -3764,11 +4061,15 @@ function checkGameOver() {
     stopParkBgm();
     stopSecretBgm();
     stopTantrumBgm();
+    stopResultBgm();
     hideTantrumAlert();
 
     // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
     // （行動の途中でGAME OVERになるので、前の画面で選んでいた番号が残っている）
     selectedCommandIndex.value = 0;
+
+    // 少し無音の間をおいてから、GAME OVER画面専用のBGMを鳴らす
+    playGameOverBgmSoon();
     return;
   }
 }
@@ -6349,11 +6650,18 @@ function resetGame() {
 
      秘密の場所BGMも stop で先頭に戻しておく
      GAME OVERになった画面から「もう一度あそぶ」を押すこともあるので、
-     再生位置も0に戻して、次に秘密の場所へ入ったときは必ず頭から鳴らす */
+     再生位置も0に戻して、次に秘密の場所へ入ったときは必ず頭から鳴らす
+
+     GAME OVER BGMも stop で止めて、先頭に戻しておく
+     GAME OVER画面から「もう一度あそぶ」を押したときは、ここで曲が止まってからタイトルBGMへ切りかわる
+     stopGameOverBgm() は「あとで鳴らす」の予約も取り消すので、
+     GAME OVERになってすぐ（0.7秒の待ち時間のうちに）押しても、
+     あとからタイトル画面でGAME OVERの曲が鳴りだすことはない */
   stopParkBgm();
   stopSecretBgm();
   stopTantrumBgm();
   stopResultBgm();
+  stopGameOverBgm();
   playTitleBgmSoon();
 
   childEnergy.value = 100;
@@ -6463,6 +6771,9 @@ function resetGame() {
      A画面は「まだ音を鳴らしていない画面」なので、
      戻ったとたんに曲が鳴りだすと不自然になる
      （B画面からA画面へ戻る goBackToBoot() と、まったく同じ後始末）
+
+   ※ リザルトBGM・GAME OVER BGMは、①の resetGame() の中で止めている
+     「もう一度あそぶ」と同じ止めかたなので、ここでは同じ処理をくり返さない
 */
 function goBackToBootFromResult() {
   /* ここでの変更は、ぜんぶ「まとめて1回」で行われる（await も nextTick も無い）
@@ -7980,13 +8291,16 @@ onUnmounted(() => {
   pauseSecretBgm();
   pauseTantrumBgm();
   pauseResultBgm();
+  pauseGameOverBgm();
 
   // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
   // 残っていると、ページを離れたあとも動きつづけてしまう
+  // （GAME OVER BGMの0.7秒の予約が残っていると、別のページで鳴りだしてしまう）
   cancelTitleBgmStart();
   cancelParkBgmStart();
   cancelSecretBgmStart();
   cancelResultBgmStart();
+  cancelGameOverBgmStart();
   cancelBgmFade();
 
   // いやいや発生の演出の「あとで消す」予約も取り消しておく
