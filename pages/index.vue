@@ -1196,10 +1196,12 @@ const commandCount = computed(() => {
     return 4;
   }
 
-  // 秘密の小道は「小道へ進む」か「先へ進む」の1つだけ
+  // 秘密の小道
+  //   はじまる前  0 小道へ進む／1 べつの場所へ行く
+  //   終わったあと 0 先へ進む
   // （遊んでいる最中は ← → を handleSecretPathKeydown() が受け取るので、ここの数は使わない）
   if (currentEvent.value === 'secretPath') {
-    return 1;
+    return secretPathPhase.value === 'ready' ? 2 : 1;
   }
 
   // 突然イベント「こうちゃんがころんだ」だけは、
@@ -5312,7 +5314,8 @@ function exploreClearingDepths() {
    左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、木漏れ日を集める
 
    ■ 流れ（secretPathPhase）
-     ready    … 説明と「小道へ進む」ボタン（まだ何も動かない）
+     ready    … 説明と「小道へ進む」「べつの場所へ行く」ボタン（まだ何も動かない）
+                「べつの場所へ行く」で公園入口の「どこへ行く？」へ戻る（leaveSecretPathToEntrance()）
      playing  … ミニゲーム中（15秒）
      finished … 結果の文章と「先へ進む」ボタン
                 「先へ進む」で secretSpot（こもれびの広場）へ入る
@@ -5438,7 +5441,7 @@ const secretPathSparkleDuration = 600;
 
 /* 結果が出てから「先へ進む」を受けつけるまでの待ち時間（ミリ秒）
 
-   時間切れのしゅんかんに ← → ボタンを押していた指やキーで、
+   時間切れのしゅんかんに道をタップしていた指や、押していたキーで、
    結果を読む前に先へ進んでしまわないようにする */
 const secretPathLeaveGuard = 600;
 
@@ -5513,7 +5516,7 @@ let secretPathNextItemId = 0;
 let secretPathFinishedAt = 0; // 結果が出た時刻（performance.now()）
 
 /* いま「小道で遊んでいる最中」かどうか
-   キー操作・左右ボタン・1コマごとの処理は、どれもこれを見てから動く */
+   キー操作・道のクリック／タップ・1コマごとの処理は、どれもこれを見てから動く */
 const isSecretPathPlaying = computed(() => currentEvent.value === 'secretPath' && secretPathPhase.value === 'playing');
 
 /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない） */
@@ -5689,7 +5692,7 @@ function startSecretPathGame() {
 /* スマホ幅のときだけ、遊ぶカードを画面のいちばん上へスクロールする
 
    スマホ幅ではページ全体がスクロールするので、
-   フィールドと ← → ボタンがいっしょに見える位置へ合わせておく
+   フィールドと下の案内がいっしょに見える位置へ合わせておく
    （パソコンでは中央エリアの中に収まるので、何もしない） */
 async function scrollSecretPathIntoView() {
   if (!import.meta.client || !window.matchMedia('(max-width: 700px)').matches) {
@@ -5875,6 +5878,23 @@ function enterSecretSpotFromPath() {
   resetSecretPathGame();
 }
 
+/* 「べつの場所へ行く」（はじまる前だけ。公園入口の「どこへ行く？」へ戻る）
+
+   小道に入らずに引き返すだけなので、何も変えない
+   ・時間・親子のステータス・おでかけポイント・アイテム・visitedPlaces は、そのまま
+   ・hasDiscoveredSecretSpot も false のまま
+     → あとでもう一度「細い道の先へ行く」を選ぶと、また ready 画面から始まる
+   ・BGMは公園BGMのまま（goToPlace() がBGMを入れかえるのは secretSpot のときだけ）
+   ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ） */
+function leaveSecretPathToEntrance() {
+  if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
+    return;
+  }
+
+  goToPlace('parkEntrance');
+  resetSecretPathGame();
+}
+
 /* こうちゃんを左（-1）か右（+1）へ、1レーンだけ動かす
 
    ・遊んでいる最中でなければ動かさない
@@ -5892,42 +5912,14 @@ function moveSecretPathPlayer(direction: -1 | 1) {
   }
 }
 
-/* 「← ひだり」「みぎ →」ボタンを、指やマウスで押したとき
+/* 道（レーン）を、マウスでクリック・指でタップしたとき（ミニゲームのメインの操作）
 
-   click を待たずに、押したしゅんかん（pointerdown）に動かす
-   click は指をはなしたときに届くので、よけるゲームでは少し遅く感じるため
-
-   preventDefault() は、長押しのメニューや、ボタンへのフォーカス移動を起こさないためのもの
-   （このあと届く click は、下の handleSecretPathButtonClick() で無視する） */
-function handleSecretPathButtonPointerDown(event: PointerEvent, direction: -1 | 1) {
-  // 右クリックなどでは動かさない
-  if (event.button !== 0) {
-    return;
-  }
-
-  event.preventDefault();
-  moveSecretPathPlayer(direction);
-}
-
-/* 「← ひだり」「みぎ →」ボタンの click
-
-   指やマウスで押したとき（event.detail が 1 以上）は、pointerdown でもう動かしてあるので何もしない
-   読み上げソフトなど、pointerdown を通らずに押されたとき（event.detail が 0）だけ動かす */
-function handleSecretPathButtonClick(event: MouseEvent, direction: -1 | 1) {
-  if (event.detail !== 0) {
-    return;
-  }
-
-  moveSecretPathPlayer(direction);
-}
-
-/* 道（レーン）を、マウスでクリック・指でタップしたとき
-
-   ・押したレーンの方向へ、1レーンだけ動く（キーやボタンと同じ「1回で1レーン」）
+   ・押したレーンの方向へ、1レーンだけ動く（← → キーと同じ「1回で1レーン」）
      左はしで右はしのレーンを押すと まん中へ、もう1回押すと右はしへ
-     （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、道を押す操作だけ有利になるため）
+     （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、キーより道を押す操作だけ有利になるため）
    ・いまいるレーンを押したときは、何もしない（光らせもしない）
-   ・ボタンと同じく、押したしゅんかん（pointerdown）に動かす
+   ・click を待たずに、押したしゅんかん（pointerdown）に動かす
+     （click は指をはなしたときに届くので、よけるゲームでは少し遅く感じるため）
    ・押したレーンを一瞬光らせて、どこを押したかが目で分かるようにする
    ・preventDefault() … 長押しのメニュー・文字の選択・フォーカス移動を起こさないため */
 function handleSecretPathLanePointerDown(event: PointerEvent, lane: SecretPathLane) {
@@ -8265,11 +8257,14 @@ function runSelectedCommand() {
       break;
 
     /* 秘密の小道
-       0 小道へ進む（はじまる前）／先へ進む（終わったあと）
+       はじまる前   0 小道へ進む／1 べつの場所へ行く（公園入口の「どこへ行く？」へ）
+       終わったあと 0 先へ進む
        ※ 遊んでいる最中は、キー操作を handleSecretPathKeydown() が受け取るので、ここへは来ない */
     case 'secretPath':
       if (index === 0 && secretPathPhase.value === 'ready') {
         startSecretPathGame();
+      } else if (index === 1 && secretPathPhase.value === 'ready') {
+        leaveSecretPathToEntrance();
       } else if (index === 0 && secretPathPhase.value === 'finished') {
         enterSecretSpotFromPath();
       }
@@ -9116,8 +9111,8 @@ function handleKeydown(event: KeyboardEvent) {
   /* ⓪-00 秘密の小道（ミニゲーム）で遊んでいる最中
 
      ← → / A D はミニゲームの操作だけに使い、ふつうのコマンド操作（↑↓・Enter）は動かさない
-     はじまる前（小道へ進む）と終わったあと（先へ進む）は、ここを通らずに
-     いつもどおりのコマンド操作になる（commandCount は 1） */
+     はじまる前（小道へ進む／べつの場所へ行く）と終わったあと（先へ進む）は、ここを通らずに
+     いつもどおりのコマンド操作になる（commandCount は はじまる前 2・終わったあと 1） */
   if (isSecretPathPlaying.value) {
     handleSecretPathKeydown(event);
     return;
@@ -11445,8 +11440,8 @@ onUnmounted(() => {
 
                そのプレイではじめて「細い道の先へ行く」を選んだときだけ、ここを通る
                secretPathPhase で、中身を3つに切りかえる
-               ・ready    … 説明と「小道へ進む」（まだ何も動かない）
-               ・playing  … 3レーンのフィールドと「← ひだり」「みぎ →」
+               ・ready    … 説明と「小道へ進む」「べつの場所へ行く」（まだ何も動かない）
+               ・playing  … 3レーンのフィールドと「道をクリック・タップして動こう」の案内
                ・finished … 結果の文章と「先へ進む」（押すと こもれびの広場へ） -->
           <div v-else-if="currentEvent === 'secretPath'" class="scene" key="secretPath">
             <!-- stage--secret-path … スマホ幅で、カードとコマンドボックスを横にはみ出させないための目印 -->
@@ -11465,7 +11460,7 @@ onUnmounted(() => {
 
                 <ul class="secret-path-rules">
                   <li>👆 道（レーン）をクリック・タップすると、その方向へ1レーン動きます。</li>
-                  <li>← → キー（A・D）や「← ひだり」「みぎ →」ボタンでも、左・まん中・右に動かせます。</li>
+                  <li>← → キー（A・D）でも、左・まん中・右に動かせます。</li>
                   <li>🌿 えだに当たると、集めたこもれびが1つへります（0より下にはなりません）。</li>
                   <li>15秒たつと、小道の奥に着きます。ぜんぶ取れなくても大丈夫！</li>
                   <li>✨ こもれびをたくさん集めると、おでかけポイントが少しもらえます。</li>
@@ -11568,40 +11563,27 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス
-                   遊んでいる最中は、コマンドのかわりに「← ひだり」「みぎ →」を出す
-                   （スマホでは画面の下のほうに来るので、親指で押しやすい） -->
+                   遊んでいる最中は、コマンドのかわりに操作の案内だけを出す
+                   （動かすのはフィールドの道をクリック・タップ。← → ・ A / D キーは補助） -->
               <nav class="command-box">
                 <template v-if="secretPathPhase === 'playing'">
-                  <p class="command-box__label">こうちゃんを動かそう</p>
+                  <p class="secret-path-guide">👆 行きたい方の道をクリック・タップして動こう！</p>
 
-                  <div class="secret-path-controls">
-                    <button
-                      type="button"
-                      class="secret-path-controls__button"
-                      aria-label="左へ動く"
-                      @pointerdown="handleSecretPathButtonPointerDown($event, -1)"
-                      @click="handleSecretPathButtonClick($event, -1)">
-                      ← ひだり
-                    </button>
-
-                    <button
-                      type="button"
-                      class="secret-path-controls__button"
-                      aria-label="右へ動く"
-                      @pointerdown="handleSecretPathButtonPointerDown($event, 1)"
-                      @click="handleSecretPathButtonClick($event, 1)">
-                      みぎ →
-                    </button>
-                  </div>
-
-                  <p class="secret-path-controls__hint">道のクリックや ← → ・ A / D キーでも動かせます</p>
+                  <p class="secret-path-guide__hint">← → ・ A / D キーでも動かせます</p>
                 </template>
 
+                <!-- はじまる前
+                     0 小道へ進む
+                     1 べつの場所へ行く（公園入口の「どこへ行く？」へ戻る。時間もステータスも変わらない） -->
                 <template v-else-if="secretPathPhase === 'ready'">
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="startSecretPathGame" @mouseenter="selectedCommandIndex = 0">
                     <span class="command-box__text">小道へ進む</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="leaveSecretPathToEntrance" @mouseenter="selectedCommandIndex = 1">
+                    <span class="command-box__text">べつの場所へ行く</span>
                   </button>
                 </template>
 
@@ -16603,7 +16585,7 @@ onUnmounted(() => {
    ・フィールド … まん中は土の色、左右のはしは草の色。点線でレーンを3つに分ける
    ・枝 🌿 と 木漏れ日 ✨ … JavaScript が top（上から何%か）を1コマごとに書きかえて動かす
      （CSSの animation で動かすと、動きを減らす設定のときに止まって遊べなくなるため）
-   ・「← ひだり」「みぎ →」… コマンドボックス（紺色の枠）の中に置く
+   ・遊んでいる最中の操作の案内 … コマンドボックス（紺色の枠）の中に置く
    ============================================================ */
 
 /* はじまる前の「えだをよけながら ✨ こもれびをあつめよう！」 */
@@ -16967,54 +16949,18 @@ onUnmounted(() => {
   }
 }
 
-/* 「← ひだり」「みぎ →」ボタン
-
-   親指で押しやすいように、横いっぱいの2つならびで、高さもたっぷりとる
-   ・touch-action: none … ボタンの上で指を動かしても、ページがスクロールしない
-   ・user-select / -webkit-touch-callout … 連打や長押しで文字が選ばれたり、メニューが出たりしない */
-.secret-path-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.secret-path-controls__button {
-  min-height: 56px;
-  padding: 8px 10px;
-  border: 2px solid #c8d4e6;
-  border-bottom-width: 4px;
-  border-radius: 12px;
-  background: var(--paper);
-  color: var(--navy);
-  font-family: inherit;
-  font-size: 18px;
+/* 遊んでいる最中の「👆 行きたい方の道をクリック・タップして動こう！」
+   動かす操作はフィールドの道だけなので、ここには押すものを置かず、短い案内だけにする */
+.secret-path-guide {
+  margin: 0;
+  color: #fff;
+  font-size: 16px;
   font-weight: 700;
-  line-height: 1.3;
-  cursor: pointer;
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-  -webkit-tap-highlight-color: transparent;
+  line-height: 1.5;
 }
 
-.secret-path-controls__button:hover {
-  background: #f2f9fd;
-}
-
-.secret-path-controls__button:active {
-  border-bottom-width: 2px;
-  background: #e3f2fb;
-  transform: translateY(2px);
-}
-
-.secret-path-controls__button:focus-visible {
-  outline: 3px solid var(--gold);
-  outline-offset: 2px;
-}
-
-.secret-path-controls__hint {
-  margin: 8px 0 0;
+.secret-path-guide__hint {
+  margin: 4px 0 0;
   color: #b8dfef;
   font-size: 12.5px;
   line-height: 1.5;
@@ -17022,7 +16968,7 @@ onUnmounted(() => {
 
 /* 指で遊ぶ端末では、キーボードの案内を出さない */
 @media (hover: none) and (pointer: coarse) {
-  .secret-path-controls__hint {
+  .secret-path-guide__hint {
     display: none;
   }
 }
@@ -17335,13 +17281,6 @@ onUnmounted(() => {
    上部ステータス〜下部コマンドが一画面に収まるようにする
    ============================================================ */
 @media (max-height: 800px) {
-  /* 秘密の小道の「← ひだり」「みぎ →」も少しだけ低くして、フィールドの高さにまわす
-     （スマホ幅では、下の max-width: 700px で押しやすい高さに戻す） */
-  .secret-path-controls__button {
-    min-height: 46px;
-    font-size: 17px;
-  }
-
   /* 上下の余白は、目もりの説明（.gauge-legend）を残す場所をつくるために
      2pxずつつめてある */
   .status-area {
@@ -18097,10 +18036,10 @@ onUnmounted(() => {
 
      ・上部ステータスを、小道の画面のあいだだけ固定しない（ページといっしょに流れる）
        固定したままだと、画面の半分近くを上部ステータスが使ってしまい、
-       フィールドと「← ひだり」「みぎ →」が同時に見えなくなるため
+       フィールドと下の案内が同時に見えなくなるため
      ・遊びはじめたら、カードが画面のいちばん上に来るようにスクロールする（scrollSecretPathIntoView()）
-     ・フィールドは、カードとボタンがいっしょに画面に収まる高さにする
-       （iPhone SE ほどの背の低い画面でも、ボタンまで見える） */
+     ・フィールドは、カードと案内がいっしょに画面に収まる高さにする
+       （iPhone SE ほどの背の低い画面でも、案内まで見える） */
   .game-screen--secret-path .status-area {
     position: static;
   }
@@ -18144,11 +18083,6 @@ onUnmounted(() => {
 
   .secret-path-rules li {
     font-size: 14.5px;
-  }
-
-  .secret-path-controls__button {
-    min-height: 56px;
-    font-size: 18px;
   }
 }
 </style>
