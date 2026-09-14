@@ -127,6 +127,7 @@ const currentEvent = ref<GameEvent>('parkEntrance');
    ↑↓キーでこの数字を動かし、Enter / Space でその番号のコマンドを実行する
    別の場所へ移動したときや、新しいコマンド画面になったときは 0 に戻して、
    いつも一番上のコマンドが選ばれている状態からはじめる
+   （例外：公園入口へ戻ってきたときは、最後にいた場所のコマンドに合わせる → restoreEntranceCursor()）
 */
 const selectedCommandIndex = ref(0);
 
@@ -925,7 +926,8 @@ const isNormalPlace = computed(() => normalPlaceEvents.includes(currentEvent.val
    0 その場所の行動①
    1 その場所の行動②
    2 休憩・おやつ          ← 押すとサブメニューが開く
-   3 べつの場所へ行く      ← よく使うので、サブメニューには入れない
+   3 ← 場所選びにもどる    ← よく使うので、サブメニューには入れない
+                              （この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る）
 
    ※ 2・3 という数字を直接書かず、名前を付けておく
      画面とキーボード操作の両方で同じ番号を使うので、
@@ -1017,6 +1019,110 @@ function toggleCareMenu() {
   }
 
   openCareMenu();
+}
+
+/* ===== 休憩・おやつのあとの「← もどる」 =====
+
+   通常の場所の「進む／戻る」は、次の3種類に分けてある（文言が混ざらないようにする）
+
+   ① 「次の場所を選ぶ」     … 場所ならではの遊びが終わったので、公園入口の「どこへ行く？」へ進む
+   ② 「← 場所選びにもどる」 … まだ何もしていないが、この場所では遊ばずに「どこへ行く？」へ戻る
+   ③ 「← もどる」           … いまいる場所や、1つ前のメニューへ戻る
+                               （おやつバッグ → ☕ ひとやすみ、休憩・おやつの結果 → いまいる場所）
+
+   休憩・おやつは、その場所で ひと息ついただけで、場所は離れていない
+   なので結果カードには①ではなく③を出し、押したら同じ場所の「どうする？」へ戻す
+*/
+
+/* いま出ている結果カードが、休憩・おやつの結果かどうか
+   finishCareAction() で true、次の行動をはじめたとき（startStatusChanges()）や場所を出たときに false */
+const isCareActionResult = ref(false);
+
+/* 休憩・おやつの結果カードに「← もどる」を出すかどうか
+
+   ※ 12:00を過ぎたときだけは出さず、ほかの行動のあとと同じ「次の場所を選ぶ」にする
+     休憩で12:00を過ぎたのに場所へ戻れてしまうと、「12:00までに帰る」というルールが崩れるため
+     （「次の場所を選ぶ」を押すと、goToNextPlace() が今までどおりゴールへ向かう） */
+const isCareResultBackVisible = computed(() => isNormalPlace.value && !!resultMessage.value && isCareActionResult.value && !isTimeOver.value);
+
+/* 休憩・おやつの結果カードの「← もどる」
+
+   結果カードを閉じて、いまいる場所の「どうする？」へ戻すだけ
+   ・時間・ステータス・おやつは、休憩・おやつを選んだときに変わり終わっているので、ここでは何も変えない
+   ・場所を離れていないので、BGMもさわらない（こもれびの広場なら、こもれびの広場BGMのまま）
+   ・カーソルは「休憩・おやつ」に合わせる（おやつバッグの「← もどる」と同じく、選んでいた行へ戻る）
+   ・決定音は鳴らさない（ほかの「← もどる」と同じ）
+   ・マウスを動かすまで、コマンド枠をマウスで押せないようにする（isCommandPointerPaused を参照） */
+function backToPlaceFromCareResult() {
+  if (!isCareResultBackVisible.value) {
+    return;
+  }
+
+  resultMessage.value = '';
+  statusChanges.value = null;
+  isCareActionResult.value = false;
+  selectedCommandIndex.value = careMenuCommandIndex;
+  pauseCommandPointer();
+}
+
+/* 「← もどる」（休憩・おやつの結果）のあとや、公園入口へ戻ってきた直後だけ、コマンド枠をマウスで押せなくしておくか
+
+   「← もどる」は1つだけのボタンなので枠のいちばん下にあり、押すと枠が上へ4行ぶん伸びる
+   するとマウスを動かしていなくても、カーソルの真下に「← 場所選びにもどる」が来てしまい、
+   ・選んでいる行が「休憩・おやつ」から勝手に移る（ハイライトが跳ねて見える）
+   ・すばやく2回押すと、2回目で場所を出てしまう
+   ということが起きる
+
+   そこで、マウスを動かす（またはどこかを押す）までは、枠へのマウス操作を止めておく
+   （止めかたは CSS の .command-box--pointer-paused）
+   キーボードで「← もどる」を選んだときも、枠の上にマウスが置いてあれば同じことが起きるので止める
+   キーボード操作（↑↓・Enter / Space）そのものは、これとは関係なく使える
+
+   ※ 指で操作しているとき（lastPointerType が 'touch'）は止めない
+     カーソルが残らないので止める必要がなく、止めると次のタップが効かなくなってしまうため
+     （CSS の (hover: hover) で分けないのは、マウスを付けていない環境などで
+       マウス操作なのに hover: none と判定されることがあるため）
+
+   ※ 公園入口へ戻ってきたとき（「次の場所を選ぶ」「← 場所選びにもどる」など）も、同じ考えかたで止める（restoreEntranceCursor() を参照）
+     最後にいた場所のコマンドにカーソルを合わせても、止まったままのマウスの下に公園入口のボタンが出てくると、
+     @mouseenter でカーソルがそのボタンへ上書きされてしまうため
+     （公園入口の「どこへ行く？」の枠には .command--pointer-paused を付ける）
+   ※ 止めるのは「戻った直後の画面」だけ。goToPlace() / goToNextPlace() で次の画面へ移るときに戻す */
+const isCommandPointerPaused = ref(false);
+
+/* いちばん最後に使われたポインターの種類（'mouse' / 'touch' / 'pen'）
+   まだ一度もマウスや指を使っていない（キーボードだけで遊んでいる）ときは ''
+   画面には出さないので、ref にはしていない */
+let lastPointerType = '';
+
+/* コマンドへのマウス操作を、マウスを動かすまで止める（isCommandPointerPaused を参照）
+   指で操作しているときは止めない（カーソルが残らず、止めると次のタップが効かなくなるため） */
+function pauseCommandPointer() {
+  isCommandPointerPaused.value = lastPointerType !== 'touch';
+}
+
+/* window の pointermove / pointerdown を受け取る
+
+   ① いま使っているポインターの種類を覚える（lastPointerType）
+   ② コマンド枠へのマウス操作を止めているなら、マウスを動かした・どこかを押したときに戻す
+
+   ※ movementX / movementY が両方 0 の pointermove は、動いたと数えない
+     枠の大きさが変わったときに、ブラウザが「カーソルの下が変わった」ことを知らせる
+     見かけだけの移動で、止めた意味がなくなってしまうため
+   ※ 押したとき（pointerdown）は、動いていなくても戻す
+     その1回の押しは、止めている枠には届かないので、場所を出てしまうことはない */
+function handleWindowPointer(event: PointerEvent) {
+  lastPointerType = event.pointerType;
+
+  if (!isCommandPointerPaused.value) {
+    return;
+  }
+
+  if (event.type === 'pointermove' && event.movementX === 0 && event.movementY === 0) {
+    return;
+  }
+
+  isCommandPointerPaused.value = false;
 }
 
 /* ===== おやつバッグ（ゲーム中に、どのおやつを食べるか選ぶメニュー） =====
@@ -1173,7 +1279,8 @@ const commandCount = computed(() => {
     return snackLeft.value > 0 ? 4 : 3;
   }
 
-  // 結果表示中は「次の場所を選ぶ」の1つだけ
+  // 結果表示中は1つだけ
+  // （ふつうは「次の場所を選ぶ」、休憩・おやつの結果なら「← もどる」）
   if (resultMessage.value) {
     return 1;
   }
@@ -1183,21 +1290,21 @@ const commandCount = computed(() => {
      0 その場所の行動①
      1 その場所の行動②
      2 休憩・おやつ
-     3 べつの場所へ行く
+     3 ← 場所選びにもどる
 
      ※ サブメニューが開いているあいだのコマンド数は、ここでは数えない
        サブメニュー側は careCommandCount で別に管理している
 
      ※ すぐ上の「結果表示中は1つ」より後ろに置くのが大事
        結果カードを読んでいるあいだは、メインコマンドも
-       「次の場所を選ぶ」1つだけになるため
+       「次の場所を選ぶ」（休憩・おやつの結果なら「← もどる」）1つだけになるため
   */
   if (isNormalPlace.value) {
     return 4;
   }
 
   // 秘密の小道
-  //   はじまる前  0 小道へ進む／1 べつの場所へ行く
+  //   はじまる前  0 小道へ進む／1 ← 場所選びにもどる
   //   終わったあと 0 先へ進む
   // （遊んでいる最中は ← → を handleSecretPathKeydown() が受け取るので、ここの数は使わない）
   if (currentEvent.value === 'secretPath') {
@@ -1268,6 +1375,77 @@ const nextPlaceCommandLabel = computed(() => {
    まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
 */
 const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
+
+/* 公園入口の「どこへ行く？」で、それぞれの場所へ入るコマンドが何番目か
+
+   画面（template の parkEntrance）と runSelectedCommand() の parkEntrance の並びと同じ
+     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 丘／5 細い道の先へ行く
+   ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
+     どちらも「細い道の先へ行く」から入るので、同じ5番にしている
+   ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
+*/
+const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
+  slide: 0,
+  sandbox: 1,
+  acornArea: 2,
+  pond: 3,
+  hill: 4,
+  secretPath: 5,
+  secretSpot: 5,
+};
+
+/* 公園入口へ戻ってきたとき、どのコマンドにカーソルを合わせるか（restoreEntranceCursor() で使う）
+
+   その場所へ入るためのコマンドの番号を返す
+   公園入口にその行が出ていないとき（場所選びから入る場所ではない・「細い道の先へ行く」が出ていない）は null
+   → 呼ぶ側は何もせず、今までどおり先頭（0）のままにする
+
+   ※ 「細い道の先へ行く」は canEnterSecretSpot のときだけ画面に出る
+     おでかけポイントもアイテムも減らないので、広場や小道にいるあいだに消えることは無いはずだが、
+     出ていないときに5番を返すと、1つくり上がったゴールを選んでしまうので、念のため確かめる */
+function getPlaceSelectionIndex(place: GameEvent): number | null {
+  const index = placeSelectionIndexes[place];
+
+  if (index === undefined) {
+    return null;
+  }
+
+  if ((place === 'secretSpot' || place === 'secretPath') && !canEnterSecretSpot.value) {
+    return null;
+  }
+
+  return index;
+}
+
+/* このプレイで、公園入口から最後に入った場所（公園入口へ戻ったときのカーソル位置に使う）
+
+   goToPlace() で、公園入口に行がある場所（placeSelectionIndexes にある場所）へ入るときに書きかえる
+   ・突然イベント・いやいやタイムは goToPlace() を通らない（goToNextPlace() が直接切りかえる）ので、
+     途中に入っても上書きされず、そのあと公園入口へ戻ったときに「遊んでいた場所」を選べる
+   ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「細い道の先へ行く」なので同じ
+   null … このプレイでまだ場所を選んでいない（ゲーム開始直後）。startGame() / resetGame() で null に戻す */
+const lastSelectedPlace = ref<GameEvent | null>(null);
+
+/* 公園入口へ戻ってきたときに、最後にいた場所のコマンドへカーソルを合わせる
+
+   呼ぶところ
+   ・goToNextPlace() で公園入口へ着いたとき
+     （遊んだあとの「次の場所を選ぶ」・何もせず「← 場所選びにもどる」・突然イベントやいやいやのあと）
+   ・leaveSecretPathToEntrance()（秘密の小道の「← 場所選びにもどる」）
+
+   ・まだ場所を選んでいない／その行が画面に出ていないときは何もしない（呼ぶ前に 0 にしてあるので先頭のまま）
+   ・マウスで押して戻ってきたときは、止まったままのマウスの下に公園入口のボタンが出てきて、
+     @mouseenter でカーソルが上書きされてしまうので、マウスを動かすまで止めておく（pauseCommandPointer()） */
+function restoreEntranceCursor() {
+  const index = lastSelectedPlace.value === null ? null : getPlaceSelectionIndex(lastSelectedPlace.value);
+
+  if (index === null) {
+    return;
+  }
+
+  selectedCommandIndex.value = index;
+  pauseCommandPointer();
+}
 
 /* ===== 「公園の出口へ向かう？」の確認ダイアログ =====
 
@@ -3442,6 +3620,9 @@ function startStatusChanges() {
   */
   closeCareMenu();
 
+  // 前の結果が休憩・おやつだったかの印も消す（このあとの行動が休憩・おやつなら、finishCareAction() でまた付く）
+  isCareActionResult.value = false;
+
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
 
@@ -4521,6 +4702,9 @@ function startGame() {
 
   gameStarted.value = true;
 
+  // 新しいプレイなので「最後に入った場所」も忘れる（resetGame() でも空にしているが、はじめての公園入口は必ず先頭から）
+  lastSelectedPlace.value = null;
+
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
 }
@@ -4803,9 +4987,17 @@ function goToPlace(place: GameEvent) {
   // 前の場所で開いたままのサブメニューが残らないように閉じる
   closeCareMenu();
 
+  // 前の画面で止めていたマウス操作も戻す（止めるのは「← もどる」のあとや、公園入口へ戻ってきた直後の画面だけ）
+  isCommandPointerPaused.value = false;
+
   resultMessage.value = '';
   statusChanges.value = null;
   currentEvent.value = place;
+
+  // 公園入口に行がある場所なら、「最後に入った場所」として覚える（公園入口へ戻ったときのカーソル位置に使う）
+  if (placeSelectionIndexes[place] !== undefined) {
+    lastSelectedPlace.value = place;
+  }
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -4843,7 +5035,7 @@ function goToPlace(place: GameEvent) {
    ⑤ 秘密の場所から出てきたなら、いまの時間に合う公園BGMへ戻す
    ⑥ 10:30を過ぎているのにBGM1のままなら、午前後半のBGM2へ切り替える
    ⑦ 突然イベントの予定があれば、その専用画面へ
-   ⑧ 何もなければ、いつもどおり公園入口へ
+   ⑧ 何もなければ、いつもどおり公園入口へ（カーソルは、最後にいた場所のコマンドに合わせる）
 
    ⑦が④より下にあるのがポイント
    お昼を過ぎているのに突然イベントを始めてしまうと、
@@ -4865,11 +5057,12 @@ function goToNextPlace() {
      「さっきまで秘密の場所にいた」ことが分からなくなる
      こもれびの広場BGMを止めるのも、公園BGMへ戻すのも、この印を見て決める
 
-     ※ 「べつの場所へ行く」でも「次の場所を選ぶ」でも、
-       秘密の場所から出る道はこの関数1本だけなので、ここで覚えれば足りる */
+     ※ 「← 場所選びにもどる」でも「次の場所を選ぶ」でも、
+       秘密の場所から出る道はこの関数1本だけなので、ここで覚えれば足りる
+       （休憩・おやつの結果の「← もどる」は場所を出ないので、この関数を通らない） */
   const leavingSecretSpot = currentEvent.value === 'secretSpot';
 
-  /* 決定音「ポン♪」（次の場所を選ぶ／べつの場所へ行く／次へ）
+  /* 決定音「ポン♪」（次の場所を選ぶ／← 場所選びにもどる／次へ）
 
      ただし、このあと ④ でゴールへ向かうときは鳴らさない
      ゴールではファンファーレだけを聞かせたいので、決定音を重ねない
@@ -4881,9 +5074,13 @@ function goToNextPlace() {
 
   resultMessage.value = '';
   statusChanges.value = null;
+  isCareActionResult.value = false;
+
+  // 前の画面で止めていたマウス操作も戻す（止めるのは「← もどる」のあとや、公園入口へ戻ってきた直後の画面だけ）
+  isCommandPointerPaused.value = false;
 
   // サブメニュー「☕ ひとやすみ」も閉じておく
-  // （結果カードを読まずに「べつの場所へ行く」を押したときのため）
+  // （サブメニューを開いたまま「← 場所選びにもどる」を押したときのため）
   closeCareMenu();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
@@ -5046,6 +5243,10 @@ function goToNextPlace() {
   }
 
   currentEvent.value = 'parkEntrance';
+
+  // 公園入口のカーソルは、最後にいた場所のコマンドに合わせる
+  // （遊んだあとの「次の場所を選ぶ」でも、何もせず「← 場所選びにもどる」でも、突然イベント・いやいやのあとでも同じ）
+  restoreEntranceCursor();
 }
 
 /* ============================================================
@@ -5314,8 +5515,8 @@ function exploreClearingDepths() {
    左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、木漏れ日を集める
 
    ■ 流れ（secretPathPhase）
-     ready    … 説明と「小道へ進む」「べつの場所へ行く」ボタン（まだ何も動かない）
-                「べつの場所へ行く」で公園入口の「どこへ行く？」へ戻る（leaveSecretPathToEntrance()）
+     ready    … 説明と「小道へ進む」「← 場所選びにもどる」ボタン（まだ何も動かない）
+                「← 場所選びにもどる」で公園入口の「どこへ行く？」へ戻る（leaveSecretPathToEntrance()）
      playing  … ミニゲーム中（15秒）
      finished … 結果の文章と「先へ進む」ボタン
                 「先へ進む」で secretSpot（こもれびの広場）へ入る
@@ -5878,14 +6079,15 @@ function enterSecretSpotFromPath() {
   resetSecretPathGame();
 }
 
-/* 「べつの場所へ行く」（はじまる前だけ。公園入口の「どこへ行く？」へ戻る）
+/* 「← 場所選びにもどる」（はじまる前だけ。公園入口の「どこへ行く？」へ戻る）
 
    小道に入らずに引き返すだけなので、何も変えない
    ・時間・親子のステータス・おでかけポイント・アイテム・visitedPlaces は、そのまま
    ・hasDiscoveredSecretSpot も false のまま
      → あとでもう一度「細い道の先へ行く」を選ぶと、また ready 画面から始まる
    ・BGMは公園BGMのまま（goToPlace() がBGMを入れかえるのは secretSpot のときだけ）
-   ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ） */
+   ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ）
+   ・カーソルは「細い道の先へ行く」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
 function leaveSecretPathToEntrance() {
   if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
     return;
@@ -5893,6 +6095,7 @@ function leaveSecretPathToEntrance() {
 
   goToPlace('parkEntrance');
   resetSecretPathGame();
+  restoreEntranceCursor();
 }
 
 /* こうちゃんを左（-1）か右（+1）へ、1レーンだけ動かす
@@ -6046,7 +6249,10 @@ function finishCareAction() {
   fixAllStatus();
   checkGameOver();
 
-  // 結果カードが出て「次の場所を選ぶ」だけの画面になるので、一番上（0）に戻す
+  // 休憩・おやつの結果だという印（結果カードに「次の場所を選ぶ」ではなく「← もどる」を出す）
+  isCareActionResult.value = true;
+
+  // 結果カードが出て「← もどる」だけの画面になるので、一番上（0）に戻す
   selectedCommandIndex.value = 0;
 }
 
@@ -7681,6 +7887,12 @@ function resetGame() {
 
   resultMessage.value = '';
   statusChanges.value = null;
+  isCareActionResult.value = false;
+
+  // 前回のプレイで最後に入った場所を忘れる（新しいプレイの公園入口は、先頭から選ぶ）
+  lastSelectedPlace.value = null;
+  isCommandPointerPaused.value = false;
+
   endingRank.value = '';
   endingTitle.value = '';
   endingMessage.value = '';
@@ -8080,10 +8292,17 @@ function runSelectedCommand() {
     return;
   }
 
-  // 結果表示中は「次の場所を選ぶ」しか出ていないので、それを実行する
+  // 結果表示中はコマンドが1つしか出ていないので、それを実行する
   // ただし「少し待ってみる」に失敗していやいやが続いているときは、
   // 画面に出ているのは いやいや のコマンドなので、ここでは進めない
   if (resultMessage.value && !isTantrumUnsolved.value) {
+    // 休憩・おやつの結果 … 「← もどる」＝いまいる場所の「どうする？」へ戻る
+    if (isCareResultBackVisible.value) {
+      backToPlaceFromCareResult();
+      return;
+    }
+
+    // それ以外の結果 … 「次の場所を選ぶ」
     goToNextPlace();
     return;
   }
@@ -8143,8 +8362,8 @@ function runSelectedCommand() {
 
   /* 通常の場所6か所で共通の、下2つのコマンドをまとめて受け取る
 
-     2 休憩・おやつ       → サブメニューを開く
-     3 べつの場所へ行く   → 次の場所へ
+     2 休憩・おやつ         → サブメニューを開く
+     3 ← 場所選びにもどる   → 公園入口の「どこへ行く？」へ（この場所のコマンドを選んだ状態で）
 
      場所ごとの switch より前に書いておくと、
      下の6か所に同じ2行を書き足さなくてよい
@@ -8192,7 +8411,7 @@ function runSelectedCommand() {
 
     /* すべり台
        0 一緒にすべる／1 下で見守る
-       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
+       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'slide':
       if (index === 0) {
         playSlide();
@@ -8203,7 +8422,7 @@ function runSelectedCommand() {
 
     /* 砂場
        0 一緒に大きな山を作る／1 砂のトンネルを作る
-       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
+       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'sandbox':
       if (index === 0) {
         playSandbox();
@@ -8214,7 +8433,7 @@ function runSelectedCommand() {
 
     /* どんぐりの木
        0 一緒にどんぐりを拾う／1 どんぐりをころがして遊ぶ
-       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
+       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'acornArea':
       if (index === 0) {
         collectAcorns();
@@ -8225,7 +8444,7 @@ function runSelectedCommand() {
 
     /* 池
        0 白鳥を近くで見る／1 少し離れて見る
-       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
+       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'pond':
       if (index === 0) {
         watchSwansClose();
@@ -8236,7 +8455,7 @@ function runSelectedCommand() {
 
     /* 丘
        0 走って丘をのぼる／1 ゆっくり歩いてのぼる
-       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
+       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'hill':
       if (index === 0) {
         runUpHill();
@@ -8247,7 +8466,7 @@ function runSelectedCommand() {
 
     /* こもれびの広場
        0 木漏れ日の中を探検する／1 広場の奥を見てみる
-       （2 休憩・おやつ／3 べつの場所へ行く は、この switch の前で受け取っている） */
+       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
         exploreSunlight();
@@ -8257,7 +8476,7 @@ function runSelectedCommand() {
       break;
 
     /* 秘密の小道
-       はじまる前   0 小道へ進む／1 べつの場所へ行く（公園入口の「どこへ行く？」へ）
+       はじまる前   0 小道へ進む／1 ← 場所選びにもどる（公園入口の「どこへ行く？」へ）
        終わったあと 0 先へ進む
        ※ 遊んでいる最中は、キー操作を handleSecretPathKeydown() が受け取るので、ここへは来ない */
     case 'secretPath':
@@ -9111,7 +9330,7 @@ function handleKeydown(event: KeyboardEvent) {
   /* ⓪-00 秘密の小道（ミニゲーム）で遊んでいる最中
 
      ← → / A D はミニゲームの操作だけに使い、ふつうのコマンド操作（↑↓・Enter）は動かさない
-     はじまる前（小道へ進む／べつの場所へ行く）と終わったあと（先へ進む）は、ここを通らずに
+     はじまる前（小道へ進む／← 場所選びにもどる）と終わったあと（先へ進む）は、ここを通らずに
      いつもどおりのコマンド操作になる（commandCount は はじまる前 2・終わったあと 1） */
   if (isSecretPathPlaying.value) {
     handleSecretPathKeydown(event);
@@ -9383,6 +9602,10 @@ onMounted(() => {
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
+  // 休憩・おやつの「← もどる」のあと、マウスを動かしたらコマンド枠へのマウス操作を戻す
+  window.addEventListener('pointermove', handleWindowPointer);
+  window.addEventListener('pointerdown', handleWindowPointer);
+
   /* A画面のメインのボタン「はじめる」へフォーカスを当てておく
      ページを開いたときのほか、/soundtrack から戻ってきたときもここを通る
      （このページは、もう一度まっさらに作り直されるため） */
@@ -9423,6 +9646,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
   window.removeEventListener('resize', updateEntranceColumns);
+  window.removeEventListener('pointermove', handleWindowPointer);
+  window.removeEventListener('pointerdown', handleWindowPointer);
 
   // 別のページへ移ったあともBGMが鳴り続けないように、ぜんぶの曲を止めておく
   // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
@@ -10260,7 +10485,9 @@ onUnmounted(() => {
               </article>
             </section>
 
-            <nav class="command">
+            <!-- command--pointer-paused … 公園入口へ戻ってきた直後、マウスを動かすまでマウスで選べなくする
+                                           （最後にいた場所に合わせたカーソルが、@mouseenter で上書きされないようにする） -->
+            <nav class="command" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
               <p class="command__label">どこへ行く？</p>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0">
@@ -10409,8 +10636,14 @@ onUnmounted(() => {
 
                      出るのは「休憩・おやつ」を選んだときだけ
                      （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                       開いているか の3つをまとめて見てくれる） -->
-                <Transition name="care-menu">
+                       開いているか の3つをまとめて見てくれる）
+
+                     :css="!resultMessage"
+                     休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをせずに すぐ消す
+                     （フェードのあいだ枠が場所を取ったままだと、先に縮んだ「どうする？」が
+                       消え終わった瞬間にガクッと下へずれて、2回に分けてパタパタ動いて見えるため）
+                     「休憩・おやつ」をもう一度押す・Escape で閉じるときは、今までどおりフェードする -->
+                <Transition name="care-menu" :css="!resultMessage">
                   <aside v-if="isCareMenuVisible" class="care-menu">
                     <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                          ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
@@ -10470,8 +10703,10 @@ onUnmounted(() => {
                   </aside>
                 </Transition>
 
-                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-                <nav class="command-box">
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる）
+                     command-box--pointer-paused … 休憩・おやつの「← もどる」の直後、マウスを動かすまでマウスで押せなくする
+                                                  （isCommandPointerPaused を参照） -->
+                <nav class="command-box" :class="{ 'command-box--pointer-paused': isCommandPointerPaused }">
                   <!-- 結果がまだ無いとき -->
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
@@ -10487,7 +10722,7 @@ onUnmounted(() => {
                     <!-- ここから下は「どこでも同じコマンド」という区切り
 
                          上の2つ … その場所ならではの遊び（すべる・見守る など）
-                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+                         下の2つ … 休憩・おやつ／← 場所選びにもどる（どの場所でも同じ）
 
                          同じ枠の中にならんでいても種類がちがうので、
                          あいだに細い線と小さな見出しを入れて、
@@ -10508,8 +10743,10 @@ onUnmounted(() => {
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
-                    <!-- 「べつの場所へ行く」はよく使うので、
-                         サブメニューには入れず、ここに残してある
+                    <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
+                         （サブメニューの「← もどる」＝1つ前のメニューへ戻る、とは役割がちがうので、戻り先まで書いてある）
+
+                         よく使うので、サブメニューには入れず、ここに残してある
 
                          よく使うコマンドなので、見た目も上の行動と
                          まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
@@ -10518,12 +10755,25 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
                       @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                      <span class="command-box__text">べつの場所へ行く</span>
+                      <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
 
+                  <!-- 結果が出たあと（コマンドは1つだけ）
+                       ・休憩・おやつの結果 … 「← もどる」で、この場所の「どうする？」へ戻る（場所は離れない）
+                       ・遊びの結果         … 「次の場所を選ぶ」で、公園入口の「どこへ行く？」へ進む
+                       ※ 休憩・おやつで12:00を過ぎたときは「次の場所を選ぶ」になる（isCareResultBackVisible を参照） -->
                   <template v-else>
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button
+                      v-if="isCareResultBackVisible"
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="backToPlaceFromCareResult"
+                      @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">← もどる</span>
+                    </button>
+
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -10635,8 +10885,14 @@ onUnmounted(() => {
 
                      出るのは「休憩・おやつ」を選んだときだけ
                      （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                       開いているか の3つをまとめて見てくれる） -->
-                <Transition name="care-menu">
+                       開いているか の3つをまとめて見てくれる）
+
+                     :css="!resultMessage"
+                     休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをせずに すぐ消す
+                     （フェードのあいだ枠が場所を取ったままだと、先に縮んだ「どうする？」が
+                       消え終わった瞬間にガクッと下へずれて、2回に分けてパタパタ動いて見えるため）
+                     「休憩・おやつ」をもう一度押す・Escape で閉じるときは、今までどおりフェードする -->
+                <Transition name="care-menu" :css="!resultMessage">
                   <aside v-if="isCareMenuVisible" class="care-menu">
                     <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                          ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
@@ -10696,8 +10952,10 @@ onUnmounted(() => {
                   </aside>
                 </Transition>
 
-                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-                <nav class="command-box">
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる）
+                     command-box--pointer-paused … 休憩・おやつの「← もどる」の直後、マウスを動かすまでマウスで押せなくする
+                                                  （isCommandPointerPaused を参照） -->
+                <nav class="command-box" :class="{ 'command-box--pointer-paused': isCommandPointerPaused }">
                   <!-- 結果がまだ無いとき -->
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
@@ -10713,7 +10971,7 @@ onUnmounted(() => {
                     <!-- ここから下は「どこでも同じコマンド」という区切り
 
                          上の2つ … その場所ならではの遊び（すべる・見守る など）
-                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+                         下の2つ … 休憩・おやつ／← 場所選びにもどる（どの場所でも同じ）
 
                          同じ枠の中にならんでいても種類がちがうので、
                          あいだに細い線と小さな見出しを入れて、
@@ -10734,8 +10992,10 @@ onUnmounted(() => {
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
-                    <!-- 「べつの場所へ行く」はよく使うので、
-                         サブメニューには入れず、ここに残してある
+                    <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
+                         （サブメニューの「← もどる」＝1つ前のメニューへ戻る、とは役割がちがうので、戻り先まで書いてある）
+
+                         よく使うので、サブメニューには入れず、ここに残してある
 
                          よく使うコマンドなので、見た目も上の行動と
                          まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
@@ -10744,12 +11004,25 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
                       @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                      <span class="command-box__text">べつの場所へ行く</span>
+                      <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
 
+                  <!-- 結果が出たあと（コマンドは1つだけ）
+                       ・休憩・おやつの結果 … 「← もどる」で、この場所の「どうする？」へ戻る（場所は離れない）
+                       ・遊びの結果         … 「次の場所を選ぶ」で、公園入口の「どこへ行く？」へ進む
+                       ※ 休憩・おやつで12:00を過ぎたときは「次の場所を選ぶ」になる（isCareResultBackVisible を参照） -->
                   <template v-else>
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button
+                      v-if="isCareResultBackVisible"
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="backToPlaceFromCareResult"
+                      @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">← もどる</span>
+                    </button>
+
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -10861,8 +11134,14 @@ onUnmounted(() => {
 
                      出るのは「休憩・おやつ」を選んだときだけ
                      （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                       開いているか の3つをまとめて見てくれる） -->
-                <Transition name="care-menu">
+                       開いているか の3つをまとめて見てくれる）
+
+                     :css="!resultMessage"
+                     休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをせずに すぐ消す
+                     （フェードのあいだ枠が場所を取ったままだと、先に縮んだ「どうする？」が
+                       消え終わった瞬間にガクッと下へずれて、2回に分けてパタパタ動いて見えるため）
+                     「休憩・おやつ」をもう一度押す・Escape で閉じるときは、今までどおりフェードする -->
+                <Transition name="care-menu" :css="!resultMessage">
                   <aside v-if="isCareMenuVisible" class="care-menu">
                     <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                          ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
@@ -10922,8 +11201,10 @@ onUnmounted(() => {
                   </aside>
                 </Transition>
 
-                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-                <nav class="command-box">
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる）
+                     command-box--pointer-paused … 休憩・おやつの「← もどる」の直後、マウスを動かすまでマウスで押せなくする
+                                                  （isCommandPointerPaused を参照） -->
+                <nav class="command-box" :class="{ 'command-box--pointer-paused': isCommandPointerPaused }">
                   <!-- 結果がまだ無いとき -->
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
@@ -10939,7 +11220,7 @@ onUnmounted(() => {
                     <!-- ここから下は「どこでも同じコマンド」という区切り
 
                          上の2つ … その場所ならではの遊び（すべる・見守る など）
-                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+                         下の2つ … 休憩・おやつ／← 場所選びにもどる（どの場所でも同じ）
 
                          同じ枠の中にならんでいても種類がちがうので、
                          あいだに細い線と小さな見出しを入れて、
@@ -10960,8 +11241,10 @@ onUnmounted(() => {
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
-                    <!-- 「べつの場所へ行く」はよく使うので、
-                         サブメニューには入れず、ここに残してある
+                    <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
+                         （サブメニューの「← もどる」＝1つ前のメニューへ戻る、とは役割がちがうので、戻り先まで書いてある）
+
+                         よく使うので、サブメニューには入れず、ここに残してある
 
                          よく使うコマンドなので、見た目も上の行動と
                          まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
@@ -10970,12 +11253,25 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
                       @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                      <span class="command-box__text">べつの場所へ行く</span>
+                      <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
 
+                  <!-- 結果が出たあと（コマンドは1つだけ）
+                       ・休憩・おやつの結果 … 「← もどる」で、この場所の「どうする？」へ戻る（場所は離れない）
+                       ・遊びの結果         … 「次の場所を選ぶ」で、公園入口の「どこへ行く？」へ進む
+                       ※ 休憩・おやつで12:00を過ぎたときは「次の場所を選ぶ」になる（isCareResultBackVisible を参照） -->
                   <template v-else>
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button
+                      v-if="isCareResultBackVisible"
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="backToPlaceFromCareResult"
+                      @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">← もどる</span>
+                    </button>
+
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11087,8 +11383,14 @@ onUnmounted(() => {
 
                      出るのは「休憩・おやつ」を選んだときだけ
                      （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                       開いているか の3つをまとめて見てくれる） -->
-                <Transition name="care-menu">
+                       開いているか の3つをまとめて見てくれる）
+
+                     :css="!resultMessage"
+                     休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをせずに すぐ消す
+                     （フェードのあいだ枠が場所を取ったままだと、先に縮んだ「どうする？」が
+                       消え終わった瞬間にガクッと下へずれて、2回に分けてパタパタ動いて見えるため）
+                     「休憩・おやつ」をもう一度押す・Escape で閉じるときは、今までどおりフェードする -->
+                <Transition name="care-menu" :css="!resultMessage">
                   <aside v-if="isCareMenuVisible" class="care-menu">
                     <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                          ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
@@ -11148,8 +11450,10 @@ onUnmounted(() => {
                   </aside>
                 </Transition>
 
-                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-                <nav class="command-box">
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる）
+                     command-box--pointer-paused … 休憩・おやつの「← もどる」の直後、マウスを動かすまでマウスで押せなくする
+                                                  （isCommandPointerPaused を参照） -->
+                <nav class="command-box" :class="{ 'command-box--pointer-paused': isCommandPointerPaused }">
                   <!-- 結果がまだ無いとき -->
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
@@ -11165,7 +11469,7 @@ onUnmounted(() => {
                     <!-- ここから下は「どこでも同じコマンド」という区切り
 
                          上の2つ … その場所ならではの遊び（すべる・見守る など）
-                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+                         下の2つ … 休憩・おやつ／← 場所選びにもどる（どの場所でも同じ）
 
                          同じ枠の中にならんでいても種類がちがうので、
                          あいだに細い線と小さな見出しを入れて、
@@ -11186,8 +11490,10 @@ onUnmounted(() => {
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
-                    <!-- 「べつの場所へ行く」はよく使うので、
-                         サブメニューには入れず、ここに残してある
+                    <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
+                         （サブメニューの「← もどる」＝1つ前のメニューへ戻る、とは役割がちがうので、戻り先まで書いてある）
+
+                         よく使うので、サブメニューには入れず、ここに残してある
 
                          よく使うコマンドなので、見た目も上の行動と
                          まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
@@ -11196,12 +11502,25 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
                       @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                      <span class="command-box__text">べつの場所へ行く</span>
+                      <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
 
+                  <!-- 結果が出たあと（コマンドは1つだけ）
+                       ・休憩・おやつの結果 … 「← もどる」で、この場所の「どうする？」へ戻る（場所は離れない）
+                       ・遊びの結果         … 「次の場所を選ぶ」で、公園入口の「どこへ行く？」へ進む
+                       ※ 休憩・おやつで12:00を過ぎたときは「次の場所を選ぶ」になる（isCareResultBackVisible を参照） -->
                   <template v-else>
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button
+                      v-if="isCareResultBackVisible"
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="backToPlaceFromCareResult"
+                      @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">← もどる</span>
+                    </button>
+
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11313,8 +11632,14 @@ onUnmounted(() => {
 
                      出るのは「休憩・おやつ」を選んだときだけ
                      （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                       開いているか の3つをまとめて見てくれる） -->
-                <Transition name="care-menu">
+                       開いているか の3つをまとめて見てくれる）
+
+                     :css="!resultMessage"
+                     休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをせずに すぐ消す
+                     （フェードのあいだ枠が場所を取ったままだと、先に縮んだ「どうする？」が
+                       消え終わった瞬間にガクッと下へずれて、2回に分けてパタパタ動いて見えるため）
+                     「休憩・おやつ」をもう一度押す・Escape で閉じるときは、今までどおりフェードする -->
+                <Transition name="care-menu" :css="!resultMessage">
                   <aside v-if="isCareMenuVisible" class="care-menu">
                     <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                          ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
@@ -11374,8 +11699,10 @@ onUnmounted(() => {
                   </aside>
                 </Transition>
 
-                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-                <nav class="command-box">
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる）
+                     command-box--pointer-paused … 休憩・おやつの「← もどる」の直後、マウスを動かすまでマウスで押せなくする
+                                                  （isCommandPointerPaused を参照） -->
+                <nav class="command-box" :class="{ 'command-box--pointer-paused': isCommandPointerPaused }">
                   <!-- 結果がまだ無いとき -->
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
@@ -11391,7 +11718,7 @@ onUnmounted(() => {
                     <!-- ここから下は「どこでも同じコマンド」という区切り
 
                          上の2つ … その場所ならではの遊び（すべる・見守る など）
-                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+                         下の2つ … 休憩・おやつ／← 場所選びにもどる（どの場所でも同じ）
 
                          同じ枠の中にならんでいても種類がちがうので、
                          あいだに細い線と小さな見出しを入れて、
@@ -11412,8 +11739,10 @@ onUnmounted(() => {
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
-                    <!-- 「べつの場所へ行く」はよく使うので、
-                         サブメニューには入れず、ここに残してある
+                    <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
+                         （サブメニューの「← もどる」＝1つ前のメニューへ戻る、とは役割がちがうので、戻り先まで書いてある）
+
+                         よく使うので、サブメニューには入れず、ここに残してある
 
                          よく使うコマンドなので、見た目も上の行動と
                          まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
@@ -11422,12 +11751,25 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
                       @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                      <span class="command-box__text">べつの場所へ行く</span>
+                      <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
 
+                  <!-- 結果が出たあと（コマンドは1つだけ）
+                       ・休憩・おやつの結果 … 「← もどる」で、この場所の「どうする？」へ戻る（場所は離れない）
+                       ・遊びの結果         … 「次の場所を選ぶ」で、公園入口の「どこへ行く？」へ進む
+                       ※ 休憩・おやつで12:00を過ぎたときは「次の場所を選ぶ」になる（isCareResultBackVisible を参照） -->
                   <template v-else>
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button
+                      v-if="isCareResultBackVisible"
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="backToPlaceFromCareResult"
+                      @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">← もどる</span>
+                    </button>
+
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11440,7 +11782,7 @@ onUnmounted(() => {
 
                そのプレイではじめて「細い道の先へ行く」を選んだときだけ、ここを通る
                secretPathPhase で、中身を3つに切りかえる
-               ・ready    … 説明と「小道へ進む」「べつの場所へ行く」（まだ何も動かない）
+               ・ready    … 説明と「小道へ進む」「← 場所選びにもどる」（まだ何も動かない）
                ・playing  … 3レーンのフィールドと「道をクリック・タップして動こう」の案内
                ・finished … 結果の文章と「先へ進む」（押すと こもれびの広場へ） -->
           <div v-else-if="currentEvent === 'secretPath'" class="scene" key="secretPath">
@@ -11574,7 +11916,7 @@ onUnmounted(() => {
 
                 <!-- はじまる前
                      0 小道へ進む
-                     1 べつの場所へ行く（公園入口の「どこへ行く？」へ戻る。時間もステータスも変わらない） -->
+                     1 ← 場所選びにもどる（公園入口の「どこへ行く？」へ戻る。時間もステータスも変わらない） -->
                 <template v-else-if="secretPathPhase === 'ready'">
                   <p class="command-box__label">どうする？</p>
 
@@ -11583,7 +11925,7 @@ onUnmounted(() => {
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="leaveSecretPathToEntrance" @mouseenter="selectedCommandIndex = 1">
-                    <span class="command-box__text">べつの場所へ行く</span>
+                    <span class="command-box__text">← 場所選びにもどる</span>
                   </button>
                 </template>
 
@@ -11703,8 +12045,14 @@ onUnmounted(() => {
 
                      出るのは「休憩・おやつ」を選んだときだけ
                      （isCareMenuVisible が、通常の場所か・結果カードが出ていないか・
-                       開いているか の3つをまとめて見てくれる） -->
-                <Transition name="care-menu">
+                       開いているか の3つをまとめて見てくれる）
+
+                     :css="!resultMessage"
+                     休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをせずに すぐ消す
+                     （フェードのあいだ枠が場所を取ったままだと、先に縮んだ「どうする？」が
+                       消え終わった瞬間にガクッと下へずれて、2回に分けてパタパタ動いて見えるため）
+                     「休憩・おやつ」をもう一度押す・Escape で閉じるときは、今までどおりフェードする -->
+                <Transition name="care-menu" :css="!resultMessage">
                   <aside v-if="isCareMenuVisible" class="care-menu">
                     <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                          ☕ ひとやすみ の枠の中身だけを入れかえて、同じ場所に出す
@@ -11764,8 +12112,10 @@ onUnmounted(() => {
                   </aside>
                 </Transition>
 
-                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる） -->
-                <nav class="command-box">
+                <!-- メインコマンド（今までどおり、枠の中に選択肢を縦に並べる）
+                     command-box--pointer-paused … 休憩・おやつの「← もどる」の直後、マウスを動かすまでマウスで押せなくする
+                                                  （isCommandPointerPaused を参照） -->
+                <nav class="command-box" :class="{ 'command-box--pointer-paused': isCommandPointerPaused }">
                   <!-- 結果がまだ無いとき -->
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
@@ -11781,7 +12131,7 @@ onUnmounted(() => {
                     <!-- ここから下は「どこでも同じコマンド」という区切り
 
                          上の2つ … その場所ならではの遊び（すべる・見守る など）
-                         下の2つ … 休憩・おやつ／べつの場所へ行く（どの場所でも同じ）
+                         下の2つ … 休憩・おやつ／← 場所選びにもどる（どの場所でも同じ）
 
                          同じ枠の中にならんでいても種類がちがうので、
                          あいだに細い線と小さな見出しを入れて、
@@ -11802,8 +12152,10 @@ onUnmounted(() => {
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
-                    <!-- 「べつの場所へ行く」はよく使うので、
-                         サブメニューには入れず、ここに残してある
+                    <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
+                         （サブメニューの「← もどる」＝1つ前のメニューへ戻る、とは役割がちがうので、戻り先まで書いてある）
+
+                         よく使うので、サブメニューには入れず、ここに残してある
 
                          よく使うコマンドなので、見た目も上の行動と
                          まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
@@ -11812,12 +12164,25 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
                       @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
-                      <span class="command-box__text">べつの場所へ行く</span>
+                      <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
 
+                  <!-- 結果が出たあと（コマンドは1つだけ）
+                       ・休憩・おやつの結果 … 「← もどる」で、この場所の「どうする？」へ戻る（場所は離れない）
+                       ・遊びの結果         … 「次の場所を選ぶ」で、公園入口の「どこへ行く？」へ進む
+                       ※ 休憩・おやつで12:00を過ぎたときは「次の場所を選ぶ」になる（isCareResultBackVisible を参照） -->
                   <template v-else>
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button
+                      v-if="isCareResultBackVisible"
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="backToPlaceFromCareResult"
+                      @mouseenter="selectedCommandIndex = 0">
+                      <span class="command-box__text">← もどる</span>
+                    </button>
+
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -16276,7 +16641,7 @@ onUnmounted(() => {
 
    同じ「どうする？」の枠の中にならんでいても、
    上の2つ（すべる・見守る など）と
-   下の2つ（休憩・おやつ／べつの場所へ行く）は種類がちがう
+   下の2つ（休憩・おやつ／← 場所選びにもどる）は種類がちがう
 
    そこで、あいだに細い線と「そのほか」という小さな見出しを入れて、
    ひとめで「ここからは別のなかま」と分かるようにしている
@@ -16377,6 +16742,39 @@ onUnmounted(() => {
   min-width: 0;
   align-self: flex-start;
   margin-top: 0;
+}
+
+/* 「どうする？」の中身が入れかわったときに、ふわっと出す
+
+   通常の場所では、結果カードが出る／「← もどる」で消えるたびに、
+   「どうする？」の中身（4つのコマンド ⇄ 1つのボタン）が v-if でまるごと入れかわり、枠の高さも一気に変わる
+   中身だけを短くフェードインさせて、入れかわりがカクッと見えないようにしている
+
+   ・動かすのは opacity だけ（:active の押しこみの transform とぶつからない）
+   ・選択中の光（::after の animation）は別の要素なので、そのまま動く
+   ・場所に入ったときにも一度だけ動くが、場面のフェード（0.24秒）より短いので目立たない
+   ・動きを減らす設定のときは、ページ下のまとめて止める指定で一瞬になる */
+.command-area .command-box > * {
+  animation: command-swap-in 0.18s ease-out;
+}
+
+@keyframes command-swap-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* 休憩・おやつの「← もどる」のあとや、公園入口へ戻ってきた直後、マウスを動かすまでコマンド枠をマウスで押せなくする
+   ・.command-box--pointer-paused … 場所の「どうする？」
+   ・.command--pointer-paused     … 公園入口の「どこへ行く？」
+   （理由と、指で操作しているときは付けないことは、script の isCommandPointerPaused の説明を参照） */
+.command-box--pointer-paused,
+.command--pointer-paused {
+  pointer-events: none;
 }
 
 /* サブメニュー「☕ ひとやすみ」の枠
@@ -16558,6 +16956,9 @@ onUnmounted(() => {
    ※ 動きを減らす設定（prefers-reduced-motion）のときは、
      ページ下のまとめて止める指定でここも自動的に止まる
      （transition-duration が 0.01ms になり、ぱっと出てぱっと消える）
+
+   ※ 休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをしない
+     （テンプレート側の <Transition name="care-menu" :css="!resultMessage"> を参照）
 */
 .care-menu-enter-active {
   transition:
