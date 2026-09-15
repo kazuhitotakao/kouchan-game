@@ -4124,6 +4124,53 @@ function addCollectedItem(itemName: string) {
   foundItemsThisAction.value.push(itemName);
 }
 
+/* アイテムが見つかる場所
+   場所で遊ぶ6か所だけ（公園入口・いやいや・突然イベントなどでは見つからないので、GameEvent 全部にはしない）
+*/
+type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot';
+
+/* 場所ごとに見つかるもの（1か所に1種類） */
+const placeItems: Record<ItemPlace, string> = {
+  slide: '赤い葉っぱ',
+  sandbox: 'きれいな石',
+  acornArea: '大きなどんぐり',
+  pond: '白い羽',
+  hill: '黄色い花',
+  secretSpot: 'ふしぎな形の枝',
+};
+
+/* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */
+const firstVisitItemFindChance = 0.6;
+
+/* 場所で遊んだときに、その場所のアイテムが見つかるか判定する
+
+   ・どちらの行動を選んでも、条件は同じ
+   ・その場所ではじめて遊んだとき … 60%で見つかる
+   ・前にその場所で遊んだのに、まだ見つけていないとき … かならず見つかる
+     （運がわるくても、2回目でかならず取れるようにするための救済）
+   ・もう見つけているとき … 何もしない（抽選もしない）
+
+   ※ かならず finishPlayAction() より前に呼ぶ
+     finishPlayAction() の中でその場所が探検済みになるので、
+     あとから呼ぶと、はじめての場所でも「2回目」あつかいになってしまう
+*/
+function tryCollectPlaceItem(place: ItemPlace) {
+  const itemName = placeItems[place];
+
+  if (collectedItems.value.includes(itemName)) {
+    return;
+  }
+
+  // 探検済みなら抽選せずに見つかる（|| なので、そのときは Math.random() も呼ばない）
+  const isFound = isVisited(place) || Math.random() < firstVisitItemFindChance;
+
+  if (!isFound) {
+    return;
+  }
+
+  addCollectedItem(itemName);
+}
+
 /* ランダムイベント
    （通常行動中に起きる、ちいさなできごと）
 
@@ -5532,7 +5579,7 @@ function playSlide() {
 
   resultMessage.value = 'こうちゃんと一緒にすべりました。大喜びです！';
 
-  addCollectedItem('赤い葉っぱ');
+  tryCollectPlaceItem('slide');
   finishPlayAction('slide');
 }
 
@@ -5550,6 +5597,7 @@ function watchSlide() {
 
   resultMessage.value = '下から見守りました。こうちゃんは楽しそうにすべっています。';
 
+  tryCollectPlaceItem('slide');
   finishPlayAction('slide');
 }
 
@@ -5569,7 +5617,7 @@ function playSandbox() {
 
   resultMessage.value = '一緒に大きな山を作りました。こうちゃんは夢中です！';
 
-  addCollectedItem('きれいな石');
+  tryCollectPlaceItem('sandbox');
   finishPlayAction('sandbox');
 }
 
@@ -5592,6 +5640,7 @@ function buildSandTunnel() {
 
   resultMessage.value = 'こうちゃんと一緒に砂のトンネルを作りました。向こう側から手が見えると、こうちゃんは大よろこびです！';
 
+  tryCollectPlaceItem('sandbox');
   finishPlayAction('sandbox');
 }
 
@@ -5611,7 +5660,7 @@ function collectAcorns() {
 
   resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
 
-  addCollectedItem('大きなどんぐり');
+  tryCollectPlaceItem('acornArea');
   finishPlayAction('acornArea');
 }
 
@@ -5634,6 +5683,7 @@ function rollAcorns() {
 
   resultMessage.value = '拾ったどんぐりを坂になった地面からころがして遊びました。こうちゃんは何度も追いかけています！';
 
+  tryCollectPlaceItem('acornArea');
   finishPlayAction('acornArea');
 }
 
@@ -5653,7 +5703,7 @@ function watchSwansClose() {
 
   resultMessage.value = '白鳥を近くで見ました。こうちゃんは大興奮です！';
 
-  addCollectedItem('白い羽');
+  tryCollectPlaceItem('pond');
   finishPlayAction('pond');
 }
 
@@ -5671,7 +5721,7 @@ function watchSwansFar() {
 
   resultMessage.value = '少し離れて白鳥を見ました。落ち着いてながめられました。';
 
-  addCollectedItem('白い羽');
+  tryCollectPlaceItem('pond');
   finishPlayAction('pond');
 }
 
@@ -5691,7 +5741,7 @@ function runUpHill() {
 
   resultMessage.value = '丘のてっぺんまで走ってのぼりました。公園全体が見わたせます！';
 
-  addCollectedItem('黄色い花');
+  tryCollectPlaceItem('hill');
   finishPlayAction('hill');
 }
 
@@ -5709,7 +5759,7 @@ function walkUpHill() {
 
   resultMessage.value = 'ゆっくり歩いてのぼりました。途中の花を見つけて楽しめました。';
 
-  addCollectedItem('黄色い花');
+  tryCollectPlaceItem('hill');
   finishPlayAction('hill');
 }
 
@@ -5729,6 +5779,7 @@ function exploreSunlight() {
 
   resultMessage.value = '木漏れ日の中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。';
 
+  tryCollectPlaceItem('secretSpot');
   finishPlayAction('secretSpot');
 }
 
@@ -5753,7 +5804,7 @@ function exploreClearingDepths() {
 
   resultMessage.value = '広場の奥へ進んでみると、木の根元に変わった形の枝を見つけました。「これなにー？」こうちゃんは不思議そうに拾い上げました。';
 
-  addCollectedItem('ふしぎな形の枝');
+  tryCollectPlaceItem('secretSpot');
   finishPlayAction('secretSpot');
 }
 
