@@ -1087,7 +1087,10 @@ function backToPlaceFromCareResult() {
      最後にいた場所のコマンドにカーソルを合わせても、止まったままのマウスの下に公園入口のボタンが出てくると、
      @mouseenter でカーソルがそのボタンへ上書きされてしまうため
      （公園入口の「どこへ行く？」の枠には .command--pointer-paused を付ける）
-   ※ 止めるのは「戻った直後の画面」だけ。goToPlace() / goToNextPlace() で次の画面へ移るときに戻す */
+   ※ キーボードの ↑↓ で結果などをスクロールしたときと、矢印キーで選んだコマンドを見える位置へスクロールしたときも、同じ理由で止める
+     （handleKeydown() の ⓪-3 と revealSelectedCommand() を参照）
+     そのため、いやいやタイム・突然イベント・秘密の小道の「どうする？」と、ゴール／GAME OVER のボタンの枠にも付けている
+   ※ 止めたあとは、マウスを動かしたとき（handleWindowPointer()）か、goToPlace() / goToNextPlace() で次の画面へ移るときに戻す */
 const isCommandPointerPaused = ref(false);
 
 /* いちばん最後に使われたポインターの種類（'mouse' / 'touch' / 'pen'）
@@ -1250,7 +1253,7 @@ function eatSnackFromBag(snackId: SnackId) {
 }
 
 /* いま画面に出ているコマンドの数
-   ↑↓キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
+   ↑↓・← →キーで動ける範囲（0 〜 commandCount - 1）を決めるために使う
 */
 const commandCount = computed(() => {
   /* ゴール・GAME OVER画面は2つ
@@ -1323,6 +1326,41 @@ const commandCount = computed(() => {
   // ※ 通常の場所は、1つ上の isNormalPlace の分岐で返している
   return 3;
 });
+
+/* 突然イベント5つ（commandCount のいちばん最後の分岐と、fallDown の分岐に来るなかま） */
+const suddenEvents: GameEvent[] = ['emergencySiren', 'ladybug', 'dog', 'fallDown', 'fountain'];
+
+/* 「どうする？」の選択肢を横にならべる画面か（テンプレートの choiceGridClass で使う）
+
+   ・いやいやタイムで、いやいやが続いているあいだ（結果が出ていても、次の対応を選ぶので横ならび）
+   ・突然イベントで、まだ選んでいないとき
+   ・秘密の小道の、はじまる前（小道へ進む／← 場所選びにもどる）
+
+   どれも「文章を ↑↓ でスクロールして読みながら、← → で選ぶ」ことがある画面なので、
+   見た目も左右にならべて、キーの向きとそろえる
+   ボタンが1つだけの画面（結果を読んだあとの「次へ」など）は、今までどおりの形のまま
+
+   ※ おやつバッグを開いているあいだは横にしない
+     バッグは今までどおり、たて1列で ↑↓ で選ぶ */
+const isChoiceGridVisible = computed(() => {
+  if (isSnackMenuVisible.value) {
+    return false;
+  }
+
+  if (isTantrumUnsolved.value) {
+    return true;
+  }
+
+  if (currentEvent.value === 'secretPath') {
+    return secretPathPhase.value === 'ready';
+  }
+
+  return suddenEvents.includes(currentEvent.value) && !resultMessage.value;
+});
+
+/* 横ならびにするときに command-box へ付けるクラス
+   command-box--choices-〇 … 選択肢の数。列の数を決めるのに使う（CSSの .command-box--choice-grid を参照） */
+const choiceGridClass = computed(() => (isChoiceGridVisible.value ? ['command-box--choice-grid', `command-box--choices-${commandCount.value}`] : null));
 
 /* いやいやタイムの4つ（3つ）のコマンドが、それぞれ何番目になるか
 
@@ -7986,13 +8024,17 @@ function goBackToBootFromResult() {
 
    ・↑        1つ上のコマンドへ移動する
    ・↓        1つ下のコマンドへ移動する
+   ・← →      1つ前（左）／次（右）のコマンドへ移動する（横ならびの選択肢や、結果を読む画面）
    ・Enter    選択中のコマンドを実行する
    ・Space    Enterと同じく、選択中のコマンドを実行する
+
+   ※ 結果・リザルトなどの「読む画面」で中身がスクロールするときは、
+     ↑↓ はスクロールに使い、コマンドは ← → で選ぶ（handleKeydown() の ⓪-3 と isReadingScene を参照）
 
    これまでどおりマウスのクリックでも遊べる（クリック操作はそのまま）
    ※ 起動画面・タイトル画面はボタンが1つだけなので、↑↓は使わず
      Enter / Space だけで押せるようにしてある
-     （ゴール・GAME OVER画面はボタンが2つなので、↑↓で行き来できる）
+     （ゴール・GAME OVER画面はボタンが2つ横にならぶので、← → で行き来できる）
    ============================================================ */
 
 /* ↑：1つ上のコマンドへ移動する
@@ -8021,6 +8063,26 @@ function moveCommandDown() {
   }
 
   selectedCommandIndex.value += 1;
+}
+
+/* ←：1つ前（左）のコマンドへ移動する
+
+   横にならべた選択肢（いやいやタイム・突然イベント・秘密の小道・ゴール／GAME OVER）と、
+   結果を読む画面で使う
+   ↑↓ とちがい、いちばん左（0）では止まって、反対のはしへは回りこまない
+   （ボタンが2つの画面で「← は左のボタン、→ は右のボタン」と、押す前から分かるようにするため）
+   例）4つあるとき 3 → 2 → 1 → 0 → 0 …
+*/
+function moveCommandPrevious() {
+  selectedCommandIndex.value = Math.max(0, selectedCommandIndex.value - 1);
+}
+
+/* →：1つ次（右）のコマンドへ移動する
+   いちばん右（コマンド数 - 1）では止まる
+   例）3つあるとき 0 → 1 → 2 → 2 …
+*/
+function moveCommandNext() {
+  selectedCommandIndex.value = Math.min(commandCount.value - 1, selectedCommandIndex.value + 1);
 }
 
 /* ===== ここから下は、サブメニュー「☕ ひとやすみ」の中の↑↓ =====
@@ -9258,12 +9320,164 @@ function handleTitleKeydown(event: KeyboardEvent) {
   }
 }
 
+/* ============================================================
+   読む画面のスクロール（↑↓）
+
+   行動の結果・いやいやタイム・突然イベント・秘密の小道・ゴール／GAME OVER は、
+   文章を「読む」画面なので、中身が画面に収まらないときは
+   ↑↓ をスクロールに使い、コマンドは ← → で選ぶ
+   （スクロールしない＝画面に収まっているときは、今までどおり ↑↓ でも選べる）
+
+   公園入口と、通常の場所で結果が出る前の「どうする？」は、
+   選択肢そのものを選ぶメニューなので、今までどおり ↑↓ で選ぶ
+   選んだボタンが画面の外なら、revealSelectedCommand() で見える位置まで動かす
+
+   ※ 見るのは「スクロールできるか」だけで、「いま一番上／一番下か」は見ない
+     一番下で ↓ を押しても、とつぜんコマンド選択に切りかわらないようにするため
+   ============================================================ */
+
+/* ゲーム画面の入れもの（上部ステータス ＋ いまの場面）
+   場面（.scene）をさがすときに、この中だけを見る */
+const gameScreenRef = ref<HTMLElement | null>(null);
+
+/* ↑↓ を「読むためのスクロール」に使ってよい画面か
+
+   ✕ 公園入口                   … 行き先を選ぶメニュー
+   ✕ 通常の場所で結果が出る前     … 「どうする？」はたて1列のメニュー
+   ✕ 秘密の小道で遊んでいる最中   … キー操作は handleSecretPathKeydown() が先に受け取る
+   ○ それ以外のゲーム画面
+     行動の結果（いやいや発生の結果もふくむ）・いやいやタイム（対応を選ぶ前／続いている結果／おさまった結果）・
+     突然イベント（選ぶ前／結果）・秘密の小道（はじまる前／終わったあと）・ゴール・GAME OVER
+
+   ※ いやいや発生の結果は、まだ currentEvent が 'tantrum' ではなく、通常の場所の結果として出る
+     そのため currentEvent ではなく「結果が出ているか」で見分けている
+   ※ おやつバッグ・「☕ ひとやすみ」は handleKeydown() でこれより先に受け取るので、
+     開いているあいだの ↑↓ はスクロールに取られない */
+const isReadingScene = computed(() => {
+  if (currentEvent.value === 'parkEntrance' || isSecretPathPlaying.value) {
+    return false;
+  }
+
+  return !isNormalPlace.value || !!resultMessage.value;
+});
+
+/* いま画面に出ている場面（.scene）
+
+   消えかけの前の場面（.scene-leave-active）はふくめない
+   ほかの場面の結果カードや .stage を、まちがってスクロールしないようにするため
+   （場面の切りかえは mode="out-in" なので、消えかけのあいだは次の場面がまだ無く、null になる） */
+function getCurrentSceneElement() {
+  return gameScreenRef.value?.querySelector<HTMLElement>(':scope > .scene:not(.scene-leave-active)') ?? null;
+}
+
+/* 要素の中身を、その要素の中でスクロールできるか
+   overflow-y が auto / scroll で、中身が1pxより多くはみ出しているとき */
+function canScrollInside(element: HTMLElement | null): element is HTMLElement {
+  if (!element) {
+    return false;
+  }
+
+  const { overflowY } = getComputedStyle(element);
+
+  if (overflowY !== 'auto' && overflowY !== 'scroll') {
+    return false;
+  }
+
+  return element.scrollHeight - element.clientHeight > 1;
+}
+
+/* スクロールする要素の「見えている高さ」
+   ページ全体（document.scrollingElement）は、ウィンドウの高さで見る */
+function getScrollViewHeight(element: HTMLElement) {
+  return element === document.scrollingElement ? window.innerHeight : element.clientHeight;
+}
+
+/* ↑↓ でスクロールできる要素を、先に動かす順に返す（スクロールできないものは入れない）
+
+   1. 結果カードの中身（.result-card__body）
+   2. その場面の中央エリア（.stage）
+   3. ページ全体（スマホ幅では .stage が伸びて、ページごとスクロールする）
+
+   空っぽなら「スクロールしない画面」＝ ↑↓ は今までどおりコマンドを選ぶ
+   ※ 結果カードは場面ごとに1枚ずつあるが、いま出ている場面の中だけをさがすので、
+     場面ごとに別々の処理を書かなくてよい */
+function getSceneScrollers(scene: HTMLElement) {
+  const scrollers: HTMLElement[] = [];
+
+  const resultBody = scene.querySelector<HTMLElement>('.result-card__body');
+
+  if (canScrollInside(resultBody)) {
+    scrollers.push(resultBody);
+  }
+
+  const stage = scene.querySelector<HTMLElement>('.stage');
+
+  if (canScrollInside(stage)) {
+    scrollers.push(stage);
+  }
+
+  const page = document.scrollingElement;
+
+  if (page instanceof HTMLElement && page.scrollHeight - window.innerHeight > 1) {
+    scrollers.push(page);
+  }
+
+  return scrollers;
+}
+
+/* ↑↓ を1回押したぶん、スクロールする
+
+   前の候補が、その向きにはもう動けない（いちばん上／下まで来た）ときは、次の候補を動かす
+   （結果カードを読みおえたら、そのまま .stage やページの続きへ進める。マウスホイールと同じ動き）
+   どれも動けないときは何もしない（コマンド選択には切りかえない）
+
+   ・1回に動かす量 … 見えている高さの2割（60〜120px）
+   ・behavior: 'auto' … なめらかスクロールを積み重ねないので、押しっぱなしでも続けて動く */
+function scrollSceneByArrow(scrollers: HTMLElement[], direction: 1 | -1) {
+  const target = scrollers.find((element) => {
+    if (direction < 0) {
+      return element.scrollTop > 0;
+    }
+
+    return element.scrollTop + getScrollViewHeight(element) < element.scrollHeight - 1;
+  });
+
+  if (!target) {
+    return;
+  }
+
+  const amount = Math.min(120, Math.max(60, Math.round(getScrollViewHeight(target) * 0.2)));
+
+  target.scrollBy({ top: direction * amount, behavior: 'auto' });
+}
+
+/* キーボードで選んだコマンドが見えていないときだけ、見える位置までスクロールする
+
+   ・公園入口の「どこへ行く？」のように、選択肢の枠そのものがスクロールする画面
+   ・↑↓ で結果を読んでいるうちに、コマンドの枠が画面の外へ出ている画面
+   で「キーボードでは選べているのに、何を選んでいるか見えない」状態にしないためのもの
+
+   block: 'nearest' … もう見えているなら動かさない
+   ※ 選んでいる印（--selected）が付くのは画面の書きかえのあとなので、nextTick で待つ */
+function revealSelectedCommand() {
+  // 見える位置へスクロールすると、止まったままのマウスの下に別のボタンが来て、
+  // @mouseenter でキーボードの選択が上書きされてしまうので、マウスを動かすまで止めておく（isCommandPointerPaused を参照）
+  pauseCommandPointer();
+
+  nextTick(() => {
+    const selected = getCurrentSceneElement()?.querySelector<HTMLElement>('.command-box__item--selected, .cmd--selected');
+
+    selected?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+}
+
 /* キーボードのキーが押されたときの処理
 
    ここが今回のキーボード操作の入口
    ① キー操作しない画面なら、なにもしないで終わり
-   ② ↑↓ならコマンドを動かす
-   ③ Enter / Space なら、選択中のコマンドを実行する
+   ② ↑↓ならコマンドを動かす（読む画面でスクロールできるときは、スクロールする）
+   ③ ← →なら、となりのコマンドへ動かす
+   ④ Enter / Space なら、選択中のコマンドを実行する
 */
 function handleKeydown(event: KeyboardEvent) {
   /* 画面がフェードで切りかわっている最中は、キーを受けつけない
@@ -9532,6 +9746,41 @@ function handleKeydown(event: KeyboardEvent) {
   // ↑↓の動きかたが他の場所とちがう
   const isEntrance = currentEvent.value === 'parkEntrance';
 
+  /* ⓪-3 読む画面で ↑↓ を押したとき（どの画面が「読む画面」かは isReadingScene を参照）
+
+     結果カードの中身・中央エリア・ページのどれかがスクロールできるなら、
+     ↑↓ はスクロールだけに使い、コマンドは動かさない（コマンドは この下の ③ の ← → で選ぶ）
+     どれもスクロールできない（画面に収まっている）ときは、この下の ①② で今までどおりコマンドを選ぶ
+
+     次の画面を、ここ1か所でまとめて受け取っている（場面ごとに別の処理は書かない）
+     ・ゴール／GAME OVER のリザルト
+     ・いやいやタイム（対応を選ぶ前・まだ続いている結果・おさまった結果）
+     ・行動の結果（いやいや発生の結果もふくむ）
+     ・突然イベント（選ぶ前・結果）／秘密の小道（はじまる前・終わったあと）
+
+     ※ 押しっぱなし（event.repeat）でも止めない。続けてスクロールできるようにするため */
+  if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && isReadingScene.value) {
+    const scene = getCurrentSceneElement();
+
+    // 場面が切りかわっている最中（次の場面がまだ無い）は、何もしない
+    // ここでコマンドを動かしてしまうと、次の場面が出たときに選択がずれているため
+    if (!scene) {
+      event.preventDefault();
+      return;
+    }
+
+    const scrollers = getSceneScrollers(scene);
+
+    if (scrollers.length > 0) {
+      event.preventDefault();
+      scrollSceneByArrow(scrollers, event.key === 'ArrowUp' ? -1 : 1);
+
+      // スクロールで止まったままのマウスの下にボタンが来ても、選択が変わらないようにする（isCommandPointerPaused を参照）
+      pauseCommandPointer();
+      return;
+    }
+  }
+
   // ① ↑：1つ上のコマンドへ
   if (event.key === 'ArrowUp') {
     // 矢印キーでページが上下にスクロールしてしまわないようにする
@@ -9542,6 +9791,9 @@ function handleKeydown(event: KeyboardEvent) {
     } else {
       moveCommandUp(); // たて1列の場所は1つ上へ
     }
+
+    // 選んだコマンドが画面の外（スクロールで隠れたところ）にあれば、見える位置へ
+    revealSelectedCommand();
     return;
   }
 
@@ -9554,24 +9806,40 @@ function handleKeydown(event: KeyboardEvent) {
     } else {
       moveCommandDown(); // たて1列の場所は1つ下へ
     }
+
+    revealSelectedCommand();
     return;
   }
 
-  // ③ ← →：となりのコマンドへ1つ動かす（公園入口だけ）
-  //    各場所の「どうする？」はたて1列なので、左右キーは使わない
+  /* ③ ← →：となりのコマンドへ1つ動かす
+
+     ・公園入口 … 1つ前／次へ（はしで止まる）
+     ・読む画面 … 1つ前（左）／次（右）へ
+                  横ならびの選択肢（いやいや・突然イベント・秘密の小道・ゴール／GAME OVER）は、見た目の左右と同じ向きに動く
+                  ↑↓ で結果をスクロールしているあいだも、ここでコマンドを選べる
+                  ボタンが1つだけの画面では、押しても何も変わらない
+     ・通常の場所で結果が出る前 … 「どうする？」はたて1列なので、左右キーは使わない */
   if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-    if (!isEntrance) {
+    if (!isEntrance && !isReadingScene.value) {
       return;
     }
 
     // 矢印キーでページが左右にスクロールしてしまわないようにする
     event.preventDefault();
 
-    if (event.key === 'ArrowLeft') {
-      moveEntranceLeft(); // ← は1つ前へ（すべり台からゴールへは回りこまない）
+    if (isEntrance) {
+      if (event.key === 'ArrowLeft') {
+        moveEntranceLeft(); // ← は1つ前へ（すべり台からゴールへは回りこまない）
+      } else {
+        moveEntranceRight(); // → は1つ次へ（ゴールからすべり台へは回りこまない）
+      }
+    } else if (event.key === 'ArrowLeft') {
+      moveCommandPrevious(); // ← は1つ左へ（いちばん左で止まる）
     } else {
-      moveEntranceRight(); // → は1つ次へ（ゴールからすべり台へは回りこまない）
+      moveCommandNext(); // → は1つ右へ（いちばん右で止まる）
     }
+
+    revealSelectedCommand();
     return;
   }
 
@@ -10257,7 +10525,7 @@ onUnmounted(() => {
            ============================================================ -->
       <!-- game-screen--secret-path … 秘密の小道のあいだだけ付ける
            スマホ幅で、上部ステータスを画面の上に固定しないようにするため（CSSの max-width: 700px を参照） -->
-      <div v-else key="game" class="game-screen" :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' }">
+      <div v-else key="game" ref="gameScreenRef" class="game-screen" :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' }">
         <!-- ==========================================================
              【上部】常時表示のステータスエリア
              ========================================================== -->
@@ -10490,27 +10758,27 @@ onUnmounted(() => {
             <nav class="command" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
               <p class="command__label">どこへ行く？</p>
 
-              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0">
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                 <span class="cmd__text">すべり台へ行く</span>
                 <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1">
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                 <span class="cmd__text">砂場へ行く</span>
                 <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2">
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                 <span class="cmd__text">どんぐりの木へ行く</span>
                 <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3">
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3" @focus="selectedCommandIndex = 3">
                 <span class="cmd__text">池へ行く</span>
                 <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('hill')" @mouseenter="selectedCommandIndex = 4">
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('hill')" @mouseenter="selectedCommandIndex = 4" @focus="selectedCommandIndex = 4">
                 <span class="cmd__text">丘へ行く</span>
                 <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
               </button>
@@ -10520,13 +10788,14 @@ onUnmounted(() => {
                 class="cmd cmd--secret"
                 :class="{ 'cmd--selected': selectedCommandIndex === 5 }"
                 @click="goToSecretArea"
-                @mouseenter="selectedCommandIndex = 5">
+                @mouseenter="selectedCommandIndex = 5"
+                @focus="selectedCommandIndex = 5">
                 <span class="cmd__text">細い道の先へ行く</span>
                 <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
               </button>
 
               <!-- 押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く） -->
-              <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="openGoalConfirm" @mouseenter="selectedCommandIndex = goalCommandIndex">
+              <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="openGoalConfirm" @mouseenter="selectedCommandIndex = goalCommandIndex" @focus="selectedCommandIndex = goalCommandIndex">
                 <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
               </button>
             </nav>
@@ -10681,7 +10950,7 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -10693,7 +10962,8 @@ onUnmounted(() => {
                         class="care-menu__item"
                         :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
                         @click="openSnackMenu('exploring')"
-                        @mouseenter="selectedCareCommandIndex = 1">
+                        @mouseenter="selectedCareCommandIndex = 1"
+                        @focus="selectedCareCommandIndex = 1">
                         <span class="care-menu__text">おやつをあげる ＞</span>
                         <span class="care-menu__badge">残り{{ snackLeft }}個</span>
                       </button>
@@ -10711,11 +10981,11 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">一緒にすべる</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">下で見守る</span>
                     </button>
 
@@ -10739,7 +11009,8 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
                       :aria-expanded="isCareMenuVisible"
                       @click="toggleCareMenu"
-                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex"
+                      @focus="selectedCommandIndex = careMenuCommandIndex">
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
@@ -10754,7 +11025,8 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
-                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex"
+                      @focus="selectedCommandIndex = leavePlaceCommandIndex">
                       <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
@@ -10769,11 +11041,12 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
                       @click="backToPlaceFromCareResult"
-                      @mouseenter="selectedCommandIndex = 0">
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -10930,7 +11203,7 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -10942,7 +11215,8 @@ onUnmounted(() => {
                         class="care-menu__item"
                         :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
                         @click="openSnackMenu('exploring')"
-                        @mouseenter="selectedCareCommandIndex = 1">
+                        @mouseenter="selectedCareCommandIndex = 1"
+                        @focus="selectedCareCommandIndex = 1">
                         <span class="care-menu__text">おやつをあげる ＞</span>
                         <span class="care-menu__badge">残り{{ snackLeft }}個</span>
                       </button>
@@ -10960,11 +11234,11 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">一緒に大きな山を作る</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">砂のトンネルを作る</span>
                     </button>
 
@@ -10988,7 +11262,8 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
                       :aria-expanded="isCareMenuVisible"
                       @click="toggleCareMenu"
-                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex"
+                      @focus="selectedCommandIndex = careMenuCommandIndex">
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
@@ -11003,7 +11278,8 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
-                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex"
+                      @focus="selectedCommandIndex = leavePlaceCommandIndex">
                       <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
@@ -11018,11 +11294,12 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
                       @click="backToPlaceFromCareResult"
-                      @mouseenter="selectedCommandIndex = 0">
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11179,7 +11456,7 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -11191,7 +11468,8 @@ onUnmounted(() => {
                         class="care-menu__item"
                         :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
                         @click="openSnackMenu('exploring')"
-                        @mouseenter="selectedCareCommandIndex = 1">
+                        @mouseenter="selectedCareCommandIndex = 1"
+                        @focus="selectedCareCommandIndex = 1">
                         <span class="care-menu__text">おやつをあげる ＞</span>
                         <span class="care-menu__badge">残り{{ snackLeft }}個</span>
                       </button>
@@ -11209,11 +11487,11 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">一緒にどんぐりを拾う</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="rollAcorns" @mouseenter="selectedCommandIndex = 1">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="rollAcorns" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">どんぐりをころがして遊ぶ</span>
                     </button>
 
@@ -11237,7 +11515,8 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
                       :aria-expanded="isCareMenuVisible"
                       @click="toggleCareMenu"
-                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex"
+                      @focus="selectedCommandIndex = careMenuCommandIndex">
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
@@ -11252,7 +11531,8 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
-                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex"
+                      @focus="selectedCommandIndex = leavePlaceCommandIndex">
                       <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
@@ -11267,11 +11547,12 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
                       @click="backToPlaceFromCareResult"
-                      @mouseenter="selectedCommandIndex = 0">
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11428,7 +11709,7 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -11440,7 +11721,8 @@ onUnmounted(() => {
                         class="care-menu__item"
                         :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
                         @click="openSnackMenu('exploring')"
-                        @mouseenter="selectedCareCommandIndex = 1">
+                        @mouseenter="selectedCareCommandIndex = 1"
+                        @focus="selectedCareCommandIndex = 1">
                         <span class="care-menu__text">おやつをあげる ＞</span>
                         <span class="care-menu__badge">残り{{ snackLeft }}個</span>
                       </button>
@@ -11458,11 +11740,11 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">白鳥を近くで見る</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">少し離れて見る</span>
                     </button>
 
@@ -11486,7 +11768,8 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
                       :aria-expanded="isCareMenuVisible"
                       @click="toggleCareMenu"
-                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex"
+                      @focus="selectedCommandIndex = careMenuCommandIndex">
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
@@ -11501,7 +11784,8 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
-                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex"
+                      @focus="selectedCommandIndex = leavePlaceCommandIndex">
                       <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
@@ -11516,11 +11800,12 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
                       @click="backToPlaceFromCareResult"
-                      @mouseenter="selectedCommandIndex = 0">
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11677,7 +11962,7 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -11689,7 +11974,8 @@ onUnmounted(() => {
                         class="care-menu__item"
                         :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
                         @click="openSnackMenu('exploring')"
-                        @mouseenter="selectedCareCommandIndex = 1">
+                        @mouseenter="selectedCareCommandIndex = 1"
+                        @focus="selectedCareCommandIndex = 1">
                         <span class="care-menu__text">おやつをあげる ＞</span>
                         <span class="care-menu__badge">残り{{ snackLeft }}個</span>
                       </button>
@@ -11707,11 +11993,11 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">走って丘をのぼる</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">ゆっくり歩いてのぼる</span>
                     </button>
 
@@ -11735,7 +12021,8 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
                       :aria-expanded="isCareMenuVisible"
                       @click="toggleCareMenu"
-                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex"
+                      @focus="selectedCommandIndex = careMenuCommandIndex">
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
@@ -11750,7 +12037,8 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
-                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex"
+                      @focus="selectedCommandIndex = leavePlaceCommandIndex">
                       <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
@@ -11765,11 +12053,12 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
                       @click="backToPlaceFromCareResult"
-                      @mouseenter="selectedCommandIndex = 0">
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -11907,7 +12196,7 @@ onUnmounted(() => {
               <!-- コマンドボックス
                    遊んでいる最中は、コマンドのかわりに操作の案内だけを出す
                    （動かすのはフィールドの道をクリック・タップ。← → ・ A / D キーは補助） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <template v-if="secretPathPhase === 'playing'">
                   <p class="secret-path-guide">👆 行きたい方の道をクリック・タップして動こう！</p>
 
@@ -11920,11 +12209,11 @@ onUnmounted(() => {
                 <template v-else-if="secretPathPhase === 'ready'">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="startSecretPathGame" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="startSecretPathGame" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">小道へ進む</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="leaveSecretPathToEntrance" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="leaveSecretPathToEntrance" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">← 場所選びにもどる</span>
                   </button>
                 </template>
@@ -11932,7 +12221,7 @@ onUnmounted(() => {
                 <template v-else>
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="enterSecretSpotFromPath" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="enterSecretSpotFromPath" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">先へ進む</span>
                   </button>
                 </template>
@@ -12090,7 +12379,7 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0">
+                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -12102,7 +12391,8 @@ onUnmounted(() => {
                         class="care-menu__item"
                         :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 1 }"
                         @click="openSnackMenu('exploring')"
-                        @mouseenter="selectedCareCommandIndex = 1">
+                        @mouseenter="selectedCareCommandIndex = 1"
+                        @focus="selectedCareCommandIndex = 1">
                         <span class="care-menu__text">おやつをあげる ＞</span>
                         <span class="care-menu__badge">残り{{ snackLeft }}個</span>
                       </button>
@@ -12120,11 +12410,11 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="exploreSunlight" @mouseenter="selectedCommandIndex = 0">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="exploreSunlight" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">木漏れ日の中を探検する</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreClearingDepths" @mouseenter="selectedCommandIndex = 1">
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreClearingDepths" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">広場の奥を見てみる</span>
                     </button>
 
@@ -12148,7 +12438,8 @@ onUnmounted(() => {
                       :class="{ 'command-box__item--selected': selectedCommandIndex === careMenuCommandIndex }"
                       :aria-expanded="isCareMenuVisible"
                       @click="toggleCareMenu"
-                      @mouseenter="selectedCommandIndex = careMenuCommandIndex">
+                      @mouseenter="selectedCommandIndex = careMenuCommandIndex"
+                      @focus="selectedCommandIndex = careMenuCommandIndex">
                       <span class="command-box__text">休憩・おやつ</span>
                     </button>
 
@@ -12163,7 +12454,8 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === leavePlaceCommandIndex }"
                       @click="goToNextPlace"
-                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex">
+                      @mouseenter="selectedCommandIndex = leavePlaceCommandIndex"
+                      @focus="selectedCommandIndex = leavePlaceCommandIndex">
                       <span class="command-box__text">← 場所選びにもどる</span>
                     </button>
                   </template>
@@ -12178,11 +12470,12 @@ onUnmounted(() => {
                       class="command-box__item"
                       :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
                       @click="backToPlaceFromCareResult"
-                      @mouseenter="selectedCommandIndex = 0">
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -12332,7 +12625,7 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <!-- おやつバッグ（「おやつをあげる ＞」を押したあと）
                      いやいやのコマンドと入れかえて、同じ枠の中に出す
                      「← もどる」・Escape で、お話／だっこ／おやつ／待つ に戻る -->
@@ -12374,7 +12667,8 @@ onUnmounted(() => {
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === talkCommandIndex }"
                     @click="talkToChild"
-                    @mouseenter="selectedCommandIndex = talkCommandIndex">
+                    @mouseenter="selectedCommandIndex = talkCommandIndex"
+                    @focus="selectedCommandIndex = talkCommandIndex">
                     <span class="command-box__text">こうちゃんとお話する</span>
                   </button>
 
@@ -12382,7 +12676,8 @@ onUnmounted(() => {
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === hugCommandIndex }"
                     @click="hugChild"
-                    @mouseenter="selectedCommandIndex = hugCommandIndex">
+                    @mouseenter="selectedCommandIndex = hugCommandIndex"
+                    @focus="selectedCommandIndex = hugCommandIndex">
                     <span class="command-box__text">だっこしてなだめる</span>
                   </button>
 
@@ -12392,7 +12687,8 @@ onUnmounted(() => {
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === snackCommandIndex }"
                     @click="openSnackMenu('tantrum')"
-                    @mouseenter="selectedCommandIndex = snackCommandIndex">
+                    @mouseenter="selectedCommandIndex = snackCommandIndex"
+                    @focus="selectedCommandIndex = snackCommandIndex">
                     <span class="command-box__text">おやつをあげる ＞</span>
                     <span class="command-box__badge">残り{{ snackLeft }}個</span>
                   </button>
@@ -12405,13 +12701,14 @@ onUnmounted(() => {
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === waitCommandIndex }"
                     @click="waitCalmly"
-                    @mouseenter="selectedCommandIndex = waitCommandIndex">
+                    @mouseenter="selectedCommandIndex = waitCommandIndex"
+                    @focus="selectedCommandIndex = waitCommandIndex">
                     <span class="command-box__text">{{ waitCommandLabel }}</span>
                   </button>
                 </template>
 
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -12501,27 +12798,27 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">立ち止まって救急車を探す</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">音を聞きながら少し待つ</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">先へ進む</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -12611,27 +12908,27 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">一緒にじっくり観察する</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">手に乗せてみる</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">そっと見送る</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -12721,27 +13018,27 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">近くで見る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">親の後ろから見る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">少し離れる</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -12831,7 +13128,7 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <!-- おやつバッグ（「おやつで気をそらす ＞」を押したあと）
                      4つのコマンドと入れかえて、同じ枠の中に出す
                      ※ この場面はどのおやつでも効果が同じなので、効果の数字は出さない
@@ -12869,15 +13166,15 @@ onUnmounted(() => {
                 <template v-else-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">すぐにだっこする</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">「大丈夫？」と見守る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 2">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
                   </button>
 
@@ -12887,7 +13184,8 @@ onUnmounted(() => {
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }"
                     @click="openSnackMenu('fallDown')"
-                    @mouseenter="selectedCommandIndex = 3">
+                    @mouseenter="selectedCommandIndex = 3"
+                    @focus="selectedCommandIndex = 3">
                     <span class="command-box__text">おやつで気をそらす ＞</span>
                     <span class="command-box__badge">残り{{ snackLeft }}個</span>
                   </button>
@@ -12895,7 +13193,7 @@ onUnmounted(() => {
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -12985,27 +13283,27 @@ onUnmounted(() => {
               </article>
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
-              <nav class="command-box">
+              <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <!-- まだ選んでいないとき -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">近くまで見に行く</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">少し離れて見る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">先へ進む</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -13132,11 +13430,15 @@ onUnmounted(() => {
               </div>
             </section>
 
-            <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
+            <!-- ボタンは2つ。左右にならべて ← → で行き来して、
                  Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
-                 マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
-            <nav class="command">
-              <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
+                 リザルトがスクロールするときは、↑↓ はスクロールに使う（収まっているときは ↑↓ でも選べる）
+                 マウスを乗せたとき・Tabで移動したときも、そのボタンが選ばれた状態になる（@mouseenter / @focus）
+                 command--result … スマホ幅でも2つを横にならべる
+                 command--pointer-paused … ↑↓・← → でスクロールした直後、マウスを動かすまでマウスで選べなくする
+                                           （止まっているカーソルの下にボタンが来て、キーボードの選択が上書きされないようにする） -->
+            <nav class="command command--result" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
+              <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                 <span class="cmd__text">もう一度あそぶ</span>
               </button>
 
@@ -13149,12 +13451,13 @@ onUnmounted(() => {
                    … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
                      同じキーが window の handleKeydown にも伝わって、
                      「選んでいるコマンド」まで実行されてしまうのを止める
-                     ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
+                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
                 @click="goBackToBootFromResult"
                 @mouseenter="selectedCommandIndex = 1"
+                @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
                 <span class="cmd__text">はじめの画面へ戻る</span>
@@ -13239,11 +13542,15 @@ onUnmounted(() => {
               </div>
             </section>
 
-            <!-- ボタンは2つ。ほかの画面と同じように ↑↓ で行き来して、
+            <!-- ボタンは2つ。左右にならべて ← → で行き来して、
                  Enter / Space で押せる（いま選んでいるほうに「▶」と水色の枠が付く）
-                 マウスを乗せたときも、そのボタンが選ばれた状態になる（@mouseenter） -->
-            <nav class="command">
-              <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0">
+                 リザルトがスクロールするときは、↑↓ はスクロールに使う（収まっているときは ↑↓ でも選べる）
+                 マウスを乗せたとき・Tabで移動したときも、そのボタンが選ばれた状態になる（@mouseenter / @focus）
+                 command--result … スマホ幅でも2つを横にならべる
+                 command--pointer-paused … ↑↓・← → でスクロールした直後、マウスを動かすまでマウスで選べなくする
+                                           （止まっているカーソルの下にボタンが来て、キーボードの選択が上書きされないようにする） -->
+            <nav class="command command--result" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
+              <button class="cmd cmd--next" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="resetGame" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                 <span class="cmd__text">もう一度あそぶ</span>
               </button>
 
@@ -13256,12 +13563,13 @@ onUnmounted(() => {
                    … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
                      同じキーが window の handleKeydown にも伝わって、
                      「選んでいるコマンド」まで実行されてしまうのを止める
-                     ↑↓ は止めないので、フォーカスが当たっていても選択は動かせる -->
+                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
                 @click="goBackToBootFromResult"
                 @mouseenter="selectedCommandIndex = 1"
+                @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
                 <span class="cmd__text">はじめの画面へ戻る</span>
@@ -16692,6 +17000,93 @@ onUnmounted(() => {
 }
 
 /* ============================================================
+   横ならびの選択肢（command-box--choice-grid）
+
+   いやいやタイム（まだ続いているとき）・突然イベント（選ぶ前）・
+   秘密の小道（はじまる前）の「どうする？」だけ、選択肢を横にならべる
+
+   これらの画面は、結果の文章や説明を ↑↓ でスクロールして読むことがあり、
+   そのあいだコマンドは ← → で選ぶ
+   見た目もキーの向きにそろえて「左右にならんだボタン」にしておく
+   （たて1列のままだと、上下にならんでいるのに ← → で動く、というちぐはぐな形になる）
+
+   ・command-box--choices-2 / 3 / 4 … 選択肢の数（commandCount）
+     列の数は選択肢の数と同じにして、せまい画面でだけ2列に折り返す（いちばん下の媒体クエリ）
+     折り返しても、← → で動く順番は左上から右下へ（0 → 1 → 2 → 3）のまま
+   ・おやつバッグを開いているあいだは付けない（バッグは今までどおりたて1列＋↑↓）
+   ・通常の場所の「どうする？」（.command-area の中）には付けない
+
+   付け外しは script の choiceGridClass で決めている
+   ============================================================ */
+.command-box--choice-grid {
+  --choice-columns: 2;
+
+  display: grid;
+  grid-template-columns: repeat(var(--choice-columns), minmax(0, 1fr));
+  gap: 6px 8px;
+
+  /* 右下の380pxの枠ではなく、上のカードと同じくらいの幅で中央に置く
+     box-sizing: border-box … width: 100% に padding と border をふくめて、横にはみ出さないようにする */
+  box-sizing: border-box;
+  align-self: center;
+  max-width: var(--stage-width);
+}
+
+.command-box--choices-3 {
+  --choice-columns: 3;
+}
+
+.command-box--choices-4 {
+  --choice-columns: 4;
+}
+
+/* 見出し「どうする？」と「おやつは、もうぜんぶ食べてしまいました…」は、1行をまるごと使う */
+.command-box--choice-grid .command-box__label,
+.command-box--choice-grid .command-box__note {
+  grid-column: 1 / -1;
+}
+
+.command-box--choice-grid .command-box__label {
+  margin-bottom: 2px;
+}
+
+/* おやつのお知らせは、DOMでは「だっこ」と「待つ」のあいだにあるが、
+   横ならびの行を分けてしまわないように、見た目だけいちばん下へ回す
+   （ボタンの順番は変わらないので、← → と Tab で動く順番もそのまま） */
+.command-box--choice-grid .command-box__note {
+  order: 1;
+  padding-left: 10px;
+}
+
+/* 1マスぶんのボタン
+   ・うすい枠で、1つ1つが別のボタンだと分かるようにする
+   ・マスに入りきらない文字は、ボタンの中で折り返す
+     「おやつをあげる ＞」と「残り2個」が1行に入らないときは、「残り2個」のほうを次の行へ送る
+     （文字のほうが先に折り返して「＞」だけが下の行に残る、という形にしない）
+   ・選んだときに右へずらす動きは、となりのマスとぶつかるので付けない */
+.command-box--choice-grid .command-box__item {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0;
+  width: auto;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%);
+}
+
+.command-box--choice-grid .command-box__text {
+  flex: 1 1 auto;
+}
+
+.command-box--choice-grid .command-box__item:hover,
+.command-box--choice-grid .command-box__item:focus-visible,
+.command-box--choice-grid .command-box__item--selected {
+  transform: none;
+}
+
+.command-box--choice-grid .command-box__item:active {
+  transform: scale(0.98);
+}
+
+/* ============================================================
    コマンド欄（サブメニュー ＋ メインコマンド）
 
    通常の場所6か所だけ、コマンドの枠を2つならべる
@@ -17620,6 +18015,27 @@ onUnmounted(() => {
   text-align: center;
 }
 
+/* ゴール／GAME OVER画面の2つのボタン（command--result）
+
+   「もう一度あそぶ」と「はじめの画面へ戻る」を、左右にならべる
+   リザルトは ↑↓ でスクロールして読むので、ボタンは ← → で選ぶ
+   見た目も左右にならべて、キーの向きとそろえている
+
+   ・パソコンでは、1つ380pxまでの幅で中央にそろえる
+   ・スマホ幅でも1列にはしない（いちばん下の max-width: 700px を参照）
+   ・公園入口の .command には付けないので、そちらの並びは変わらない */
+.command--result {
+  grid-template-columns: repeat(2, minmax(0, 380px));
+  justify-content: center;
+}
+
+/* 1行まるごと使って中央に置く指定（.cmd--next / .cmd--back）を、この画面だけ外す */
+.command--result .cmd--next,
+.command--result .cmd--back {
+  grid-column: auto;
+  justify-self: stretch;
+}
+
 /* 秘密の場所
    大きさと形はほかの場所のボタンとそろえ、ほかの場所の続きに並べる
    目立たせるのは色（紫）だけにする */
@@ -18000,6 +18416,12 @@ onUnmounted(() => {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 横ならびの選択肢（4つ）は、タブレット幅では 2列 × 2行 に折り返す
+     （← → で動く順番は、左上 → 右上 → 左下 → 右下 のまま） */
+  .command-box--choices-4 {
+    --choice-columns: 2;
+  }
+
   /* 秘密の小道のカードは、padding と border をふくめて中央エリアの幅に収める
      （content-box のままだと、タブレット幅で左右が少しはみ出してしまうため） */
   .stage--secret-path > .place-card {
@@ -18191,9 +18613,19 @@ onUnmounted(() => {
     max-width: none;
   }
 
+  /* width: auto … 幅は stretch にまかせる
+     width: 100% のままだと、padding と border のぶんだけ画面の右へはみ出してしまう
+     （いやいやタイム・突然イベントの「どうする？」。.command-area の中の枠と同じ考えかた） */
   .command-box {
     align-self: stretch;
+    width: auto;
     max-width: none;
+  }
+
+  /* 横ならびの選択肢（3つ）は、スマホ幅では2列に折り返す（3つ目は下の行へ）
+     たて1列には戻さない（← → で選ぶ向きと、見た目の向きをそろえるため） */
+  .command-box--choices-3 {
+    --choice-columns: 2;
   }
 
   .record-grid {
@@ -18410,6 +18842,12 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
     max-height: 62vh;
     padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* ゴール／GAME OVER の2つのボタンは、スマホ幅でも横にならべる
+     （← → で選ぶ向きと、見た目の向きをそろえる。長い文字はボタンの中で折り返す） */
+  .command--result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cmd {
