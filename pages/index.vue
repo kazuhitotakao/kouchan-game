@@ -5937,6 +5937,19 @@ const secretPathBumpEffectDuration = 600;
 /* 道（レーン）をクリック・タップしたとき、押したレーンを光らせておく長さ（ミリ秒） */
 const secretPathTapFlashDuration = 200;
 
+/* 「はやく進む」ときの速さ（ゲームの時計を何倍で進めるか）
+   ずっと押しっぱなしなら、15秒ぶんが実際には約10秒で終わる
+   （早く着けるかわりに、枝や木漏れ日へ反応できる時間も短くなる） */
+const secretPathBoostMultiplier = 1.5;
+
+/* フィールドを何ミリ秒押しつづけたら「長押し」（はやく進む）にするか
+   押したしゅんかんに はやくならないように、少しだけ待つ */
+const secretPathHoldBoostDelay = 250;
+
+/* 押したまま横へ何px動かしたら、1レーン動かすか（マウスのドラッグ・指のフリック共通）
+   小さな手ぶれでは動かないようにするため */
+const secretPathSwipeThreshold = 32;
+
 /* 木漏れ日を取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
 const secretPathSparkleDuration = 600;
 
@@ -6016,9 +6029,28 @@ let secretPathSpawnQueue: SecretPathSpawn[] = []; // まだ出していない予
 let secretPathNextItemId = 0;
 let secretPathFinishedAt = 0; // 結果が出た時刻（performance.now()）
 
+/* フィールドを押しているポインター（マウス・指・ペン）の一時的な状態
+   はなしたとき・キャンセルされたとき・リセットや終了のときに、releaseSecretPathPointer() でまとめて戻す */
+let secretPathPointerId: number | null = null; // 押しているポインターの番号（押していないときは null）
+let secretPathPointerField: HTMLElement | null = null; // pointer capture をしているフィールド
+let secretPathPointerDownLane: SecretPathLane | null = null; // 押しはじめたレーン（短いタップのときに使う）
+let secretPathPointerLastX = 0; // 横の移動を数えはじめた位置（1レーン動くたびに、そこから数えなおす）
+let secretPathPointerDragged = false; // 押しているあいだに、横へ動かして1レーン動いたか（タップとして動かさない）
+let secretPathPointerHeld = false; // 長押しになったか（タップとして動かさない）
+let secretPathHoldTimer: ReturnType<typeof setTimeout> | null = null; // 長押しを待つ予約
+
+/* はやく進んでいるか（キーと、フィールドの長押しを別々に持つ）
+   片方をはなしても、もう片方を押しているあいだは はやいまま */
+const isSecretPathKeyBoosting = ref(false);
+const isSecretPathPointerBoosting = ref(false);
+
 /* いま「小道で遊んでいる最中」かどうか
    キー操作・道のクリック／タップ・1コマごとの処理は、どれもこれを見てから動く */
 const isSecretPathPlaying = computed(() => currentEvent.value === 'secretPath' && secretPathPhase.value === 'playing');
+
+/* いま はやく進んでいるか（HUDの「⏩ 1.5x」と、1コマごとの時計の進め方に使う）
+   遊んでいる最中でなければ、かならず false（結果の画面に「⏩ 1.5x」が残らない） */
+const isSecretPathBoosting = computed(() => isSecretPathPlaying.value && (isSecretPathKeyBoosting.value || isSecretPathPointerBoosting.value));
 
 /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない） */
 const isSecretPathBumped = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathBumpUntil.value);
@@ -6112,6 +6144,7 @@ function stopSecretPathLoop() {
    （hasDiscoveredSecretSpot はここでは戻さない。戻すのは resetGame() だけ） */
 function resetSecretPathGame() {
   stopSecretPathLoop();
+  releaseSecretPathControls();
 
   secretPathPhase.value = 'ready';
   secretPathPlayerLane.value = 1;
@@ -6213,6 +6246,7 @@ function runSecretPathFrame(timestamp: number) {
   // もう小道で遊んでいる最中ではない（リセット・画面が変わった など）ときは、ここで止まる
   if (!gameStarted.value || !isSecretPathPlaying.value) {
     stopSecretPathLoop();
+    releaseSecretPathControls();
     return;
   }
 
@@ -6224,7 +6258,10 @@ function runSecretPathFrame(timestamp: number) {
 
   secretPathLastTimestamp = timestamp;
 
-  advanceSecretPath(delta);
+  /* はやく進んでいるあいだは、ゲームの時計そのものを1.5倍で進める
+     出てくるタイミング・流れる速さ・残り時間・「いたっ！」などの長さが、ぜんぶ同じ時計でそろって速くなる
+     （1コマで進むのは最大 50 × 1.5 = 75ミリ秒。枝が進むのは4.5%で、当たり判定の幅10%より小さいので すり抜けない） */
+  advanceSecretPath(isSecretPathBoosting.value ? delta * secretPathBoostMultiplier : delta);
 
   // 時間切れで終わっていなければ、次のコマを予約する
   if (isSecretPathPlaying.value) {
@@ -6323,6 +6360,7 @@ function advanceSecretPath(delta: number) {
    このあと同じプレイのあいだは、ミニゲームをくり返さない */
 function finishSecretPathGame() {
   stopSecretPathLoop();
+  releaseSecretPathControls();
 
   secretPathPhase.value = 'finished';
   secretPathItems.value = [];
@@ -6415,27 +6453,211 @@ function moveSecretPathPlayer(direction: -1 | 1) {
   }
 }
 
-/* 道（レーン）を、マウスでクリック・指でタップしたとき（ミニゲームのメインの操作）
+/* フィールドの横の位置（clientX）が、どのレーンの上か（フィールドの外なら null） */
+function getSecretPathLaneAt(field: HTMLElement, clientX: number, clientY: number): SecretPathLane | null {
+  const rect = field.getBoundingClientRect();
 
-   ・押したレーンの方向へ、1レーンだけ動く（← → キーと同じ「1回で1レーン」）
+  if (rect.width <= 0 || clientX < rect.left || clientX >= rect.right || clientY < rect.top || clientY >= rect.bottom) {
+    return null;
+  }
+
+  const lane = Math.floor(((clientX - rect.left) / rect.width) * 3);
+
+  return lane === 0 || lane === 1 || lane === 2 ? lane : null;
+}
+
+/* はやく進む・ポインターを押している状態を、ぜんぶ元に戻す
+
+   キーをはなしたこと（keyup）や、指をはなしたこと（pointerup）が届かないときでも、
+   はやいまま・押したままの扱いが残らないように、次のときにかならず呼ぶ
+   ・時間が終わったとき（finishSecretPathGame()）
+   ・リセットしたとき（resetSecretPathGame()）
+   ・ウィンドウからフォーカスが外れた・タブが見えなくなったとき
+   ・ページから離れたとき（onUnmounted）
+   ・なにかの理由で「小道で遊んでいる最中」ではなくなったとき（runSecretPathFrame()） */
+function releaseSecretPathControls() {
+  isSecretPathKeyBoosting.value = false;
+  releaseSecretPathPointer();
+}
+
+/* ポインター（マウス・指・ペン）を押している状態だけを、元に戻す */
+function releaseSecretPathPointer() {
+  if (secretPathHoldTimer !== null) {
+    clearTimeout(secretPathHoldTimer);
+    secretPathHoldTimer = null;
+  }
+
+  if (secretPathPointerField && secretPathPointerId !== null) {
+    try {
+      if (secretPathPointerField.hasPointerCapture(secretPathPointerId)) {
+        secretPathPointerField.releasePointerCapture(secretPathPointerId);
+      }
+    } catch {
+      // もう押していないポインターのときは、何もしなくてよい
+    }
+  }
+
+  secretPathPointerId = null;
+  secretPathPointerField = null;
+  secretPathPointerDownLane = null;
+  secretPathPointerLastX = 0;
+  secretPathPointerDragged = false;
+  secretPathPointerHeld = false;
+  isSecretPathPointerBoosting.value = false;
+}
+
+/* フィールドのポインター操作（マウス・指・ペンを Pointer Events でまとめて受け取る）
+
+   ■ 短く押す（クリック・タップ）
+     押したレーンの方向へ、1レーンだけ動く（← → キーと同じ「1回で1レーン」）
      左はしで右はしのレーンを押すと まん中へ、もう1回押すと右はしへ
-     （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、キーより道を押す操作だけ有利になるため）
-   ・いまいるレーンを押したときは、何もしない（光らせもしない）
-   ・click を待たずに、押したしゅんかん（pointerdown）に動かす
-     （click は指をはなしたときに届くので、よけるゲームでは少し遅く感じるため）
-   ・押したレーンを一瞬光らせて、どこを押したかが目で分かるようにする
-   ・preventDefault() … 長押しのメニュー・文字の選択・フォーカス移動を起こさないため */
-function handleSecretPathLanePointerDown(event: PointerEvent, lane: SecretPathLane) {
+     （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、道を押す操作だけ有利になるため）
+     長押し・ドラッグと見分けるため、動かすのは はなしたとき（pointerup）
+
+   ■ 押したまま横へ動かす（しきい値 secretPathSwipeThreshold をこえるたびに1レーン）
+     ・マウス             … ドラッグ。こえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
+     ・指・ペン           … フリック。1回押すあいだに1レーンだけ（大きくはらっても、まん中で止まる）
+     ・長押しになったあと … 指・ペンでも、スライドでこえるたびに1レーンずつ動ける
+     長押しになる前に横へ動いたら、長押しの判定はやめる（フリック・ドラッグとして扱う）
+
+   ■ 長押し（secretPathHoldBoostDelay だけ押しつづける）
+     はなすまで、はやく進む（ゲームの時計が1.5倍）
+
+   ※ setPointerCapture … 押したままフィールドの外へ出ても、pointerup / pointercancel を受け取るため
+   ※ 最初に押したポインターだけで操作する（2本目の指は使わない） */
+function handleSecretPathPointerDown(event: PointerEvent) {
   // 右クリックなど、遊んでいる最中以外では動かさない
   if (event.button !== 0 || !isSecretPathPlaying.value) {
     return;
   }
 
+  // 長押しのメニュー・文字の選択・フォーカス移動を起こさない
   event.preventDefault();
 
+  const field = event.currentTarget as HTMLElement;
+
+  if (secretPathPointerId !== null) {
+    // べつの指で まだ押している（capture が続いている）ときは、あとから押したほうを使わない
+    if (secretPathPointerId !== event.pointerId && field.hasPointerCapture(secretPathPointerId)) {
+      return;
+    }
+
+    // はなしたことが届かなかった古い状態は、ここで片づけてから始めなおす
+    releaseSecretPathPointer();
+  }
+
+  const pointerId = event.pointerId;
+
+  secretPathPointerId = pointerId;
+  secretPathPointerField = field;
+  secretPathPointerDownLane = getSecretPathLaneAt(field, event.clientX, event.clientY);
+  secretPathPointerLastX = event.clientX;
+
+  try {
+    field.setPointerCapture(pointerId);
+  } catch {
+    // capture できなくても、フィールドの中で はなせばふつうに動く
+  }
+
+  secretPathHoldTimer = setTimeout(() => {
+    secretPathHoldTimer = null;
+
+    if (!isSecretPathPlaying.value || secretPathPointerId !== pointerId) {
+      return;
+    }
+
+    secretPathPointerHeld = true;
+    isSecretPathPointerBoosting.value = true;
+  }, secretPathHoldBoostDelay);
+}
+
+function handleSecretPathPointerMove(event: PointerEvent) {
+  // マウスを乗せているレーン（動く先の目印をはっきりさせるため。指には「乗せる」が無いので、マウスのときだけ）
+  if (event.pointerType === 'mouse') {
+    secretPathHoverLane.value = getSecretPathLaneAt(event.currentTarget as HTMLElement, event.clientX, event.clientY);
+  }
+
+  if (event.pointerId !== secretPathPointerId || !isSecretPathPlaying.value) {
+    return;
+  }
+
+  swipeSecretPathPlayer(event);
+}
+
+function handleSecretPathPointerUp(event: PointerEvent) {
+  if (event.pointerId !== secretPathPointerId) {
+    return;
+  }
+
+  if (isSecretPathPlaying.value) {
+    // pointermove が届く前に はなした、すばやいフリックも拾う
+    swipeSecretPathPlayer(event);
+
+    // 横へ動かさず、長押しにもならなかった → 短いクリック・タップ
+    if (!secretPathPointerDragged && !secretPathPointerHeld) {
+      tapSecretPathLane(secretPathPointerDownLane);
+    }
+  }
+
+  releaseSecretPathPointer();
+}
+
+/* キャンセルされたとき（ブラウザがジェスチャーを引き取った など）は、動かさずに元へ戻すだけ */
+function handleSecretPathPointerCancel(event: PointerEvent) {
+  if (event.pointerId !== secretPathPointerId) {
+    return;
+  }
+
+  releaseSecretPathPointer();
+}
+
+function handleSecretPathPointerLeave(event: PointerEvent) {
+  if (event.pointerType === 'mouse') {
+    secretPathHoverLane.value = null;
+  }
+}
+
+/* 押したまま横へ、しきい値より大きく動いていたら、その方向へ1レーンだけ動かす */
+function swipeSecretPathPlayer(event: PointerEvent) {
+  const distance = event.clientX - secretPathPointerLastX;
+
+  if (Math.abs(distance) < secretPathSwipeThreshold) {
+    return;
+  }
+
+  // 指・ペンのフリックは、1回押すあいだに1レーンだけ（長押しになったあとのスライドと、マウスのドラッグは何度でも）
+  const canMoveAgain = event.pointerType === 'mouse' || secretPathPointerHeld;
+
+  if (secretPathPointerDragged && !canMoveAgain) {
+    return;
+  }
+
+  // 長押しになる前に横へ動いたら、長押しにはしない
+  if (secretPathHoldTimer !== null) {
+    clearTimeout(secretPathHoldTimer);
+    secretPathHoldTimer = null;
+  }
+
+  secretPathPointerDragged = true;
+  secretPathPointerLastX = event.clientX;
+
+  const laneBefore = secretPathPlayerLane.value;
+
+  moveSecretPathPlayer(distance < 0 ? -1 : 1);
+
+  // 動いた先のレーンを一瞬光らせる（はしで動けなかったときは光らせない）
+  if (secretPathPlayerLane.value !== laneBefore) {
+    secretPathTapLane.value = secretPathPlayerLane.value;
+    secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
+  }
+}
+
+/* 短く押したレーンの方向へ、1レーンだけ動かす（いまいるレーンを押したときは、何もしない・光らせもしない）
+   押したレーンを一瞬光らせて、どこを押したかが目で分かるようにする */
+function tapSecretPathLane(lane: SecretPathLane | null) {
   const currentLane = secretPathPlayerLane.value;
 
-  if (lane === currentLane) {
+  if (lane === null || lane === currentLane) {
     return;
   }
 
@@ -6445,32 +6667,35 @@ function handleSecretPathLanePointerDown(event: PointerEvent, lane: SecretPathLa
   secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
 }
 
-/* マウスがレーンに乗った・はなれたとき（動く先の目印をはっきりさせるため）
-   指のときは、押したしゅんかんにも pointerenter が届くので、マウスのときだけ見る */
-function handleSecretPathLanePointerEnter(event: PointerEvent, lane: SecretPathLane) {
-  if (event.pointerType !== 'mouse') {
-    return;
+/* ↑ キーをはなしたとき（window の keyup。遊んでいる最中かどうかに関係なく、はやく進むのをやめる） */
+function handleSecretPathKeyup(event: KeyboardEvent) {
+  if (event.key === 'ArrowUp') {
+    isSecretPathKeyBoosting.value = false;
   }
-
-  secretPathHoverLane.value = lane;
 }
 
-function handleSecretPathLanePointerLeave(event: PointerEvent, lane: SecretPathLane) {
-  if (event.pointerType !== 'mouse' || secretPathHoverLane.value !== lane) {
-    return;
-  }
+/* ウィンドウからフォーカスが外れた・タブが見えなくなったとき
+   keyup や pointerup が届かないことがあるので、はやく進む・押している状態を戻しておく */
+function handleSecretPathWindowBlur() {
+  releaseSecretPathControls();
+}
 
-  secretPathHoverLane.value = null;
+function handleSecretPathVisibilityChange() {
+  if (document.visibilityState === 'hidden') {
+    releaseSecretPathControls();
+  }
 }
 
 /* 小道で遊んでいる最中のキー操作（handleKeydown() から呼ばれる）
 
    ・← / A … 左へ1レーン
    ・→ / D … 右へ1レーン
-   ・↑ ↓ / Enter / Space … 何もしない（ページのスクロールや、ボタンの押しまちがいを止めるだけ）
+   ・↑       … 押しているあいだだけ、はやく進む（はなすと handleSecretPathKeyup() で元の速さに戻る）
+   ・↓ / Enter / Space … 何もしない（ページのスクロールや、ボタンの押しまちがいを止めるだけ）
    ・それ以外（Tab など）… ブラウザのふつうの動きにまかせる
 
-   ※ 押しっぱなし（event.repeat）では続けて動かさない（1回押すと1レーン）
+   ※ ← → は押しっぱなし（event.repeat）では続けて動かさない（1回押すと1レーン）
+   ※ ↑ は押しっぱなしで何度届いても、はやいままでよい
    ※ はじまる前・終わったあとは、ここへは来ない（ふつうのコマンド操作に戻る） */
 function handleSecretPathKeydown(event: KeyboardEvent) {
   // Ctrl + A（ぜんぶ選択）などのショートカットは、じゃましない
@@ -6489,7 +6714,13 @@ function handleSecretPathKeydown(event: KeyboardEvent) {
     return;
   }
 
-  if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    isSecretPathKeyBoosting.value = true;
+    return;
+  }
+
+  if (event.key === 'ArrowDown') {
     event.preventDefault();
     return;
   }
@@ -7697,6 +7928,17 @@ function calculateFinalScore() {
   finalScore.value = keepInRange(total);
 }
 
+/* 遊びつかれて、親かこうちゃんの体力が減っているかどうか（isWornOut() の理由のうち「体力」だけ）
+
+   Cランクの「ちょっと遊びすぎた！」は、これが true のときだけ出す
+   isWornOut() は、機嫌・余裕・いやいや・お昼すぎ でも true になるので、
+   それだけで決めると、少ししか遊んでいないのに「遊びすぎた」と出てしまう
+   （機嫌は55スタートで、ぐずりだすライン50のすぐ上。少し下がっただけで isWornOut() が true になる）
+   体力は遊ぶたびにしっかり減るので、ここが下がっていれば「たくさん遊んで疲れた」と言える */
+function isTiredFromPlaying() {
+  return parentEnergy.value < 50 || childEnergy.value < 30;
+}
+
 /* へとへとで帰ってきたかどうかを判定する
 
    スコアが低くなる理由は、大きく分けて2つある
@@ -7712,7 +7954,7 @@ function calculateFinalScore() {
 */
 function isWornOut() {
   // 親かこうちゃんの体力が減っている
-  if (parentEnergy.value < 50 || childEnergy.value < 30) {
+  if (isTiredFromPlaying()) {
     return true;
   }
 
@@ -7754,6 +7996,8 @@ function isWornOut() {
      ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
      ・C／Dランク … 「あまり遊べなかった」系の文は、遊んだ回数が少ないときだけ使う
                      （同じ場所でくりかえし遊んだ人に言うと話が合わない）
+     ・Cランク    … 「遊びすぎた」は、体力が減っているときだけ使う（isTiredFromPlaying()）
+                     （機嫌・余裕・いやいや・時間だけで疲れた判定になった人に言うと話が合わない）
 
    ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
 */
@@ -7839,10 +8083,19 @@ function judgeResult() {
 
     // 疲れて帰ってきたとき
     if (isWornOut()) {
-      // たくさん回ったうえで疲れたのなら「遊びすぎた」でよい
-      if (visitedPlaces.value.length >= 3) {
+      // たくさん回ったうえで、遊びつかれて体力が減ったのなら「遊びすぎた」でよい
+      if (visitedPlaces.value.length >= 3 && isTiredFromPlaying()) {
         endingTitle.value = 'ちょっと遊びすぎた！';
         endingMessage.value = 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！';
+        return;
+      }
+
+      // いろいろ回ったけれど、体力はまだ残っているとき
+      // （機嫌が下がった・親の余裕が減った・いやいやが起きた・お昼をすぎた、で疲れた判定になった形）
+      // ここで「遊びすぎた」と書くと、そんなに遊んでいない人と話が合わない
+      if (visitedPlaces.value.length >= 3) {
+        endingTitle.value = 'ちょっとバタバタ探検！';
+        endingMessage.value = 'いろいろな場所を回れたけれど、ちょっとバタバタした1日でした。次は機嫌や時間も見ながら、ゆったり回ってみよう！';
         return;
       }
 
@@ -10141,6 +10394,11 @@ function handleKeydown(event: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown);
 
+  // 秘密の小道：↑ をはなしたら はやく進むのをやめる／フォーカスが外れたら、はやい・押している状態を戻す
+  window.addEventListener('keyup', handleSecretPathKeyup);
+  window.addEventListener('blur', handleSecretPathWindowBlur);
+  document.addEventListener('visibilitychange', handleSecretPathVisibilityChange);
+
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
@@ -10237,6 +10495,9 @@ onMounted(() => {
 /* 画面から離れるときは、受付をやめる（後始末） */
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
+  window.removeEventListener('keyup', handleSecretPathKeyup);
+  window.removeEventListener('blur', handleSecretPathWindowBlur);
+  document.removeEventListener('visibilitychange', handleSecretPathVisibilityChange);
   window.removeEventListener('resize', updateEntranceColumns);
   window.removeEventListener('pointermove', handleWindowPointer);
   window.removeEventListener('pointerdown', handleWindowPointer);
@@ -10264,7 +10525,9 @@ onUnmounted(() => {
   hideTantrumAlert();
 
   // 秘密の小道（ミニゲーム）の requestAnimationFrame も止めておく
+  // はやく進む・押している状態と、長押しを待つ予約も片づける
   stopSecretPathLoop();
+  releaseSecretPathControls();
 });
 </script>
 
@@ -12633,11 +12896,26 @@ onUnmounted(() => {
                 </p>
 
                 <ul class="secret-path-rules">
-                  <li>👆 道（レーン）をクリック・タップすると、その方向へ1レーン動きます。</li>
-                  <li>← → キー（A・D）でも、左・まん中・右に動かせます。</li>
-                  <li>🌿 えだに当たると、集めたこもれびが1つへります（0より下にはなりません）。</li>
-                  <li>15秒たつと、小道の奥に着きます。ぜんぶ取れなくても大丈夫！</li>
-                  <li>✨ こもれびをたくさん集めると、おでかけポイントが少しもらえます。</li>
+                  <!-- 操作の説明は、パソコン向け（--pc）とスマホ向け（--touch）を CSS で出し分ける -->
+                  <!-- はじめる前に長く読まなくても遊べるよう、操作と目的だけを短く書く
+                       文字を大きくしているので、せまい画面でもひと組（「← → / A D：左右に移動」など）の途中では
+                       折り返さないよう、span で包んでいる（secret-path-rules__part） -->
+                  <li class="secret-path-for-pc">
+                    <span class="secret-path-rules__part">← → / A D：左右に移動</span>
+                    <span class="secret-path-rules__part">↑長押し：はやく進む</span>
+                  </li>
+                  <li class="secret-path-for-pc">
+                    <span class="secret-path-rules__part">🖱 クリック・ドラッグ：左右に移動</span>
+                    <span class="secret-path-rules__part">長押し：はやく進む</span>
+                  </li>
+                  <li class="secret-path-for-touch">
+                    <span class="secret-path-rules__part">👆 タップ・フリック：左右に移動</span>
+                    <span class="secret-path-rules__part">長押し：はやく進む</span>
+                  </li>
+                  <li>
+                    <span class="secret-path-rules__part">🌿をよけて✨を集めよう！</span>
+                    <span class="secret-path-rules__part">枝に当たると✨が1つへります</span>
+                  </li>
                 </ul>
               </article>
 
@@ -12651,19 +12929,35 @@ onUnmounted(() => {
                     / {{ secretPathSunlightTotal }}
                   </span>
 
-                  <span class="secret-path-hud__time" :class="{ 'secret-path-hud__time--soon': secretPathTimeLeft <= 3 }">あと {{ secretPathTimeLeft }}秒</span>
+                  <span class="secret-path-hud__time" :class="{ 'secret-path-hud__time--soon': secretPathTimeLeft <= 3 }">
+                    あと {{ secretPathTimeLeft }}秒
+                    <!-- はやく進んでいるあいだだけ出す（↑ キー・フィールドの長押し）
+                         残り時間の右上に重ねて出すので、出たり消えたりしても HUD の並びは変わらない -->
+                    <span v-if="isSecretPathBoosting" class="secret-path-hud__boost">⏩ {{ secretPathBoostMultiplier }}x</span>
+                  </span>
                 </div>
 
                 <!-- フィールド（左・まん中・右の3レーン）
                      枝と木漏れ日の位置は、JavaScript が1コマごとに top を書きかえて動かしている
                      aria-hidden … 流れてくる絵文字を、ひとつずつ読み上げないようにする -->
-                <div class="secret-path-field" aria-hidden="true">
-                  <!-- 道（レーン）の押せる場所
-                       マウスでクリック・指でタップすると、こうちゃんが押したレーンの方向へ1レーン動く
+                <!-- ポインター操作（クリック・タップ・ドラッグ・フリック・長押し）は、フィールド1か所でまとめて受け取る
+                     （handleSecretPathPointerDown() を参照）
+                     contextmenu … スマホで長押ししたときのメニューを出さない -->
+                <div
+                  class="secret-path-field"
+                  aria-hidden="true"
+                  @pointerdown="handleSecretPathPointerDown"
+                  @pointermove="handleSecretPathPointerMove"
+                  @pointerup="handleSecretPathPointerUp"
+                  @pointercancel="handleSecretPathPointerCancel"
+                  @pointerleave="handleSecretPathPointerLeave"
+                  @contextmenu.prevent>
+                  <!-- 道（レーン）の見た目
+                       短くクリック・タップすると、こうちゃんが押したレーンの方向へ1レーン動く
                        ・--next        … 1回で動ける「となりのレーン」。こうちゃんの高さに、うすい点線の丸と矢印（行き先の目印）を出す
                        ・--destination … マウスを乗せたレーンを押したときの動く先。目印がはっきりする
                                          （遠いレーンに乗せたときは、まん中の目印がはっきりする）
-                       ・--flash       … 押したレーンが一瞬光る
+                       ・--flash       … 押したレーン・動いた先のレーンが一瞬光る
                        ※ 枝・木漏れ日・こうちゃんは pointer-events: none なので、上に重なっていても押せる -->
                   <div
                     v-for="lane in secretPathLanes"
@@ -12675,10 +12969,7 @@ onUnmounted(() => {
                       'secret-path-lane--destination': lane === secretPathHoverDestination,
                       'secret-path-lane--flash': lane === secretPathFlashLane,
                     }"
-                    :style="{ left: `${(lane / 3) * 100}%` }"
-                    @pointerdown="handleSecretPathLanePointerDown($event, lane)"
-                    @pointerenter="handleSecretPathLanePointerEnter($event, lane)"
-                    @pointerleave="handleSecretPathLanePointerLeave($event, lane)">
+                    :style="{ left: `${(lane / 3) * 100}%` }">
                     <span class="secret-path-lane__target" :style="{ top: `${secretPathPlayerY}%` }">{{ secretPathPlayerLane > lane ? '←' : '→' }}</span>
                   </div>
 
@@ -12738,12 +13029,20 @@ onUnmounted(() => {
 
               <!-- コマンドボックス
                    遊んでいる最中は、コマンドのかわりに操作の案内だけを出す
-                   （動かすのはフィールドの道をクリック・タップ。← → ・ A / D キーは補助） -->
+                   パソコン向け（--pc）とスマホ向け（--touch）を CSS で出し分ける -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <template v-if="secretPathPhase === 'playing'">
-                  <p class="secret-path-guide">👆 行きたい方の道をクリック・タップして動こう！</p>
+                  <p class="secret-path-guide secret-path-for-pc">
+                    <span class="secret-path-guide__item">← → / A D：移動</span>
+                    <span class="secret-path-guide__item">↑長押し：加速</span>
+                  </p>
 
-                  <p class="secret-path-guide__hint">← → ・ A / D キーでも動かせます</p>
+                  <p class="secret-path-guide__hint secret-path-for-pc">🖱 クリック・ドラッグ：移動　長押し：加速</p>
+
+                  <p class="secret-path-guide secret-path-for-touch">
+                    <span class="secret-path-guide__item">👆 タップ・フリック：移動</span>
+                    <span class="secret-path-guide__item">長押し：加速</span>
+                  </p>
                 </template>
 
                 <!-- はじまる前
@@ -18153,17 +18452,25 @@ onUnmounted(() => {
 /* 遊びかたの箇条書き（点は、うすい紫の丸） */
 .secret-path-rules {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
 }
 
+/* 説明は3行（スマホは2行）だけなので、本文より大きめの文字にして、ぱっと読めるようにする */
 .secret-path-rules li {
   position: relative;
-  padding-left: 18px;
-  font-size: 15px;
+  padding-left: 20px;
+  font-size: 17px;
   line-height: 1.7;
+}
+
+/* 説明のひと組（「← → / A D：左右に移動」など）
+   組の途中では折り返さず、入りきらないときは組の切れ目で次の行へ送る */
+.secret-path-rules__part {
+  display: inline-block;
+  margin-right: 1em;
 }
 
 .secret-path-rules li::before {
@@ -18191,16 +18498,19 @@ onUnmounted(() => {
   padding: 14px 18px 18px;
 }
 
-/* 木漏れ日の数と残り時間 */
+/* 木漏れ日の数と残り時間
+   padding-top … 残り時間の右上に出す「⏩ 1.5x」のぶん、上を少しあけておく */
 .secret-path-hud {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 6px 10px;
+  box-sizing: border-box;
   width: 100%;
   max-width: 460px;
   margin: 0 auto;
+  padding-top: 8px;
 }
 
 .secret-path-hud__sunlight {
@@ -18238,6 +18548,7 @@ onUnmounted(() => {
 }
 
 .secret-path-hud__time {
+  position: relative;
   padding: 3px 14px;
   border-radius: 999px;
   background: var(--navy);
@@ -18253,11 +18564,36 @@ onUnmounted(() => {
   background: #c9412f;
 }
 
+/* はやく進んでいるあいだの「⏩ 1.5x」（残り時間の右上に、小さく重ねて出す）
+
+   HUD の中に並べると、スマホ幅では出たときに残り時間が次の行へ折り返して、
+   フィールドががくっと下へずれてしまうので、position: absolute で並びから外している
+   「あと 12秒」の文字に重ならないよう、丸の上のふちに少しだけかかる高さに置く（そのぶん HUD の上をあけている） */
+.secret-path-hud__boost {
+  position: absolute;
+  top: -17px;
+  right: -6px;
+  padding: 0 7px;
+  border: 2px solid #fff;
+  border-radius: 999px;
+  background: #3f6b3a;
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 /* フィールド（森の小道）
 
+   ・左右のはし … 濃いめの草
+   ・まん中     … 土の道（枝 🌿 の緑・木漏れ日 ✨ の黄色・こうちゃんが、色で埋もれないように茶色にする）
+   ・まるい光の模様 … 地面に落ちている木漏れ日（流れてくる ✨ とまちがえないよう、うすめにする）
    ・box-sizing: border-box … 枠のぶんだけカードから横にはみ出さないようにする
-   ・まるい光の模様 … 地面に落ちている木漏れ日
-   ・touch-action: none … 指でフィールドをさわっても、ページがスクロールしないようにする */
+   ・touch-action: none … 指でフィールドをさわっても、ページがスクロールしないようにする
+   ・-webkit-touch-callout: none … iPhone で長押ししたときのメニューを出さない */
 .secret-path-field {
   position: relative;
   flex: 1 1 auto;
@@ -18267,20 +18603,21 @@ onUnmounted(() => {
   min-height: 220px;
   margin: 0 auto;
   overflow: hidden;
-  border: 3px solid #7aa874;
+  border: 3px solid #4f7a46;
   border-radius: 18px;
   background:
-    radial-gradient(circle at 22% 16%, rgb(255 246 196 / 75%) 0 16px, transparent 44px),
-    radial-gradient(circle at 80% 40%, rgb(255 246 196 / 60%) 0 12px, transparent 38px),
-    radial-gradient(circle at 36% 66%, rgb(255 246 196 / 50%) 0 14px, transparent 40px),
-    linear-gradient(90deg, #a9d59f 0%, #efe4c6 9%, #efe4c6 91%, #a9d59f 100%);
-  box-shadow: inset 0 10px 18px rgb(47 94 60 / 22%);
+    radial-gradient(circle at 22% 16%, rgb(255 236 170 / 30%) 0 16px, transparent 44px),
+    radial-gradient(circle at 80% 40%, rgb(255 236 170 / 24%) 0 12px, transparent 38px),
+    radial-gradient(circle at 36% 66%, rgb(255 236 170 / 20%) 0 14px, transparent 40px),
+    linear-gradient(90deg, #4a7a40 0%, #5a8c4c 6%, #7a5a3c 7%, #a67c52 10%, #b08a60 50%, #a67c52 90%, #7a5a3c 93%, #5a8c4c 94%, #4a7a40 100%);
+  box-shadow: inset 0 10px 18px rgb(38 58 30 / 35%);
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
-/* レーンの区切りの点線（左から 1/3 と 2/3 の位置） */
+/* レーンの区切りの点線（左から 1/3 と 2/3 の位置。土の道の上で見えるよう、明るいクリーム色） */
 .secret-path-field::before,
 .secret-path-field::after {
   position: absolute;
@@ -18289,7 +18626,7 @@ onUnmounted(() => {
   z-index: 1;
   width: 3px;
   margin-left: -1.5px;
-  background: repeating-linear-gradient(180deg, rgb(122 168 116 / 55%) 0 16px, transparent 16px 34px);
+  background: repeating-linear-gradient(180deg, rgb(255 244 222 / 70%) 0 16px, transparent 16px 34px);
   content: '';
 }
 
@@ -18334,9 +18671,9 @@ onUnmounted(() => {
   box-sizing: border-box;
   width: 46px;
   height: 46px;
-  border: 3px dashed rgb(95 143 90 / 60%);
+  border: 3px dashed rgb(255 246 228 / 85%);
   border-radius: 50%;
-  color: rgb(79 125 74);
+  color: #fff6e4;
   font-size: 18px;
   font-weight: 700;
   line-height: 1;
@@ -18358,7 +18695,7 @@ onUnmounted(() => {
 /* マウスを乗せたレーン（マウスなど、乗せられる端末だけ）は、少し明るくなる */
 @media (hover: hover) {
   .secret-path-lane:not(.secret-path-lane--current):hover {
-    background: rgb(255 255 255 / 32%);
+    background: rgb(255 255 255 / 16%);
   }
 }
 
@@ -18374,7 +18711,7 @@ onUnmounted(() => {
 
 /* 押した直後のレーン（クリック・タップどちらも）は、木漏れ日の色で一瞬光る */
 .secret-path-lane--flash {
-  background: rgb(255 241 168 / 60%);
+  background: rgb(255 241 168 / 40%);
 }
 
 /* 流れてくる枝と木漏れ日（left と top は、レーンと y から JavaScript が入れる） */
@@ -18387,12 +18724,14 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+/* 枝：うすいクリーム色のふちどりと、下に濃い影をつけて、草や土の色に埋もれないようにする */
 .secret-path-item--branch {
-  filter: drop-shadow(0 2px 0 rgb(47 94 60 / 35%));
+  filter: drop-shadow(0 0 1.5px rgb(255 250 232)) drop-shadow(0 0 1px rgb(255 250 232)) drop-shadow(0 2px 2px rgb(40 28 12 / 60%));
 }
 
+/* 木漏れ日：こげ茶の細いふちどり ＋ 金色の光で、明るい所でも暗い所でも消えないようにする */
 .secret-path-item--sunlight {
-  filter: drop-shadow(0 0 6px rgb(255 214 90 / 95%));
+  filter: drop-shadow(0 0 1px rgb(110 64 0 / 95%)) drop-shadow(0 0 6px rgb(255 226 110));
 }
 
 /* 当たった枝は、うすくして「もう当たらない」ことが分かるようにする */
@@ -18409,11 +18748,12 @@ onUnmounted(() => {
   pointer-events: none;
 }
 
+/* こうちゃん：白いふちどりで、土の道の上でもくっきり見えるようにする */
 .secret-path-player__face {
   display: block;
   font-size: 42px;
   line-height: 1;
-  filter: drop-shadow(0 3px 0 rgb(47 94 60 / 30%));
+  filter: drop-shadow(0 0 2px rgb(255 255 255)) drop-shadow(0 3px 1px rgb(40 28 12 / 45%));
 }
 
 /* 枝に当たったとき：小さく2回ゆれる（いやいや発生の結果カードと同じ shake） */
@@ -18497,27 +18837,42 @@ onUnmounted(() => {
   }
 }
 
-/* 遊んでいる最中の「👆 行きたい方の道をクリック・タップして動こう！」
-   動かす操作はフィールドの道だけなので、ここには押すものを置かず、短い案内だけにする */
+/* 遊んでいる最中の操作の案内（「← → / A D：左右に移動」「↑ 長押し：はやく進む」など）
+   動かす操作はフィールドとキーだけなので、ここには押すものを置かず、短い案内だけにする */
 .secret-path-guide {
   margin: 0;
   color: #fff;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.5;
+}
+
+/* 案内のひとまとまり（せまい画面では、まとまりの切れ目で折り返す） */
+.secret-path-guide__item {
+  display: inline-block;
+  margin: 0 6px;
 }
 
 .secret-path-guide__hint {
   margin: 4px 0 0;
   color: #b8dfef;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
-/* 指で遊ぶ端末では、キーボードの案内を出さない */
-@media (hover: none) and (pointer: coarse) {
-  .secret-path-guide__hint {
+/* パソコン向け（--pc）とスマホ向け（--touch）の説明の出し分け
+   ふだんはパソコン向けを出し、指で遊ぶ端末ではスマホ向けだけを出す */
+.secret-path-for-touch {
+  display: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .secret-path-for-pc {
     display: none;
+  }
+
+  .secret-path-for-touch {
+    display: block;
   }
 }
 
@@ -19672,7 +20027,7 @@ onUnmounted(() => {
   }
 
   .secret-path-rules li {
-    font-size: 14.5px;
+    font-size: 16px;
   }
 }
 </style>
