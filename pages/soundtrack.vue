@@ -441,7 +441,7 @@ function saveSoundSetting() {
   }
 }
 
-/* 「🔊 サウンド ON」「🔇 サウンド OFF」のボタンを押したとき */
+/* 「🔊 サウンド ON」「🔊✕ サウンド OFF」のボタンを押したとき */
 function toggleSound() {
   // ① まず切り替える（ONならOFFへ、OFFならONへ）
   soundEnabled.value = !soundEnabled.value;
@@ -2784,7 +2784,7 @@ onUnmounted(() => {
         <!-- ゲーム本編（pages/index.vue）のサウンドボタンと同じ形にしてある
 
              aria-pressed … 読み上げソフトへ「いま押されている（＝ON）」を伝える
-                            見た目（色・🔊/🔇）も、この値をもとにCSSで切り替えている
+                            見た目（色・🔊 / 🔊✕）も、この値をもとにCSSで切り替えている
              ON と OFF の文字は同じ場所に重ねて置き、使わないほうを見えなくする
              （ボタンの幅がいつも同じになるので、押してもツールバーの並びがずれない）
              ref … 矢印キーで「🔀 シャッフル再生」から↑で戻る先、戻るから→で移る先 -->
@@ -2793,9 +2793,15 @@ onUnmounted(() => {
           type="button"
           class="st-soundToggle"
           :aria-pressed="soundEnabled"
-          :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
+          :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
           @click="toggleSound">
-          <span class="st-soundToggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
+          <span class="st-soundToggle__icon">
+            <!-- スピーカーは、ONでもOFFでも同じ 🔊 のまま
+                 OFFのときだけ右に「✕」を足して（🔊✕）、音が出ない状態だと一目で分かるようにする
+                 ✕ の場所はONのときも残るので、押してもボタンの幅は変わらない -->
+            <span class="st-soundToggle__iconSpeaker">🔊</span>
+            <span class="st-soundToggle__iconCross">✕</span>
+          </span>
           <span class="st-soundToggle__text">サウンド</span>
           <span class="st-soundToggle__state">
             <span class="st-soundToggle__stateText st-soundToggle__stateText--on">ON</span>
@@ -2986,7 +2992,7 @@ onUnmounted(() => {
              ・音量バー … 「どのくらいの大きさ」で鳴らすか
 
              ※ 🔊 の絵文字は、上部ツールバーのサウンドボタンだけに付けている
-               音量のほうにも付けると、OFF（🔇）のときも 🔊 が見えてしまい、
+               音量のほうにも付けると、OFF（🔊✕）のときも ✕ のない 🔊 が見えてしまい、
                いまONなのかOFFなのかが分かりにくくなるため -->
         <div class="st-settings">
           <!-- 🔁 リピート（押すたびに OFF → 全曲 → 1曲 → OFF と回る）
@@ -3576,6 +3582,41 @@ onUnmounted(() => {
 .st-soundToggle__icon {
   font-size: 16px;
   line-height: 1;
+}
+
+/* スピーカーのアイコン（🔊 と、OFFのときだけ出る ✕）
+
+   ミュートの絵文字 🔇 は「斜めの線」だけなので、小さく出すと
+   音が出ない状態なのかどうかが、ぱっと見では分かりにくい
+   そこで、スピーカーはONでもOFFでも同じ 🔊 のままにしておいて、
+   OFFのときだけ、右に「✕」を足す（🔊✕）
+
+   ✕ は、ONのときも visibility で場所を残しておく（display: none にしない）
+   下の「ON」「OFF」の文字と同じ考えかたで、押してもボタンの幅が変わらない
+   （本編の pages/index.vue の .sound-toggle__icon と同じ考えかた） */
+.st-soundToggle__icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* 「✕」の大きさは em（スピーカーとの比）で指定している
+   スマホでアイコンを小さくしても、つりあいは同じになる */
+.st-soundToggle__iconCross {
+  font-size: 0.95em;
+  font-weight: 700;
+}
+
+/* サウンドOFFのときは、ボタン全体の色をぬいている（上の指定）が、
+   「✕」だけは、いちばん伝えたい印なので、うすくせずに読みやすい濃さのままにする */
+.st-soundToggle[aria-pressed='false'] .st-soundToggle__iconCross {
+  color: var(--ink);
+}
+
+/* サウンドONのときは「✕」を見えなくする（場所はそのまま残る）
+   aria-pressed は true＝サウンドON、false＝サウンドOFF */
+.st-soundToggle[aria-pressed='true'] .st-soundToggle__iconCross {
+  visibility: hidden;
 }
 
 /* 状態の文字（OFF / 全曲 / 1曲、ON / OFF）が変わっても、
