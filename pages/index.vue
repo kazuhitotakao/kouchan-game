@@ -12897,14 +12897,25 @@ onUnmounted(() => {
 
                 <ul class="secret-path-rules">
                   <!-- 操作の説明は、パソコン向け（--pc）とスマホ向け（--touch）を CSS で出し分ける -->
-                  <li class="secret-path-for-pc">← → キー（A・D）で、左・まん中・右に1レーンずつ動きます。↑ キーを長押しすると、はやく進みます。</li>
-                  <li class="secret-path-for-pc">🖱 マウスは、押したまま左右にドラッグで移動、長押しで はやく進みます。</li>
-                  <li class="secret-path-for-touch">👆 左右にフリックすると、その方向へ1レーン動きます。</li>
-                  <li class="secret-path-for-touch">⏩ 道を長押しすると、はやく進みます。</li>
-                  <li>はやく進むと早く着けるけど、よけるのも少しむずかしくなります。</li>
-                  <li>🌿 えだに当たると、集めたこもれびが1つへります（0より下にはなりません）。</li>
-                  <li>15秒たつと、小道の奥に着きます。ぜんぶ取れなくても大丈夫！</li>
-                  <li>✨ こもれびをたくさん集めると、おでかけポイントが少しもらえます。</li>
+                  <!-- はじめる前に長く読まなくても遊べるよう、操作と目的だけを短く書く
+                       文字を大きくしているので、せまい画面でもひと組（「← → / A D：左右に移動」など）の途中では
+                       折り返さないよう、span で包んでいる（secret-path-rules__part） -->
+                  <li class="secret-path-for-pc">
+                    <span class="secret-path-rules__part">← → / A D：左右に移動</span>
+                    <span class="secret-path-rules__part">↑長押し：はやく進む</span>
+                  </li>
+                  <li class="secret-path-for-pc">
+                    <span class="secret-path-rules__part">🖱 クリック・ドラッグ：左右に移動</span>
+                    <span class="secret-path-rules__part">長押し：はやく進む</span>
+                  </li>
+                  <li class="secret-path-for-touch">
+                    <span class="secret-path-rules__part">👆 タップ・フリック：左右に移動</span>
+                    <span class="secret-path-rules__part">長押し：はやく進む</span>
+                  </li>
+                  <li>
+                    <span class="secret-path-rules__part">🌿をよけて✨を集めよう！</span>
+                    <span class="secret-path-rules__part">枝に当たると✨が1つへります</span>
+                  </li>
                 </ul>
               </article>
 
@@ -13022,15 +13033,15 @@ onUnmounted(() => {
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
                 <template v-if="secretPathPhase === 'playing'">
                   <p class="secret-path-guide secret-path-for-pc">
-                    <span class="secret-path-guide__item">← → / A D：左右に移動</span>
-                    <span class="secret-path-guide__item">↑ 長押し：はやく進む</span>
+                    <span class="secret-path-guide__item">← → / A D：移動</span>
+                    <span class="secret-path-guide__item">↑長押し：加速</span>
                   </p>
 
-                  <p class="secret-path-guide__hint secret-path-for-pc">🖱 マウス：ドラッグで左右移動／長押しで はやく進む</p>
+                  <p class="secret-path-guide__hint secret-path-for-pc">🖱 クリック・ドラッグ：移動　長押し：加速</p>
 
                   <p class="secret-path-guide secret-path-for-touch">
-                    <span class="secret-path-guide__item">👆 左右フリック：左右に移動</span>
-                    <span class="secret-path-guide__item">長押し：はやく進む</span>
+                    <span class="secret-path-guide__item">👆 タップ・フリック：移動</span>
+                    <span class="secret-path-guide__item">長押し：加速</span>
                   </p>
                 </template>
 
@@ -18441,17 +18452,25 @@ onUnmounted(() => {
 /* 遊びかたの箇条書き（点は、うすい紫の丸） */
 .secret-path-rules {
   display: grid;
-  gap: 2px;
+  gap: 4px;
   margin: 12px 0 0;
   padding: 0;
   list-style: none;
 }
 
+/* 説明は3行（スマホは2行）だけなので、本文より大きめの文字にして、ぱっと読めるようにする */
 .secret-path-rules li {
   position: relative;
-  padding-left: 18px;
-  font-size: 15px;
+  padding-left: 20px;
+  font-size: 17px;
   line-height: 1.7;
+}
+
+/* 説明のひと組（「← → / A D：左右に移動」など）
+   組の途中では折り返さず、入りきらないときは組の切れ目で次の行へ送る */
+.secret-path-rules__part {
+  display: inline-block;
+  margin-right: 1em;
 }
 
 .secret-path-rules li::before {
@@ -18823,7 +18842,7 @@ onUnmounted(() => {
 .secret-path-guide {
   margin: 0;
   color: #fff;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.5;
 }
@@ -18837,7 +18856,7 @@ onUnmounted(() => {
 .secret-path-guide__hint {
   margin: 4px 0 0;
   color: #b8dfef;
-  font-size: 12.5px;
+  font-size: 14px;
   line-height: 1.5;
 }
 
@@ -20008,7 +20027,7 @@ onUnmounted(() => {
   }
 
   .secret-path-rules li {
-    font-size: 14.5px;
+    font-size: 16px;
   }
 }
 </style>
