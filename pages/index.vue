@@ -7928,6 +7928,17 @@ function calculateFinalScore() {
   finalScore.value = keepInRange(total);
 }
 
+/* 遊びつかれて、親かこうちゃんの体力が減っているかどうか（isWornOut() の理由のうち「体力」だけ）
+
+   Cランクの「ちょっと遊びすぎた！」は、これが true のときだけ出す
+   isWornOut() は、機嫌・余裕・いやいや・お昼すぎ でも true になるので、
+   それだけで決めると、少ししか遊んでいないのに「遊びすぎた」と出てしまう
+   （機嫌は55スタートで、ぐずりだすライン50のすぐ上。少し下がっただけで isWornOut() が true になる）
+   体力は遊ぶたびにしっかり減るので、ここが下がっていれば「たくさん遊んで疲れた」と言える */
+function isTiredFromPlaying() {
+  return parentEnergy.value < 50 || childEnergy.value < 30;
+}
+
 /* へとへとで帰ってきたかどうかを判定する
 
    スコアが低くなる理由は、大きく分けて2つある
@@ -7943,7 +7954,7 @@ function calculateFinalScore() {
 */
 function isWornOut() {
   // 親かこうちゃんの体力が減っている
-  if (parentEnergy.value < 50 || childEnergy.value < 30) {
+  if (isTiredFromPlaying()) {
     return true;
   }
 
@@ -7985,6 +7996,8 @@ function isWornOut() {
      ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
      ・C／Dランク … 「あまり遊べなかった」系の文は、遊んだ回数が少ないときだけ使う
                      （同じ場所でくりかえし遊んだ人に言うと話が合わない）
+     ・Cランク    … 「遊びすぎた」は、体力が減っているときだけ使う（isTiredFromPlaying()）
+                     （機嫌・余裕・いやいや・時間だけで疲れた判定になった人に言うと話が合わない）
 
    ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
 */
@@ -8070,10 +8083,19 @@ function judgeResult() {
 
     // 疲れて帰ってきたとき
     if (isWornOut()) {
-      // たくさん回ったうえで疲れたのなら「遊びすぎた」でよい
-      if (visitedPlaces.value.length >= 3) {
+      // たくさん回ったうえで、遊びつかれて体力が減ったのなら「遊びすぎた」でよい
+      if (visitedPlaces.value.length >= 3 && isTiredFromPlaying()) {
         endingTitle.value = 'ちょっと遊びすぎた！';
         endingMessage.value = 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！';
+        return;
+      }
+
+      // いろいろ回ったけれど、体力はまだ残っているとき
+      // （機嫌が下がった・親の余裕が減った・いやいやが起きた・お昼をすぎた、で疲れた判定になった形）
+      // ここで「遊びすぎた」と書くと、そんなに遊んでいない人と話が合わない
+      if (visitedPlaces.value.length >= 3) {
+        endingTitle.value = 'ちょっとバタバタ探検！';
+        endingMessage.value = 'いろいろな場所を回れたけれど、ちょっとバタバタした1日でした。次は機嫌や時間も見ながら、ゆったり回ってみよう！';
         return;
       }
 
