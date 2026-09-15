@@ -77,6 +77,10 @@ const howToPlayButtonRef = ref<HTMLButtonElement | null>(null); // B画面の「
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
 const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
 
+/* 音量スライダー
+   A画面・B画面で Tab を回りこませるときに、いちばん後ろの行き先として使う */
+const soundVolumeSliderRef = ref<HTMLInputElement | null>(null);
+
 /* あそびかた画面の「← ひとつ前の画面へ戻る」（上のツールバーの左）
    画面が出おわったときに、ここへフォーカスを当てる */
 const howToBackButtonRef = ref<HTMLButtonElement | null>(null);
@@ -1620,16 +1624,88 @@ const soundEnabled = ref(true);
 */
 const soundStorageKey = 'kouchan-game-sound-enabled';
 
-/* サウンド（効果音＋BGM）のON/OFFを切り替える
+/* 音ぜんぶの大きさ（0〜100の整数。100＝そのままの大きさ）
 
-   localStorage は、ブラウザに小さなメモを残しておける保存場所
-   ページを閉じても消えないので、次に開いたときも設定を思い出せる
+   ■ 何にかかるか
+     BGMにも、決定音などの効果音にも、まとめて同じ割合でかかる
+     （曲ごと・効果音ごとの数字は「録音の大きさをそろえる」ためのものなので、そのまま残す）
+     実際に鳴らす大きさは、その数字とこれをかけ算して決める（→ getSoundVolume()）
+
+   ■ 0% ＝ ミュート
+     0%にすると音が何も出なくなるので、スピーカーのミュートと同じ状態になる
+     見た目と中身が食いちがわないように、この2つはいつもセットで動かしている
+     ・スライダーを0%にした     … soundEnabled も false にする（アイコンが 🔊× になる）
+     ・スライダーを0%から上げた … soundEnabled も true に戻す（音が戻る）
+     ・ミュートボタンを押した   … スライダーも 0% ⇄ もとの大きさ に動く
+     （切りかえているのは changeSoundVolume() と toggleSound() の2か所だけ）
+
+   ※ サウンドON/OFFと同じ「設定」なので、resetGame（もう一度あそぶ）では戻さない
+*/
+const soundVolumePercent = ref(100);
+
+/* ミュートする直前の大きさ（ミュートを解除したときに、ここへ戻す）
+
+   ミュートすると音量は0%になるので、そのままだと
+   解除したときに「前はどれくらいだったか」が分からなくなってしまう
+   0%のときは戻り先にならないので、100%を初期値にしてある
+*/
+let volumeBeforeMute = 100;
+
+/* 音量を保存しておく名前（localStorageのキー）
+   サウンドON/OFF（kouchan-game-sound-enabled）とは別のメモにしてある
+   ※ キーの文字は、前に決めたときのまま（-bgm- ）にしてある
+     いま使っている人の設定が、名前を変えたせいで消えてしまわないようにするため */
+const soundVolumeStorageKey = 'kouchan-game-bgm-volume';
+
+/* もとの大きさに、音量スライダーのぶんをかけた「実際に鳴らす大きさ」を返す
+
+   BGMからも効果音からも、同じこの関数を通す
+   例：公園BGM（0.16）で、音量が50%なら → 0.16 × 0.5 ＝ 0.08
+   例：決定音（0.06）で、音量が50%なら → 0.06 × 0.5 ＝ 0.03
+
+   volume に入れられるのは 0〜1 の数字だけなので、
+   はみ出さないように、下（0）と上（1）でおさえている
+*/
+function getSoundVolume(baseVolume: number) {
+  return Math.min(1, Math.max(0, baseVolume * (soundVolumePercent.value / 100)));
+}
+
+/* ミュートボタンを押したとき（サウンドのON/OFFを切り替える）
+
+   0% ＝ ミュートなので、スライダーの位置もいっしょに動かす
+   ・ミュートする   … いまの大きさを覚えてから、0%へ
+   ・ミュートを解除 … 覚えておいた大きさへ戻す（覚えが0%なら100%）
 */
 function toggleSound() {
   // ① まず切り替える（true なら false へ、false なら true へ）
   soundEnabled.value = !soundEnabled.value;
 
-  /* ② BGMも合わせる
+  // ② スライダーの位置も、いまの状態に合わせる
+  if (soundEnabled.value) {
+    soundVolumePercent.value = volumeBeforeMute > 0 ? volumeBeforeMute : 100;
+  } else {
+    if (soundVolumePercent.value > 0) {
+      volumeBeforeMute = soundVolumePercent.value;
+    }
+
+    soundVolumePercent.value = 0;
+  }
+
+  // ③ 新しい大きさを、いま鳴っているBGMへ反映して、保存しておく
+  applySoundVolume();
+  saveSoundVolume();
+
+  // ④ BGMを止める・鳴らしなおす（と、ON/OFFの保存）
+  applySoundEnabledChange();
+}
+
+/* サウンドのON/OFFが変わったあとの、あと始末
+
+   ミュートボタン（toggleSound）からも、
+   スライダーを0%にした・0%から上げたとき（changeSoundVolume）からも呼ばれる
+
+   ここでやること
+   ① BGMを止める／鳴らしなおす
        効果音は getAudioContext() が soundEnabled を見てくれるので何もしなくてよいが、
        BGMは「いま鳴っている曲」なので、その場で止める・再開する必要がある
 
@@ -1681,7 +1757,12 @@ function toggleSound() {
        ※ サウンドOFFのまま秘密の場所へ入って、そこでONに戻したときは、
          まだ曲を一度も作っていないので、resumeSecretBgm() の中で
          新しく作って先頭から鳴りはじめる（公園BGMは鳴らない）
-  */
+
+   ② 次に開いたときのために、ON/OFFを保存する
+       localStorage は、ブラウザに小さなメモを残しておける保存場所
+       ページを閉じても消えないので、次に開いたときも設定を思い出せる
+*/
+function applySoundEnabledChange() {
   if (soundEnabled.value) {
     if (titleEntered.value && !gameStarted.value) {
       resumeTitleBgm();
@@ -1716,7 +1797,6 @@ function toggleSound() {
     return;
   }
 
-  // ③ 次に開いたときのために保存しておく
   try {
     localStorage.setItem(soundStorageKey, String(soundEnabled.value));
   } catch {
@@ -1781,6 +1861,8 @@ function getAudioContext() {
    startTime … いつ鳴らしはじめるか（AudioContextの中の時計の時刻）
    duration  … 音の長さ（秒）
    volume    … 音の大きさ（0〜1）。今回はどれも0.1以下の控えめな値にしている
+                （ここへ渡すのは効果音ごとの「もとの大きさ」で、
+                  音量スライダーのぶんは、この関数の中でかけ算する）
    type      … 波の形。sine と triangle はどちらも丸くてやさしい音になる
    endFrequency … 指定すると、その高さまで音程がなめらかに変化する（省略可）
 
@@ -1806,18 +1888,38 @@ function playTone(frequency: number, startTime: number, duration: number, volume
       oscillator.frequency.exponentialRampToValueAtTime(endFrequency, startTime + duration);
     }
 
+    /* 効果音の大きさにも、音量スライダーのぶんをかける
+
+       BGMとまったく同じ割合をかけるので、スライダーを下げると
+       BGMも効果音も、同じだけ小さくなる
+       （効果音ごとの「もとの大きさ」のちがいは、かけ算なのでそのまま残る） */
+    const effectVolume = getSoundVolume(volume);
+
+    /* 0（＝ミュート）のときは鳴らさずに終わり
+
+       ふだんは getAudioContext() が soundEnabled を見て止めてくれるが、
+       下の exponentialRampToValueAtTime() は 0 を受け取れないので、
+       ここでも念のため確かめている */
+    if (effectVolume <= 0) {
+      return;
+    }
+
     /* 音量の動き（これが無いと、鳴りはじめと鳴り終わりに「ブツッ」と雑音が入る）
        ① ほぼ無音からはじめる
        ② 0.015秒かけて、すっと目的の音量まで上げる
        ③ そのあと、鳴り終わりに向かってゆっくり下げる
 
-       ※ 下げる先を 0 ではなく 0.001 にしているのは、
-         exponentialRampToValueAtTime() が 0 を受け取れないため
-         （0へ向かう計算ができないので、代わりに「ほぼ0」を使う）
+       ※ ①と③で 0 を使えないのは、exponentialRampToValueAtTime() が
+         0 へ向かう計算をできないため（代わりに「ほぼ0」を使う）
+       ※ ①と③の「ほぼ0」を effectVolume からの割合で出しているのが大事
+         決まった数字（0.001 など）にすると、音量を下げたときに
+         その数字のほうが大きくなってしまい、鳴り終わりで音が上がってしまう
     */
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+    const nearSilent = effectVolume * 0.02;
+
+    gain.gain.setValueAtTime(nearSilent, startTime);
+    gain.gain.exponentialRampToValueAtTime(effectVolume, startTime + 0.015);
+    gain.gain.exponentialRampToValueAtTime(nearSilent, startTime + duration);
 
     // 発生源 → 音量つまみ → スピーカー の順につなぐ
     oscillator.connect(gain);
@@ -2025,7 +2127,7 @@ function getParkBgm() {
       parkBgm.loop = true;
 
       // volume … 音の大きさ（上の parkBgmVolume で決めている）
-      parkBgm.volume = parkBgmVolume;
+      parkBgm.volume = getSoundVolume(parkBgmVolume);
     }
 
     return parkBgm;
@@ -2064,7 +2166,7 @@ function getParkBgm2() {
       parkBgm2.loop = true;
 
       // volume … 音の大きさ（上の parkBgm2Volume で決めている）
-      parkBgm2.volume = parkBgm2Volume;
+      parkBgm2.volume = getSoundVolume(parkBgm2Volume);
     }
 
     return parkBgm2;
@@ -2138,9 +2240,12 @@ let bgmFadeTimer: ReturnType<typeof setInterval> | null = null;
    途中でやめたときに「どの曲の音量を戻すか」が分かるように覚えておく */
 let fadingBgm: HTMLAudioElement | null = null;
 
-/* その曲の ふだんの音量（＝どこまで上げたら終わりか）
-   曲ごとに音量がちがうので、いっしょに覚えておく */
-let fadingBgmVolume = 0;
+/* その曲の「曲ごとの音量」（＝どこまで上げたら終わりか、のもとの数字）
+
+   ここに入れるのは、音量スライダーのぶんをかける前の数字
+   フェードの途中でスライダーを動かされても追いつけるように、
+   実際の大きさは1回ごとに getSoundVolume() で計算しなおす */
+let fadingBgmBaseVolume = 0;
 
 /* BGMをフェードインさせる（音量を0から少しずつ上げる）
 
@@ -2172,7 +2277,7 @@ function startBgmFadeIn(bgm: HTMLAudioElement, targetVolume: number) {
 
   bgm.volume = 0; // まずは無音から
   fadingBgm = bgm;
-  fadingBgmVolume = targetVolume;
+  fadingBgmBaseVolume = targetVolume;
 
   bgmFadeTimer = setInterval(() => {
     doneSteps += 1;
@@ -2180,8 +2285,15 @@ function startBgmFadeIn(bgm: HTMLAudioElement, targetVolume: number) {
     // 進み具合（0 → 1）を、そのまま音量の割合として使う
     const ratio = doneSteps / totalSteps;
 
+    /* 上がりきったときの大きさは、1回ごとに計算しなおす
+
+       こうしておくと、フェードの途中で音量スライダーを
+       100% → 30% のように動かしても、その場から新しい大きさに追いつく
+       （古い目標をつかんだまま、100%相当まで上がってしまうことがない） */
+    const goalVolume = getSoundVolume(fadingBgmBaseVolume);
+
     try {
-      bgm.volume = ratio >= 1 ? targetVolume : targetVolume * ratio;
+      bgm.volume = ratio >= 1 ? goalVolume : goalVolume * ratio;
     } catch {
       // 何もしない
     }
@@ -2208,13 +2320,13 @@ function cancelBgmFade() {
 
   if (fadingBgm) {
     try {
-      fadingBgm.volume = fadingBgmVolume;
+      fadingBgm.volume = getSoundVolume(fadingBgmBaseVolume);
     } catch {
       // 何もしない
     }
 
     fadingBgm = null;
-    fadingBgmVolume = 0;
+    fadingBgmBaseVolume = 0;
   }
 }
 
@@ -2531,7 +2643,7 @@ function getTitleBgm() {
       titleBgm.loop = true;
 
       // volume … 音の大きさ（上の titleBgmVolume で決めている）
-      titleBgm.volume = titleBgmVolume;
+      titleBgm.volume = getSoundVolume(titleBgmVolume);
     }
 
     return titleBgm;
@@ -2562,7 +2674,7 @@ function playTitleBgm() {
 
     // タイトルBGMはフェードインさせず、そのまま鳴らす
     // （フェードインするのは公園BGMだけ）
-    bgm.volume = titleBgmVolume;
+    bgm.volume = getSoundVolume(titleBgmVolume);
 
     bgm.play().catch(() => {});
   } catch {
@@ -2725,7 +2837,7 @@ function getTantrumBgm() {
       tantrumBgm.loop = true;
 
       // volume … 音の大きさ（上の tantrumBgmVolume で決めている）
-      tantrumBgm.volume = tantrumBgmVolume;
+      tantrumBgm.volume = getSoundVolume(tantrumBgmVolume);
     }
 
     return tantrumBgm;
@@ -2908,7 +3020,7 @@ function getResultBgm() {
       resultBgm.loop = true;
 
       // volume … 音の大きさ（上の resultBgmVolume で決めている）
-      resultBgm.volume = resultBgmVolume;
+      resultBgm.volume = getSoundVolume(resultBgmVolume);
     } else if (resultBgm.getAttribute('src') !== src) {
       /* 前のゴールとランクがちがって、鳴らす曲が変わるときだけ差しかえる
 
@@ -3149,7 +3261,7 @@ function getGameOverBgm() {
       gameOverBgm.loop = true;
 
       // volume … 音の大きさ（上の gameOverBgmVolume で決めている）
-      gameOverBgm.volume = gameOverBgmVolume;
+      gameOverBgm.volume = getSoundVolume(gameOverBgmVolume);
     }
 
     return gameOverBgm;
@@ -3339,7 +3451,7 @@ function stopGameOverBgm() {
 
     // 音量も、決めてある大きさへ戻しておく
     // （フェードインの途中で止めると、小さい音量のまま残ることがあるため）
-    gameOverBgm.volume = gameOverBgmVolume;
+    gameOverBgm.volume = getSoundVolume(gameOverBgmVolume);
   } catch {
     // 何もしない
   }
@@ -3394,7 +3506,7 @@ function getSecretBgm() {
       secretBgm.loop = true;
 
       // volume … 音の大きさ（上の secretBgmVolume で決めている）
-      secretBgm.volume = secretBgmVolume;
+      secretBgm.volume = getSoundVolume(secretBgmVolume);
     }
 
     return secretBgm;
@@ -3577,6 +3689,123 @@ function stopSecretBgm() {
     secretBgm.currentTime = 0; // 次に入ったときは、また曲の先頭から
   } catch {
     // 何もしない
+  }
+}
+
+/* ============================================================
+   音量（スライダー）を、実際の音へ反映する
+
+   ここにあるのは3つ
+   ・applySoundVolume()  … いま作ってあるBGMの volume を、いまの設定へそろえる
+   ・saveSoundVolume()   … 次に開いたときのために localStorage へ残す
+   ・changeSoundVolume() … スライダーを動かしたときに呼ばれる（上の2つをまとめて行う）
+   ============================================================ */
+
+/* いま作ってある（＝一度でも鳴らした）BGMの音量を、いまの設定へそろえる
+
+   ■ get〜Bgm() を呼ばないのが大事
+     呼ぶと、まだ一度も鳴らしていない曲まで new Audio() で作られてしまい、
+     音量を変えただけなのに mp3 の読み込みが始まってしまう
+     ここでは「もう作ってある曲」だけを、そのまま直す
+
+   ■ pause() も play() も currentTime も、さわらない
+     volume だけを変えるので、鳴っている曲は
+     止まったり、頭から鳴りなおしたりせず、そのまま大きさだけが変わる
+
+   ■ フェードインの最中の曲だけは、ここでは変えない
+     フェードの係（startBgmFadeIn）が 0.05秒ごとに
+     いまの設定で計算しなおしているので、そちらにまかせる
+     （ここで一気に入れてしまうと、フェードの途中で音が飛んでしまう）
+*/
+function applySoundVolume() {
+  /* 曲と「曲ごとの音量」の組み合わせ
+     新しいBGMを足したときは、ここにも1行足す */
+  const bgmList: [HTMLAudioElement | null, number][] = [
+    [parkBgm, parkBgmVolume],
+    [parkBgm2, parkBgm2Volume],
+    [titleBgm, titleBgmVolume],
+    [tantrumBgm, tantrumBgmVolume],
+    [resultBgm, resultBgmVolume],
+    [gameOverBgm, gameOverBgmVolume],
+    [secretBgm, secretBgmVolume],
+  ];
+
+  for (const [bgm, baseVolume] of bgmList) {
+    // まだ作っていない曲（null）と、フェードインの最中の曲は、ここでは何もしない
+    if (!bgm || bgm === fadingBgm) {
+      continue;
+    }
+
+    try {
+      bgm.volume = getSoundVolume(baseVolume);
+    } catch {
+      // 何もしない
+    }
+  }
+}
+
+/* 音量を、次に開いたときのために保存しておく */
+function saveSoundVolume() {
+  // サーバー側には localStorage が無いので、ここで終わり
+  if (!import.meta.client) {
+    return;
+  }
+
+  try {
+    localStorage.setItem(soundVolumeStorageKey, String(soundVolumePercent.value));
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 保存できなくても、このページを開いているあいだの音量は正常に動く
+  }
+}
+
+/* 音量のスライダーを動かしたとき
+
+   input type="range" の value は文字で届くので、Number() で数字に直す
+   つまみを持って動かしているあいだ（@input）ずっと呼ばれるので、
+   動かしている途中から、鳴っている音の大きさが変わっていく
+
+   ■ 0% ＝ ミュートなので、スピーカーの状態もここでそろえる
+     ・0%まで下げた     … ミュートにする（アイコンが 🔊× になり、BGMも止まる）
+     ・0%から上げた     … ミュートを解除する（いまの画面に合うBGMが鳴りなおす）
+     どちらも、ミュートボタンを押したときとまったく同じあと始末をする
+     （→ applySoundEnabledChange）
+
+   ※ ここでは toggleSound() は呼ばない
+     toggleSound() はスライダーの位置まで動かしてしまうので、
+     せっかく動かした値（30%など）が、覚えていた値で上書きされてしまうため
+*/
+function changeSoundVolume(event: Event) {
+  const slider = event.target as HTMLInputElement;
+  const percent = Number(slider.value);
+
+  if (!Number.isFinite(percent)) {
+    return;
+  }
+
+  soundVolumePercent.value = Math.min(100, Math.max(0, Math.round(percent)));
+
+  // 0%より大きいときは、次にミュートを解除したときの戻り先として覚えておく
+  if (soundVolumePercent.value > 0) {
+    volumeBeforeMute = soundVolumePercent.value;
+  }
+
+  /* 0%かどうかで、サウンドのON/OFFが変わるかを見る
+     変わるときだけ、BGMの止める・鳴らしなおすところまで行う
+     （動かすたびに毎回やると、鳴っている曲が何度も鳴りなおしてしまう） */
+  const shouldBeOn = soundVolumePercent.value > 0;
+  const soundEnabledChanged = shouldBeOn !== soundEnabled.value;
+
+  if (soundEnabledChanged) {
+    soundEnabled.value = shouldBeOn;
+  }
+
+  // 先に音量をそろえてから、BGMを鳴らしなおす（小さいはずの曲が一瞬大きく鳴らないように）
+  applySoundVolume();
+  saveSoundVolume();
+
+  if (soundEnabledChanged) {
+    applySoundEnabledChange();
   }
 }
 
@@ -9207,7 +9436,14 @@ function handleTitleKeydown(event: KeyboardEvent) {
      こうすると Tab でも3つをぐるぐる回れる */
   if (event.key === 'Tab') {
     const first = items[0];
-    const last = items[items.length - 1];
+
+    /* いちばん後ろは「音量スライダー」
+
+       スライダーはボタンではないので items には入っていないが、
+       HTMLではサウンドボタンのすぐ後ろ（＝いちばん最後）に置いてある
+       ここで行き先に入れておかないと、サウンドボタンでTabを押したときに
+       スライダーを飛びこして、先頭まで戻ってしまう */
+    const last = soundVolumeSliderRef.value ?? items[items.length - 1];
 
     if (!event.shiftKey && document.activeElement === last) {
       event.preventDefault();
@@ -9448,6 +9684,35 @@ function handleKeydown(event: KeyboardEvent) {
      マウスのほうは、消えかけの画面を押せなくするCSSで止めている
      （.screen-fade-leave-active の pointer-events: none） */
   if (isScreenChanging.value) {
+    return;
+  }
+
+  /* 音量スライダーを選んでいるあいだは、ゲームのキー操作をしない
+
+     このゲームのキー操作は window 全体で受け取っているため、
+     スライダーを選んだまま ← → を押すと
+     「音量を変える」と「コマンドを選びなおす」が同時に起きてしまう
+
+     input type="range" は、ブラウザがもともと
+     ・← →        … 1目もり（1%）ずつ増やす・減らす
+     ・Home / End  … 0% / 100%
+     を用意してくれているので、ここでは何もせず、そのままブラウザにまかせる
+     Enter / Space はスライダーでは何も起きないキーだが、
+     そのまま下へ行くとゲームの「決定」になってしまうので、ここで止めておく
+
+     ※ event.preventDefault() は呼ばない
+       呼ぶと、そのブラウザ本来の操作まで止まってしまう
+     ※ Tab と Escape は、わざと素通りさせている
+       Tab … A画面・B画面の「いちばん後ろまで行ったら先頭へ戻る」を今までどおり動かすため
+       Escape … おやつ選択画面・あそびかた画面から、今までどおり戻れるようにするため
+     ※ 画面ごとの分岐より前（いちばん上）に置くのが大事
+       A画面・B画面・おやつ選択画面・あそびかた画面・ゲーム本編と、
+       スライダーはどの画面にも出ているので、ここ1か所でまとめて止められる
+  */
+  const sliderOwnKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Enter', ' '];
+  const keyTarget = event.target as HTMLElement | null;
+
+  if (sliderOwnKeys.includes(event.key) && keyTarget?.closest?.('.sound-control__slider')) {
     return;
   }
 
@@ -9855,6 +10120,56 @@ onMounted(() => {
     // 読み込めなくても、初期値のONで普通に遊べる
   }
 
+  /* 前回の音量を思い出す
+
+     localStorage には文字しか入らないので、'70' のような「文字」で戻ってくる
+     保存したことが無いときは null になる
+
+     ※ null をそのまま Number() に入れると 0 になってしまうので、
+       先に「保存されているか」を見てから数字に直している
+     ※ 数字にならない・0未満・100より大きい、のときは
+       最初に決めた100%（そのままの大きさ）のままにする
+  */
+  try {
+    const savedSoundVolume = localStorage.getItem(soundVolumeStorageKey);
+
+    if (savedSoundVolume !== null) {
+      const percent = Number(savedSoundVolume);
+
+      if (Number.isFinite(percent) && percent >= 0 && percent <= 100) {
+        soundVolumePercent.value = Math.round(percent);
+      }
+    }
+  } catch {
+    // 読み込めなくても、初期値の100%で普通に遊べる
+  }
+
+  /* サウンドのON/OFFと音量を、ここでそろえておく（0% ＝ ミュート）
+
+     この2つは別々に保存しているので、
+     前に遊んだときの保存がかみ合っていないことがある
+     （たとえば「ミュートだが音量は70%」というメモが残っている、など）
+     そのままにすると、アイコンは 🔊× なのにスライダーは70%、
+     という食いちがった見た目になってしまうので、開いたときに1回そろえる
+
+     ※ ここではBGMを鳴らしたり止めたりしない
+       ページを開いた直後は、まだどのBGMも鳴っていないため
+  */
+  if (!soundEnabled.value) {
+    // ミュートで始まるとき … 音量も0%にそろえ、解除したときの戻り先を覚えておく
+    if (soundVolumePercent.value > 0) {
+      volumeBeforeMute = soundVolumePercent.value;
+    }
+
+    soundVolumePercent.value = 0;
+  } else if (soundVolumePercent.value === 0) {
+    // 0%で始まるとき … 音が出ないので、スピーカーもミュートにそろえる
+    soundEnabled.value = false;
+  } else {
+    // ふつうに音が出る状態 … いまの大きさを、そのまま戻り先にしておく
+    volumeBeforeMute = soundVolumePercent.value;
+  }
+
   /* S+ランク限定のうた入りBGMを、前に解放しているかを思い出す
      （サーバー側では localStorage を読めないので、ブラウザで動くここで読む）
      解放済みなら、次にS+を取っても「新しい曲が追加されました！」は出ない */
@@ -9961,23 +10276,67 @@ onUnmounted(() => {
           <div class="title-card__tools">
             <button ref="howToBackButtonRef" type="button" class="title-card__back" @click="closeHowToPlay">← ひとつ前の画面へ戻る</button>
 
-            <button
-              ref="soundToggleButtonRef"
-              type="button"
-              class="sound-toggle"
-              :aria-pressed="soundEnabled"
-              :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
-              @click="toggleSound">
-              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-              <span class="sound-toggle__text">サウンド</span>
-              <span class="sound-toggle__state">
-                <!-- ON と OFF を同じ場所に重ねて置いておく
-                     使わないほうは「見えなくする」だけで場所は残るので、
-                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+            <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+
+                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                 何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+
+                 ・ミュートボタン … 音を出すか、出さないか
+                 ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
+                 0% ＝ ミュートなので、2つはいつも同じ状態になる
+                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+            <div class="sound-control">
+              <button
+                ref="soundToggleButtonRef"
+                type="button"
+                class="sound-toggle"
+                :aria-pressed="soundEnabled"
+                :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
+                @click="toggleSound">
+                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
+                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
+                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
+                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
+                <span class="sound-toggle__icon">
+                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
+                       いま使わないほうを見えなくするだけなので、
+                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
+                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
+
+                  <span class="sound-toggle__state sound-toggle__state--off">
+                    <span class="sound-toggle__speaker">🔊</span>
+                    <span class="sound-toggle__muteMark">×</span>
+                  </span>
+                </span>
+
+                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
+              </button>
+
+              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
+
+                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
+                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
+                   （サウンドトラックページの音量スライダーと同じ作りかた）
+
+                   0%まで下げるとミュート、そこから上げるとミュート解除になる
+                   （スピーカーのアイコンも、いっしょに切りかわる） -->
+              <span class="sound-control__sliderWrap">
+                <input
+                  ref="soundVolumeSliderRef"
+                  type="range"
+                  class="sound-control__slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  :value="soundVolumePercent"
+                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
+                  aria-label="音量"
+                  :aria-valuetext="soundVolumePercent + 'パーセント'"
+                  @input="changeSoundVolume" />
+
+                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
               </span>
-            </button>
+            </div>
           </div>
 
           <h1 class="howto-heading">
@@ -10194,23 +10553,67 @@ onUnmounted(() => {
                    ようにしているため（ボタン側で止める必要はない） -->
             <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" @click="goToSoundtrack">♪ サウンドトラック</button>
 
-            <button
-              ref="soundToggleButtonRef"
-              type="button"
-              class="sound-toggle"
-              :aria-pressed="soundEnabled"
-              :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
-              @click="toggleSound">
-              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-              <span class="sound-toggle__text">サウンド</span>
-              <span class="sound-toggle__state">
-                <!-- ON と OFF を同じ場所に重ねて置いておく
-                     使わないほうは「見えなくする」だけで場所は残るので、
-                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+            <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+
+                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                 何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+
+                 ・ミュートボタン … 音を出すか、出さないか
+                 ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
+                 0% ＝ ミュートなので、2つはいつも同じ状態になる
+                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+            <div class="sound-control">
+              <button
+                ref="soundToggleButtonRef"
+                type="button"
+                class="sound-toggle"
+                :aria-pressed="soundEnabled"
+                :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
+                @click="toggleSound">
+                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
+                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
+                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
+                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
+                <span class="sound-toggle__icon">
+                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
+                       いま使わないほうを見えなくするだけなので、
+                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
+                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
+
+                  <span class="sound-toggle__state sound-toggle__state--off">
+                    <span class="sound-toggle__speaker">🔊</span>
+                    <span class="sound-toggle__muteMark">×</span>
+                  </span>
+                </span>
+
+                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
+              </button>
+
+              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
+
+                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
+                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
+                   （サウンドトラックページの音量スライダーと同じ作りかた）
+
+                   0%まで下げるとミュート、そこから上げるとミュート解除になる
+                   （スピーカーのアイコンも、いっしょに切りかわる） -->
+              <span class="sound-control__sliderWrap">
+                <input
+                  ref="soundVolumeSliderRef"
+                  type="range"
+                  class="sound-control__slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  :value="soundVolumePercent"
+                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
+                  aria-label="音量"
+                  :aria-valuetext="soundVolumePercent + 'パーセント'"
+                  @input="changeSoundVolume" />
+
+                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
               </span>
-            </button>
+            </div>
           </div>
 
           <h1 class="title-card__name">{{ gameTitle }}</h1>
@@ -10265,23 +10668,67 @@ onUnmounted(() => {
                 <span class="title-card__howtoText">あそびかた</span>
               </button>
 
-              <button
-                ref="soundToggleButtonRef"
-                type="button"
-                class="sound-toggle"
-                :aria-pressed="soundEnabled"
-                :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
-                @click="toggleSound">
-                <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-                <span class="sound-toggle__text">サウンド</span>
-                <span class="sound-toggle__state">
-                  <!-- ON と OFF を同じ場所に重ねて置いておく
-                       使わないほうは「見えなくする」だけで場所は残るので、
-                       ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                  <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                  <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+
+                   文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                   何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+
+                   ・ミュートボタン … 音を出すか、出さないか
+                   ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
+                   0% ＝ ミュートなので、2つはいつも同じ状態になる
+                   （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+              <div class="sound-control">
+                <button
+                  ref="soundToggleButtonRef"
+                  type="button"
+                  class="sound-toggle"
+                  :aria-pressed="soundEnabled"
+                  :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
+                  @click="toggleSound">
+                  <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
+                       OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
+                       ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
+                       小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
+                  <span class="sound-toggle__icon">
+                    <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
+                         いま使わないほうを見えなくするだけなので、
+                         ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
+                    <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
+
+                    <span class="sound-toggle__state sound-toggle__state--off">
+                      <span class="sound-toggle__speaker">🔊</span>
+                      <span class="sound-toggle__muteMark">×</span>
+                    </span>
+                  </span>
+
+                  <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
+                </button>
+
+                <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
+
+                     吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
+                     :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
+                     （サウンドトラックページの音量スライダーと同じ作りかた）
+
+                     0%まで下げるとミュート、そこから上げるとミュート解除になる
+                     （スピーカーのアイコンも、いっしょに切りかわる） -->
+                <span class="sound-control__sliderWrap">
+                  <input
+                    ref="soundVolumeSliderRef"
+                    type="range"
+                    class="sound-control__slider"
+                    min="0"
+                    max="100"
+                    step="1"
+                    :value="soundVolumePercent"
+                    :style="{ '--volume-progress': soundVolumePercent + '%' }"
+                    aria-label="音量"
+                    :aria-valuetext="soundVolumePercent + 'パーセント'"
+                    @input="changeSoundVolume" />
+
+                  <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
                 </span>
-              </button>
+              </div>
             </div>
           </div>
 
@@ -10449,23 +10896,67 @@ onUnmounted(() => {
                  さっき選んだおやつがそのまま入っている） -->
             <button type="button" class="title-card__back" @click="closeSnackSelection">← ひとつ前の画面へ戻る</button>
 
-            <button
-              ref="soundToggleButtonRef"
-              type="button"
-              class="sound-toggle"
-              :aria-pressed="soundEnabled"
-              :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
-              @click="toggleSound">
-              <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-              <span class="sound-toggle__text">サウンド</span>
-              <span class="sound-toggle__state">
-                <!-- ON と OFF を同じ場所に重ねて置いておく
-                     使わないほうは「見えなくする」だけで場所は残るので、
-                     ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+            <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+
+                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                 何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+
+                 ・ミュートボタン … 音を出すか、出さないか
+                 ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
+                 0% ＝ ミュートなので、2つはいつも同じ状態になる
+                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+            <div class="sound-control">
+              <button
+                ref="soundToggleButtonRef"
+                type="button"
+                class="sound-toggle"
+                :aria-pressed="soundEnabled"
+                :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
+                @click="toggleSound">
+                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
+                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
+                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
+                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
+                <span class="sound-toggle__icon">
+                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
+                       いま使わないほうを見えなくするだけなので、
+                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
+                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
+
+                  <span class="sound-toggle__state sound-toggle__state--off">
+                    <span class="sound-toggle__speaker">🔊</span>
+                    <span class="sound-toggle__muteMark">×</span>
+                  </span>
+                </span>
+
+                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
+              </button>
+
+              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
+
+                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
+                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
+                   （サウンドトラックページの音量スライダーと同じ作りかた）
+
+                   0%まで下げるとミュート、そこから上げるとミュート解除になる
+                   （スピーカーのアイコンも、いっしょに切りかわる） -->
+              <span class="sound-control__sliderWrap">
+                <input
+                  ref="soundVolumeSliderRef"
+                  type="range"
+                  class="sound-control__slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  :value="soundVolumePercent"
+                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
+                  aria-label="音量"
+                  :aria-valuetext="soundVolumePercent + 'パーセント'"
+                  @input="changeSoundVolume" />
+
+                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
               </span>
-            </button>
+            </div>
           </div>
 
           <h1 class="snack-heading">🍪 きょうのおやつ</h1>
@@ -10494,22 +10985,65 @@ onUnmounted(() => {
             <div class="status-area__titleRow">
               <span class="status-area__title">{{ gameTitle }}</span>
 
-              <button
-                type="button"
-                class="sound-toggle sound-toggle--bar"
-                :aria-pressed="soundEnabled"
-                :aria-label="soundEnabled ? 'サウンドをオフにする' : 'サウンドをオンにする'"
-                @click="toggleSound">
-                <span class="sound-toggle__icon">{{ soundEnabled ? '🔊' : '🔇' }}</span>
-                <span class="sound-toggle__text">サウンド</span>
-                <span class="sound-toggle__state">
-                  <!-- ON と OFF を同じ場所に重ねて置いておく
-                       使わないほうは「見えなくする」だけで場所は残るので、
-                       ボタンの幅はいつも長いほう（OFF）のまま変わらない -->
-                  <span class="sound-toggle__stateText sound-toggle__stateText--on">ON</span>
-                  <span class="sound-toggle__stateText sound-toggle__stateText--off">OFF</span>
+              <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+
+                   文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                   何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+
+                   ・ミュートボタン … 音を出すか、出さないか
+                   ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
+                   0% ＝ ミュートなので、2つはいつも同じ状態になる
+                   （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+              <div class="sound-control sound-control--bar">
+                <button
+                  type="button"
+                  class="sound-toggle sound-toggle--bar"
+                  :aria-pressed="soundEnabled"
+                  :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
+                  @click="toggleSound">
+                  <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
+                       OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
+                       ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
+                       小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
+                  <span class="sound-toggle__icon">
+                    <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
+                         いま使わないほうを見えなくするだけなので、
+                         ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
+                    <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
+
+                    <span class="sound-toggle__state sound-toggle__state--off">
+                      <span class="sound-toggle__speaker">🔊</span>
+                      <span class="sound-toggle__muteMark">×</span>
+                    </span>
+                  </span>
+
+                  <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
+                </button>
+
+                <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
+
+                     吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
+                     :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
+                     （サウンドトラックページの音量スライダーと同じ作りかた）
+
+                     0%まで下げるとミュート、そこから上げるとミュート解除になる
+                     （スピーカーのアイコンも、いっしょに切りかわる） -->
+                <span class="sound-control__sliderWrap">
+                  <input
+                    type="range"
+                    class="sound-control__slider"
+                    min="0"
+                    max="100"
+                    step="1"
+                    :value="soundVolumePercent"
+                    :style="{ '--volume-progress': soundVolumePercent + '%' }"
+                    aria-label="音量"
+                    :aria-valuetext="soundVolumePercent + 'パーセント'"
+                    @input="changeSoundVolume" />
+
+                  <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
                 </span>
-              </button>
+              </div>
             </div>
 
             <span class="status-clock">
@@ -13904,12 +14438,11 @@ onUnmounted(() => {
 /* 上部に並ぶボタンの大きさ（高さ・文字・左右の余白・アイコンとのすき間）
    左右どちらも同じ値にして、上端・高さ・文字サイズをそろえる
 
-   ※ .sound-toggle はゲーム画面の上部バーでも使っているので、
-     ここでは .title-card__tools の中にあるものだけを大きくする */
+   ※ サウンドのコントロールは、ボタンの中身が文字ではなくアイコンなので、
+     padding ではなく、すぐ下の --sound-〜 で大きさをそろえている */
 .title-card__soundtrack,
 .title-card__back,
-.title-card__howto,
-.title-card__tools .sound-toggle {
+.title-card__howto {
   gap: 7px;
   min-height: 38px;
   padding: 8px 14px;
@@ -13919,9 +14452,15 @@ onUnmounted(() => {
   white-space: nowrap; /* 「← はじめの画面へ戻る」を2行に折り返させない */
 }
 
-/* 文字を大きくしたぶん、スピーカーのアイコンも合わせて大きくする */
-.title-card__tools .sound-toggle__icon {
-  font-size: 16px;
+/* タイトル画面（A/B・おやつ選択・あそびかた）のサウンドコントロール
+
+   左の補助リンク（min-height: 38px）と高さをそろえて、
+   ゲーム画面の上部バーに置くときより ひとまわり大きくする
+   （指でも押しやすく、ミュートの「×」もはっきり見える大きさになる） */
+.title-card__tools .sound-control {
+  --sound-button-size: 38px;
+  --sound-icon-size: 20px;
+  --sound-slider-width: 110px;
 }
 
 /* 左側の補助リンク（A：♪ サウンドトラック / B：← はじめの画面へ戻る）
@@ -14781,107 +15320,352 @@ onUnmounted(() => {
   gap: 10px;
 }
 
-/* ===== サウンドのON/OFFボタン（設定用の小さなボタン） =====
+/* ===== サウンドのコントロール（ミュートボタン ＋ 音量スライダー） =====
 
-   これは「設定」なので、選択中コマンドの水色発光のようには目立たせない
-   ONを緑・OFFを赤にはしない
-   （このゲームでは 緑＝良い変化 / 赤＝あぶない という意味が決まっているため、
-     音の設定に使うと意味を取りちがえてしまう）
-   navy と 水色 だけの、中立的な見た目にしている
+   [ 🔊  ━━━━●━━ ]  … サウンドON
+   [ 🔊× ━━━━●━━ ]  … ミュート（スピーカーの右どなりに「×」が出る。重ねない）
 
-   ここの値はゲーム画面の上部バーに置くときの大きさ
-   高さは padding 4px + 文字11.5px + 枠1px で約21px
-   タイトル1行ぶん（約25px）より小さいので、行の高さは変わらない
+   ■ 枠はひとつ
+     ミュートボタンとスライダーは「音の設定」というひとつのまとまりなので、
+     丸い枠（pill）も1つだけにして、その中に2つを入れている
+     枠を持っているのは .sound-control のほうで、
+     中のボタン（.sound-toggle）は自分の枠も背景も持たない
 
-   ※ タイトル画面（A/B）の上部に置くときは、左の補助リンクと高さをそろえるため
-     .title-card__tools の中でひとまわり大きくしている
+   ■ 文字を出さない
+     前は「🔊 サウンド ON / OFF」と文字も出していたが、
+     となりに音量スライダーを置くため、アイコンだけの小さなボタンにした
+     何のボタンかは、読み上げ用の aria-label と、
+     hover / focus のときだけ出る小さな吹き出し（.sound-control__tooltip）で伝える
+
+   ■ 色について
+     これは「設定」なので、選択中コマンドの水色発光のようには目立たせない
+     ONを緑・OFFを赤にはしない
+     （このゲームでは 緑＝良い変化 / 赤＝あぶない という意味が決まっているため、
+       音の設定に使うと意味を取りちがえてしまう）
+     navy と 水色 だけの、中立的な見た目にしている
+
+   ■ 大きさの決めかた
+     下の3つの値（--sound-〜）だけで、ボタンもアイコンもスライダーも決まるようにしてある
+     置き場所ごとに変えたいときは、この3つを書きかえるだけでよい
+     ・ここ（初期値）        … ゲーム画面の上部バー用（いちばん小さい）
+     ・.title-card__tools    … タイトル画面（A/B）・おやつ選択・あそびかた用（ひとまわり大きい）
+     ・@media (max-width: 600px) … スマホ用（スライダーだけ短くする）
 */
-.sound-toggle {
+.sound-control {
+  --sound-button-size: 30px;
+  --sound-icon-size: 17px;
+
+  /* ゲーム画面の上部バーは、右にゲージやおでかけポイントがならぶので、
+     「×」を大きくしたぶんは、スライダーを少し短くして場所を返している
+     （タイトル画面のほうは場所に余裕があるので、下の .title-card__tools で長いまま） */
+  --sound-slider-width: 80px;
+
   display: inline-flex;
+  box-sizing: border-box;
+  flex: none;
   align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
+  gap: calc(var(--sound-icon-size) * 0.18);
+  height: var(--sound-button-size);
+  padding: 0 calc(var(--sound-icon-size) * 0.42);
   border: 1px solid var(--navy-line);
   border-radius: 999px;
   background: rgb(255 255 255 / 55%);
   color: var(--navy);
+}
+
+/* ミュートボタン（枠の中の左がわ・🔊 と × のところ）
+
+   枠と背景は外がわの .sound-control が持っているので、
+   ここは「押せるところ」だけを受け持つ（枠なし・背景なし）
+   色も枠から受けつぐので、濃い青の上（--bar）でも指定しなおさなくてよい
+
+   ※ クラス名は .sound-toggle のまま
+     キーボード操作のよけ方（handleKeydown）や、おやつ選択画面の矢印キーの行き先が
+     この名前で探しているので、名前を変えずにそのまま使っている */
+.sound-toggle {
+  position: relative; /* 吹き出し（.sound-control__tooltip）の置き場所の基準になる */
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 0 calc(var(--sound-icon-size) * 0.12);
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
   font-family: inherit;
-  font-size: 11.5px;
-  font-weight: 700;
   line-height: 1;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
   cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.1s ease;
+  transition: transform 0.1s ease;
 }
 
-/* マウスを乗せたとき：少しだけ明るくする（発光やアニメーションはしない） */
-.sound-toggle:hover {
-  border-color: var(--navy);
-  background: rgb(255 255 255 / 85%);
-}
+/* ※ マウスを乗せたときに、背景の色は変えない
 
-/* 押した瞬間：ほんの少しだけ沈む（cmdボタンほど大きくは動かさない） */
+     枠（.sound-control）の中に、色のちがう四角がふっと出ると、
+     スライダーと2つに分かれて見えてしまい、ひとつのまとまりに見えなくなる
+     マウスが乗っていることは
+     ・カーソルの形が変わる（cursor: pointer）
+     ・すぐ下に吹き出しが出る（.sound-control__tooltip）
+     の2つで、じゅうぶんに分かる
+
+   押した瞬間：ほんの少しだけ沈む（cmdボタンほど大きくは動かさない） */
 .sound-toggle:active {
   transform: translateY(1px);
 }
 
 /* Tabキーで移動してきたとき、どこにいるかが分かるようにする
-   コマンドの選択発光ほど派手にはしない */
+   枠のすぐ内がわに出したいので、offset をマイナスにしている
+   （外に出すと、外がわの枠と二重の輪になって見えてしまう） */
 .sound-toggle:focus-visible {
   outline: 2px solid var(--navy);
-  outline-offset: 2px;
+  outline-offset: -1px;
 }
 
+/* スピーカーと「×」を、横にならべる入れもの（🔊×）
+
+   「×」はスピーカーに重ねない
+   重ねると、絵文字の上に印が乗って読みにくくなるので、
+   見たままの「🔊×」になるように、右どなりに置いている
+
+   ■ 押しても幅が変わらないようにする工夫（ここが大事）
+     ON用（🔊）とOFF用（🔊×）を、grid で同じマスに重ねて置いている
+     マスの幅は「中身のうち、いちばん広いもの」＝ 🔊× に、ブラウザが自動でそろえてくれる
+     いま使わないほうは visibility で見えなくするだけ（場所は残る）なので、
+     押しても幅はいつも同じまま
+     ＝ となりのスライダーも、上部ステータスのゲージも、1pxも動かない
+
+     前は「🔊× はこれくらいの幅だろう」と数字で決めていた（min-width）が、
+     絵文字の幅は使う機械やブラウザでちがうので、
+     少しはみ出したときに、ミュートのときだけ右へずれてしまっていた
+     ここは数字で決めず、実物に測らせるのが正しい
+
+   ■ ONのとき、右だけ不自然に空いて見えないようにする工夫
+     重ねた2つは、どちらも justify-content: center で中身を真ん中にそろえている
+     そのため、ONのときの 🔊 はマスの真ん中に出る（右だけが空いて見えない） */
 .sound-toggle__icon {
-  font-size: 12px;
+  display: grid;
+  font-size: var(--sound-icon-size);
   line-height: 1;
 }
 
-/* 「ON」と「OFF」で、ボタンの幅を変えないための工夫
-
-   上部ステータスは grid-template-columns: auto ... なので、
-   1列目（タイトル＋時計）は中の文字の幅そのままに広がる
-   そのため ON（2文字）→ OFF（3文字）でボタンが少し広がると、
-   右にあるゲージやおでかけポイントの位置までずれてしまう
-
-   そこで ON と OFF を同じマスに重ねて置き、
-   使わないほうを visibility で見えなくする
-   display: none とちがい visibility は「場所は残したまま消す」ので、
-   幅はいつも長いほう（OFF）のままになり、切り替えてもずれない
-*/
+/* 重ねて置く2つ（ON用・OFF用） */
 .sound-toggle__state {
-  display: grid;
-}
-
-.sound-toggle__stateText {
+  display: inline-flex;
   grid-area: 1 / 1; /* 2つとも同じマスに置いて重ねる */
-  text-align: center;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--sound-icon-size) * 0.1);
 }
 
 /* いま使わないほうを見えなくする（場所はそのまま残る）
-   aria-pressed は true = サウンドON、false = サウンドOFF */
-.sound-toggle[aria-pressed='true'] .sound-toggle__stateText--off,
-.sound-toggle[aria-pressed='false'] .sound-toggle__stateText--on {
+   aria-pressed は true = サウンドON、false = サウンドOFF（＝ミュート） */
+.sound-toggle[aria-pressed='true'] .sound-toggle__state--off,
+.sound-toggle[aria-pressed='false'] .sound-toggle__state--on {
   visibility: hidden;
 }
 
-/* ===== 上部ステータス内（濃い青の上）に置くとき ===== */
-.sound-toggle--bar {
+.sound-toggle__speaker {
+  line-height: 1;
+}
+
+/* ミュートの「×」（サウンドOFFのときだけ見せる）
+
+   ■ 斜めの線だけの表しかたにしない
+     ミュートの絵文字 🔇 は「斜めの線」だけなので、小さく出すと
+     音が出ない状態なのかどうかが、ぱっと見では分かりにくい
+     そこで、スピーカーはONでもOFFでも同じ絵文字のままにしておいて、
+     OFFのときだけ、右どなりに「×」を出す（🔊×）
+
+   ■ 見えなくならないようにする工夫
+     ・大きさはスピーカーと同じくらい（アイコンの105%）にして、はっきり見せる
+       「×」のほうが絵文字より細いので、同じ数字だと小さく見えてしまうため、少し大きめにしてある
+     ・太字＋濃い紺色で、うすい下地の上でもはっきり読めるようにしている
+
+   ※ ここを大きくしても、ボタンの幅は「いちばん広い中身」に合わせて自動で決まる
+     （→ 上の .sound-toggle__icon）ので、レイアウトはくずれない
+     出す・出さないの切りかえも、上の .sound-toggle__state のところでまとめて行っている */
+.sound-toggle__muteMark {
+  color: var(--navy-deep);
+  font-size: calc(var(--sound-icon-size) * 1.05);
+  font-weight: 900;
+  line-height: 1;
+}
+
+/* ===== 音量スライダー =====
+
+   作りかたは、サウンドトラックページの音量スライダー（.st-volume__slider）と同じ
+   ・レールとつまみを、ブラウザごとに別々に指定する
+   ・左（小さい側）だけ色を変えるために、下地のグラデーションを使う
+     境目の位置は、画面から --volume-progress で渡している
+   ちがうのは、ゲーム画面にそえる小さなコントロールなので、
+   ひとまわり細く・短くしてあることだけ */
+.sound-control__sliderWrap {
+  position: relative; /* 吹き出しの置き場所の基準。input には吹き出しを付けられないので、外側でかこっている */
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.15s ease;
+}
+
+/* ※ ミュート中にスライダーを薄くする指定は、置いていない
+     0% ＝ ミュートなので、ミュート中のスライダーはいつも左はし（0%）にある
+     レールが空なのを見れば、音が出ない状態だとすぐ分かる
+     そのうえ薄くすると、さわれないボタンのように見えてしまう */
+
+.sound-control__slider {
+  width: var(--sound-slider-width);
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* レール（Chrome / Safari / Edge） */
+.sound-control__slider::-webkit-slider-runnable-track {
+  height: 5px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--navy) var(--volume-progress, 100%), #d7e4f0 var(--volume-progress, 100%));
+}
+
+/* つまみ（Chrome / Safari / Edge）
+   （つまみ14px − レール5px）÷ 2 ≒ 4.5px ぶん、上へずらして真ん中にそろえる */
+.sound-control__slider::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  margin-top: -4.5px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--navy);
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+/* レール（Firefox） */
+.sound-control__slider::-moz-range-track {
+  height: 5px;
+  border-radius: 999px;
+  background: #d7e4f0;
+}
+
+/* 小さい側（Firefox は、はじめから塗り分ける機能がある） */
+.sound-control__slider::-moz-range-progress {
+  height: 5px;
+  border-radius: 999px;
+  background: var(--navy);
+}
+
+/* つまみ（Firefox） */
+.sound-control__slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--navy);
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+}
+
+/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
+.sound-control__slider:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 3px;
+}
+
+/* ===== 小さな吹き出し（hover / focus のときだけ出る） =====
+
+   文字を常に出すかわりの案内なので、じゃまにならない大きさにしている
+   ・ミュートボタン … 「サウンドをミュート」／「サウンドをオン」
+   ・スライダー     … 「音量 70%」
+
+   right: 0 … コントロールはどの画面でも行のいちばん右にあるので、
+              右はしをそろえて左へのばす（画面の外へはみ出さない）
+   pointer-events: none … 吹き出しが、下のボタンやスライダーの操作をじゃましないようにする
+   ※ 読み上げには aria-label / aria-valuetext のほうが使われるので、
+     この吹き出しは aria-hidden="true" にしてある（二重に読まれない） */
+.sound-control__tooltip {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  z-index: 6;
+  padding: 5px 11px;
+  border: 1px solid rgb(238 249 255 / 55%);
+  border-radius: 8px;
+
+  /* すきとおらせず、しっかり濃い紺にする
+     うしろの絵（公園の背景・上部バーの青）がすけると、白い文字が読みにくくなるため */
+  background: #14384a;
+  box-shadow: 0 4px 12px rgb(16 29 44 / 45%);
+  color: #fff;
+
+  /* 小さすぎると読めないので、ゲームの本文に近い大きさまで上げている
+     （濃い紺に白い文字なので、色の差はじゅうぶんにある） */
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.sound-toggle:hover .sound-control__tooltip,
+.sound-toggle:focus-visible .sound-control__tooltip,
+.sound-control__sliderWrap:hover .sound-control__tooltip,
+.sound-control__sliderWrap:focus-within .sound-control__tooltip {
+  opacity: 1;
+}
+
+/* ===== 上部ステータス内（濃い青の上）に置くとき =====
+
+   枠と色は、外がわの .sound-control--bar が持つ
+   中のボタンは color: inherit なので、ここで文字色を指定しなおす必要はない */
+.sound-control--bar {
   border-color: rgb(134 198 221 / 70%);
   background: rgb(255 255 255 / 12%);
   color: #eef9ff;
 }
 
-.sound-toggle--bar:hover {
-  border-color: #eef9ff;
-  background: rgb(255 255 255 / 24%);
+/* Tabで移動してきたときの輪だけ、濃い青の上で見えるように明るくする
+   （hover で背景を変えないのは、明るい下地のときと同じ） */
+.sound-toggle--bar:focus-visible {
+  outline-color: #eef9ff;
 }
 
-.sound-toggle--bar:focus-visible {
+/* 濃い青の上では、ミュートの「×」を明るい色にする
+   どちらの置き場所でも、はっきり読めるようにするため */
+.sound-control--bar .sound-toggle__muteMark {
+  color: #eef9ff;
+}
+
+/* スライダーも、濃い青の上で見えるように明るい色にする */
+.sound-control--bar .sound-control__slider::-webkit-slider-runnable-track {
+  background: linear-gradient(to right, #eef9ff var(--volume-progress, 100%), rgb(255 255 255 / 30%) var(--volume-progress, 100%));
+}
+
+.sound-control--bar .sound-control__slider::-webkit-slider-thumb {
+  border-color: var(--navy-deep);
+  background: #eef9ff;
+}
+
+.sound-control--bar .sound-control__slider::-moz-range-track {
+  background: rgb(255 255 255 / 30%);
+}
+
+.sound-control--bar .sound-control__slider::-moz-range-progress {
+  background: #eef9ff;
+}
+
+.sound-control--bar .sound-control__slider::-moz-range-thumb {
+  border-color: var(--navy-deep);
+  background: #eef9ff;
+}
+
+.sound-control--bar .sound-control__slider:focus-visible {
   outline-color: #eef9ff;
 }
 
@@ -18399,17 +19183,13 @@ onUnmounted(() => {
     border-right: none;
   }
 
-  /* スマホでは「サウンド」の文字を隠して「🔊 ON」だけの短い表示にする
-     こうすると、せまい画面でもボタンがはみ出さない
-     ※ aria-label は隠さないので、読み上げでは
-       「サウンドをオフにする」と今までどおり伝わる */
-  .sound-toggle {
-    gap: 4px;
-    padding: 4px 8px;
-  }
+  /* スマホでは、スライダーだけ少し短くする
 
-  .sound-toggle__text {
-    display: none;
+     ボタンはそのままの大きさにしておく（小さくすると指で押しにくくなるため）
+     [ 🔊 ][━━●━] の形のまま、せまい画面でも横にはみ出さずに収まる
+     ※ 読み上げ用の名前（aria-label）は、画面の広さにかかわらず、いつも付いている */
+  .sound-control {
+    --sound-slider-width: 76px;
   }
 
   .status-area__titleRow {
@@ -18590,20 +19370,23 @@ onUnmounted(() => {
 
   /* スマホでは左右2つが1行に収まるよう、文字と余白を少しだけ下げる
      （それでも以前の11.5pxよりは大きいままにして、押しやすさを残す）
-     「サウンド」の文字は下の .sound-toggle__text で隠れるので、
-     右側は「🔊 ON」の短い表示になり、左の長いリンクとぶつからない */
+     右側のサウンドは [ 🔊 ][━━●━] だけの短いまとまりなので、
+     左の長いリンクとぶつからずに収まる */
   .title-card__soundtrack,
   .title-card__back,
-  .title-card__howto,
-  .title-card__tools .sound-toggle {
+  .title-card__howto {
     gap: 6px;
     min-height: 36px;
     padding: 7px 11px;
     font-size: 13.5px;
   }
 
-  .title-card__tools .sound-toggle__icon {
-    font-size: 15px;
+  /* サウンドのコントロールも、左の補助リンク（min-height: 36px）に高さをそろえる
+     スライダーは、せまい画面で横にはみ出さないように少し短くする */
+  .title-card__tools .sound-control {
+    --sound-button-size: 36px;
+    --sound-icon-size: 19px;
+    --sound-slider-width: 84px;
   }
 
   /* B画面の「？ あそびかた」も、スマホでは「?」だけの短い表示にする
