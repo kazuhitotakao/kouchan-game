@@ -1000,7 +1000,7 @@ function openCareMenu() {
    ※ おやつバッグ（closeSnackMenu()）もいっしょに閉じる
      ひとやすみを閉じたのに、その中から開いたバッグだけが残る、ということが起きない
      この関数は「行動をはじめたとき・場所を移動したとき・もう一度あそぶ」でも呼ばれるので、
-     いやいやタイムやころんだ場面で開いたバッグも、そのときにまとめて閉じられる
+     いやいやタイムで開いたバッグも、そのときにまとめて閉じられる
 */
 function closeCareMenu() {
   isCareMenuOpen.value = false;
@@ -1133,19 +1133,20 @@ function handleWindowPointer(event: PointerEvent) {
    isSnackSelectionOpen（ゲーム開始前に、持っていくおやつを選ぶ画面）とは別もの
    こちらは公園の中で「バッグに残っているおやつから1つ選んで食べる」ためのメニュー
 
-   おやつを食べる場面は3つあり、どれも同じバッグ（selectedSnackIds）から選ぶ
+   おやつを食べる場面は2つあり、どちらも同じバッグ（selectedSnackIds）から選ぶ
 
      exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
      tantrum   … いやいやタイムの「おやつをあげる ＞」
-     fallDown  … 突然イベント「こうちゃんがころんだ」の「おやつで気をそらす ＞」
 
-   並べるおやつも、↑↓・Enter・Escape の動きも3つとも同じ
+   ※ 突然イベント「こうちゃんがころんだ」では、おやつは使わない（バッグも開かない）
+
+   並べるおやつも、↑↓・Enter・Escape の動きも2つとも同じ
    ちがうのは「選んだあとに呼ぶ関数（＝おやつの効果）」だけなので、
    どこから開いたかを snackUseContext に覚えておき、eatSnackFromBag() で呼び分ける
 */
 
 /* どの場面からおやつバッグを開いたか */
-type SnackUseContext = 'exploring' | 'tantrum' | 'fallDown';
+type SnackUseContext = 'exploring' | 'tantrum';
 
 /* いまおやつバッグを開いている場面
 
@@ -1173,8 +1174,7 @@ const snackMenuBackIndex = computed(() => selectedSnacks.value.length);
 
    開いた場面のコマンドが、いま画面に出ているときだけ true にする
    ・exploring … ☕ ひとやすみ が出ているとき（バッグは その枠の中に出る）
-   ・tantrum   … いやいやが続いているとき（「少し待ってみる」に失敗した直後もふくむ）
-   ・fallDown  … ころんだ画面で、まだ結果が出ていないとき */
+   ・tantrum   … いやいやが続いているとき（「少し待ってみる」に失敗した直後もふくむ） */
 const isSnackMenuVisible = computed(() => {
   if (snackUseContext.value === 'exploring') {
     return isCareMenuVisible.value;
@@ -1184,19 +1184,8 @@ const isSnackMenuVisible = computed(() => {
     return isTantrumUnsolved.value;
   }
 
-  if (snackUseContext.value === 'fallDown') {
-    return currentEvent.value === 'fallDown' && !resultMessage.value;
-  }
-
   return false;
 });
-
-/* おやつバッグに「体力 +5 ／ 機嫌 +20 ／ 5分」を出すかどうか
-
-   休憩・いやいやタイムでは、おやつごとの energy / mood / minutes がそのまま効くので出す
-   ころんだ場面は、どのおやつでも効果が同じ（giveSnackAfterFall() の説明を参照）なので、
-   実際とちがう数字を見せて迷わせないように出さない */
-const isSnackEffectShown = computed(() => snackUseContext.value !== 'fallDown');
 
 /* おやつバッグを開く
 
@@ -1219,8 +1208,7 @@ function openSnackMenu(context: SnackUseContext) {
    バッグの中身（selectedSnackIds）はさわらない
    閉じると、開く前のメニューがそのまま出てくる
    ・exploring … ☕ ひとやすみ（「おやつをあげる」が選ばれたまま）
-   ・tantrum   … お話／だっこ／おやつ／待つ（「おやつをあげる」が選ばれたまま）
-   ・fallDown  … ころんだ場面の4つのコマンド（「おやつで気をそらす」が選ばれたまま） */
+   ・tantrum   … お話／だっこ／おやつ／待つ（「おやつをあげる」が選ばれたまま） */
 function closeSnackMenu() {
   snackUseContext.value = null;
   selectedSnackMenuIndex.value = 0;
@@ -1244,11 +1232,6 @@ function eatSnackFromBag(snackId: SnackId) {
 
   if (snackUseContext.value === 'tantrum') {
     giveSnack(snackId);
-    return;
-  }
-
-  if (snackUseContext.value === 'fallDown') {
-    giveSnackAfterFall(snackId);
   }
 }
 
@@ -1314,11 +1297,10 @@ const commandCount = computed(() => {
     return secretPathPhase.value === 'ready' ? 2 : 1;
   }
 
-  // 突然イベント「こうちゃんがころんだ」だけは、
-  // おやつが残っていれば4つ、食べきっていれば3つになる
-  // （4番目の「おやつで気をそらす」が画面から消えるため）
+  // 突然イベント「こうちゃんがころんだ」だけは、選択肢が4つ
+  // （おやつは使わないので、おやつの残りに関係なく いつも4つ）
   if (currentEvent.value === 'fallDown') {
-    return snackLeft.value > 0 ? 4 : 3;
+    return 4;
   }
 
   // ここに来るのは突然イベント（救急車・テントウムシ・犬・噴水）だけ
@@ -7145,31 +7127,34 @@ function keepDistanceFromDog() {
    ※ このイベントからは checkTantrum() を呼ばない
      「ころぶ → 選ぶ → 結果」だけの、シンプルな流れにしている
 
+   ※ おやつは使わない（どれを選んでも、バッグのおやつは減らない）
+     選択肢はいつも同じ4つで、画面の並び・runSelectedCommand() の番号・下の関数の並びは同じ順番
+       0 すぐにだっこする／1 痛いの痛いのとんでいけ〜／2 ベンチで少し休む／3 「大丈夫？」と見守る
+
    ※ 下の4つに書いてある こうちゃん の数字は、
      「ころんだ分」と「なだめた分」を足したあとの合計
 
      ころんだ時点で、ひざは痛いし、びっくりして泣きそうになっている
      そこからどれだけ取り返せるかがこのイベントなので、
      じょうずになだめても、ころぶ前より良くはならない
-     （＝こうちゃんの数字は、基本プラスにしない）
+     （＝こうちゃんの数字は、プラスにしない）
 
-     ・体力 … ころべば必ず減る。うまくなだめても、よくて±0まで
-       （おやつ 0 ／ だっこ -3 ／ 痛いの痛いの -4 ／ 見守る -6）
+     ・体力 … ころべば必ず減る。ベンチでゆっくり休めば、ようやく±0まで戻る
+       （ベンチ 0 ／ だっこ -3 ／ 痛いの痛いの -4 ／ 見守る -6）
      ・機嫌 … だっこなら、ころぶ前と同じところまで戻る（±0）
-       おやつだけは、ころんだこと自体を忘れてしまうので少しプラス
-       （おやつ +2 ／ だっこ 0 ／ 痛いの痛いの -2 ／ 見守る -8）
-
-     なだめかたの強さの順番は、今までどおり
-       おやつ ＞ だっこ ＞ 痛いの痛いの ＞ 見守る
-     おやつがいちばん強いが、1日2個しかないので使いどころを選ぶ
+       （だっこ 0 ／ ベンチ -1 ／ 痛いの痛いの -2 ／ 見守る -8）
 
    ※ 目の前で子どもがころぶと、どうしてもヒヤッとする
      そのため、どれを選んでも親の余裕は減る
      何で払うかがちがうだけで、いやいや対応とまったく同じ考えかた
-     ・だっこ       … 親の体力 -10 ／ 親の余裕 -3
-     ・見守る       … 親の体力 +1  ／ 親の余裕 -8（体力は減らないが、いちばん心にくる）
-     ・痛いの痛いの … 親の体力 -3  ／ 親の余裕 -5
-     ・おやつ       … おやつ -1    ／ 親の余裕 -2（いちばん軽いが、1日2個まで）
+     ・だっこ       … 親の体力 -10 ／ 親の余裕 -3 ／ 10分（親の体力を大きく使って、しっかり対応）
+     ・痛いの痛いの … 親の体力 -3  ／ 親の余裕 -5 ／  5分（バランス型）
+     ・ベンチ       … 親の体力 -2  ／ 親の余裕 -1 ／ 15分（時間を多く使って、安全に立て直す）
+     ・見守る       … 親の体力 +1  ／ 親の余裕 -8 ／  5分（親の体力は減らないが、こうちゃんの負担がいちばん大きい）
+
+   ※ ベンチは、ステータスだけ見れば4つの中でいちばん安全
+     そのかわり15分（4つの中でいちばん長い）かかるのがコスト
+     お昼が近いときや、まだ回りたい場所が残っているときは、ほかの対応と見くらべて選ぶ
 */
 
 /* ① すぐにだっこする */
@@ -7198,35 +7183,11 @@ function hugAfterFall() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 「大丈夫？」と見守る */
-function watchAfterFall() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  // なだめていないので、ころんだ分がほとんどそのまま残る
-  childMood.value -= 8;
-  childEnergy.value -= 6;
-  parentEnergy.value += 1;
-  parentCalm.value -= 8;
-  addMinutes(5);
-
-  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっていますが、口はへの字のままです。';
-
-  // 今回の変化量を記録してから、0〜100に丸める
-  saveStatusChanges();
-  fixAllStatus();
-  checkGameOver();
-
-  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
-  selectedCommandIndex.value = 0;
-}
-
-/* ③ 痛いの痛いのとんでいけ〜
+/* ② 痛いの痛いのとんでいけ〜
 
    だっこ（親の体力-10）ほど親の力を使わずに、
    見守る（機嫌-8）よりも こうちゃん の気持ちを立てなおせる、
-   ちょうど真ん中の選択肢
-   声をかけて、痛いのを空へ投げるまねをするだけなので、おやつも減らない
+   ちょうど真ん中の選択肢（バランス型）
 */
 function blowPainAway() {
   // 行動する前のステータスを控えておく
@@ -7251,49 +7212,53 @@ function blowPainAway() {
   selectedCommandIndex.value = 0;
 }
 
-/* ④ おやつで気をそらす
-   おやつが1個以上あるときだけ、画面にこのコマンドが出る
+/* ③ ベンチで少し休む
 
-   「おやつで気をそらす ＞」→ おやつバッグ で選んだときに呼ばれる
-   （引数の snackId が、選んだおやつの名札）
-
-   ※ この場面だけは、おやつのデータ（energy / mood / minutes）を使わない
-     上の説明のとおり、ころんだ場面は「こうちゃんの数字を基本プラスにしない」と決めてあり、
-     バナナ（体力 +24）などをそのまま足すと、その決まりがくずれてしまうため
-     効果は今までどおり「どのおやつでも同じ」にして、
-     どのおやつを使ったか（バッグから消えるおやつと、結果の文章）だけを選べるようにしている
-     （おやつごとに効果を変えるかどうかは、あとで決める）
+   近くのベンチに座って、ひざの痛みが落ち着くまで待つ
+   こうちゃんの体力は±0まで戻り、機嫌も親の体力・余裕もほとんど減らない
+   そのかわり、4つの中でいちばん時間がかかる（15分）
+   ※ おやつは食べないので、バッグのおやつは減らない
 */
-function giveSnackAfterFall(snackId: SnackId) {
-  // バッグに入っていないおやつなら、何もしないで終わり
-  // （giveSnackWhileExploring() と同じ理由で、startStatusChanges() より前に確かめる）
-  const snack = findSnackInBag(snackId);
-
-  if (!snack) {
-    return;
-  }
-
+function restOnBenchAfterFall() {
   // 行動する前のステータスを控えておく
-  // ※ ここでおやつバッグも閉じる
   startStatusChanges();
 
-  // ころんだこと自体を忘れてしまうので、機嫌だけ少しプラスになる
-  // 体力は、おやつで取り返してちょうど ±0
+  // 体力は、座って休んでちょうど ±0
   // ＝ここでは childEnergy をさわらない
-  childMood.value += 2;
+  childMood.value -= 1;
   parentEnergy.value -= 2;
-  parentCalm.value -= 2;
-  addMinutes(5);
+  parentCalm.value -= 1;
+  addMinutes(15);
 
-  resultMessage.value = `${snack.name}をそっと見せると、こうちゃんの目がぱっと変わりました。ころんだことは、もうすっかり忘れているようです。`;
+  resultMessage.value = '近くのベンチに座って、こうちゃんと少し休むことにしました。ひざの痛みもだんだん落ち着いてきたようで、こうちゃんはほっとした顔をしています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
   fixAllStatus();
   checkGameOver();
 
-  // ステータスの計算がぜんぶ終わってから、使ったおやつをバッグから出す
-  removeSnackFromBag(snack.id);
+  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
+  selectedCommandIndex.value = 0;
+}
+
+/* ④ 「大丈夫？」と見守る */
+function watchAfterFall() {
+  // 行動する前のステータスを控えておく
+  startStatusChanges();
+
+  // なだめていないので、ころんだ分がほとんどそのまま残る
+  childMood.value -= 8;
+  childEnergy.value -= 6;
+  parentEnergy.value += 1;
+  parentCalm.value -= 8;
+  addMinutes(5);
+
+  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっていますが、口はへの字のままです。';
+
+  // 今回の変化量を記録してから、0〜100に丸める
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -8373,7 +8338,7 @@ function runSelectedCommand() {
 
      ひとやすみの中でバッグを開いているあいだは isCareMenuVisible も true のままなので、
      下のサブメニューの処理より前に置く
-     （いやいやタイム・ころんだ場面のバッグも、ここで受け取る）
+     （いやいやタイムのバッグも、ここで受け取る）
   */
   if (isSnackMenuVisible.value) {
     // いちばん下の「← もどる」
@@ -8616,26 +8581,19 @@ function runSelectedCommand() {
       }
       break;
 
-    /* こうちゃんがころんだ
-       0 すぐにだっこする／1 「大丈夫？」と見守る
-       2 痛いの痛いのとんでいけ〜／3 おやつで気をそらす ＞
-
-       「おやつで気をそらす ＞」はおやつバッグを開くだけ
-       （いやいやタイムの「おやつをあげる ＞」と同じ）
-
-       ※ おやつのコマンドはいちばん下（3番目）なので、
-         おやつが0個のときは画面に無いだけで、番号のくり上がりは起きない
-         それでも念のため、snackLeft を見てから実行する
+    /* こうちゃんがころんだ（おやつは使わないので、いつも4つ）
+       0 すぐにだっこする／1 痛いの痛いのとんでいけ〜
+       2 ベンチで少し休む／3 「大丈夫？」と見守る
     */
     case 'fallDown':
       if (index === 0) {
         hugAfterFall();
       } else if (index === 1) {
-        watchAfterFall();
-      } else if (index === 2) {
         blowPainAway();
-      } else if (index === 3 && snackLeft.value > 0) {
-        openSnackMenu('fallDown');
+      } else if (index === 2) {
+        restOnBenchAfterFall();
+      } else if (index === 3) {
+        watchAfterFall();
       }
       break;
 
@@ -10128,7 +10086,7 @@ onUnmounted(() => {
             <ul class="howto-list">
               <li>出発前に、{{ snacks.length }}種類から{{ maxSnackCount }}つ選んで持っていきます。</li>
               <li>体力が回復しやすいもの、機嫌がよくなりやすいものなど、おやつごとに得意なことが少しちがいます。</li>
-              <li>ひとやすみ・イヤイヤタイム・ころんだときなどに使えます。使うと残りが減ります。</li>
+              <li>ひとやすみやイヤイヤタイムで使えます。使うと残りが減ります。</li>
             </ul>
           </section>
 
@@ -10930,7 +10888,7 @@ onUnmounted(() => {
                         @mouseenter="selectedSnackMenuIndex = index"
                         @focus="selectedSnackMenuIndex = index">
                         <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                        <span class="care-menu__badge snack-menu__effects">
                           <span>体力 +{{ snack.energy }}</span>
                           <span>機嫌 +{{ snack.mood }}</span>
                           <span>{{ snack.minutes }}分</span>
@@ -11183,7 +11141,7 @@ onUnmounted(() => {
                         @mouseenter="selectedSnackMenuIndex = index"
                         @focus="selectedSnackMenuIndex = index">
                         <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                        <span class="care-menu__badge snack-menu__effects">
                           <span>体力 +{{ snack.energy }}</span>
                           <span>機嫌 +{{ snack.mood }}</span>
                           <span>{{ snack.minutes }}分</span>
@@ -11436,7 +11394,7 @@ onUnmounted(() => {
                         @mouseenter="selectedSnackMenuIndex = index"
                         @focus="selectedSnackMenuIndex = index">
                         <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                        <span class="care-menu__badge snack-menu__effects">
                           <span>体力 +{{ snack.energy }}</span>
                           <span>機嫌 +{{ snack.mood }}</span>
                           <span>{{ snack.minutes }}分</span>
@@ -11689,7 +11647,7 @@ onUnmounted(() => {
                         @mouseenter="selectedSnackMenuIndex = index"
                         @focus="selectedSnackMenuIndex = index">
                         <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                        <span class="care-menu__badge snack-menu__effects">
                           <span>体力 +{{ snack.energy }}</span>
                           <span>機嫌 +{{ snack.mood }}</span>
                           <span>{{ snack.minutes }}分</span>
@@ -11942,7 +11900,7 @@ onUnmounted(() => {
                         @mouseenter="selectedSnackMenuIndex = index"
                         @focus="selectedSnackMenuIndex = index">
                         <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                        <span class="care-menu__badge snack-menu__effects">
                           <span>体力 +{{ snack.energy }}</span>
                           <span>機嫌 +{{ snack.mood }}</span>
                           <span>{{ snack.minutes }}分</span>
@@ -12359,7 +12317,7 @@ onUnmounted(() => {
                         @mouseenter="selectedSnackMenuIndex = index"
                         @focus="selectedSnackMenuIndex = index">
                         <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                        <span v-if="isSnackEffectShown" class="care-menu__badge snack-menu__effects">
+                        <span class="care-menu__badge snack-menu__effects">
                           <span>体力 +{{ snack.energy }}</span>
                           <span>機嫌 +{{ snack.mood }}</span>
                           <span>{{ snack.minutes }}分</span>
@@ -12641,7 +12599,7 @@ onUnmounted(() => {
                     @mouseenter="selectedSnackMenuIndex = index"
                     @focus="selectedSnackMenuIndex = index">
                     <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                    <span v-if="isSnackEffectShown" class="command-box__badge snack-menu__effects">
+                    <span class="command-box__badge snack-menu__effects">
                       <span>体力 +{{ snack.energy }}</span>
                       <span>機嫌 +{{ snack.mood }}</span>
                       <span>{{ snack.minutes }}分</span>
@@ -13129,65 +13087,24 @@ onUnmounted(() => {
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
-                <!-- おやつバッグ（「おやつで気をそらす ＞」を押したあと）
-                     4つのコマンドと入れかえて、同じ枠の中に出す
-                     ※ この場面はどのおやつでも効果が同じなので、効果の数字は出さない
-                       （isSnackEffectShown が false になる） -->
-                <template v-if="isSnackMenuVisible">
-                  <p class="command-box__label">🎒 どのおやつで気をそらす？</p>
-
-                  <button
-                    v-for="(snack, index) in selectedSnacks"
-                    :key="snack.id"
-                    class="command-box__item snack-menu__item"
-                    :class="{ 'command-box__item--selected': selectedSnackMenuIndex === index }"
-                    @click="eatSnackFromBag(snack.id)"
-                    @mouseenter="selectedSnackMenuIndex = index"
-                    @focus="selectedSnackMenuIndex = index">
-                    <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
-                    <span v-if="isSnackEffectShown" class="command-box__badge snack-menu__effects">
-                      <span>体力 +{{ snack.energy }}</span>
-                      <span>機嫌 +{{ snack.mood }}</span>
-                      <span>{{ snack.minutes }}分</span>
-                    </span>
-                  </button>
-
-                  <button
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedSnackMenuIndex === snackMenuBackIndex }"
-                    @click="closeSnackMenu"
-                    @mouseenter="selectedSnackMenuIndex = snackMenuBackIndex"
-                    @focus="selectedSnackMenuIndex = snackMenuBackIndex">
-                    <span class="command-box__text">← もどる</span>
-                  </button>
-                </template>
-
-                <!-- まだ選んでいないとき -->
-                <template v-else-if="!resultMessage">
+                <!-- まだ選んでいないとき（おやつは使わないので、いつも4つ） -->
+                <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">すぐにだっこする</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">「大丈夫？」と見守る</span>
-                  </button>
-
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
                   </button>
 
-                  <!-- バッグにおやつが残っているときだけ出す（押すとおやつバッグが開く） -->
-                  <button
-                    v-if="snackLeft > 0"
-                    class="command-box__item"
-                    :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }"
-                    @click="openSnackMenu('fallDown')"
-                    @mouseenter="selectedCommandIndex = 3"
-                    @focus="selectedCommandIndex = 3">
-                    <span class="command-box__text">おやつで気をそらす ＞</span>
-                    <span class="command-box__badge">残り{{ snackLeft }}個</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="restOnBenchAfterFall" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                    <span class="command-box__text">ベンチで少し休む</span>
+                  </button>
+
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 3" @focus="selectedCommandIndex = 3">
+                    <span class="command-box__text">「大丈夫？」と見守る</span>
                   </button>
                 </template>
 
@@ -17299,7 +17216,7 @@ onUnmounted(() => {
 
    新しい枠は作らず、いま出ている枠の中身だけを入れかえて使う
    ・休憩中               … ☕ ひとやすみ（care-menu）の枠の中
-   ・いやいや／ころんだ場面 … どうする？（command-box）の枠の中
+   ・いやいやタイム       … どうする？（command-box）の枠の中
 
    おやつ1つぶんの行には care-menu__item / command-box__item をそのまま付けているので、
    ▶ カーソル・水色の光・hover・focus-visible の見た目は、ほかのコマンドと同じになる
