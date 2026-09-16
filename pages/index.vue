@@ -110,7 +110,7 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    goal         = ゴール（公園の出口）
    gameOver     = ゲームオーバー（限界をむかえて途中で終わった）
 
-   ここから下は「突然イベント」の画面
+   ここから下は「とつぜんのできごと」の画面
    通常行動のあとに20%で起こる、専用画面つきの出来事
    emergencySiren = 救急車のサイレンが聞こえる
    ladybug        = テントウムシを見つける
@@ -699,17 +699,17 @@ const hasNiceTantrumResponse = ref(false);
    行動をはじめるたび（startStatusChanges()）と、いやいやタイムから出るときに空へ戻す */
 const niceTantrumResponseText = ref('');
 
-/* 突然イベントが起きる確率
+/* とつぜんのできごとが起きる確率
    0.2 ＝ 20%（5回に1回くらい）
    ここの数字だけを書きかえれば、起きやすさを変えられる
    例）0.15 なら15%、0.25 なら25%
 */
 const suddenEventChance = 0.2;
 
-/* 次に起こす予定の突然イベント（予定表）
+/* 次に起こす予定のとつぜんのできごと（予定表）
 
    null                    … 予定なし
-   'emergencySiren' など   … 次の「次へ」で、その突然イベント画面へ移動する
+   'emergencySiren' など   … 次の「次へ」で、そのとつぜんのできごと画面へ移動する
 
    ※ 通常行動が終わった瞬間に画面を切り替えてしまうと、
      せっかくの結果メッセージと「今回の変化」が読まれる前に消えてしまう
@@ -908,7 +908,7 @@ const isTantrumUnsolved = computed(() => currentEvent.value === 'tantrum' && isT
 /* 公園にある「通常の場所」6か所
 
    この6か所だけが、その場所ならではの遊びを持っている場所
-   （公園入口・いやいやタイム・突然イベント・ゴール・GAME OVER はふくまない）
+   （公園入口・いやいやタイム・とつぜんのできごと・ゴール・GAME OVER はふくまない）
 
    別枠の「ひとやすみ」を出すのは、ここに書いた6か所だけ
    あとから場所が増えたときも、この配列に1行足すだけでそろう
@@ -1093,7 +1093,7 @@ function backToPlaceFromCareResult() {
      （公園入口の「どこへ行く？」の枠には .command--pointer-paused を付ける）
    ※ キーボードの ↑↓ で結果などをスクロールしたときと、矢印キーで選んだコマンドを見える位置へスクロールしたときも、同じ理由で止める
      （handleKeydown() の ⓪-3 と revealSelectedCommand() を参照）
-     そのため、いやいやタイム・突然イベント・秘密の小道の「どうする？」と、ゴール／GAME OVER のボタンの枠にも付けている
+     そのため、いやいやタイム・とつぜんのできごと・秘密の小道の「どうする？」と、ゴール／GAME OVER のボタンの枠にも付けている
    ※ 止めたあとは、マウスを動かしたとき（handleWindowPointer()）か、goToPlace() / goToNextPlace() で次の画面へ移るときに戻す */
 const isCommandPointerPaused = ref(false);
 
@@ -1142,7 +1142,7 @@ function handleWindowPointer(event: PointerEvent) {
      exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
      tantrum   … いやいやタイムの「おやつをあげる ＞」
 
-   ※ 突然イベント「こうちゃんがころんだ」では、おやつは使わない（バッグも開かない）
+   ※ とつぜんのできごと「こうちゃんがころんだ」では、おやつは使わない（バッグも開かない）
 
    並べるおやつも、↑↓・Enter・Escape の動きも2つとも同じ
    ちがうのは「選んだあとに呼ぶ関数（＝おやつの効果）」だけなので、
@@ -1301,25 +1301,25 @@ const commandCount = computed(() => {
     return secretPathPhase.value === 'ready' ? 2 : 1;
   }
 
-  // 突然イベント「こうちゃんがころんだ」だけは、選択肢が4つ
+  // とつぜんのできごと「こうちゃんがころんだ」だけは、選択肢が4つ
   // （おやつは使わないので、おやつの残りに関係なく いつも4つ）
   if (currentEvent.value === 'fallDown') {
     return 4;
   }
 
-  // ここに来るのは突然イベント（救急車・テントウムシ・犬・噴水）だけ
+  // ここに来るのはとつぜんのできごと（救急車・テントウムシ・犬・噴水）だけ
   // どれも選択肢が3つなので3を返す
   // ※ 通常の場所は、1つ上の isNormalPlace の分岐で返している
   return 3;
 });
 
-/* 突然イベント5つ（commandCount のいちばん最後の分岐と、fallDown の分岐に来るなかま） */
+/* とつぜんのできごと5つ（commandCount のいちばん最後の分岐と、fallDown の分岐に来るなかま） */
 const suddenEvents: GameEvent[] = ['emergencySiren', 'ladybug', 'dog', 'fallDown', 'fountain'];
 
 /* 「どうする？」の選択肢を横にならべる画面か（テンプレートの choiceGridClass で使う）
 
    ・いやいやタイムで、いやいやが続いているあいだ（結果が出ていても、次の対応を選ぶので横ならび）
-   ・突然イベントで、まだ選んでいないとき
+   ・とつぜんのできごとで、まだ選んでいないとき
    ・秘密の小道の、はじまる前（小道へ進む／← 場所選びにもどる）
 
    どれも「文章を ↑↓ でスクロールして読みながら、← → で選ぶ」ことがある画面なので、
@@ -1377,7 +1377,7 @@ const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessag
 /* 結果カードの下に出す「次へ進む」コマンドの文字
    いやいやが起きているときは、次の場所ではなく
    まず こうちゃん をなだめる場面へ進むので、文言だけ変える
-   突然イベントの予定があるときも、この先で何か起きることが伝わる文言にする
+   とつぜんのできごとの予定があるときも、この先で何か起きることが伝わる文言にする
    （押したときに呼ぶ goToNextPlace() は、どの場合も今までと同じ）
 */
 const nextPlaceCommandLabel = computed(() => {
@@ -1386,7 +1386,7 @@ const nextPlaceCommandLabel = computed(() => {
     return 'こうちゃんのところへ行く';
   }
 
-  // 突然イベントの予定があるとき
+  // とつぜんのできごとの予定があるとき
   if (pendingSuddenEvent.value !== null) {
     return 'なにか起こりそう…';
   }
@@ -1444,7 +1444,7 @@ function getPlaceSelectionIndex(place: GameEvent): number | null {
 /* このプレイで、公園入口から最後に入った場所（公園入口へ戻ったときのカーソル位置に使う）
 
    goToPlace() で、公園入口に行がある場所（placeSelectionIndexes にある場所）へ入るときに書きかえる
-   ・突然イベント・いやいやタイムは goToPlace() を通らない（goToNextPlace() が直接切りかえる）ので、
+   ・とつぜんのできごと・いやいやタイムは goToPlace() を通らない（goToNextPlace() が直接切りかえる）ので、
      途中に入っても上書きされず、そのあと公園入口へ戻ったときに「遊んでいた場所」を選べる
    ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「細い道の先へ行く」なので同じ
    null … このプレイでまだ場所を選んでいない（ゲーム開始直後）。startGame() / resetGame() で null に戻す */
@@ -1454,7 +1454,7 @@ const lastSelectedPlace = ref<GameEvent | null>(null);
 
    呼ぶところ
    ・goToNextPlace() で公園入口へ着いたとき
-     （遊んだあとの「次の場所を選ぶ」・何もせず「← 場所選びにもどる」・突然イベントやいやいやのあと）
+     （遊んだあとの「次の場所を選ぶ」・何もせず「← 場所選びにもどる」・とつぜんのできごとやいやいやのあと）
    ・leaveSecretPathToEntrance()（秘密の小道の「← 場所選びにもどる」）
 
    ・まだ場所を選んでいない／その行が画面に出ていないときは何もしない（呼ぶ前に 0 にしてあるので先頭のまま）
@@ -3847,7 +3847,7 @@ function fixAllStatus() {
 /* 行動をはじめる前に呼ぶ
    「今のステータス」を控えておくだけの処理
 
-   ※ 各場所の行動・いやいや対応・突然イベント・ひとやすみの行動は、
+   ※ 各場所の行動・いやいや対応・とつぜんのできごと・ひとやすみの行動は、
      どれも1行目でこの関数を呼んでいる＝「行動がはじまった瞬間」の共通の入口
      クリックでも Enter / Space でも必ずここを通るので、
      決定音はここで1回だけ鳴らせばよい
@@ -4125,7 +4125,7 @@ function addCollectedItem(itemName: string) {
 }
 
 /* アイテムが見つかる場所
-   場所で遊ぶ6か所だけ（公園入口・いやいや・突然イベントなどでは見つからないので、GameEvent 全部にはしない）
+   場所で遊ぶ6か所だけ（公園入口・いやいや・とつぜんのできごとなどでは見つからないので、GameEvent 全部にはしない）
 */
 type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot';
 
@@ -4226,7 +4226,7 @@ function tryCollectPlaceItem(place: ItemPlace) {
      「通常行動をしている、その最中に起きたこと」という扱いなので、
      時間は通常行動のぶんだけ進む
 
-   ※ 専用画面へ移動する「突然イベント」とは別物
+   ※ 専用画面へ移動する「とつぜんのできごと」とは別物
      こちらは結果カードに文章とステータス変化が少し足されるだけ
 */
 /* ランダムイベントで動いたステータスを、画面に出す形で1つ控える
@@ -4342,7 +4342,7 @@ function runRandomEvent() {
    「もう1か所あそぶ？ 休む？ おやつを使う？ そろそろ帰る？」を
    最後まで考えられる数字になる
 
-   ※ いやいやをなだめる行動と突然イベントでは呼ばれない
+   ※ いやいやをなだめる行動ととつぜんのできごとでは呼ばれない
      （どちらも finishPlayAction() を通らないため）
      なだめている最中にさらに機嫌が下がると、立て直せなくなってしまう
 */
@@ -4729,7 +4729,7 @@ function checkGameOver() {
   }
 }
 
-/* 突然イベントの抽選
+/* とつぜんのできごとの抽選
 
    ① 20%（suddenEventChance）で発生するか決める
    ② 発生したら、5種類の中からランダムで1つ選ぶ
@@ -4782,9 +4782,9 @@ function checkSuddenEvent() {
    ⑤ 今回の変化量を記録する（ランダムイベントと機嫌ダウン、いやいやの分もふくむ）
    ⑥ ステータスを0〜100に収める
    ⑦ GAME OVERになっていないか判定する
-   ⑧ 突然イベントが起きるか抽選する（起きるなら予定表に書くだけ）
+   ⑧ とつぜんのできごとが起きるか抽選する（起きるなら予定表に書くだけ）
    ※ いやいやをなだめる行動では呼ばない（ランダムイベントを起こさないため）
-   ※ 突然イベントの行動でも呼ばない（突然イベントが連続で起きないようにするため）
+   ※ とつぜんのできごとの行動でも呼ばない（とつぜんのできごとが連続で起きないようにするため）
 
    ⑦を⑥の次に置いているので、
    ランダムイベントの「だっこ！」で親の体力が0になった場合も、
@@ -4804,7 +4804,7 @@ function finishPlayAction(place: GameEvent) {
   fixAllStatus();
   checkGameOver();
 
-  /* ⑧ 突然イベントの抽選（いちばん最後）
+  /* ⑧ とつぜんのできごとの抽選（いちばん最後）
 
      つぎの3つのときは抽選しない
      ・GAME OVERになった  … もう続きが無いので
@@ -5366,11 +5366,11 @@ function goToPlace(place: GameEvent) {
    ④ 12:00を過ぎていたら、もう探検は続けられないのでゴールへ
    ⑤ 秘密の場所から出てきたなら、いまの時間に合う公園BGMへ戻す
    ⑥ 10:30を過ぎているのにBGM1のままなら、午前後半のBGM2へ切り替える
-   ⑦ 突然イベントの予定があれば、その専用画面へ
+   ⑦ とつぜんのできごとの予定があれば、その専用画面へ
    ⑧ 何もなければ、いつもどおり公園入口へ（カーソルは、最後にいた場所のコマンドに合わせる）
 
    ⑦が④より下にあるのがポイント
-   お昼を過ぎているのに突然イベントを始めてしまうと、
+   お昼を過ぎているのにとつぜんのできごとを始めてしまうと、
    「12:00までに帰る」というルールが崩れてしまう
 
    ⑤⑥も④より下に置くのが大事
@@ -5420,7 +5420,7 @@ function goToNextPlace() {
 
   /* 秘密の場所から出るので、こもれびの広場BGMを止める
 
-     行き先（いやいやタイム・ゴール・突然イベント・公園入口）に関わらず、
+     行き先（いやいやタイム・ゴール・とつぜんのできごと・公園入口）に関わらず、
      秘密の場所の画面を離れる時点で、この曲の出番は終わり
      ここでまとめて止めておくと、行き先ごとに止め忘れることがない
 
@@ -5537,7 +5537,7 @@ function goToNextPlace() {
        ゴール直前に公園BGMを鳴らすと、
        一瞬だけ鳴って消える不自然な音になってしまうため
 
-     ※ 突然イベントの予定があるときも、ここを通ってよい
+     ※ とつぜんのできごとの予定があるときも、ここを通ってよい
        救急車・てんとう虫・犬などは、どれも「ふつうの公園での出来事」なので、
        こもれびの広場BGMのままではなく公園BGMへ戻すのが自然 */
   if (leavingSecretSpot) {
@@ -5555,7 +5555,7 @@ function goToNextPlace() {
 
      すでにBGM2になっているときは、中で何もしないで戻ってくるので、
      押すたびに曲が頭から鳴りなおすことはない
-     （突然イベントへ進むときも、ここを通ってからなので公園BGM2が鳴る）
+     （とつぜんのできごとへ進むときも、ここを通ってからなので公園BGM2が鳴る）
 
      ※ すぐ上の⑤（秘密の場所から出てきた）を通ったときは、ここは何もしない
        秘密の場所へ入るときに公園BGMを止めてあり、
@@ -5564,9 +5564,9 @@ function goToNextPlace() {
        ここで二重に鳴らしはじめてしまうことはない */
   switchParkBgmForCurrentTime();
 
-  // 突然イベントの予定があれば、その画面へ移動する
+  // とつぜんのできごとの予定があれば、その画面へ移動する
   // 移動したら予定表は空（null）に戻す
-  // ※ ここで戻しておかないと、突然イベントが終わったあとに
+  // ※ ここで戻しておかないと、とつぜんのできごとが終わったあとに
   //   もう一度おなじ画面へ入ってしまう
   if (pendingSuddenEvent.value !== null) {
     currentEvent.value = pendingSuddenEvent.value;
@@ -5577,7 +5577,7 @@ function goToNextPlace() {
   currentEvent.value = 'parkEntrance';
 
   // 公園入口のカーソルは、最後にいた場所のコマンドに合わせる
-  // （遊んだあとの「次の場所を選ぶ」でも、何もせず「← 場所選びにもどる」でも、突然イベント・いやいやのあとでも同じ）
+  // （遊んだあとの「次の場所を選ぶ」でも、何もせず「← 場所選びにもどる」でも、とつぜんのできごと・いやいやのあとでも同じ）
   restoreEntranceCursor();
 }
 
@@ -6800,7 +6800,7 @@ function handleSecretPathKeydown(event: KeyboardEvent) {
    ・visitedPlaces（探検済みの場所）に追加する
    ・runRandomEvent()（ちいさなできごと）を起こす
    ・checkTantrum()（いやいや抽選）
-   ・checkSuddenEvent()（突然イベント抽選）
+   ・checkSuddenEvent()（とつぜんのできごと抽選）
    までまとめて行っている
 
    ひとやすみは遊びではなく休んだだけなので、
@@ -7485,12 +7485,12 @@ function waitCalmly() {
 }
 
 /* ============================================================
-   突然イベント（通常行動のあと、20%で起こる出来事）
+   とつぜんのできごと（通常行動のあと、20%で起こる出来事）
 
    通常の場所の行動とちがうところ
    ・finishPlayAction() を呼ばない
      → runRandomEvent() / checkTantrum() / checkSuddenEvent() が動かないので、
-       突然イベントから続けて突然イベントが起きることはない
+       とつぜんのできごとから続けてとつぜんのできごとが起きることはない
      → visitedPlaces（探検した場所）にも入らない
    ・そのかわり、どの行動も次の4つは必ず行う
      ① startStatusChanges()  行動前のステータスを控える（いちばん最初）
@@ -7500,10 +7500,10 @@ function waitCalmly() {
 
    ※ おでかけポイントは addOutingPoint() ではなく、そのまま足している
      addOutingPoint() は「2回目の場所は半分」というルールの関数で、
-     突然イベントは「場所」ではないため
+     とつぜんのできごとは「場所」ではないため
    ============================================================ */
 
-/* ===== 突然イベント：救急車のサイレン ===== */
+/* ===== とつぜんのできごと：救急車のサイレン ===== */
 
 /* ① 立ち止まって救急車を探す */
 function lookForAmbulance() {
@@ -7561,7 +7561,7 @@ function walkOnFromSiren() {
   selectedCommandIndex.value = 0;
 }
 
-/* ===== 突然イベント：テントウムシ ===== */
+/* ===== とつぜんのできごと：テントウムシ ===== */
 
 /* ① 一緒にじっくり観察する */
 function watchLadybug() {
@@ -7622,7 +7622,7 @@ function seeOffLadybug() {
   selectedCommandIndex.value = 0;
 }
 
-/* ===== 突然イベント：犬が近づいてくる ===== */
+/* ===== とつぜんのできごと：犬が近づいてくる ===== */
 
 /* ① 近くで見る */
 function watchDogClose() {
@@ -7683,7 +7683,7 @@ function keepDistanceFromDog() {
   selectedCommandIndex.value = 0;
 }
 
-/* ===== 突然イベント：こうちゃんがころんだ =====
+/* ===== とつぜんのできごと：こうちゃんがころんだ =====
 
    ※ このイベントからは checkTantrum() を呼ばない
      「ころぶ → 選ぶ → 結果」だけの、シンプルな流れにしている
@@ -7825,7 +7825,7 @@ function watchAfterFall() {
   selectedCommandIndex.value = 0;
 }
 
-/* ===== 突然イベント：噴水が突然出る ===== */
+/* ===== とつぜんのできごと：噴水が突然出る ===== */
 
 /* ① 近くまで見に行く */
 function goCloseToFountain() {
@@ -7926,7 +7926,7 @@ function calculateFinalScore() {
   //   ・11:46〜12:00   → +4点
   //   ・12:00を過ぎた  → -10点
   //   ※ 11:45 にしているのは、6か所ぜんぶ回ると
-  //     いやいや や 突然イベント の時間で必ずはみ出してしまい、
+  //     いやいや や とつぜんのできごと の時間で必ずはみ出してしまい、
   //     +8点が「ぜったいに取れないボーナス」になっていたため
   if (currentMinutes.value <= 11 * 60 + 45) {
     scoreBreakdown.value.push({ label: '余裕をもって帰宅', points: 8 });
@@ -8504,7 +8504,7 @@ function resetGame() {
   gameOverTitle.value = '';
   gameOverMessage.value = '';
 
-  // 突然イベントの予定も空に戻す
+  // とつぜんのできごとの予定も空に戻す
   // ※ 戻しておかないと、前回のプレイの予定が
   //   次のゲームの1回目の行動のあとに出てきてしまう
   pendingSuddenEvent.value = null;
@@ -8615,7 +8615,7 @@ function moveCommandDown() {
 
 /* ←：1つ前（左）のコマンドへ移動する
 
-   横にならべた選択肢（いやいやタイム・突然イベント・秘密の小道・ゴール／GAME OVER）と、
+   横にならべた選択肢（いやいやタイム・とつぜんのできごと・秘密の小道・ゴール／GAME OVER）と、
    結果を読む画面で使う
    ↑↓ とちがい、いちばん左（0）では止まって、反対のはしへは回りこまない
    （ボタンが2つの画面で「← は左のボタン、→ は右のボタン」と、押す前から分かるようにするため）
@@ -9126,7 +9126,7 @@ function runSelectedCommand() {
       }
       break;
 
-    /* ここから下は突然イベント */
+    /* ここから下はとつぜんのできごと */
 
     /* 救急車のサイレン
        0 立ち止まって救急車を探す／1 音を聞きながら少し待つ／2 先へ進む */
@@ -9871,7 +9871,7 @@ function handleTitleKeydown(event: KeyboardEvent) {
 /* ============================================================
    読む画面のスクロール（↑↓）
 
-   行動の結果・いやいやタイム・突然イベント・秘密の小道・ゴール／GAME OVER は、
+   行動の結果・いやいやタイム・とつぜんのできごと・秘密の小道・ゴール／GAME OVER は、
    文章を「読む」画面なので、中身が画面に収まらないときは
    ↑↓ をスクロールに使い、コマンドは ← → で選ぶ
    （スクロールしない＝画面に収まっているときは、今までどおり ↑↓ でも選べる）
@@ -9895,7 +9895,7 @@ const gameScreenRef = ref<HTMLElement | null>(null);
    ✕ 秘密の小道で遊んでいる最中   … キー操作は handleSecretPathKeydown() が先に受け取る
    ○ それ以外のゲーム画面
      行動の結果（いやいや発生の結果もふくむ）・いやいやタイム（対応を選ぶ前／続いている結果／おさまった結果）・
-     突然イベント（選ぶ前／結果）・秘密の小道（はじまる前／終わったあと）・ゴール・GAME OVER
+     とつぜんのできごと（選ぶ前／結果）・秘密の小道（はじまる前／終わったあと）・ゴール・GAME OVER
 
    ※ いやいや発生の結果は、まだ currentEvent が 'tantrum' ではなく、通常の場所の結果として出る
      そのため currentEvent ではなく「結果が出ているか」で見分けている
@@ -10333,7 +10333,7 @@ function handleKeydown(event: KeyboardEvent) {
      ・ゴール／GAME OVER のリザルト
      ・いやいやタイム（対応を選ぶ前・まだ続いている結果・おさまった結果）
      ・行動の結果（いやいや発生の結果もふくむ）
-     ・突然イベント（選ぶ前・結果）／秘密の小道（はじまる前・終わったあと）
+     ・とつぜんのできごと（選ぶ前・結果）／秘密の小道（はじまる前・終わったあと）
 
      ※ 押しっぱなし（event.repeat）でも止めない。続けてスクロールできるようにするため */
   if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && isReadingScene.value) {
@@ -10392,7 +10392,7 @@ function handleKeydown(event: KeyboardEvent) {
 
      ・公園入口 … 1つ前／次へ（はしで止まる）
      ・読む画面 … 1つ前（左）／次（右）へ
-                  横ならびの選択肢（いやいや・突然イベント・秘密の小道・ゴール／GAME OVER）は、見た目の左右と同じ向きに動く
+                  横ならびの選択肢（いやいや・とつぜんのできごと・秘密の小道・ゴール／GAME OVER）は、見た目の左右と同じ向きに動く
                   ↑↓ で結果をスクロールしているあいだも、ここでコマンドを選べる
                   ボタンが1つだけの画面では、押しても何も変わらない
      ・通常の場所で結果が出る前 … 「どうする？」はたて1列なので、左右キーは使わない */
@@ -13683,11 +13683,11 @@ onUnmounted(() => {
             </section>
           </div>
 
-          <!-- 突然イベント：救急車のサイレン！ -->
+          <!-- とつぜんのできごと：救急車のサイレン！ -->
           <div v-else-if="currentEvent === 'emergencySiren'" class="scene" key="emergencySiren">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <p class="place-card__flash">突然イベント！</p>
+                <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
@@ -13802,11 +13802,11 @@ onUnmounted(() => {
             </section>
           </div>
 
-          <!-- 突然イベント：テントウムシ発見！ -->
+          <!-- とつぜんのできごと：テントウムシ発見！ -->
           <div v-else-if="currentEvent === 'ladybug'" class="scene" key="ladybug">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <p class="place-card__flash">突然イベント！</p>
+                <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
@@ -13921,11 +13921,11 @@ onUnmounted(() => {
             </section>
           </div>
 
-          <!-- 突然イベント：犬が近づいてきた！ -->
+          <!-- とつぜんのできごと：犬が近づいてきた！ -->
           <div v-else-if="currentEvent === 'dog'" class="scene" key="dog">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <p class="place-card__flash">突然イベント！</p>
+                <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
 
@@ -14040,11 +14040,11 @@ onUnmounted(() => {
             </section>
           </div>
 
-          <!-- 突然イベント：こうちゃんがころんだ！ -->
+          <!-- とつぜんのできごと：こうちゃんがころんだ！ -->
           <div v-else-if="currentEvent === 'fallDown'" class="scene" key="fallDown">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <p class="place-card__flash">突然イベント！</p>
+                <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
@@ -14163,11 +14163,11 @@ onUnmounted(() => {
             </section>
           </div>
 
-          <!-- 突然イベント：噴水が出た！ -->
+          <!-- とつぜんのできごと：噴水が出た！ -->
           <div v-else-if="currentEvent === 'fountain'" class="scene" key="fountain">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <p class="place-card__flash">突然イベント！</p>
+                <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">⛲ 噴水が出た！</h2>
 
@@ -16786,7 +16786,7 @@ onUnmounted(() => {
   line-height: 1.6;
 }
 
-/* 突然イベント（急に起きた出来事のカード）
+/* とつぜんのできごと（急に起きた出来事のカード）
    ふだんの場所は紺色の線だが、こちらは金色にして
    「いつもと違うことが起きた」と分かるようにしている
 */
@@ -16800,7 +16800,7 @@ onUnmounted(() => {
   color: #8a5a00;
 }
 
-/* 「突然イベント！」の帯
+/* 「とつぜんのできごと！」の帯
    アイテム発見の帯と同じ動き（found-in）で、ふわっと出す
 */
 .place-card__flash {
@@ -18241,7 +18241,7 @@ onUnmounted(() => {
 /* ============================================================
    横ならびの選択肢（command-box--choice-grid）
 
-   いやいやタイム（まだ続いているとき）・突然イベント（選ぶ前）・
+   いやいやタイム（まだ続いているとき）・とつぜんのできごと（選ぶ前）・
    秘密の小道（はじまる前）の「どうする？」だけ、選択肢を横にならべる
 
    これらの画面は、結果の文章や説明を ↑↓ でスクロールして読むことがあり、
@@ -18335,7 +18335,7 @@ onUnmounted(() => {
    PCでは [care-menu][command-box] の横ならび
    スマホでは横幅が足りないので、たてにならぶ（いちばん下の媒体クエリ）
 
-   ※ いやいやタイムと突然イベントでは command-box が1枚だけで、
+   ※ いやいやタイムととつぜんのできごとでは command-box が1枚だけで、
      この .command-area を通らない
      そのため .command-box 自身の置きかた（align-self / margin-top）は
      そのまま残してあり、ここでは入れものの中だけ上書きしている
@@ -19906,7 +19906,7 @@ onUnmounted(() => {
 
   /* width: auto … 幅は stretch にまかせる
      width: 100% のままだと、padding と border のぶんだけ画面の右へはみ出してしまう
-     （いやいやタイム・突然イベントの「どうする？」。.command-area の中の枠と同じ考えかた） */
+     （いやいやタイム・とつぜんのできごとの「どうする？」。.command-area の中の枠と同じ考えかた） */
   .command-box {
     align-self: stretch;
     width: auto;
