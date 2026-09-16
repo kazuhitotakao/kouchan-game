@@ -5583,19 +5583,27 @@ function playSlide() {
   finishPlayAction('slide');
 }
 
-/* ② 下で見守る */
+/* ② 下で見守る
+
+   「いっしょにすべる」より軽い行動だが、親の余裕はあまり節約できない
+   こうちゃんが手の届かない高い所へひとりでのぼっていくので、
+   すぐそばで支えられる①よりも、かえって気が張る
+   （ころんだときの「見守る」も同じ考えで、親の余裕がいちばん減る）
+
+   そのぶん、親の体力と時間は①よりはっきり少なくすんでいる
+*/
 function watchSlide() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
   childEnergy.value -= 12;
-  childMood.value += 2;
-  addOutingPoint('slide', 4);
-  parentEnergy.value -= 4;
-  parentCalm.value -= 2;
+  childMood.value += 3;
+  addOutingPoint('slide', 5);
+  parentEnergy.value -= 8;
+  parentCalm.value -= 9;
   addMinutes(15);
 
-  resultMessage.value = '下から見守りました。こうちゃんは楽しそうにすべっています。';
+  resultMessage.value = '「みててー！」こうちゃんはてっぺんから手をふっています。下でハラハラしながら見守りました。';
 
   tryCollectPlaceItem('slide');
   finishPlayAction('slide');
@@ -11627,7 +11635,11 @@ onUnmounted(() => {
               <article class="place-card">
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">大きなすべり台があります。こうちゃんは階段をのぼりはじめました。</p>
+                <p class="place-card__text">
+                  すべり台を見つけると、「すべるー！」とおおはしゃぎ。
+                  <br />
+                  小さな手で手すりをぎゅっとつかんで、とてとて階段をのぼりはじめました。
+                </p>
               </article>
 
               <!-- 結果が出たあと -->
