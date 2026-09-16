@@ -2073,6 +2073,187 @@ function playFallDownSound() {
   playTone(120, start + 0.11, 0.15, 0.18, 'triangle', 70); // ② ポテッ
 }
 
+/* ⑧ 葉っぱのガサガサ音「ササッ、ガサッ」（とつぜんのできごと「テントウムシ発見！」用）
+
+   ここまでの効果音（①〜⑦）は、どれも playTone() で「決まった形の波」を鳴らしてきた
+   音程のある「ポン♪」「ポテッ」は、それで作れる
+
+   でも、葉っぱがこすれる音には音程が無い
+   「ドレミ」のどれでもない、ザラザラした音なので、波の形では作れない
+   そこで、この音だけは作りかたを変えている
+
+   ・音程のある音 … きれいにくり返す波（playTone／OscillatorNode）
+   ・ガサガサ音   … でたらめな数字の列（ホワイトノイズ／AudioBufferSourceNode）
+
+   でたらめな数字をそのまま鳴らすと「シャーッ」というテレビの砂あらしの音になり、
+   耳にきつく、葉っぱには聞こえない
+   そこで、フィルター（BiquadFilterNode）で高い音を削って、
+   やわらかい葉ずれの音にしている
+
+   ぜんぶで0.42秒ほど。短い音のかたまりを2つ続けて「葉っぱの中で何かが動いた」を表す
+   ① ササッ … 小さめ。葉っぱがかすかにゆれた
+   ② ガサッ … 少し大きめ。テントウムシが顔を出した
+
+   ①②はどちらも、1回の音ではなく短い粒をいくつか重ねて作っている
+   （くわしくは playLadybugRustleSound() のコメント）
+
+   ※ 音量は、ほかの効果音より大きめの数字にしてある
+     フィルターで高い音を削っているぶん、音のエネルギーが減って小さく聞こえるため
+     （転倒音を大きめにしてあるのと同じ、耳で聞いてそろえるための調整）
+*/
+
+/* ガサガサ音を鳴らしはじめるまでの待ち時間（秒）
+
+   転倒音（fallDownSoundDelay）とまったく同じ理由・同じ長さにしてある
+   この音が鳴るのは「次へ」を押して、テントウムシの画面へ切りかわった瞬間
+   すぐ鳴らすと、押したときの決定音「ポン♪」と重なってしまうため、
+   決定音が鳴り終わってから鳴るようにしてある */
+const ladybugRustleDelay = 0.45;
+
+/* ガサガサ音を1つだけ鳴らす（①ササッ と ②ガサッ で、2回呼ぶ）
+
+   startTime … いつ鳴らしはじめるか（AudioContextの中の時計の時刻）
+   duration  … 音の長さ（秒）
+   volume    … 音の大きさ（0〜1）
+   filterFrequency … この高さ（Hz）より上を削る。小さいほど、こもったやわらかい音になる
+*/
+function playRustleNoise(startTime: number, duration: number, volume: number, filterFrequency: number) {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  /* 効果音の大きさにも、音量スライダーのぶんをかける（playTone と同じ） */
+  const effectVolume = getSoundVolume(volume);
+
+  /* 0（＝ミュート）のときは鳴らさずに終わり
+     下の exponentialRampToValueAtTime() は 0 を受け取れないため */
+  if (effectVolume <= 0) {
+    return;
+  }
+
+  try {
+    /* ① でたらめな数字の列（ホワイトノイズ）を作る
+
+       createBuffer(チャンネル数, 数字の個数, 1秒あたりの個数)
+       「1秒あたりの個数 × 秒数」で、必要な個数が決まる
+       中身を -1〜1 のでたらめな数字で埋めると、ザラザラした音になる
+
+       ただし、ただの乱数をそのまま鳴らすと「スーッ」と平らな音になってしまう
+       本物の葉ずれは、葉と葉が触れる細かい「カサ」が
+       不規則に連なって「ガサガサ」に聞こえている
+
+       そこで、全体にもう一段おおざっぱなゆれ（roughness）をかけている
+       ・rough … ゆっくり上下する、0.15〜1 のあいだのでたらめな倍率
+       ・これを乱数にかけ算すると、音の粒が「濃いところ・薄いところ」に分かれる
+       この濃淡が、葉っぱがこすれるときの「ガサッ、ガサッ」というざらつきになる
+
+       ゆれを何サンプルごとに作りなおすかが roughStep
+       細かすぎると元のホワイトノイズに戻ってしまい、
+       粗すぎるとブツブツ途切れた音になるので、
+       1秒あたりの個数の 1/900（44100Hzなら約49個ぶん）にしている */
+    const frameCount = Math.floor(context.sampleRate * duration);
+    const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    const roughStep = Math.max(1, Math.floor(context.sampleRate / 900));
+    let rough = 1;
+
+    for (let i = 0; i < frameCount; i += 1) {
+      // roughStep 個ごとに、ゆれの倍率を新しく決めなおす
+      if (i % roughStep === 0) {
+        rough = 0.15 + Math.random() * 0.85;
+      }
+
+      data[i] = (Math.random() * 2 - 1) * rough;
+    }
+
+    const noise = context.createBufferSource(); // 音の発生源（でたらめな数字を読み上げる）
+    const filter = context.createBiquadFilter(); // 高い音を削る係
+    const highpass = context.createBiquadFilter(); // 低い音を削る係
+    const gain = context.createGain(); // 音量つまみ
+
+    noise.buffer = buffer;
+
+    /* ② 高すぎる「シャー」を削る
+
+       lowpass ＝ 低い音は通して、高い音は通さない、という種類のフィルター
+       frequency より上がだんだん小さくなるので、
+       ここの数字を下げるほど、こもったやわらかい音になる */
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(filterFrequency, startTime);
+
+    /* ③ 低すぎる「ゴロゴロ」も削る
+
+       乱数には、耳に聞こえないほど低い音まで入っている
+       そこが残っていると、軽い葉ずれではなく
+       「ボフッ」とこもった重い音になってしまう
+       highpass ＝ 高い音は通して、低い音は通さない、で下を切り、
+       葉っぱがこすれる軽さを出している */
+    highpass.type = 'highpass';
+    highpass.frequency.setValueAtTime(700, startTime);
+
+    /* ④ 音量の動き（playTone と同じ考えかた）
+       ① ほぼ無音からはじめて ② すっと上げて ③ 鳴り終わりに向かって下げる
+
+       葉っぱがこすれる音は「パッと鳴って、すっと消える」ので、
+       上げるところ（0.01秒）を playTone（0.015秒）より短くしている */
+    const nearSilent = effectVolume * 0.02;
+
+    gain.gain.setValueAtTime(nearSilent, startTime);
+    gain.gain.exponentialRampToValueAtTime(effectVolume, startTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(nearSilent, startTime + duration);
+
+    // 発生源 → 高い音を削る → 低い音を削る → 音量つまみ → スピーカー の順につなぐ
+    noise.connect(filter);
+    filter.connect(highpass);
+    highpass.connect(gain);
+    gain.connect(context.destination);
+
+    noise.start(startTime);
+    noise.stop(startTime + duration);
+  } catch {
+    // 音が鳴らなくても、ゲームは止めない
+  }
+}
+
+function playLadybugRustleSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const start = context.currentTime + ladybugRustleDelay;
+
+  /* 「ササッ」も「ガサッ」も、1回の音ではなく小さな音の集まりにしている
+
+     葉っぱがゆれるときは、葉と葉が何度も触れあうので、
+     1粒だけ鳴らすと「ポッ」と単発に聞こえてしまう
+     短い粒を少しずつずらして重ねると、
+     粒どうしがつながって「ガサガサ」と連なって聞こえる
+
+     数字は順に（鳴らしはじめ, 長さ, 大きさ, 高い音を削る位置）
+
+     ① ササッ … 小さめ・高めの粒を3つ。かすかに葉がゆれた
+     ② ガサッ … 大きめ・低めの粒を4つ。テントウムシが顔を出した
+
+     粒の長さも間かくもそろえていないのは、
+     きれいに等間かくだと機械のように聞こえてしまうため */
+
+  // ① ササッ
+  playRustleNoise(start, 0.05, 0.11, 2600);
+  playRustleNoise(start + 0.035, 0.06, 0.14, 2100);
+  playRustleNoise(start + 0.085, 0.05, 0.09, 2400);
+
+  // ② ガサッ（①のあと、少しだけ間を空けてから）
+  playRustleNoise(start + 0.2, 0.07, 0.18, 1700);
+  playRustleNoise(start + 0.245, 0.08, 0.24, 1300);
+  playRustleNoise(start + 0.305, 0.07, 0.19, 1500);
+  playRustleNoise(start + 0.355, 0.06, 0.12, 1200);
+}
+
 /* ============================================================
    公園のBGM（HTML Audio）
 
@@ -5634,19 +5815,25 @@ function goToNextPlace() {
     /* 行き先をいったん控えてから、画面を切りかえる
 
        pendingSuddenEvent を空に戻したあとでは、どのできごとへ来たのかが分からなくなるため
-       （転倒音を鳴らすかどうかの判定に、この控えを使う） */
+       （効果音を鳴らすかどうかの判定に、この控えを使う） */
     const nextSuddenEvent = pendingSuddenEvent.value;
 
     currentEvent.value = nextSuddenEvent;
     pendingSuddenEvent.value = null;
 
-    /* ころんだできごとへ「移動した瞬間」だけ、転倒音を鳴らす
+    /* できごとの画面へ「移動した瞬間」だけ、そのできごとの効果音を鳴らす
 
        画面を見ているあいだではなく、ここで1回だけ鳴らす
        （同じ画面のまま何かしても、鳴りなおすことはない）
-       サウンドOFF・音量0%のときは、getAudioContext() が止めてくれる */
+       サウンドOFF・音量0%のときは、getAudioContext() が止めてくれる
+
+       ここに書いていないできごと（救急車・犬・噴水）は、今までどおり音を鳴らさない */
     if (nextSuddenEvent === 'fallDown') {
       playFallDownSound();
+    }
+
+    if (nextSuddenEvent === 'ladybug') {
+      playLadybugRustleSound();
     }
 
     return;
