@@ -1,30 +1,29 @@
-name: Auto Merge to Develop
+name: Build and Auto Merge to Develop
 
-# 作業ブランチに push されたときに実行
-#
-# 対象は、コミットメッセージの接頭辞（Conventional Commits）に合わせた作業ブランチ
-# 例：feat/sound-effect、fix/layout、chore/update-deps
-#
-# develop と main は、ここに書いていないので対象にならない
-# （直接 push しても、この自動PR・自動マージは動かない）
-#
-# 新しい接頭辞を使いはじめるときは、ここに1行足すこと
+# develop向けのPull Requestが作成・更新されたときに実行
 on:
-  push:
+  pull_request:
     branches:
-      - "feat/**"
-      - "feature/**"
-      - "fix/**"
-      - "refactor/**"
-      - "chore/**"
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
 
 # GitHub Actions に
 # ・コードを書き込む権限
-# ・Pull Request を作る権限
+# ・Pull Requestを操作する権限
 # を与える
 permissions:
   contents: write
   pull-requests: write
+
+# 同じPRで新しい処理が始まった場合、
+# 古い実行をキャンセルする
+concurrency:
+  group: auto-merge-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   # ========================================
@@ -34,8 +33,22 @@ jobs:
     name: build
     runs-on: ubuntu-latest
 
+    # 自動マージ対象の作業ブランチだけ実行する
+    #
+    # develop や main からのPR、
+    # 想定外の名前のブランチは自動マージしない
+    if: >
+      github.event.pull_request.draft == false &&
+      (
+        startsWith(github.head_ref, 'feat/') ||
+        startsWith(github.head_ref, 'feature/') ||
+        startsWith(github.head_ref, 'fix/') ||
+        startsWith(github.head_ref, 'refactor/') ||
+        startsWith(github.head_ref, 'chore/')
+      )
+
     steps:
-      # GitHubからコードを取得
+      # PRのコードを取得
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -49,15 +62,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Nuxtのbuild確認
+      # Nuxtが正常にbuildできるか確認
       - name: Build
         run: npm run build
 
   # ========================================
-  # ② build成功後、PRを作ってdevelopへマージ
+  # ② build成功後、developへ自動マージ
   # ========================================
   merge:
-    name: Create PR and merge
+    name: Merge to develop
     needs: build
     runs-on: ubuntu-latest
 
@@ -65,82 +78,10 @@ jobs:
       # GitHub CLI（gh）が使うトークン
       GH_TOKEN: ${{ github.token }}
 
-      # pushされたブランチ名
-      # 例：fix/layout
-      BRANCH_NAME: ${{ github.ref_name }}
-
     steps:
-      - name: Create PR and merge
+      - name: Merge pull request
         run: |
-          # ========================================
-          # すでに同じブランチのPRがあるか確認
-          # ========================================
-          PR_NUMBER=$(gh pr list \
-            --repo "$GITHUB_REPOSITORY" \
-            --head "$BRANCH_NAME" \
-            --base develop \
-            --state open \
-            --json number \
-            --jq '.[0].number')
-
-          # ========================================
-          # PRがまだ無ければ作成
-          # ========================================
-          if [ -z "$PR_NUMBER" ]; then
-
-            # 最新コミットのメッセージ全体を取得
-            COMMIT_MESSAGE=$(gh api \
-              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" \
-              --jq '.commit.message')
-
-            # 1行目をPRタイトルにする
-            #
-            # 例：
-            # git commit -m "fix: 表示崩れを修正"
-            #
-            # ↓
-            #
-            # PRタイトル：
-            # fix: 表示崩れを修正
-            COMMIT_TITLE=$(printf '%s\n' "$COMMIT_MESSAGE" | head -n 1)
-
-            # 2行目以降をPR本文にする
-            COMMIT_BODY=$(printf '%s\n' "$COMMIT_MESSAGE" | tail -n +2 | sed '/./,$!d')
-
-            # ========================================
-            # PR本文を作成
-            # ========================================
-            if [ -n "$COMMIT_BODY" ]; then
-              printf '%s\n\n' "$COMMIT_BODY" > pr-body.md
-            else
-              printf '%s\n\n' "変更内容はコミットメッセージを参照してください。" > pr-body.md
-            fi
-
-            printf '%s\n' "---" >> pr-body.md
-            printf '%s\n' "この Pull Request は GitHub Actions により自動作成されています。" >> pr-body.md
-
-            # ========================================
-            # Pull Requestを自動作成
-            # ========================================
-            PR_URL=$(gh pr create \
-              --repo "$GITHUB_REPOSITORY" \
-              --base develop \
-              --head "$BRANCH_NAME" \
-              --title "$COMMIT_TITLE" \
-              --body-file pr-body.md)
-
-            # 作ったPRの番号を取得
-            PR_NUMBER=$(gh pr view "$PR_URL" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json number \
-              --jq '.number')
-
-          fi
-
-          # ========================================
-          # developへ自動マージ
-          # ========================================
-          gh pr merge "$PR_NUMBER" \
+          gh pr merge "${{ github.event.pull_request.number }}" \
             --repo "$GITHUB_REPOSITORY" \
             --squash \
             --delete-branch
