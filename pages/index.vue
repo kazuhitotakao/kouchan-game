@@ -45,7 +45,7 @@ const isSnackSelectionOpen = ref(false);
 
    B画面の「？ あそびかた」で true、「← ひとつ前の画面へ戻る」・Escape で false になる
    B画面の上に説明書を一時的に広げるだけなので、
-   titleEntered・isSnackSelectionOpen・gameStarted はさわらない
+   titleEntered・isSnackSelectionOpen・gameStarted はさわらな
    （タイトルBGMも鳴ったまま。止めも、最初から鳴らしなおしもしない）
 
    ※ 画面の出し分け・キー操作・フォーカスのどれも、
