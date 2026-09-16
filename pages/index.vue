@@ -4205,9 +4205,22 @@ function tryCollectPlaceItem(place: ItemPlace) {
    5回に1回くらい（20%）だけ起こり、
    8種類の中から1つが選ばれる
 
+     1 飛行機を見つける      … こうちゃんの機嫌 +5
+     2 急に「だっこ！」      … 親の体力 -5
+     3 ねこを見つける        … こうちゃんの機嫌 +5
+     4 急に走り出す          … 親の余裕 -6
+     5 ちょうちょ            … こうちゃんの機嫌 +4
+     6 落ち葉を踏む          … こうちゃんの機嫌 +5
+     7 靴がぽろっと脱げる    … 親の余裕 -4
+     8 水たまりで大はしゃぎ  … こうちゃんの機嫌 +5 ／ 親の余裕 -3
+
+   うれしいことが4つ・親がつかれることが3つ・その両方が1つ（8）という組み合わせ
+   どれも小さな数字にしてあるので、出る順番で有利不利が決まってしまうことはない
+
    ※ ここに書く数字は「このできごとだけの増減」
      中央の「今回の変化（合計）」は行動ぜんぶを足した数なので、
-     たとえば 休む -10 ＋ 急に走り出す +10 なら 合計は 0 になる
+     たとえば 一緒にすべる（親の体力 -14）＋ 急に「だっこ！」（-5）なら
+     合計は -19 になる
 
    ※ どのイベントでも addMinutes() は呼ばない
      「通常行動をしている、その最中に起きたこと」という扱いなので、
@@ -4246,56 +4259,51 @@ function runRandomEvent() {
   //   8つの区間はどれも同じ幅なので、8種類が同じ確率で出る
   const eventNumber = Math.floor(Math.random() * 8);
 
-  /* --- 良いイベント --- */
-
-  // ① 四つ葉のクローバー
-  //   ※ addOutingPoint() ではなく直接足している
-  //     addOutingPoint() は「2回目の場所は半分」という場所のためのルールで、
-  //     ちいさなできごとは場所の探検ではないため、半減の対象にしない
+  // ① 飛行機を見つける
   if (eventNumber === 0) {
-    outingPoint.value += 5;
-    randomEventText.value = 'そのとき、四つ葉のクローバーを見つけました！';
-    addRandomEventEffect('おでかけポイント', 'outingPoint', 5);
+    childMood.value += 5;
+    randomEventText.value = '「ひこうき！」こうちゃんは、うれしそうに空を見上げています。';
+    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
     return;
   }
 
   // ② 急に「だっこ！」
   if (eventNumber === 1) {
-    parentEnergy.value -= 8;
+    parentEnergy.value -= 5;
     randomEventText.value = 'こうちゃんが急に「だっこ！」と言い出しました。';
-    addRandomEventEffect('親の体力', 'parentEnergy', -8);
+    addRandomEventEffect('親の体力', 'parentEnergy', -5);
     return;
   }
 
-  // ③ きれいな鳥
+  // ③ ねこを見つける
   if (eventNumber === 2) {
     childMood.value += 5;
-    randomEventText.value = '木の上に小さなかわいい鳥を見つけました！';
+    randomEventText.value = '「ねこちゃん！」こうちゃんは、うれしそうに指をさしました。';
     addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
     return;
   }
 
-  // ④ 急に走り出してヒヤッ
+  // ④ 急に走り出す
   if (eventNumber === 3) {
-    parentCalm.value -= 10;
-    randomEventText.value = 'こうちゃんが急に走り出してヒヤッとしました！';
-    addRandomEventEffect('親の余裕', 'parentCalm', -10);
+    parentCalm.value -= 6;
+    randomEventText.value = 'こうちゃんが急に走り出して、ちょっとヒヤッとしました！';
+    addRandomEventEffect('親の余裕', 'parentCalm', -6);
     return;
   }
 
   // ⑤ ちょうちょ
   if (eventNumber === 4) {
     childMood.value += 4;
-    randomEventText.value = '目の前をちょうちょがひらひら飛んでいきました。こうちゃんはうれしそうに追いかけています！';
+    randomEventText.value = '「ちょうちょ！」こうちゃんは、うれしそうに追いかけています。';
     addRandomEventEffect('こうちゃんの機嫌', 'childMood', 4);
     return;
   }
 
-  // ⑥ ベンチでひと休み
+  // ⑥ 落ち葉を踏む
   if (eventNumber === 5) {
-    parentEnergy.value += 5;
-    randomEventText.value = 'ちょうど空いているベンチを見つけて、少しひと休みできました。';
-    addRandomEventEffect('親の体力', 'parentEnergy', 5);
+    childMood.value += 5;
+    randomEventText.value = '「カサカサする！」こうちゃんは、何度も落ち葉を踏んでいます。';
+    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
     return;
   }
 
@@ -4312,7 +4320,7 @@ function runRandomEvent() {
   //   2つステータスが動くので、しるしも2つ並べる
   childMood.value += 5;
   parentCalm.value -= 3;
-  randomEventText.value = 'こうちゃんが水たまりを見つけて大はしゃぎ！楽しそうだけど、親はちょっとヒヤヒヤです。';
+  randomEventText.value = '「みずたまり！」こうちゃんは、楽しそうにバシャバシャしています。';
   addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
   addRandomEventEffect('親の余裕', 'parentCalm', -3);
 }
