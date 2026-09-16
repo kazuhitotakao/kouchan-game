@@ -5707,19 +5707,19 @@ function watchSwansClose() {
   finishPlayAction('pond');
 }
 
-/* ② 少し離れて見る */
-function watchSwansFar() {
+/* ② コイに餌をあげる */
+function feedKoi() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 6;
-  childMood.value += 2;
-  addOutingPoint('pond', 5);
-  parentEnergy.value -= 3;
-  parentCalm.value -= 2;
+  childEnergy.value -= 8;
+  childMood.value += 6;
+  addOutingPoint('pond', 7);
+  parentEnergy.value -= 5;
+  parentCalm.value -= 4;
   addMinutes(15);
 
-  resultMessage.value = '少し離れて白鳥を見ました。落ち着いてながめられました。';
+  resultMessage.value = 'コイに餌をあげました。たくさんのコイが集まってきて、バシャンと水しぶきをたてながら餌を食べています。こうちゃんは大喜びです。';
 
   tryCollectPlaceItem('pond');
   finishPlayAction('pond');
@@ -9003,13 +9003,13 @@ function runSelectedCommand() {
       break;
 
     /* 池
-       0 白鳥を近くで見る／1 少し離れて見る
+       0 白鳥を近くで見る／1 コイに餌をあげる
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'pond':
       if (index === 0) {
         watchSwansClose();
       } else if (index === 1) {
-        watchSwansFar();
+        feedKoi();
       }
       break;
 
@@ -12381,7 +12381,7 @@ onUnmounted(() => {
               <article class="place-card">
                 <h2 class="place-card__title">池</h2>
 
-                <p class="place-card__text">池には白鳥が泳いでいます。こうちゃんは指をさして大はしゃぎです。</p>
+                <p class="place-card__text">池には白鳥が泳ぎ、コイもたくさん集まっています。こうちゃんは指をさして大はしゃぎです。</p>
               </article>
 
               <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
@@ -12558,8 +12558,8 @@ onUnmounted(() => {
                       <span class="command-box__text">白鳥を近くで見る</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSwansFar" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                      <span class="command-box__text">少し離れて見る</span>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="feedKoi" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                      <span class="command-box__text">コイに餌をあげる</span>
                     </button>
 
                     <!-- ここから下は「どこでも同じコマンド」という区切り
