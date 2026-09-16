@@ -214,7 +214,7 @@ const tantrumCount = ref(0);
 
 /* いやいや発生の演出（画面いっぱいのオーバーレイ）を出しているかどうか
 
-   true のあいだだけ「イヤイヤ発生！」のオーバーレイが画面に重なって出る
+   true のあいだだけ「いやいや発生！」のオーバーレイが画面に重なって出る
    出すのは「新しいいやいやが始まった瞬間」の1回だけで、
    「少し待ってみる」に失敗して同じいやいやが続くときには出さない
 */
@@ -559,6 +559,7 @@ const currentTantrumLevelInfo = computed(() => tantrumLevelInfo[tantrumLevel.val
    scene          … ぐずぐず（レベル1）のときの、こうちゃんの様子
                     （大泣き・大いやいやの様子は tantrumLevelInfo のほう）
    complaint      … 対応がずれていたときの結果の文章に出す、短いさけび
+                    （相性のわるいおやつをあげたとき／待つに失敗したとき）
    greatSnackText … ぴったりのおやつ（相性 great）をあげたときに足す文 */
 type TantrumReasonInfo = {
   voices: Record<TantrumLevel, string>;
@@ -570,27 +571,27 @@ type TantrumReasonInfo = {
 const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
   tired: {
     voices: { 1: 'もうあるけない〜！', 2: 'もうあるけないー！！', 3: 'もうあるけないーーー！！！' },
-    scene: 'こうちゃんはその場にしゃがみこんで、足をさすっています。',
+    scene: 'こうちゃんは、その場にしゃがみこんでいます。',
     complaint: 'つかれたー！',
-    greatSnackText: '体に元気がもどってきて、また立ち上がれそうな顔になってきました。',
+    greatSnackText: 'ちょっと元気がもどってきたみたいです。',
   },
   hungry: {
-    voices: { 1: 'おなかすいたぁ……！', 2: 'おなかすいたー！！', 3: 'おなかすいたーーー！！！' },
-    scene: 'こうちゃんはおなかを押さえながら、その場にぺたんと座りこんでいます。',
+    voices: { 1: 'おなかすいた〜！', 2: 'おなかすいたー！！', 3: 'おなかすいたーーー！！！' },
+    scene: 'こうちゃんは、おなかを押さえて座りこんでいます。',
     complaint: 'おなかすいたー！',
-    greatSnackText: 'おなかが満たされて、気持ちももどってきたようです。',
+    greatSnackText: 'おなかも少し満たされたようです。',
   },
   frustrated: {
-    voices: { 1: 'なんかちがうー！', 2: 'なんかちがうー！！', 3: 'ちがうのーーー！！！' },
-    scene: '思っていたのとちがったのか、こうちゃんは納得できない様子で目に涙をためています。',
+    voices: { 1: 'なんかちがう〜！', 2: 'なんかちがうー！！', 3: 'ちがうのーーー！！！' },
+    scene: 'こうちゃんは、目に涙をためて納得できない様子です。',
     complaint: 'なんかちがうー！',
-    greatSnackText: '大好きな甘い味で、悔しかった気持ちが少しずつほどけてきたようです。',
+    greatSnackText: '悔しかった気持ちも、少しやわらいだようです。',
   },
   wantMorePlay: {
-    voices: { 1: 'まだあそぶー！', 2: 'まだあそぶー！！', 3: 'まだあそぶーーー！！！' },
-    scene: 'こうちゃんは遊具のほうを指さして、その場から動こうとしません。',
+    voices: { 1: 'まだあそぶ〜！', 2: 'まだあそぶー！！', 3: 'まだあそぶーーー！！！' },
+    scene: 'こうちゃんは、遊具を指さして動こうとしません。',
     complaint: 'まだあそぶー！',
-    greatSnackText: 'おいしいおやつで、遊びたかった気持ちも切りかわってきたようです。',
+    greatSnackText: 'まだ遊びたい気持ちも、少し切りかわったようです。',
   },
 };
 
@@ -4589,7 +4590,7 @@ function checkTantrum() {
   //   関数のいちばん上（isTantrum が true）で return しているので鳴らない
   playTantrumSound();
 
-  // 「イヤイヤ発生！」のオーバーレイを約2秒だけ出す
+  // 「いやいや発生！」のオーバーレイを約2秒だけ出す
   // 効果音と同じで、新しいいやいやが始まったこの瞬間だけの演出
   // ※ 見た目だけの追加なので、このあとの処理はいつもどおりすぐ進む
   showTantrumAlert();
@@ -4621,7 +4622,7 @@ function checkTantrum() {
   childMood.value -= 15;
   parentCalm.value -= 12;
 
-  tantrumText.value = 'そのあと、こうちゃんが「いやー！」とほっぺをぷうっとふくらませて、その場にぺたんと座りこんでしまいました…';
+  tantrumText.value = 'こうちゃんが「いやー！」と、その場にぺたんと座りこんでしまいました。';
 }
 
 /* GAME OVER判定
@@ -4666,7 +4667,7 @@ function checkGameOver() {
 
      どの理由でも、いやいや発生の演出（hideTantrumAlert）は必ず消す
      いやいやが起きた行動でそのままGAME OVERになることがあり、
-     消さないとGAME OVER画面の上に「イヤイヤ発生！」が重なって残ってしまう */
+     消さないとGAME OVER画面の上に「いやいや発生！」が重なって残ってしまう */
 
   // ① 親の体力が0以下
   if (parentEnergy.value <= 0) {
@@ -7070,7 +7071,7 @@ function applyNiceTantrumResponse(message = 'こうちゃんの気持ちが分�
   niceTantrumResponseText.value = message;
 }
 
-/* ① だっこしてなだめる（安全策）
+/* ① だっこする（安全策）
 
    いやいや対応の中では、いちばん確実に落ち着かせられる方法
    理由がどれでも、レベルがどれでも、だっこすれば必ず いやいや は終わる
@@ -7108,16 +7109,15 @@ function hugChild() {
   isTantrum.value = false;
 
   if (tantrumLevel.value === 1) {
-    resultMessage.value = 'ぎゅっとだっこすると、しばらく足をぱたぱたさせていましたが、そのうち肩にことんと頭をあずけてきました。';
+    resultMessage.value = 'ぎゅっとだっこすると、こうちゃんは肩にぺたん。少しずつ落ち着いてきました。';
   } else {
-    resultMessage.value =
-      '大泣きしているこうちゃんをぎゅっとだっこして、背中をとんとん。しばらくあばれていましたが、そのうち肩にことんと頭をあずけてきました。落ち着くまでだっこするのは、ひと苦労でした。';
+    resultMessage.value = '泣いているこうちゃんをぎゅっとだっこ。背中をとんとんすると、少しずつ力がぬけてきました。';
   }
 
   // 「つかれた」いやいやなら、歩きつかれた足を休ませてあげられた＝ナイス対応
   // ※ saveStatusChanges() より前に呼んで、ボーナスも「今回の変化」に入れる
   if (tantrumReason.value === 'tired') {
-    resultMessage.value += 'つかれた足を休ませてもらえて、ほっとしたようです。';
+    resultMessage.value += 'だっこで足も休めて、ほっとしたようです。';
     applyNiceTantrumResponse();
   }
 
@@ -7185,7 +7185,7 @@ function giveSnack(snackId: SnackId) {
     // ぴったり：どんなにはげしく泣いていても、落ち着いてくれる → 解決 ＋ ナイス対応
     isTantrum.value = false;
 
-    resultMessage.value = `${snack.name}をそっと見せると、涙のたまった目で「……たべる」。もぐもぐ食べているうちに、こうちゃんは少しずつ落ち着いてきました。`;
+    resultMessage.value = `${snack.name}を見せると、「……たべる」。もぐもぐするうちに、こうちゃんの涙が止まってきました。`;
 
     if (currentTantrumReasonInfo.value) {
       resultMessage.value += currentTantrumReasonInfo.value.greatSnackText;
@@ -7197,18 +7197,18 @@ function giveSnack(snackId: SnackId) {
     // ふつう × ぐずぐず：おやつがうれしくて、そのまま落ち着く → 解決
     isTantrum.value = false;
 
-    resultMessage.value = `${snack.name}をそっと見せると、涙のたまった目で「……たべる」。もぐもぐ食べているうちに、こうちゃんは少しずつ落ち着いてきました。`;
+    resultMessage.value = `${snack.name}を見せると、「……たべる」。もぐもぐするうちに、こうちゃんの涙が止まってきました。`;
   } else if (fit === 'normal') {
     // ふつう × 大泣き・大いやいや：少し落ち着くが、気持ちまではおさまらない → 1段下がって続く
     decreaseTantrumLevel();
 
-    resultMessage.value = `${snack.name}を食べると、さっきより少し泣き声が小さくなってきました。でも、まだ完全には気持ちがおさまっていないようです。`;
+    resultMessage.value = `${snack.name}を食べると、泣き声は少し小さくなりました。でも、まだいやいやは続いています。`;
   } else {
     // ずれている：食べてはくれたが、泣いている理由には合っていない → 悪化
     // （同じいやいやが続くだけなので、tantrumCount も tantrumReason も変えない）
     const complaint = currentTantrumReasonInfo.value?.complaint ?? 'いやー！';
 
-    resultMessage.value = `${snack.name}を食べて、少し元気になりました。でも、「${complaint}」という気持ちは変わっていないようです……。`;
+    resultMessage.value = `${snack.name}は食べたけれど、「${complaint}」。まだいやいやは続いています。`;
 
     applyTantrumFailurePenalty();
   }
@@ -7227,7 +7227,7 @@ function giveSnack(snackId: SnackId) {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ こうちゃんとお話する
+/* ③ お話してみる
 
    泣いているこうちゃんに向き合って、気持ちを言葉にしてあげる
    だっこほど体力は使わないが、向き合うぶん親の余裕は少し使う
@@ -7276,19 +7276,19 @@ function talkToChild() {
       // 大いやいや：話は聞こえているが、まず少し落ち着くところから → 1段下がって続く
       decreaseTantrumLevel();
 
-      resultMessage.value = `${words}と声をかけると、こうちゃんの泣き声が少しずつ小さくなってきました。まだ涙は止まりませんが、話は聞こえているようです。`;
+      resultMessage.value = `${words}と話すと、こうちゃんの泣き声が少し小さくなりました。まだ涙は止まりません。`;
     } else {
       // ぐずぐず・大泣き：気持ちを分かってもらえて、解決
       isTantrum.value = false;
 
       resultMessage.value =
         tantrumReason.value === 'frustrated'
-          ? '「うまくできなくて悔しかったんだね」と話しかけると、こうちゃんは少しずつ落ち着いてきました。'
-          : '「まだ遊びたかったんだね」と話すと、こうちゃんは少し考えてから、こくんとうなずいてくれました。';
+          ? `${words}と話すと、こうちゃんは涙をふいて、少しずつ落ち着いてきました。`
+          : `${words}と話すと、こうちゃんは「うん…」とうなずいて、少し落ち着きました。`;
     }
 
     if (isRepeatedTalk) {
-      resultMessage.value += '同じ話をくり返すのは、親もちょっと疲れます。';
+      resultMessage.value += '同じ話のくり返しで、親も少し疲れました。';
     }
 
     // ※ saveStatusChanges() より前に呼んで、ボーナスも「今回の変化」に入れる
@@ -7302,16 +7302,14 @@ function talkToChild() {
       parentCalm.value -= 3;
     }
 
-    const complaint = currentTantrumReasonInfo.value?.complaint ?? 'いやー！';
-
     if (tantrumReason.value === 'tired') {
-      resultMessage.value = `こうちゃんに話しかけてみましたが、「${complaint}」と、まだ動きたくないようです……。`;
+      resultMessage.value = '話しかけてみましたが、「つかれた〜！」。こうちゃんは、まだ動きたくないようです。';
     } else {
-      resultMessage.value = `こうちゃんに話しかけてみましたが、「${complaint}」と、まだ気持ちはおさまりません……。`;
+      resultMessage.value = '話しかけてみましたが、「おなかすいた〜！」。こうちゃんは、おなかを押さえたままです。';
     }
 
     if (isRepeatedTalk) {
-      resultMessage.value += '同じことを話しても、いまのこうちゃんには届かないようです。';
+      resultMessage.value += '同じ話では、もう届かないようです。';
     }
 
     applyTantrumFailurePenalty();
@@ -7437,16 +7435,12 @@ function waitCalmly() {
       // ぐずぐず：落ち着いてくれたので、いやいや終了
       isTantrum.value = false;
 
-      resultMessage.value = isFrustrated
-        ? 'となりで静かに待っていると、こうちゃんは自分で涙をふいて、少しずつ落ち着いてきました。悔しい気持ちに、自分で区切りをつけられたようです。'
-        : 'となりで静かに待っていると、泣き声が少しずつ小さくなりました。こうちゃんはようやく落ち着いたようです。';
+      resultMessage.value = 'となりで静かに待っていると、こうちゃんは自分で涙をふいて、少しずつ落ち着いてきました。';
     } else {
       // 大泣き・大いやいや：少し落ち着くが、まだ続く → 1段下がる
       decreaseTantrumLevel();
 
-      resultMessage.value = isFrustrated
-        ? 'となりで静かに待っていると、こうちゃんは自分で涙をふこうとしはじめました。さっきより少し、泣き声が小さくなってきました。'
-        : 'となりで静かに待っていると、さっきより少し、泣き声が小さくなってきました。でも、まだ完全には落ち着いていないようです。';
+      resultMessage.value = 'しばらく待つと、泣き声が少し小さくなりました。でも、まだ涙は止まりません。';
     }
 
     // 悔しい気持ちを、こうちゃんが自分で立てなおそうとできた＝ナイス対応（1回のいやいやで1回だけ）
@@ -7460,12 +7454,13 @@ function waitCalmly() {
     const complaint = currentTantrumReasonInfo.value?.complaint;
 
     resultMessage.value = complaint
-      ? `しばらく待ってみましたが、こうちゃんは「${complaint}」と、まだ気持ちがおさまらないようです……。`
-      : 'しばらく待ってみましたが、こうちゃんはまだ気持ちがおさまらないようです……。';
+      ? `しばらく待ってみましたが、こうちゃんは「${complaint}」。まだいやいやしています。`
+      : 'しばらく待ってみましたが、こうちゃんはまだいやいやしています。';
 
-    // 待つを続けていると、だんだん効きにくくなることを、文章でも伝える
+    // 待つを続けていると効きにくくなることを、こうちゃんの様子として伝える
+    // （「別の対応を試したほうがよさそう」と気づけるようにするための1文）
     if (repeatedTantrumActionCount.value > 0) {
-      resultMessage.value += '待っているだけでは、だんだん落ち着きにくくなってきたようです。';
+      resultMessage.value += 'このまま待っていても、なかなか落ち着かなさそうです。';
     }
 
     applyTantrumFailurePenalty();
@@ -8461,7 +8456,7 @@ function resetGame() {
   isHowToPlayOpen.value = false;
 
   // いやいや発生の演出も消しておく
-  // （残っていると、タイトル画面の上に前回の「イヤイヤ発生！」が出たままになる）
+  // （残っていると、タイトル画面の上に前回の「いやいや発生！」が出たままになる）
   hideTantrumAlert();
 
   // サブメニュー「☕ ひとやすみ」も閉じておく
@@ -10817,11 +10812,11 @@ onUnmounted(() => {
             <ul class="howto-list">
               <li>出発前に、{{ snacks.length }}種類から{{ maxSnackCount }}つ選んで持っていきます。</li>
               <li>体力が回復しやすいもの、機嫌がよくなりやすいものなど、おやつごとに得意なことが少しちがいます。</li>
-              <li>ひとやすみやイヤイヤタイムで使えます。使うと残りが減ります。</li>
+              <li>ひとやすみやいやいやタイムで使えます。使うと残りが減ります。</li>
             </ul>
           </section>
 
-          <!-- 4. イヤイヤタイム
+          <!-- 4. いやいやタイム
 
                4つの対応の「しくみ」だけを書く
                理由ごとの正解・おやつの相性・待つの成功率・レベルごとの数字・
@@ -10832,23 +10827,23 @@ onUnmounted(() => {
           <section class="howto-section">
             <h2 class="howto-section__title">
               <span class="howto-section__num">4</span>
-              イヤイヤタイム
+              いやいやタイム
             </h2>
 
-            <p class="howto-text">疲れた・おなかがすいた・うまくできなくて悔しい・まだ遊びたい などの理由で、こうちゃんはイヤイヤします。理由の答えは画面に出ません。</p>
+            <p class="howto-text">疲れた・おなかがすいた・うまくできなくて悔しい・まだ遊びたい などの理由で、こうちゃんはいやいやします。理由の答えは画面に出ません。</p>
 
-            <p class="howto-note howto-note--hint">💡 こうちゃんのセリフや様子をよく見て、どうしてイヤイヤしているのか考えてみよう。</p>
+            <p class="howto-note howto-note--hint">💡 こうちゃんのセリフや様子をよく見て、どうしていやいやしているのか考えてみよう。</p>
 
             <h3 class="howto-subheading">4つの対応</h3>
 
             <dl class="howto-terms">
               <div class="howto-terms__row">
-                <dt>こうちゃんとお話する</dt>
+                <dt>お話してみる</dt>
                 <dd>理由によって、うまくいきやすさが変わります。</dd>
               </div>
 
               <div class="howto-terms__row">
-                <dt>だっこしてなだめる</dt>
+                <dt>だっこする</dt>
                 <dd>落ち着かせやすいけれど、親の体力を使います。</dd>
               </div>
 
@@ -10864,7 +10859,7 @@ onUnmounted(() => {
             </dl>
 
             <ul class="howto-list">
-              <li>対応が合わないと、イヤイヤがもっと強くなることがあります。</li>
+              <li>対応が合わないと、いやいやがもっと強くなることがあります。</li>
               <li>同じ方法ばかり続けるより、別の方法を考えることも大切です。</li>
               <li>気持ちにぴったり合った対応ができると「ナイス対応」になることも。</li>
             </ul>
@@ -11686,8 +11681,11 @@ onUnmounted(() => {
                      上の「結果」バッジ（h3）は外に置いてあるので、
                      スクロールしても切れずに残る -->
                 <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
+                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
+                       ここにも出すと同じことを2回言うことになる
+                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
+                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
 
                   <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
                   <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -11948,8 +11946,11 @@ onUnmounted(() => {
                      上の「結果」バッジ（h3）は外に置いてあるので、
                      スクロールしても切れずに残る -->
                 <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
+                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
+                       ここにも出すと同じことを2回言うことになる
+                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
+                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
 
                   <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
                   <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -12210,8 +12211,11 @@ onUnmounted(() => {
                      上の「結果」バッジ（h3）は外に置いてあるので、
                      スクロールしても切れずに残る -->
                 <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
+                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
+                       ここにも出すと同じことを2回言うことになる
+                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
+                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
 
                   <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
                   <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -12472,8 +12476,11 @@ onUnmounted(() => {
                      上の「結果」バッジ（h3）は外に置いてあるので、
                      スクロールしても切れずに残る -->
                 <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
+                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
+                       ここにも出すと同じことを2回言うことになる
+                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
+                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
 
                   <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
                   <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -12734,8 +12741,11 @@ onUnmounted(() => {
                      上の「結果」バッジ（h3）は外に置いてあるので、
                      スクロールしても切れずに残る -->
                 <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
+                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
+                       ここにも出すと同じことを2回言うことになる
+                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
+                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
 
                   <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
                   <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -13196,8 +13206,11 @@ onUnmounted(() => {
                      上の「結果」バッジ（h3）は外に置いてあるので、
                      スクロールしても切れずに残る -->
                 <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <p v-if="isTantrum" class="result-alert">いやいや発生！</p>
+                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
+                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
+                       ここにも出すと同じことを2回言うことになる
+                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
+                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
 
                   <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
                   <p v-if="foundItemsThisAction.length > 0" class="found-flash">
@@ -13629,14 +13642,14 @@ onUnmounted(() => {
                 <template v-else-if="isTantrumUnsolved">
                   <p class="command-box__label">どうする？</p>
 
-                  <!-- こうちゃんとお話する（いちばん上。いやいやタイムが始まったときは、ここが選ばれている） -->
+                  <!-- お話してみる（いちばん上。いやいやタイムが始まったときは、ここが選ばれている） -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === talkCommandIndex }"
                     @click="talkToChild"
                     @mouseenter="selectedCommandIndex = talkCommandIndex"
                     @focus="selectedCommandIndex = talkCommandIndex">
-                    <span class="command-box__text">こうちゃんとお話する</span>
+                    <span class="command-box__text">お話してみる</span>
                   </button>
 
                   <button
@@ -13645,7 +13658,7 @@ onUnmounted(() => {
                     @click="hugChild"
                     @mouseenter="selectedCommandIndex = hugCommandIndex"
                     @focus="selectedCommandIndex = hugCommandIndex">
-                    <span class="command-box__text">だっこしてなだめる</span>
+                    <span class="command-box__text">だっこする</span>
                   </button>
 
                   <!-- バッグにおやつが残っているときだけ出す（押すとおやつバッグが開く） -->
@@ -14563,7 +14576,7 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="tantrumAlertVisible" class="tantrum-alert">
       <div class="tantrum-alert__content">
-        <strong class="tantrum-alert__title">イヤイヤ発生！</strong>
+        <strong class="tantrum-alert__title">いやいや発生！</strong>
       </div>
     </div>
 
@@ -15203,7 +15216,7 @@ onUnmounted(() => {
   content: '';
 }
 
-/* 名前と説明の一覧（ステータス・イヤイヤタイムの4つの対応）
+/* 名前と説明の一覧（ステータス・いやいやタイムの4つの対応）
    パソコンでは「左に名前・右に説明」の1行、
    スマホ幅では名前の下に説明（ページ下の max-width: 700px） */
 .howto-terms {
@@ -16775,7 +16788,7 @@ onUnmounted(() => {
   margin-right: 6px;
 }
 
-/* いやいやタイムの、こうちゃんのセリフ（「おなかすいたぁ……！」など）
+/* いやいやタイムの、こうちゃんのセリフ（「おなかすいた〜！」など）
    様子の文より少し大きく太くして、まずセリフが目に入るようにする
    色は、いやいやタイムの見出しとそろえている */
 .tantrum-voice {
@@ -17514,7 +17527,7 @@ onUnmounted(() => {
   text-align: center;
 }
 
-/* 「イヤイヤ発生！」…… いちばん目立たせる */
+/* 「いやいや発生！」…… いちばん目立たせる */
 .tantrum-alert__title {
   color: #c9412f;
   font-size: 40px;

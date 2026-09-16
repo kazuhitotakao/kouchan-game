@@ -85,8 +85,8 @@ const baseTracks: SoundtrackTrack[] = [
   },
   {
     id: 5,
-    title: 'イヤイヤタイム！',
-    description: 'イヤイヤタイムBGM',
+    title: 'いやいやタイム！',
+    description: 'いやいやタイムBGM',
     src: '/audio/tantrum-bgm.mp3',
     volume: 0.43,
     credit: '音楽生成：Suno',
