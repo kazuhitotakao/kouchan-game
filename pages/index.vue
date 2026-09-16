@@ -4206,6 +4206,11 @@ function tryCollectPlaceItem(place: ItemPlace) {
    5回に1回くらい（20%）だけ起こり、
    8種類の中から1つが選ばれる
 
+   ※ いやいやが起きた回は、そもそもこの関数が呼ばれない
+     いやいやは専用の画面とBGMまである大きなできごとなので、
+     同じ結果カードに並べず、1回の行動で目立つできごとは1つにそろえている
+     （呼ぶかどうかを決めているのは finishPlayAction()）
+
      1 飛行機を見つける      … こうちゃんの機嫌 +5
      2 急に「だっこ！」      … 親の体力 -5
      3 ねこを見つける        … こうちゃんの機嫌 +5
@@ -4777,30 +4782,47 @@ function checkSuddenEvent() {
 
 /* 場所で1つ行動したあとの共通処理
    ① その場所を探検済みにする
-   ② たまにランダムイベントが起こる
-   ③ 疲れていたら、機嫌が少し下がる
-   ④ いやいやが始まるか判定する
-   ⑤ 今回の変化量を記録する（ランダムイベントと機嫌ダウン、いやいやの分もふくむ）
+   ② 疲れていたら、機嫌が少し下がる
+   ③ いやいやが始まるか判定する
+   ④ いやいやが起きなかったときだけ、たまにちいさなできごとが起こる
+   ⑤ 今回の変化量を記録する（機嫌ダウンと、いやいや・ちいさなできごとの分もふくむ）
    ⑥ ステータスを0〜100に収める
    ⑦ GAME OVERになっていないか判定する
    ⑧ とつぜんのできごとが起きるか抽選する（起きるなら予定表に書くだけ）
-   ※ いやいやをなだめる行動では呼ばない（ランダムイベントを起こさないため）
+   ※ いやいやをなだめる行動では呼ばない（ちいさなできごとを起こさないため）
    ※ とつぜんのできごとの行動でも呼ばない（とつぜんのできごとが連続で起きないようにするため）
 
    ⑦を⑥の次に置いているので、
-   ランダムイベントの「だっこ！」で親の体力が0になった場合も、
+   ちいさなできごとの「だっこ！」で親の体力が0になった場合も、
    いやいや発生で親の余裕が0になった場合も、まとめてGAME OVERになる
 
-   ③がいやいや判定より前にあるのもポイント
+   ②がいやいや判定より前にあるのもポイント
    下がったあとの機嫌でいやいやを判定するので、
    「疲れて機嫌もわるい」ときほど、ちゃんといやいやが起きやすくなる
 */
 function finishPlayAction(place: GameEvent) {
   playCount.value += 1;
   addVisitedPlace(place);
-  runRandomEvent();
   dropMoodWhenTired();
   checkTantrum();
+
+  /* ④ ちいさなできごとの抽選
+
+     いやいやが起きた回は、ちいさなできごとを起こさない
+     いやいやは専用の画面とBGMまである大きなできごとなので、
+     同じ結果カードに「ねこちゃん！（機嫌 +5）」と「いやいや発生」が並ぶと、
+     どちらの話なのか分からなくなってしまう
+     1回の行動で目立つできごとは1つ、という形にそろえている
+     （すぐ下の⑧「とつぜんのできごと」も、同じ考えかたでいやいや中は抽選しない）
+
+     ※ いやいや判定（checkTantrum()）のあとに抽選するので、
+       ちいさなできごとの機嫌や余裕の増減が、
+       いやいやの起きやすさを変えることはない
+  */
+  if (!isTantrum.value) {
+    runRandomEvent();
+  }
+
   saveStatusChanges();
   fixAllStatus();
   checkGameOver();
@@ -7619,7 +7641,7 @@ function seeOffLadybug() {
 
 /* ===== とつぜんのできごと：犬が近づいてくる ===== */
 
-/* ① 近くで見る */
+/* ① 近くで見せてもらう */
 function watchDogClose() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7629,7 +7651,7 @@ function watchDogClose() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = '飼い主さんに聞いてから、近くで見せてもらいました。こうちゃんは大喜びですが、急に手を出さないか見ているのは少しどきどきします。';
+  resultMessage.value = '飼い主さんに聞いて、近くで見せてもらいました。「わんわん、かわいいね！」こうちゃんは大喜びです。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7640,7 +7662,8 @@ function watchDogClose() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 親の後ろから見る */
+/* ② だっこで少し離れて見る
+   （こうちゃんをだっこして、犬から少し離れたところで見る） */
 function watchDogBehindParent() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7649,7 +7672,7 @@ function watchDogBehindParent() {
   parentEnergy.value -= 2;
   addMinutes(5);
 
-  resultMessage.value = 'こうちゃんは親の足のうしろに、そっとかくれました。ときどき顔だけ出して、犬をじっと見つめています。';
+  resultMessage.value = 'だっこで少し離れて見ていると、こうちゃんは「わんわん、こっち見た！」とうれしそうです。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7660,14 +7683,14 @@ function watchDogBehindParent() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 少し離れる */
+/* ③ 道をあけて見送る */
 function keepDistanceFromDog() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
   addMinutes(5);
 
-  resultMessage.value = '手をつないで、少しだけ道のはしへよけました。犬はしっぽをふりながら、そのまま通りすぎていきました。';
+  resultMessage.value = '手をつないで道をあけると、犬はそのまま歩いていきました。「わんわん、ばいばーい！」こうちゃんは手をふっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -9148,7 +9171,7 @@ function runSelectedCommand() {
       break;
 
     /* 犬が近づいてきた
-       0 近くで見る／1 親の後ろから見る／2 少し離れる */
+       0 近くで見せてもらう／1 だっこで少し離れて見る／2 道をあけて見送る */
     case 'dog':
       if (index === 0) {
         watchDogClose();
@@ -13942,7 +13965,11 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
 
-                <p class="place-card__text">散歩中の犬が、しっぽをふりながら近づいてきました。こうちゃんは気になっているようです。</p>
+                <p class="place-card__text">
+                  散歩中の犬が、しっぽをふりながら近づいてきました。
+                  <br />
+                  「わんわん！」こうちゃんは、うれしそうに指をさしています。
+                </p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -14031,15 +14058,15 @@ onUnmounted(() => {
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
-                    <span class="command-box__text">近くで見る</span>
+                    <span class="command-box__text">近くで見せてもらう</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">親の後ろから見る</span>
+                    <span class="command-box__text">だっこで少し離れて見る</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
-                    <span class="command-box__text">少し離れる</span>
+                    <span class="command-box__text">道をあけて見送る</span>
                   </button>
                 </template>
 
