@@ -7522,7 +7522,7 @@ function waitCalmly() {
 
 /* ===== とつぜんのできごと：救急車のサイレン ===== */
 
-/* ① 立ち止まって救急車を探す */
+/* ① 救急車を探してみる */
 function lookForAmbulance() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7543,7 +7543,7 @@ function lookForAmbulance() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 音を聞きながら少し待つ */
+/* ② いっしょにサイレンを聞く */
 function listenToSiren() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7562,12 +7562,12 @@ function listenToSiren() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 先へ進む（ステータスも時間も変わらない） */
+/* ③ 遊びに戻る（ステータスも時間も変わらない） */
 function walkOnFromSiren() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  resultMessage.value = '「またこんど見ようね」と声をかけて、先へ進みました。こうちゃんは何度か後ろをふりかえっています。';
+  resultMessage.value = '「またこんど見ようね」と声をかけて、遊びに戻りました。こうちゃんは何度か後ろをふりかえっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7580,7 +7580,7 @@ function walkOnFromSiren() {
 
 /* ===== とつぜんのできごと：テントウムシ ===== */
 
-/* ① 一緒にじっくり観察する */
+/* ① いっしょにじっくり見る */
 function watchLadybug() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7589,7 +7589,7 @@ function watchLadybug() {
   outingPoint.value += 4;
   addMinutes(10);
 
-  resultMessage.value = '二人でしゃがんで、じっくり見つめました。こうちゃんは「 てちてち歩いている、かわいい 」と満足げです。';
+  resultMessage.value = '二人でしゃがんで、じっくり見つめました。こうちゃんは「てちてち歩いている、かわいい」と満足げです。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7600,7 +7600,7 @@ function watchLadybug() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 手に乗せてみる */
+/* ② そっと手を近づけてみる */
 function holdLadybug() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7609,7 +7609,7 @@ function holdLadybug() {
   outingPoint.value += 5;
   addMinutes(10);
 
-  resultMessage.value = 'そっと指を近づけると、テントウムシが乗ってきました。こうちゃんは手を上にあげ、テントウムシを飛ばそうとしています。';
+  resultMessage.value = 'そっと手を近づけると、テントウムシが指にちょこんと乗りました。「のった！」こうちゃんはうれしそうに見ています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7620,7 +7620,7 @@ function holdLadybug() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ そっと見送る */
+/* ③ ばいばいして見送る */
 function seeOffLadybug() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7628,7 +7628,7 @@ function seeOffLadybug() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = 'しばらく見ていると、テントウムシはぱっと羽を広げて飛んでいきました。こうちゃんは「ばいばい」と手をふっています。';
+  resultMessage.value = 'テントウムシがぱっと飛び立ちました。「ばいばーい！」こうちゃんは空に向かって手をふっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -9147,7 +9147,7 @@ function runSelectedCommand() {
     /* ここから下はとつぜんのできごと */
 
     /* 救急車のサイレン
-       0 立ち止まって救急車を探す／1 音を聞きながら少し待つ／2 先へ進む */
+       0 救急車を探してみる／1 いっしょにサイレンを聞く／2 遊びに戻る */
     case 'emergencySiren':
       if (index === 0) {
         lookForAmbulance();
@@ -9159,7 +9159,7 @@ function runSelectedCommand() {
       break;
 
     /* テントウムシ
-       0 一緒にじっくり観察する／1 手に乗せてみる／2 そっと見送る */
+       0 いっしょにじっくり見る／1 そっと手を近づけてみる／2 ばいばいして見送る */
     case 'ladybug':
       if (index === 0) {
         watchLadybug();
@@ -13727,7 +13727,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
-                <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。こうちゃんは「きゅうきゅうしゃ！」と目を輝かせています。</p>
+                <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。「きゅうきゅうしゃ、どこ？」こうちゃんは辺りを見回しています。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -13816,15 +13816,15 @@ onUnmounted(() => {
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
-                    <span class="command-box__text">立ち止まって救急車を探す</span>
+                    <span class="command-box__text">救急車を探してみる</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">音を聞きながら少し待つ</span>
+                    <span class="command-box__text">いっしょにサイレンを聞く</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
-                    <span class="command-box__text">先へ進む</span>
+                    <span class="command-box__text">遊びに戻る</span>
                   </button>
                 </template>
 
@@ -13935,15 +13935,15 @@ onUnmounted(() => {
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
-                    <span class="command-box__text">一緒にじっくり観察する</span>
+                    <span class="command-box__text">いっしょにじっくり見る</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">手に乗せてみる</span>
+                    <span class="command-box__text">そっと手を近づけてみる</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
-                    <span class="command-box__text">そっと見送る</span>
+                    <span class="command-box__text">ばいばいして見送る</span>
                   </button>
                 </template>
 
