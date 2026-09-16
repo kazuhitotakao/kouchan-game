@@ -118,7 +118,23 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    fallDown       = こうちゃんがころぶ
    fountain       = 噴水が突然出る
 */
-type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot' | 'secretPath' | 'tantrum' | 'goal' | 'gameOver' | 'emergencySiren' | 'ladybug' | 'dog' | 'fallDown' | 'fountain';
+type GameEvent =
+  | 'parkEntrance'
+  | 'slide'
+  | 'sandbox'
+  | 'acornArea'
+  | 'pond'
+  | 'grassArea'
+  | 'secretSpot'
+  | 'secretPath'
+  | 'tantrum'
+  | 'goal'
+  | 'gameOver'
+  | 'emergencySiren'
+  | 'ladybug'
+  | 'dog'
+  | 'fallDown'
+  | 'fountain';
 
 /* 現在いる場所
    最初は「公園入口」からスタート
@@ -2071,6 +2087,187 @@ function playFallDownSound() {
 
   playTone(260, start, 0.1, 0.12, 'triangle', 150); // ① ヒュッ
   playTone(120, start + 0.11, 0.15, 0.18, 'triangle', 70); // ② ポテッ
+}
+
+/* ⑧ 葉っぱのガサガサ音「ササッ、ガサッ」（とつぜんのできごと「テントウムシ発見！」用）
+
+   ここまでの効果音（①〜⑦）は、どれも playTone() で「決まった形の波」を鳴らしてきた
+   音程のある「ポン♪」「ポテッ」は、それで作れる
+
+   でも、葉っぱがこすれる音には音程が無い
+   「ドレミ」のどれでもない、ザラザラした音なので、波の形では作れない
+   そこで、この音だけは作りかたを変えている
+
+   ・音程のある音 … きれいにくり返す波（playTone／OscillatorNode）
+   ・ガサガサ音   … でたらめな数字の列（ホワイトノイズ／AudioBufferSourceNode）
+
+   でたらめな数字をそのまま鳴らすと「シャーッ」というテレビの砂あらしの音になり、
+   耳にきつく、葉っぱには聞こえない
+   そこで、フィルター（BiquadFilterNode）で高い音を削って、
+   やわらかい葉ずれの音にしている
+
+   ぜんぶで0.42秒ほど。短い音のかたまりを2つ続けて「葉っぱの中で何かが動いた」を表す
+   ① ササッ … 小さめ。葉っぱがかすかにゆれた
+   ② ガサッ … 少し大きめ。テントウムシが顔を出した
+
+   ①②はどちらも、1回の音ではなく短い粒をいくつか重ねて作っている
+   （くわしくは playLadybugRustleSound() のコメント）
+
+   ※ 音量は、ほかの効果音より大きめの数字にしてある
+     フィルターで高い音を削っているぶん、音のエネルギーが減って小さく聞こえるため
+     （転倒音を大きめにしてあるのと同じ、耳で聞いてそろえるための調整）
+*/
+
+/* ガサガサ音を鳴らしはじめるまでの待ち時間（秒）
+
+   転倒音（fallDownSoundDelay）とまったく同じ理由・同じ長さにしてある
+   この音が鳴るのは「次へ」を押して、テントウムシの画面へ切りかわった瞬間
+   すぐ鳴らすと、押したときの決定音「ポン♪」と重なってしまうため、
+   決定音が鳴り終わってから鳴るようにしてある */
+const ladybugRustleDelay = 0.45;
+
+/* ガサガサ音を1つだけ鳴らす（①ササッ と ②ガサッ で、2回呼ぶ）
+
+   startTime … いつ鳴らしはじめるか（AudioContextの中の時計の時刻）
+   duration  … 音の長さ（秒）
+   volume    … 音の大きさ（0〜1）
+   filterFrequency … この高さ（Hz）より上を削る。小さいほど、こもったやわらかい音になる
+*/
+function playRustleNoise(startTime: number, duration: number, volume: number, filterFrequency: number) {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  /* 効果音の大きさにも、音量スライダーのぶんをかける（playTone と同じ） */
+  const effectVolume = getSoundVolume(volume);
+
+  /* 0（＝ミュート）のときは鳴らさずに終わり
+     下の exponentialRampToValueAtTime() は 0 を受け取れないため */
+  if (effectVolume <= 0) {
+    return;
+  }
+
+  try {
+    /* ① でたらめな数字の列（ホワイトノイズ）を作る
+
+       createBuffer(チャンネル数, 数字の個数, 1秒あたりの個数)
+       「1秒あたりの個数 × 秒数」で、必要な個数が決まる
+       中身を -1〜1 のでたらめな数字で埋めると、ザラザラした音になる
+
+       ただし、ただの乱数をそのまま鳴らすと「スーッ」と平らな音になってしまう
+       本物の葉ずれは、葉と葉が触れる細かい「カサ」が
+       不規則に連なって「ガサガサ」に聞こえている
+
+       そこで、全体にもう一段おおざっぱなゆれ（roughness）をかけている
+       ・rough … ゆっくり上下する、0.15〜1 のあいだのでたらめな倍率
+       ・これを乱数にかけ算すると、音の粒が「濃いところ・薄いところ」に分かれる
+       この濃淡が、葉っぱがこすれるときの「ガサッ、ガサッ」というざらつきになる
+
+       ゆれを何サンプルごとに作りなおすかが roughStep
+       細かすぎると元のホワイトノイズに戻ってしまい、
+       粗すぎるとブツブツ途切れた音になるので、
+       1秒あたりの個数の 1/900（44100Hzなら約49個ぶん）にしている */
+    const frameCount = Math.floor(context.sampleRate * duration);
+    const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    const roughStep = Math.max(1, Math.floor(context.sampleRate / 900));
+    let rough = 1;
+
+    for (let i = 0; i < frameCount; i += 1) {
+      // roughStep 個ごとに、ゆれの倍率を新しく決めなおす
+      if (i % roughStep === 0) {
+        rough = 0.15 + Math.random() * 0.85;
+      }
+
+      data[i] = (Math.random() * 2 - 1) * rough;
+    }
+
+    const noise = context.createBufferSource(); // 音の発生源（でたらめな数字を読み上げる）
+    const filter = context.createBiquadFilter(); // 高い音を削る係
+    const highpass = context.createBiquadFilter(); // 低い音を削る係
+    const gain = context.createGain(); // 音量つまみ
+
+    noise.buffer = buffer;
+
+    /* ② 高すぎる「シャー」を削る
+
+       lowpass ＝ 低い音は通して、高い音は通さない、という種類のフィルター
+       frequency より上がだんだん小さくなるので、
+       ここの数字を下げるほど、こもったやわらかい音になる */
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(filterFrequency, startTime);
+
+    /* ③ 低すぎる「ゴロゴロ」も削る
+
+       乱数には、耳に聞こえないほど低い音まで入っている
+       そこが残っていると、軽い葉ずれではなく
+       「ボフッ」とこもった重い音になってしまう
+       highpass ＝ 高い音は通して、低い音は通さない、で下を切り、
+       葉っぱがこすれる軽さを出している */
+    highpass.type = 'highpass';
+    highpass.frequency.setValueAtTime(700, startTime);
+
+    /* ④ 音量の動き（playTone と同じ考えかた）
+       ① ほぼ無音からはじめて ② すっと上げて ③ 鳴り終わりに向かって下げる
+
+       葉っぱがこすれる音は「パッと鳴って、すっと消える」ので、
+       上げるところ（0.01秒）を playTone（0.015秒）より短くしている */
+    const nearSilent = effectVolume * 0.02;
+
+    gain.gain.setValueAtTime(nearSilent, startTime);
+    gain.gain.exponentialRampToValueAtTime(effectVolume, startTime + 0.01);
+    gain.gain.exponentialRampToValueAtTime(nearSilent, startTime + duration);
+
+    // 発生源 → 高い音を削る → 低い音を削る → 音量つまみ → スピーカー の順につなぐ
+    noise.connect(filter);
+    filter.connect(highpass);
+    highpass.connect(gain);
+    gain.connect(context.destination);
+
+    noise.start(startTime);
+    noise.stop(startTime + duration);
+  } catch {
+    // 音が鳴らなくても、ゲームは止めない
+  }
+}
+
+function playLadybugRustleSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const start = context.currentTime + ladybugRustleDelay;
+
+  /* 「ササッ」も「ガサッ」も、1回の音ではなく小さな音の集まりにしている
+
+     葉っぱがゆれるときは、葉と葉が何度も触れあうので、
+     1粒だけ鳴らすと「ポッ」と単発に聞こえてしまう
+     短い粒を少しずつずらして重ねると、
+     粒どうしがつながって「ガサガサ」と連なって聞こえる
+
+     数字は順に（鳴らしはじめ, 長さ, 大きさ, 高い音を削る位置）
+
+     ① ササッ … 小さめ・高めの粒を3つ。かすかに葉がゆれた
+     ② ガサッ … 大きめ・低めの粒を4つ。テントウムシが顔を出した
+
+     粒の長さも間かくもそろえていないのは、
+     きれいに等間かくだと機械のように聞こえてしまうため */
+
+  // ① ササッ
+  playRustleNoise(start, 0.05, 0.11, 2600);
+  playRustleNoise(start + 0.035, 0.06, 0.14, 2100);
+  playRustleNoise(start + 0.085, 0.05, 0.09, 2400);
+
+  // ② ガサッ（①のあと、少しだけ間を空けてから）
+  playRustleNoise(start + 0.2, 0.07, 0.18, 1700);
+  playRustleNoise(start + 0.245, 0.08, 0.24, 1300);
+  playRustleNoise(start + 0.305, 0.07, 0.19, 1500);
+  playRustleNoise(start + 0.355, 0.06, 0.12, 1200);
 }
 
 /* ============================================================
@@ -4189,12 +4386,12 @@ const placeItems: Record<ItemPlace, string> = {
      （結果カードは場所ごとに同じ形のものが並んでいるため）
 */
 const itemReactions: Record<string, string> = {
-  'ちいさな松ぼっくり': '「みてみて！」こうちゃんは、まつぼっくりを見せてくれました。',
-  'きれいな石': '「つるつるしてる！」こうちゃんは、何度もさわっています。',
-  '大きなどんぐり': '「大きいのあった〜！」こうちゃんは、うれしそうに見せてくれました。',
-  '水色のガラス玉': '「きらきら！」こうちゃんは、光にかざして見ています。',
-  '黄色い花': '「おはな！」こうちゃんは、大事そうに持っています。',
-  'ふしぎな形の枝': '「これなに？」こうちゃんは、くるくる回して見ています。',
+  ちいさな松ぼっくり: '「みてみて！」こうちゃんは、まつぼっくりを見せてくれました。',
+  きれいな石: '「つるつるしてる！」こうちゃんは、何度もさわっています。',
+  大きなどんぐり: '「大きいのあった〜！」こうちゃんは、うれしそうに見せてくれました。',
+  水色のガラス玉: '「きらきら！」こうちゃんは、光にかざして見ています。',
+  黄色い花: '「おはな！」こうちゃんは、大事そうに持っています。',
+  ふしぎな形の枝: '「これなに？」こうちゃんは、くるくる回して見ています。',
 };
 
 /* アイテムの名前から、こうちゃんのひとことを取り出す
@@ -5634,19 +5831,25 @@ function goToNextPlace() {
     /* 行き先をいったん控えてから、画面を切りかえる
 
        pendingSuddenEvent を空に戻したあとでは、どのできごとへ来たのかが分からなくなるため
-       （転倒音を鳴らすかどうかの判定に、この控えを使う） */
+       （効果音を鳴らすかどうかの判定に、この控えを使う） */
     const nextSuddenEvent = pendingSuddenEvent.value;
 
     currentEvent.value = nextSuddenEvent;
     pendingSuddenEvent.value = null;
 
-    /* ころんだできごとへ「移動した瞬間」だけ、転倒音を鳴らす
+    /* できごとの画面へ「移動した瞬間」だけ、そのできごとの効果音を鳴らす
 
        画面を見ているあいだではなく、ここで1回だけ鳴らす
        （同じ画面のまま何かしても、鳴りなおすことはない）
-       サウンドOFF・音量0%のときは、getAudioContext() が止めてくれる */
+       サウンドOFF・音量0%のときは、getAudioContext() が止めてくれる
+
+       ここに書いていないできごと（救急車・犬・噴水）は、今までどおり音を鳴らさない */
     if (nextSuddenEvent === 'fallDown') {
       playFallDownSound();
+    }
+
+    if (nextSuddenEvent === 'ladybug') {
+      playLadybugRustleSound();
     }
 
     return;
@@ -7359,9 +7562,7 @@ function talkToChild() {
       isTantrum.value = false;
 
       resultMessage.value =
-        tantrumReason.value === 'frustrated'
-          ? `${words}と話すと、こうちゃんは涙をふいて、少しずつ落ち着いてきました。`
-          : `${words}と話すと、こうちゃんは「うん…」とうなずいて、少し落ち着きました。`;
+        tantrumReason.value === 'frustrated' ? `${words}と話すと、こうちゃんは涙をふいて、少しずつ落ち着いてきました。` : `${words}と話すと、こうちゃんは「うん…」とうなずいて、少し落ち着きました。`;
     }
 
     if (isRepeatedTalk) {
@@ -7530,9 +7731,7 @@ function waitCalmly() {
     // ここでは checkTantrum() を呼ばない（新しいいやいやではないので、tantrumCount も tantrumReason も変えない）
     const complaint = currentTantrumReasonInfo.value?.complaint;
 
-    resultMessage.value = complaint
-      ? `しばらく待ってみましたが、こうちゃんは「${complaint}」。まだいやいやしています。`
-      : 'しばらく待ってみましたが、こうちゃんはまだいやいやしています。';
+    resultMessage.value = complaint ? `しばらく待ってみましたが、こうちゃんは「${complaint}」。まだいやいやしています。` : 'しばらく待ってみましたが、こうちゃんはまだいやいやしています。';
 
     // 待つを続けていると効きにくくなることを、こうちゃんの様子として伝える
     // （「別の対応を試したほうがよさそう」と気づけるようにするための1文）
@@ -11401,12 +11600,7 @@ onUnmounted(() => {
                    0% ＝ ミュートなので、2つはいつも同じ状態になる
                    （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
               <div class="sound-control sound-control--bar">
-                <button
-                  type="button"
-                  class="sound-toggle sound-toggle--bar"
-                  :aria-pressed="soundEnabled"
-                  :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
-                  @click="toggleSound">
+                <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'" @click="toggleSound">
                   <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
                        OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
                        ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
@@ -11693,7 +11887,12 @@ onUnmounted(() => {
               </button>
 
               <!-- 押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く） -->
-              <button class="cmd cmd--goal" :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }" @click="openGoalConfirm" @mouseenter="selectedCommandIndex = goalCommandIndex" @focus="selectedCommandIndex = goalCommandIndex">
+              <button
+                class="cmd cmd--goal"
+                :class="{ 'cmd--selected': selectedCommandIndex === goalCommandIndex }"
+                @click="openGoalConfirm"
+                @mouseenter="selectedCommandIndex = goalCommandIndex"
+                @focus="selectedCommandIndex = goalCommandIndex">
                 <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
               </button>
             </nav>
@@ -11864,7 +12063,12 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                        @click="takeCommonBreak"
+                        @mouseenter="selectedCareCommandIndex = 0"
+                        @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -11895,11 +12099,21 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSlide" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="playSlide"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">一緒にすべる</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchSlide" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                      @click="watchSlide"
+                      @mouseenter="selectedCommandIndex = 1"
+                      @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">下で見守る</span>
                     </button>
 
@@ -11960,7 +12174,13 @@ onUnmounted(() => {
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      v-else
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -12129,7 +12349,12 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                        @click="takeCommonBreak"
+                        @mouseenter="selectedCareCommandIndex = 0"
+                        @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -12160,11 +12385,21 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playSandbox" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="playSandbox"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">一緒に大きな山を作る</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="buildSandTunnel" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                      @click="buildSandTunnel"
+                      @mouseenter="selectedCommandIndex = 1"
+                      @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">砂のトンネルを作る</span>
                     </button>
 
@@ -12225,7 +12460,13 @@ onUnmounted(() => {
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      v-else
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -12394,7 +12635,12 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                        @click="takeCommonBreak"
+                        @mouseenter="selectedCareCommandIndex = 0"
+                        @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -12425,11 +12671,21 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="collectAcorns" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="collectAcorns"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">一緒にどんぐりを拾う</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="rollAcorns" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                      @click="rollAcorns"
+                      @mouseenter="selectedCommandIndex = 1"
+                      @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">どんぐりをころがして遊ぶ</span>
                     </button>
 
@@ -12490,7 +12746,13 @@ onUnmounted(() => {
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      v-else
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -12659,7 +12921,12 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                        @click="takeCommonBreak"
+                        @mouseenter="selectedCareCommandIndex = 0"
+                        @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -12690,11 +12957,21 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchSwansClose" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="watchSwansClose"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">白鳥を近くで見る</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="feedKoi" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                      @click="feedKoi"
+                      @mouseenter="selectedCommandIndex = 1"
+                      @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">コイに餌をあげる</span>
                     </button>
 
@@ -12755,7 +13032,13 @@ onUnmounted(() => {
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      v-else
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -12924,7 +13207,12 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                        @click="takeCommonBreak"
+                        @mouseenter="selectedCareCommandIndex = 0"
+                        @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -12955,11 +13243,21 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playTagOnGrass" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="playTagOnGrass"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">追いかけっこする</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="playWithBubbles" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                      @click="playWithBubbles"
+                      @mouseenter="selectedCommandIndex = 1"
+                      @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">シャボン玉で遊ぶ</span>
                     </button>
 
@@ -13020,7 +13318,13 @@ onUnmounted(() => {
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      v-else
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -13078,7 +13382,10 @@ onUnmounted(() => {
               <!-- 遊んでいる最中 -->
               <article v-else-if="secretPathPhase === 'playing'" ref="secretPathPlayRef" class="place-card place-card--secret secret-path">
                 <div class="secret-path-hud">
-                  <span class="secret-path-hud__sunlight" :class="{ 'secret-path-hud__sunlight--sparkle': isSecretPathSparkling, 'secret-path-hud__sunlight--lost': isSecretPathBumped && secretPathBumpLost }" aria-live="polite">
+                  <span
+                    class="secret-path-hud__sunlight"
+                    :class="{ 'secret-path-hud__sunlight--sparkle': isSecretPathSparkling, 'secret-path-hud__sunlight--lost': isSecretPathBumped && secretPathBumpLost }"
+                    aria-live="polite">
                     ✨ 木漏れ日
                     <!-- key を数にしておくと、取るたびに数字がぽんっと出なおす -->
                     <b :key="secretPathSunlightCount" class="secret-path-hud__count">{{ secretPathSunlightCount }}</b>
@@ -13134,7 +13441,9 @@ onUnmounted(() => {
                     :key="item.id"
                     class="secret-path-item"
                     :class="[`secret-path-item--${item.kind}`, { 'secret-path-item--hit': item.hit }]"
-                    :style="{ left: getSecretPathLaneLeft(item.lane), top: `${item.y}%` }">{{ item.kind === 'branch' ? '🌿' : '✨' }}</span>
+                    :style="{ left: getSecretPathLaneLeft(item.lane), top: `${item.y}%` }">
+                    {{ item.kind === 'branch' ? '🌿' : '✨' }}
+                  </span>
 
                   <div class="secret-path-player" :style="{ left: getSecretPathLaneLeft(secretPathPlayerLane), top: `${secretPathPlayerY}%` }">
                     <!-- 枝に当たったとき：「いたっ！」と、木漏れ日が減ったときだけ「✨ -1」
@@ -13144,11 +13453,7 @@ onUnmounted(() => {
                       <span v-if="secretPathBumpLost" class="secret-path-player__minus">✨ -1</span>
                     </span>
                     <span v-if="isSecretPathSparkling" :key="secretPathSparkleId" class="secret-path-player__plus">✨ +1</span>
-                    <span
-                      class="secret-path-player__face"
-                      :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">
-                      👦
-                    </span>
+                    <span class="secret-path-player__face" :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">👦</span>
                   </div>
                 </div>
               </article>
@@ -13207,11 +13512,21 @@ onUnmounted(() => {
                 <template v-else-if="secretPathPhase === 'ready'">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="startSecretPathGame" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="startSecretPathGame"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">小道へ進む</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="leaveSecretPathToEntrance" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="leaveSecretPathToEntrance"
+                    @mouseenter="selectedCommandIndex = 1"
+                    @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">← 場所選びにもどる</span>
                   </button>
                 </template>
@@ -13219,7 +13534,12 @@ onUnmounted(() => {
                 <template v-else>
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="enterSecretSpotFromPath" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="enterSecretSpotFromPath"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">先へ進む</span>
                   </button>
                 </template>
@@ -13389,7 +13709,12 @@ onUnmounted(() => {
                     <template v-else>
                       <p class="care-menu__label">☕ ひとやすみ</p>
 
-                      <button class="care-menu__item" :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }" @click="takeCommonBreak" @mouseenter="selectedCareCommandIndex = 0" @focus="selectedCareCommandIndex = 0">
+                      <button
+                        class="care-menu__item"
+                        :class="{ 'care-menu__item--selected': selectedCareCommandIndex === 0 }"
+                        @click="takeCommonBreak"
+                        @mouseenter="selectedCareCommandIndex = 0"
+                        @focus="selectedCareCommandIndex = 0">
                         <span class="care-menu__text">休憩する</span>
                       </button>
 
@@ -13420,11 +13745,21 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="exploreSunlight" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="exploreSunlight"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">木漏れ日の中を探検する</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="exploreClearingDepths" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                    <button
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                      @click="exploreClearingDepths"
+                      @mouseenter="selectedCommandIndex = 1"
+                      @focus="selectedCommandIndex = 1">
                       <span class="command-box__text">広場の奥を見てみる</span>
                     </button>
 
@@ -13485,7 +13820,13 @@ onUnmounted(() => {
                       <span class="command-box__text">← もどる</span>
                     </button>
 
-                    <button v-else class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                    <button
+                      v-else
+                      class="command-box__item"
+                      :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                      @click="goToNextPlace"
+                      @mouseenter="selectedCommandIndex = 0"
+                      @focus="selectedCommandIndex = 0">
                       <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                     </button>
                   </template>
@@ -13727,7 +14068,12 @@ onUnmounted(() => {
                 </template>
 
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -13831,22 +14177,42 @@ onUnmounted(() => {
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="lookForAmbulance" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="lookForAmbulance"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">救急車を探してみる</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="listenToSiren" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="listenToSiren"
+                    @mouseenter="selectedCommandIndex = 1"
+                    @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">いっしょにサイレンを聞く</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromSiren" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                    @click="walkOnFromSiren"
+                    @mouseenter="selectedCommandIndex = 2"
+                    @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">遊びに戻る</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -13950,22 +14316,42 @@ onUnmounted(() => {
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchLadybug" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="watchLadybug"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">いっしょにじっくり見る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="holdLadybug" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="holdLadybug"
+                    @mouseenter="selectedCommandIndex = 1"
+                    @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">そっと手を近づけてみる</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="seeOffLadybug" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                    @click="seeOffLadybug"
+                    @mouseenter="selectedCommandIndex = 2"
+                    @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">ばいばいして見送る</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -14073,22 +14459,42 @@ onUnmounted(() => {
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="watchDogClose" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="watchDogClose"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">近くで見せてもらう</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchDogBehindParent" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="watchDogBehindParent"
+                    @mouseenter="selectedCommandIndex = 1"
+                    @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">だっこで少し離れて見る</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="keepDistanceFromDog" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                    @click="keepDistanceFromDog"
+                    @mouseenter="selectedCommandIndex = 2"
+                    @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">道をあけて見送る</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -14192,22 +14598,42 @@ onUnmounted(() => {
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="hugAfterFall" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="hugAfterFall"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">すぐにだっこする</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="blowPainAway"
+                    @mouseenter="selectedCommandIndex = 1"
+                    @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">「いたいのいたいのとんでいけ〜」</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                    @click="watchAfterFall"
+                    @mouseenter="selectedCommandIndex = 2"
+                    @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">「大丈夫？」と声をかけて待つ</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -14311,22 +14737,42 @@ onUnmounted(() => {
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goCloseToFountain"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">水しぶきの近くまで行く</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    @click="watchFountainFar"
+                    @mouseenter="selectedCommandIndex = 1"
+                    @focus="selectedCommandIndex = 1">
                     <span class="command-box__text">少し離れてながめる</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }"
+                    @click="walkOnFromFountain"
+                    @mouseenter="selectedCommandIndex = 2"
+                    @focus="selectedCommandIndex = 2">
                     <span class="command-box__text">遊びに戻る</span>
                   </button>
                 </template>
 
                 <!-- 選んだあとは「次の場所を選ぶ」の1つだけ -->
                 <template v-else>
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goToNextPlace" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                  <button
+                    class="command-box__item"
+                    :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }"
+                    @click="goToNextPlace"
+                    @mouseenter="selectedCommandIndex = 0"
+                    @focus="selectedCommandIndex = 0">
                     <span class="command-box__text">{{ nextPlaceCommandLabel }}</span>
                   </button>
                 </template>
@@ -18846,8 +19292,7 @@ onUnmounted(() => {
   border: 3px solid #4f7a46;
   border-radius: 18px;
   background:
-    radial-gradient(circle at 22% 16%, rgb(255 236 170 / 30%) 0 16px, transparent 44px),
-    radial-gradient(circle at 80% 40%, rgb(255 236 170 / 24%) 0 12px, transparent 38px),
+    radial-gradient(circle at 22% 16%, rgb(255 236 170 / 30%) 0 16px, transparent 44px), radial-gradient(circle at 80% 40%, rgb(255 236 170 / 24%) 0 12px, transparent 38px),
     radial-gradient(circle at 36% 66%, rgb(255 236 170 / 20%) 0 14px, transparent 40px),
     linear-gradient(90deg, #4a7a40 0%, #5a8c4c 6%, #7a5a3c 7%, #a67c52 10%, #b08a60 50%, #a67c52 90%, #7a5a3c 93%, #5a8c4c 94%, #4a7a40 100%);
   box-shadow: inset 0 10px 18px rgb(38 58 30 / 35%);
