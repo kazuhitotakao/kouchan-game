@@ -4131,10 +4131,10 @@ type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'sec
 
 /* 場所ごとに見つかるもの（1か所に1種類） */
 const placeItems: Record<ItemPlace, string> = {
-  slide: '赤い葉っぱ',
+  slide: 'ちいさな松ぼっくり',
   sandbox: 'きれいな石',
   acornArea: '大きなどんぐり',
-  pond: '白い羽',
+  pond: '水色のガラス玉',
   grassArea: '黄色い花',
   secretSpot: 'ふしぎな形の枝',
 };
