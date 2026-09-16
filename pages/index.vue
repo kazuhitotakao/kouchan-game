@@ -4139,6 +4139,34 @@ const placeItems: Record<ItemPlace, string> = {
   secretSpot: 'ふしぎな形の枝',
 };
 
+/* アイテムごとの、こうちゃんのひとこと
+
+   結果カードの「★ アイテム発見！」「『○○』を見つけました！」の下に、1文だけ出す
+   見出し（キー）は placeItems のアイテム名とそろえてあるので、
+   placeItems の名前を変えたときは、ここも合わせて変えること
+
+   ※ 同じ文を画面のほうに何度も書かないように、文章はここだけに置いてある
+     （結果カードは場所ごとに同じ形のものが並んでいるため）
+*/
+const itemReactions: Record<string, string> = {
+  'ちいさな松ぼっくり': '「みてみて！」こうちゃんは、まつぼっくりを見せてくれました。',
+  'きれいな石': '「つるつるしてる！」こうちゃんは、何度もさわっています。',
+  '大きなどんぐり': '「大きいのあった〜！」こうちゃんは、うれしそうに見せてくれました。',
+  '水色のガラス玉': '「きらきら！」こうちゃんは、光にかざして見ています。',
+  '黄色い花': '「おはな！」こうちゃんは、大事そうに持っています。',
+  'ふしぎな形の枝': '「これなに？」こうちゃんは、くるくる回して見ています。',
+};
+
+/* アイテムの名前から、こうちゃんのひとことを取り出す
+
+   対応表に無い名前のときは空文字を返す
+   画面のほうは v-if で見ているので、その行はまるごと出ない
+   （あとからひとことの無いアイテムを足しても、空の行が残らないようにするため）
+*/
+function itemReaction(itemName: string) {
+  return itemReactions[itemName] ?? '';
+}
+
 /* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */
 const firstVisitItemFindChance = 0.6;
 
@@ -11662,12 +11690,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -11915,12 +11952,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -12168,12 +12214,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -12421,12 +12476,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -12674,12 +12738,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -13127,12 +13200,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -13433,12 +13515,21 @@ onUnmounted(() => {
                   </div>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -13606,12 +13697,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -13716,12 +13816,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -13826,12 +13935,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -13936,12 +14054,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -14050,12 +14177,21 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする -->
-                  <p v-for="item in foundItemsThisAction" :key="item" class="found-line">
-                    「
-                    <b class="found-line__name">{{ item }}</b>
-                    」を見つけました！
-                  </p>
+                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
+
+                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
+                       （文章は script の itemReactions にまとめてある）
+                       今回の行動で新しく見つけたときだけ出る
+                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
+                  <template v-for="item in foundItemsThisAction" :key="item">
+                    <p class="found-line">
+                      「
+                      <b class="found-line__name">{{ item }}</b>
+                      」を見つけました！
+                    </p>
+
+                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
+                  </template>
 
                   <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
@@ -17577,6 +17713,22 @@ onUnmounted(() => {
   border-radius: 6px;
   background: #fff1c9;
   color: #7a5410;
+}
+
+/* アイテムごとの、こうちゃんのひとこと
+
+   すぐ上の「〜を見つけました！」に続く1文なので、
+   ・少し小さめ・やわらかい色にして、上の行を主役のままにする
+   ・左に細い線を入れて「上の行に付いている文」と分かるようにする
+     （線の色は「★ アイテム発見！」の帯のふちと同じ）
+*/
+.found-reaction {
+  margin: 4px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid #f5e2be;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.8;
 }
 
 /* 行動の最中に起きたちいさなできごと（ランダムイベント）
