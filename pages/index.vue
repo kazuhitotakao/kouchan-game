@@ -4211,7 +4211,7 @@ function tryCollectPlaceItem(place: ItemPlace) {
      4 急に走り出す          … 親の余裕 -6
      5 ちょうちょ            … こうちゃんの機嫌 +4
      6 落ち葉を踏む          … こうちゃんの機嫌 +5
-     7 靴がぽろっと脱げる    … 親の余裕 -4
+     7 靴に砂が入る          … 親の余裕 -3
      8 水たまりで大はしゃぎ  … こうちゃんの機嫌 +5 ／ 親の余裕 -3
 
    うれしいことが4つ・親がつかれることが3つ・その両方が1つ（8）という組み合わせ
@@ -4307,11 +4307,11 @@ function runRandomEvent() {
     return;
   }
 
-  // ⑦ 靴がぽろっと脱げる
+  // ⑦ 靴に砂が入る
   if (eventNumber === 6) {
-    parentCalm.value -= 4;
-    randomEventText.value = 'こうちゃんが走っていると、片方の靴がぽろっと脱げてしまいました。ちょっと待って、履きなおします。';
-    addRandomEventEffect('親の余裕', 'parentCalm', -4);
+    parentCalm.value -= 3;
+    randomEventText.value = '「砂はいっちゃった〜」こうちゃんは、くつを見ながら立ち止まりました。';
+    addRandomEventEffect('親の余裕', 'parentCalm', -3);
     return;
   }
 
