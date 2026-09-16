@@ -7845,7 +7845,7 @@ function watchAfterFall() {
 
 /* ===== とつぜんのできごと：噴水が突然出る ===== */
 
-/* ① 近くまで見に行く */
+/* ① 水しぶきの近くまで行く */
 function goCloseToFountain() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7867,7 +7867,7 @@ function goCloseToFountain() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 少し離れて見る */
+/* ② 少し離れてながめる */
 function watchFountainFar() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7887,12 +7887,12 @@ function watchFountainFar() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 先へ進む（ステータスも時間も変わらない） */
+/* ③ 遊びに戻る（ステータスも時間も変わらない） */
 function walkOnFromFountain() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  resultMessage.value = '「またあとでね」と手をつないで、そのまま先へ進みました。うしろで噴水の音がしています。';
+  resultMessage.value = '「またあとで見ようね」と声をかけて、遊びに戻りました。こうちゃんは何度か噴水を振り返っています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -9199,7 +9199,7 @@ function runSelectedCommand() {
       break;
 
     /* 噴水が出た
-       0 近くまで見に行く／1 少し離れて見る／2 先へ進む */
+       0 水しぶきの近くまで行く／1 少し離れてながめる／2 遊びに戻る */
     case 'fountain':
       if (index === 0) {
         goCloseToFountain();
@@ -14300,15 +14300,15 @@ onUnmounted(() => {
                   <p class="command-box__label">どうする？</p>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="goCloseToFountain" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
-                    <span class="command-box__text">近くまで見に行く</span>
+                    <span class="command-box__text">水しぶきの近くまで行く</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="watchFountainFar" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">少し離れて見る</span>
+                    <span class="command-box__text">少し離れてながめる</span>
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="walkOnFromFountain" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
-                    <span class="command-box__text">先へ進む</span>
+                    <span class="command-box__text">遊びに戻る</span>
                   </button>
                 </template>
 
