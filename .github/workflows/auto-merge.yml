@@ -1,10 +1,22 @@
 name: Auto Merge to Develop
 
-# fix/○○ ブランチに push されたときに実行
+# 作業ブランチに push されたときに実行
+#
+# 対象は、コミットメッセージの接頭辞（Conventional Commits）に合わせた作業ブランチ
+# 例：feat/sound-effect、fix/layout、chore/update-deps
+#
+# develop と main は、ここに書いていないので対象にならない
+# （直接 push しても、この自動PR・自動マージは動かない）
+#
+# 新しい接頭辞を使いはじめるときは、ここに1行足すこと
 on:
   push:
     branches:
+      - "feat/**"
+      - "feature/**"
       - "fix/**"
+      - "refactor/**"
+      - "chore/**"
 
 # GitHub Actions に
 # ・コードを書き込む権限
@@ -59,7 +71,6 @@ jobs:
 
     steps:
       - name: Create PR and merge
-        id: pr
         run: |
           # ========================================
           # すでに同じブランチのPRがあるか確認
@@ -77,26 +88,46 @@ jobs:
           # ========================================
           if [ -z "$PR_NUMBER" ]; then
 
-            # 最後のコミットメッセージの1行目を取得
+            # 最新コミットのメッセージ全体を取得
+            COMMIT_MESSAGE=$(gh api \
+              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" \
+              --jq '.commit.message')
+
+            # 1行目をPRタイトルにする
             #
             # 例：
-            # git commit -m "表示崩れを修正"
+            # git commit -m "fix: 表示崩れを修正"
             #
             # ↓
             #
-            # PRタイトル
-            # 「表示崩れを修正」
-            COMMIT_TITLE=$(gh api \
-              "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" \
-              --jq '.commit.message' | head -n 1)
+            # PRタイトル：
+            # fix: 表示崩れを修正
+            COMMIT_TITLE=$(printf '%s\n' "$COMMIT_MESSAGE" | head -n 1)
 
+            # 2行目以降をPR本文にする
+            COMMIT_BODY=$(printf '%s\n' "$COMMIT_MESSAGE" | tail -n +2 | sed '/./,$!d')
+
+            # ========================================
+            # PR本文を作成
+            # ========================================
+            if [ -n "$COMMIT_BODY" ]; then
+              printf '%s\n\n' "$COMMIT_BODY" > pr-body.md
+            else
+              printf '%s\n\n' "変更内容はコミットメッセージを参照してください。" > pr-body.md
+            fi
+
+            printf '%s\n' "---" >> pr-body.md
+            printf '%s\n' "この Pull Request は GitHub Actions により自動作成されています。" >> pr-body.md
+
+            # ========================================
             # Pull Requestを自動作成
+            # ========================================
             PR_URL=$(gh pr create \
               --repo "$GITHUB_REPOSITORY" \
               --base develop \
               --head "$BRANCH_NAME" \
               --title "$COMMIT_TITLE" \
-              --body "GitHub Actions により自動作成された Pull Request です。")
+              --body-file pr-body.md)
 
             # 作ったPRの番号を取得
             PR_NUMBER=$(gh pr view "$PR_URL" \
