@@ -103,7 +103,7 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    sandbox      = 砂場
    acornArea    = どんぐりの木
    pond         = 池
-   hill         = 丘
+   grassArea    = 芝生広場
    secretSpot   = こもれびの広場
    secretPath   = 秘密の小道（こもれびの広場へ続くミニゲーム。そのプレイではじめて広場へ行くときだけ通る）
    tantrum      = いやいや中（なだめる場面）
@@ -118,7 +118,7 @@ const snackSelectionRef = ref<HTMLElement | null>(null);
    fallDown       = こうちゃんがころぶ
    fountain       = 噴水が突然出る
 */
-type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot' | 'secretPath' | 'tantrum' | 'goal' | 'gameOver' | 'emergencySiren' | 'ladybug' | 'dog' | 'fallDown' | 'fountain';
+type GameEvent = 'parkEntrance' | 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot' | 'secretPath' | 'tantrum' | 'goal' | 'gameOver' | 'emergencySiren' | 'ladybug' | 'dog' | 'fallDown' | 'fountain';
 
 /* 現在いる場所
    最初は「公園入口」からスタート
@@ -913,7 +913,7 @@ const isTantrumUnsolved = computed(() => currentEvent.value === 'tantrum' && isT
    別枠の「ひとやすみ」を出すのは、ここに書いた6か所だけ
    あとから場所が増えたときも、この配列に1行足すだけでそろう
 */
-const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 'pond', 'hill', 'secretSpot'];
+const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 'pond', 'grassArea', 'secretSpot'];
 
 /* いま「通常の場所」にいるかどうか
 
@@ -1403,7 +1403,7 @@ const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 /* 公園入口の「どこへ行く？」で、それぞれの場所へ入るコマンドが何番目か
 
    画面（template の parkEntrance）と runSelectedCommand() の parkEntrance の並びと同じ
-     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 丘／5 細い道の先へ行く
+     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先へ行く
    ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
      どちらも「細い道の先へ行く」から入るので、同じ5番にしている
    ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
@@ -1413,7 +1413,7 @@ const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
   sandbox: 1,
   acornArea: 2,
   pond: 3,
-  hill: 4,
+  grassArea: 4,
   secretPath: 5,
   secretSpot: 5,
 };
@@ -1532,7 +1532,7 @@ const goalConfirmTimeText = computed(() => {
 */
 const fussEnergyLine = 71;
 
-/* 公園にある場所の数（すべり台・砂場・どんぐり・池・丘・秘密の場所）
+/* 公園にある場所の数（すべり台・砂場・どんぐり・池・芝生広場・秘密の場所）
    結果の文章で「ぜんぶ回れたか」を見るのに使う */
 const totalPlaceCount = 6;
 
@@ -4127,7 +4127,7 @@ function addCollectedItem(itemName: string) {
 /* アイテムが見つかる場所
    場所で遊ぶ6か所だけ（公園入口・いやいや・突然イベントなどでは見つからないので、GameEvent 全部にはしない）
 */
-type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'hill' | 'secretSpot';
+type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot';
 
 /* 場所ごとに見つかるもの（1か所に1種類） */
 const placeItems: Record<ItemPlace, string> = {
@@ -4135,7 +4135,7 @@ const placeItems: Record<ItemPlace, string> = {
   sandbox: 'きれいな石',
   acornArea: '大きなどんぐり',
   pond: '白い羽',
-  hill: '黄色い花',
+  grassArea: '黄色い花',
   secretSpot: 'ふしぎな形の枝',
 };
 
@@ -4242,7 +4242,7 @@ function runRandomEvent() {
   // ③ きれいな鳥
   if (eventNumber === 2) {
     childMood.value += 5;
-    randomEventText.value = '木の上にきれいな鳥を見つけました！';
+    randomEventText.value = '木の上に小さなかわいい鳥を見つけました！';
     addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
     return;
   }
@@ -5273,7 +5273,7 @@ function goToSoundtrack() {
    移動すると前の結果メッセージと変化量の表示は消す
 
    ※ BGMが変わるのは、秘密の場所へ行くときだけ
-     すべり台・砂場・どんぐり・池・丘は、ぜんぶ同じ公園のつづきなので
+     すべり台・砂場・どんぐり・池・芝生広場は、ぜんぶ同じ公園のつづきなので
      公園BGMを鳴らしたままにする（場所を移るたびに曲が鳴りなおすと落ち着かない）
 */
 function goToPlace(place: GameEvent) {
@@ -5553,9 +5553,9 @@ function goToNextPlace() {
    ・親の余裕 … どれだけヒヤッとしたか（水辺・高い所・見失いそう）
 
    そのため、同じ「よく遊ぶ」コマンドでも場所によって中身がちがう
-   ・池を近くで見る   … 体力 -13 ／ 余裕 -14（水があるので、いちばん気が張る）
-   ・丘を走ってのぼる … 体力 -17 ／ 余裕 -11（体力もいちばん使い、見失いそうでもある）
-   ・どんぐりを拾う   … 体力 -10 ／ 余裕  -3（しゃがんで拾うだけなので穏やか）
+   ・池を近くで見る         … 体力 -13 ／ 余裕 -14（水があるので、いちばん気が張る）
+   ・芝生広場で追いかけっこ … 体力 -15 ／ 余裕  -8（親もいっしょに走るので、体をいちばん使う）
+   ・どんぐりを拾う         … 体力 -10 ／ 余裕  -3（しゃがんで拾うだけなので穏やか）
 
    こうすると
    「体力は残っているけれど、余裕がないから池はやめておこう」
@@ -5725,42 +5725,48 @@ function feedKoi() {
   finishPlayAction('pond');
 }
 
-/* ===== 丘 ===== */
+/* ===== 芝生広場 ===== */
 
-/* ① 走って丘をのぼる */
-function runUpHill() {
+/* ① 追いかけっこする */
+function playTagOnGrass() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 24;
+  childEnergy.value -= 19;
   childMood.value += 8;
-  addOutingPoint('hill', 11);
-  parentEnergy.value -= 17;
-  parentCalm.value -= 11;
+  addOutingPoint('grassArea', 10);
+  parentEnergy.value -= 15;
+  parentCalm.value -= 8;
   addMinutes(25);
 
-  resultMessage.value = '丘のてっぺんまで走ってのぼりました。公園全体が見わたせます！';
+  resultMessage.value = '芝生広場で、こうちゃんと元気いっぱい追いかけっこをしました。こうちゃんは笑いながら走り回っています！';
 
-  tryCollectPlaceItem('hill');
-  finishPlayAction('hill');
+  tryCollectPlaceItem('grassArea');
+  finishPlayAction('grassArea');
 }
 
-/* ② ゆっくり歩いてのぼる */
-function walkUpHill() {
+/* ② シャボン玉で遊ぶ
+
+   軽い行動（②）の中では、いちばん機嫌が上がる遊び
+   走り回らないので体力はあまり減らないが、
+   ふわふわ飛ぶシャボン玉はこうちゃんのお気に入りなので、
+   「体力が残っていないけれど機嫌を上げたい」ときの逃げ道になる
+*/
+function playWithBubbles() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 12;
-  childMood.value += 3;
-  addOutingPoint('hill', 6);
-  parentEnergy.value -= 10;
-  parentCalm.value -= 4;
+  childEnergy.value -= 9;
+  childMood.value += 7;
+  addOutingPoint('grassArea', 6);
+  parentEnergy.value -= 6;
+  parentCalm.value -= 3;
   addMinutes(20);
 
-  resultMessage.value = 'ゆっくり歩いてのぼりました。途中の花を見つけて楽しめました。';
+  resultMessage.value = '芝生の上でシャボン玉を飛ばしました。ふわふわ飛んでいくシャボン玉を、こうちゃんは楽しそうに追いかけています。';
 
-  tryCollectPlaceItem('hill');
-  finishPlayAction('hill');
+  tryCollectPlaceItem('grassArea');
+  finishPlayAction('grassArea');
 }
 
 /* ===== こもれびの広場 ===== */
@@ -8663,7 +8669,7 @@ const entranceColumns = ref(3);
    ほかのコマンドのような「列」を持っていない
    そのため覚えておかないと、↑で戻るときに行き先の
    いちばんうしろへ帰ってしまい、
-   「池へ行く」で↓→↑としたのに「丘へ行く」に移動してしまう
+   「池へ行く」で↓→↑としたのに「芝生広場へ行く」に移動してしまう
 
    ※ 見た目には出てこない、キーボード操作のためだけのメモ
 */
@@ -8701,7 +8707,7 @@ function updateEntranceColumns() {
      そのため、ゴールはいちばん下の1行として別あつかいで計算する
 
      [すべり台] [砂場] [どんぐり]
-     [池]       [丘]   [秘密]
+     [池]       [芝生] [秘密]
      [───── ゴール ─────]   ← 横いっぱいの1行
 */
 function moveEntranceUp() {
@@ -8771,9 +8777,9 @@ function moveEntranceDown() {
 
   // まだ下に行き先の行が残っているとき
   //   例）行き先が5つ・3列で「どんぐり(2)」にいる場合、
-  //      すぐ下の [池][丘] の行には3列目が無い
-  //      ここでゴールへ飛ばすと、池・丘の行をまるごと飛びこえてしまうので、
-  //      その行のいちばん近いコマンド（丘）へ寄せる
+  //      すぐ下の [池][芝生広場] の行には3列目が無い
+  //      ここでゴールへ飛ばすと、池・芝生広場の行をまるごと飛びこえてしまうので、
+  //      その行のいちばん近いコマンド（芝生広場）へ寄せる
   if (selectedCommandIndex.value < lastRowStart) {
     selectedCommandIndex.value = goalIndex - 1;
     return;
@@ -8942,7 +8948,7 @@ function runSelectedCommand() {
 
   switch (currentEvent.value) {
     /* 公園入口
-       0 すべり台／1 砂場／2 どんぐりの木／3 池／4 丘
+       0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場
        5 秘密の場所（見つけているときだけ画面に出る）
        最後 公園の出口へ向かう（ゴール）
 
@@ -8960,7 +8966,7 @@ function runSelectedCommand() {
       } else if (index === 3) {
         goToPlace('pond');
       } else if (index === 4) {
-        goToPlace('hill');
+        goToPlace('grassArea');
       } else if (index === 5 && canEnterSecretSpot.value) {
         // はじめてのときは秘密の小道へ、見つけたあとは そのまま こもれびの広場へ
         goToSecretArea();
@@ -9013,14 +9019,14 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 丘
-       0 走って丘をのぼる／1 ゆっくり歩いてのぼる
+    /* 芝生広場
+       0 追いかけっこする／1 シャボン玉で遊ぶ
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
-    case 'hill':
+    case 'grassArea':
       if (index === 0) {
-        runUpHill();
+        playTagOnGrass();
       } else if (index === 1) {
-        walkUpHill();
+        playWithBubbles();
       }
       break;
 
@@ -11592,9 +11598,9 @@ onUnmounted(() => {
                 <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
               </button>
 
-              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('hill')" @mouseenter="selectedCommandIndex = 4" @focus="selectedCommandIndex = 4">
-                <span class="cmd__text">丘へ行く</span>
-                <span v-if="isVisited('hill')" class="cmd__badge">探検済み</span>
+              <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('grassArea')" @mouseenter="selectedCommandIndex = 4" @focus="selectedCommandIndex = 4">
+                <span class="cmd__text">芝生広場へ行く</span>
+                <span v-if="isVisited('grassArea')" class="cmd__badge">探検済み</span>
               </button>
 
               <button
@@ -12628,13 +12634,13 @@ onUnmounted(() => {
             </section>
           </div>
 
-          <!-- 丘 -->
-          <div v-else-if="currentEvent === 'hill'" class="scene" key="hill">
+          <!-- 芝生広場 -->
+          <div v-else-if="currentEvent === 'grassArea'" class="scene" key="grassArea">
             <section class="stage">
               <article class="place-card">
-                <h2 class="place-card__title">丘</h2>
+                <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">ゆるやかな丘があります。てっぺんまでのぼれそうです。</p>
+                <p class="place-card__text">やわらかい芝生が広がっています。思いきり走り回れそうです。</p>
               </article>
 
               <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
@@ -12807,12 +12813,12 @@ onUnmounted(() => {
                   <template v-if="!resultMessage">
                     <p class="command-box__label">どうする？</p>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="runUpHill" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
-                      <span class="command-box__text">走って丘をのぼる</span>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 0 }" @click="playTagOnGrass" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
+                      <span class="command-box__text">追いかけっこする</span>
                     </button>
 
-                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="walkUpHill" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                      <span class="command-box__text">ゆっくり歩いてのぼる</span>
+                    <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="playWithBubbles" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
+                      <span class="command-box__text">シャボン玉で遊ぶ</span>
                     </button>
 
                     <!-- ここから下は「どこでも同じコマンド」という区切り
