@@ -1302,19 +1302,14 @@ const commandCount = computed(() => {
     return secretPathPhase.value === 'ready' ? 2 : 1;
   }
 
-  // とつぜんのできごと「こうちゃんがころんだ」だけは、選択肢が4つ
-  // （おやつは使わないので、おやつの残りに関係なく いつも4つ）
-  if (currentEvent.value === 'fallDown') {
-    return 4;
-  }
-
-  // ここに来るのはとつぜんのできごと（救急車・テントウムシ・犬・噴水）だけ
+  // ここに来るのはとつぜんのできごと5つ（救急車・テントウムシ・犬・ころんだ・噴水）だけ
   // どれも選択肢が3つなので3を返す
+  // ※ ころんだイベントも、おやつを使わないので おやつの残りに関係なく いつも3つ
   // ※ 通常の場所は、1つ上の isNormalPlace の分岐で返している
   return 3;
 });
 
-/* とつぜんのできごと5つ（commandCount のいちばん最後の分岐と、fallDown の分岐に来るなかま） */
+/* とつぜんのできごと5つ（commandCount のいちばん最後の分岐に来るなかま） */
 const suddenEvents: GameEvent[] = ['emergencySiren', 'ladybug', 'dog', 'fallDown', 'fountain'];
 
 /* 「どうする？」の選択肢を横にならべる画面か（テンプレートの choiceGridClass で使う）
@@ -7707,10 +7702,10 @@ function keepDistanceFromDog() {
      「ころぶ → 選ぶ → 結果」だけの、シンプルな流れにしている
 
    ※ おやつは使わない（どれを選んでも、バッグのおやつは減らない）
-     選択肢はいつも同じ4つで、画面の並び・runSelectedCommand() の番号・下の関数の並びは同じ順番
-       0 すぐにだっこする／1 痛いの痛いのとんでいけ〜／2 ベンチで少し休む／3 「大丈夫？」と見守る
+     選択肢はいつも同じ3つで、画面の並び・runSelectedCommand() の番号・下の関数の並びは同じ順番
+       0 すぐにだっこする／1 「いたいのいたいのとんでいけ〜」／2 「大丈夫？」と声をかけて待つ
 
-   ※ 下の4つに書いてある こうちゃん の数字は、
+   ※ 下の3つに書いてある こうちゃん の数字は、
      「ころんだ分」と「なだめた分」を足したあとの合計
 
      ころんだ時点で、ひざは痛いし、びっくりして泣きそうになっている
@@ -7718,22 +7713,17 @@ function keepDistanceFromDog() {
      じょうずになだめても、ころぶ前より良くはならない
      （＝こうちゃんの数字は、プラスにしない）
 
-     ・体力 … ころべば必ず減る。ベンチでゆっくり休めば、ようやく±0まで戻る
-       （ベンチ 0 ／ だっこ -3 ／ 痛いの痛いの -4 ／ 見守る -6）
+     ・体力 … ころべば必ず減る
+       （だっこ -3 ／ いたいのいたいの -4 ／ 声をかけて待つ -6）
      ・機嫌 … だっこなら、ころぶ前と同じところまで戻る（±0）
-       （だっこ 0 ／ ベンチ -1 ／ 痛いの痛いの -2 ／ 見守る -8）
+       （だっこ 0 ／ いたいのいたいの -2 ／ 声をかけて待つ -8）
 
    ※ 目の前で子どもがころぶと、どうしてもヒヤッとする
      そのため、どれを選んでも親の余裕は減る
      何で払うかがちがうだけで、いやいや対応とまったく同じ考えかた
-     ・だっこ       … 親の体力 -10 ／ 親の余裕 -3 ／ 10分（親の体力を大きく使って、しっかり対応）
-     ・痛いの痛いの … 親の体力 -3  ／ 親の余裕 -5 ／  5分（バランス型）
-     ・ベンチ       … 親の体力 -2  ／ 親の余裕 -1 ／ 15分（時間を多く使って、安全に立て直す）
-     ・見守る       … 親の体力 +1  ／ 親の余裕 -8 ／  5分（親の体力は減らないが、こうちゃんの負担がいちばん大きい）
-
-   ※ ベンチは、ステータスだけ見れば4つの中でいちばん安全
-     そのかわり15分（4つの中でいちばん長い）かかるのがコスト
-     お昼が近いときや、まだ回りたい場所が残っているときは、ほかの対応と見くらべて選ぶ
+     ・だっこ           … 親の体力 -10 ／ 親の余裕 -3 ／ 10分（親の体力を大きく使って、しっかり対応）
+     ・いたいのいたいの … 親の体力 -3  ／ 親の余裕 -5 ／  5分（バランス型）
+     ・声をかけて待つ   … 親の体力 +1  ／ 親の余裕 -8 ／  5分（親の体力は減らないが、こうちゃんの負担がいちばん大きい）
 */
 
 /* ① すぐにだっこする */
@@ -7749,7 +7739,7 @@ function hugAfterFall() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = 'すぐにかけよってぎゅっとだっこすると、こうちゃんはほっとした顔になりました。びっくりした気持ちは、ころぶ前と同じところまで戻ったようです。ひざはまだ少しひりひりします。';
+  resultMessage.value = 'すぐにかけよってぎゅっとだっこ。こうちゃんは肩にぺたんと顔をつけて、少しずつ落ち着いてきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7762,10 +7752,10 @@ function hugAfterFall() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 痛いの痛いのとんでいけ〜
+/* ② 「いたいのいたいのとんでいけ〜」
 
    だっこ（親の体力-10）ほど親の力を使わずに、
-   見守る（機嫌-8）よりも こうちゃん の気持ちを立てなおせる、
+   声をかけて待つ（機嫌-8）よりも こうちゃん の気持ちを立てなおせる、
    ちょうど真ん中の選択肢（バランス型）
 */
 function blowPainAway() {
@@ -7779,8 +7769,7 @@ function blowPainAway() {
   parentCalm.value -= 5;
   addMinutes(5);
 
-  resultMessage.value =
-    'ひざをそっとなでながら「いたいの いたいの とんでいけ〜！」と、遠くの空へ投げるまねをしました。こうちゃんは飛んでいったほうをじっと見上げて、「とんでった」とにっこりしました。';
+  resultMessage.value = 'ひざをそっとなでながら「いたいのいたいの、とんでいけ〜！」。こうちゃんは空を見上げて、「とんでった！」とにっこりしました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -7791,36 +7780,7 @@ function blowPainAway() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ ベンチで少し休む
-
-   近くのベンチに座って、ひざの痛みが落ち着くまで待つ
-   こうちゃんの体力は±0まで戻り、機嫌も親の体力・余裕もほとんど減らない
-   そのかわり、4つの中でいちばん時間がかかる（15分）
-   ※ おやつは食べないので、バッグのおやつは減らない
-*/
-function restOnBenchAfterFall() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  // 体力は、座って休んでちょうど ±0
-  // ＝ここでは childEnergy をさわらない
-  childMood.value -= 1;
-  parentEnergy.value -= 2;
-  parentCalm.value -= 1;
-  addMinutes(15);
-
-  resultMessage.value = '近くのベンチに座って、こうちゃんと少し休むことにしました。ひざの痛みもだんだん落ち着いてきたようで、こうちゃんはほっとした顔をしています。';
-
-  // 今回の変化量を記録してから、0〜100に丸める
-  saveStatusChanges();
-  fixAllStatus();
-  checkGameOver();
-
-  // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
-  selectedCommandIndex.value = 0;
-}
-
-/* ④ 「大丈夫？」と見守る */
+/* ③ 「大丈夫？」と声をかけて待つ */
 function watchAfterFall() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
@@ -7832,7 +7792,7 @@ function watchAfterFall() {
   parentCalm.value -= 8;
   addMinutes(5);
 
-  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっていますが、口はへの字のままです。';
+  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは「だいじょうぶ」と言って、自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -9182,18 +9142,14 @@ function runSelectedCommand() {
       }
       break;
 
-    /* こうちゃんがころんだ（おやつは使わないので、いつも4つ）
-       0 すぐにだっこする／1 痛いの痛いのとんでいけ〜
-       2 ベンチで少し休む／3 「大丈夫？」と見守る
-    */
+    /* こうちゃんがころんだ（おやつは使わないので、いつも3つ）
+       0 すぐにだっこする／1 「いたいのいたいのとんでいけ〜」／2 「大丈夫？」と声をかけて待つ */
     case 'fallDown':
       if (index === 0) {
         hugAfterFall();
       } else if (index === 1) {
         blowPainAway();
       } else if (index === 2) {
-        restOnBenchAfterFall();
-      } else if (index === 3) {
         watchAfterFall();
       }
       break;
@@ -14088,7 +14044,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
-                <p class="place-card__text">走っていたこうちゃんがつまずいてころんでしまいました。少しびっくりした顔でこちらを見ています。</p>
+                <p class="place-card__text">走っていたこうちゃんがつまずいて、ころんでしまいました。「いたい……」と、ひざを見ています。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -14172,7 +14128,7 @@ onUnmounted(() => {
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
-                <!-- まだ選んでいないとき（おやつは使わないので、いつも4つ） -->
+                <!-- まだ選んでいないとき（おやつは使わないので、いつも3つ） -->
                 <template v-if="!resultMessage">
                   <p class="command-box__label">どうする？</p>
 
@@ -14181,15 +14137,11 @@ onUnmounted(() => {
                   </button>
 
                   <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }" @click="blowPainAway" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">痛いの痛いのとんでいけ〜</span>
+                    <span class="command-box__text">「いたいのいたいのとんでいけ〜」</span>
                   </button>
 
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="restOnBenchAfterFall" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
-                    <span class="command-box__text">ベンチで少し休む</span>
-                  </button>
-
-                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 3 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 3" @focus="selectedCommandIndex = 3">
-                    <span class="command-box__text">「大丈夫？」と見守る</span>
+                  <button class="command-box__item" :class="{ 'command-box__item--selected': selectedCommandIndex === 2 }" @click="watchAfterFall" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
+                    <span class="command-box__text">「大丈夫？」と声をかけて待つ</span>
                   </button>
                 </template>
 
