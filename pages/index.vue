@@ -1819,7 +1819,8 @@ let audioContext: AudioContext | null = null;
 function getAudioContext() {
   /* ここが効果音ON/OFFの「関所」
 
-     4種類の音（decision・item・tantrum・goal）は、どれも必ずこの関数を通る
+     効果音（decision・item・tantrum・goal・sunlight・branchBump・fallDown）は、
+     どれも必ずこの関数を通る
      なので、ここで null を返すだけで、すべての効果音がまとめて止まる
      ゲーム処理のあちこちに if (soundEnabled.value) を書く必要はない
 
@@ -2027,6 +2028,49 @@ function playBranchBumpSound() {
   }
 
   playTone(300, context.currentTime, 0.12, 0.05, 'triangle', 190);
+}
+
+/* ⑦ 転倒音「ヒュッ、ポテッ」（とつぜんのできごと「こうちゃんがころんだ」用）
+
+   短い音を2つ、すきまなく続けて鳴らして「つまずいて、地面にすわりこむ」を表す
+   ① ヒュッ … 少し高めの音から下がる（つまずいて足がすべった感じ）
+   ② ポテッ … そのすぐあと、低めで丸い音（地面にぺたんとついた感じ）
+
+   ぜんぶで0.26秒ほど。①より②を少しだけ大きくして、あとのほうに重みを置いている
+
+   ※ 音量は、ほかの効果音より大きめの数字にしてある
+     この音はほかの効果音（700〜1760Hz）よりずっと低い（260〜70Hz）
+     人の耳は低い音ほど小さく感じるので、同じ数字にすると、これだけ聞こえにくくなる
+     耳で聞いてそろうように、とくに低いほうの②を大きくしている
+     （BGMの音量を曲ごとに変えているのと同じ考えかた）
+
+   ※ 「ドスン！」のような重い衝撃音にはしない
+     小さい子が芝生でポテッところんだくらいの、やわらかい音にしたいので、
+     角のない triangle だけを使い、音量も鳴りびびくほどには上げていない
+
+   ※ 少し待ってから鳴らしはじめる（fallDownSoundDelay）
+     この音が鳴るのは「次へ」を押して、ころんだ画面へ切りかわった瞬間
+     すぐ鳴らすと、押したときの決定音「ポン♪」と重なってしまい、
+     画面が切りかわるより前に転ぶ音だけが先に聞こえてしまう
+     決定音が鳴り終わり、ころんだ画面が出てから鳴るように、間を空けてある
+     （アイテム音0.06秒・いやいや発生音0.12秒と同じ考えかたで、それより長めにしている）
+*/
+
+/* 転倒音を鳴らしはじめるまでの待ち時間（秒）
+   ここの数字だけを書きかえれば、間の長さを調整できる */
+const fallDownSoundDelay = 0.45;
+
+function playFallDownSound() {
+  const context = getAudioContext();
+
+  if (!context) {
+    return;
+  }
+
+  const start = context.currentTime + fallDownSoundDelay;
+
+  playTone(260, start, 0.1, 0.12, 'triangle', 150); // ① ヒュッ
+  playTone(120, start + 0.11, 0.15, 0.18, 'triangle', 70); // ② ポテッ
 }
 
 /* ============================================================
@@ -5587,8 +5631,24 @@ function goToNextPlace() {
   // ※ ここで戻しておかないと、とつぜんのできごとが終わったあとに
   //   もう一度おなじ画面へ入ってしまう
   if (pendingSuddenEvent.value !== null) {
-    currentEvent.value = pendingSuddenEvent.value;
+    /* 行き先をいったん控えてから、画面を切りかえる
+
+       pendingSuddenEvent を空に戻したあとでは、どのできごとへ来たのかが分からなくなるため
+       （転倒音を鳴らすかどうかの判定に、この控えを使う） */
+    const nextSuddenEvent = pendingSuddenEvent.value;
+
+    currentEvent.value = nextSuddenEvent;
     pendingSuddenEvent.value = null;
+
+    /* ころんだできごとへ「移動した瞬間」だけ、転倒音を鳴らす
+
+       画面を見ているあいだではなく、ここで1回だけ鳴らす
+       （同じ画面のまま何かしても、鳴りなおすことはない）
+       サウンドOFF・音量0%のときは、getAudioContext() が止めてくれる */
+    if (nextSuddenEvent === 'fallDown') {
+      playFallDownSound();
+    }
+
     return;
   }
 
