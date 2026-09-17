@@ -15626,10 +15626,11 @@ onUnmounted(() => {
    （あまった縦の余白は、name の margin-top: auto と
      開始ボタンの margin-bottom: auto が上下に分けて吸収する）
 
-   ※ このゲームは box-sizing を border-box にしていないので、
-     ここの400pxは padding（44px）をふくまない「中身だけ」の高さ
-     上部の操作を大きくしてもB画面の中身は400pxに収まるため、
-     デスクトップではこの値のままでよい */
+   ※ .title-card は box-sizing: border-box なので、
+     この494pxは padding（44px）とふち（3px）もふくめた、箱ぜんたいの高さ
+     （中身だけの高さにすると 400px ＝ 494 − 上下padding 88 − 上下ふち 6）
+     こうしておくと、以前の content-box のときと同じ見た目の高さのまま、
+     A画面・B画面の中身がどちらもきちんと収まる */
 /* flex-shrink: 0 は「カードを押しつぶさせない」ための指定
 
    .title-screen は display: flex ＋ flex-direction: column なので、
@@ -15651,13 +15652,27 @@ onUnmounted(() => {
 
    ※ A画面・B画面のカードは中身が少なく、ふだん縮むことはないが、
      とても背の低い画面では同じことが起きるので、まとめてここで防いでおく */
+/* box-sizing: border-box … width: 100% ／ max-width ／ min-height に
+   左右の余白（padding）とふち（border）もふくめる
+
+   これを付けないと（content-box）、width: 100% は「中身だけ」の幅になり、
+   その外側に左右padding（スマホで20px＋20px）とふち（3px＋3px）が足されるので、
+   iPhone SE ほどの細い画面（375px）では .title-screen から横にはみ出し、
+   右へスワイプできてしまう（23pxずれる不具合）
+
+   border-box にすると、余白とふちも width: 100% の中にふくまれるので、
+   .title-screen の幅ぴったりに収まり、横スクロールしなくなる
+
+   max-width / min-height は、以前の見た目（中身620×400）と同じになるよう、
+   余白とふちのぶん（左右・上下とも +94px）を足した値にしてある */
 .title-card {
+  box-sizing: border-box;
   display: flex;
   flex: none;
   flex-direction: column;
   width: 100%;
-  max-width: 620px;
-  min-height: 400px;
+  max-width: 714px;
+  min-height: 494px;
   padding: 44px 44px;
   border: 3px solid var(--navy);
   border-radius: 20px;
@@ -15914,14 +15929,12 @@ onUnmounted(() => {
       （収まらないぶんは .title-screen が縦にスクロールしてくれる）
    ============================================================ */
 
-/* box-sizing: border-box にしているのは、横にはみ出さないようにするため
+/* box-sizing: border-box は .title-card がもともと持っているが、
+   この画面は文章が多く横に広い（max-width: 780px）ぶん、
+   はみ出さないことが特に大事なので、ここでも念のため明示しておく
 
-   このゲームは box-sizing を border-box にしていないので、
-   ふつうの .title-card は「width: 100% ＋ 左右の余白とふち」の幅になる
-   B画面（620px）は画面の余白の中に収まるが、この画面は幅が広い（780px）ので、
-   タブレットくらいの幅（768pxなど）では、余白とふちのぶんだけ画面の外へはみ出してしまう
-
-   border-box にすると、余白とふちもふくめて width: 100% ／ max-width: 780px に収まる */
+   border-box なので、左右の余白とふちも width: 100% ／ max-width: 780px の中にふくまれ、
+   タブレットくらいの幅（768pxなど）でも画面の外へはみ出さない */
 .title-card--howto {
   box-sizing: border-box;
   max-width: 780px;
@@ -16181,7 +16194,7 @@ onUnmounted(() => {
      見た目をくずさない範囲で、余白を少しずつ削ってある
      （さらに背の低い画面向けの調整は、ページ下の max-height: 800px のところ） */
 .title-card--snack {
-  max-width: 820px;
+  max-width: 914px;
   padding-top: 32px;
   padding-bottom: 32px;
 }
@@ -21150,11 +21163,12 @@ onUnmounted(() => {
   }
 
   /* せまい画面では説明文の折り返しが増えるぶん、B画面の中身が縦に伸びる
-     340pxのままだとB画面だけ min-height を超えてカードが高くなり、
-     上下まんなか置きのせいで上部の操作がA画面とずれてしまうので、
-     折り返しが増えても収まる高さまで上げておく */
+     border-box なので、この462pxには上下padding（28px×2）とふち（3px×2）もふくまれる
+     ＝ 中身が入る高さは400px。折り返しが増えてもB画面がこの中に収まり、
+     A画面とカードの高さ（＝上部の操作の位置）がそろう
+     （デスクトップの min-height: 494px と、中身の高さ400pxがそろうようにしている） */
   .title-card {
-    min-height: 400px;
+    min-height: 462px;
     padding: 28px 20px;
   }
 
