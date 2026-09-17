@@ -16,6 +16,7 @@ alias dev='npm run dev'
 # --- git ---
 alias gb='git branch'
 alias gbd='git branch -d'
+alias gbD='git branch -D'
 alias gs='git switch'
 alias gsc='git switch -c'
 alias gd='git diff'
