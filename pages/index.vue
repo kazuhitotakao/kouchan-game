@@ -1619,6 +1619,10 @@ const dangerWarnings = computed(() => {
 
    つなぎ方は
    Oscillator（音を出す）→ Gain（音量を調整）→ destination（スピーカー）
+
+   ※ 効果音のうち3つ（救急車・犬・噴水）だけは、ここでは作っていない
+     本物らしい音色が必要で、計算では作れないので、録音した音声ファイルを鳴らしている
+     （→ このあとの「音声ファイルの効果音（HTML Audio）」）
    ============================================================ */
 
 /* ゲームの音を鳴らすかどうか（プレイヤーの設定）
@@ -2268,6 +2272,252 @@ function playLadybugRustleSound() {
   playRustleNoise(start + 0.245, 0.08, 0.24, 1300);
   playRustleNoise(start + 0.305, 0.07, 0.19, 1500);
   playRustleNoise(start + 0.355, 0.06, 0.12, 1200);
+}
+
+/* ============================================================
+   音声ファイルの効果音（HTML Audio）
+   ＝ 救急車のサイレン・犬の鳴き声・噴水の音
+
+   ここまでの効果音（①〜⑧）は、どれも Web Audio API で
+   「その場で音を計算して作る」やり方だった
+   「ポン♪」や「ポテッ」のような短くて単純な音なら、それで作れる
+
+   でも、この3つは計算では作れない
+   ・救急車のサイレン … ピーポーピーポーと、本物らしい音色が必要
+   ・犬の鳴き声       … 動物の声は、波の形では真似できない
+   ・噴水の音         … 水しぶきが何千粒も重なっている音
+
+   そこで、この3つだけは録音済みの音声ファイルを鳴らす
+   ＝ BGMと同じ HTMLAudioElement（new Audio）を使う
+
+   ・計算して作る音（①〜⑧）… Web Audio API（音声ファイルは不要）
+   ・録音を鳴らす音（この3つ・BGM）… HTMLAudioElement
+
+   ※ 効果音なので、BGMとちがって loop はしない（1回鳴って終わり）
+   ============================================================ */
+
+/* 音声ファイルの効果音の音量（0＝無音、1＝そのままの大きさ）
+
+   BGMと同じで、volume は「もとの音源を何倍にするか」なので、
+   同じ数字にしても、録音そのものが大きい音は大きく聞こえてしまう
+   耳で聞いてそろうように、音源ごとに数字を分けてある
+   （音を差しかえたときは、ここの数字で調整する）
+
+   ※ 計算して作る効果音（0.05〜0.24あたり）の数字とは、くらべなくてよい
+     あちらは波の大きさをこちらで決めているが、
+     こちらは「録音がもともとどれくらいの大きさか」で必要な数字が変わるため
+*/
+
+/* 救急車のサイレンの音量 */
+const ambulanceSirenVolume = 0.2;
+
+/* 犬の鳴き声の音量 */
+const dogBarkVolume = 0.2;
+
+/* 噴水の音量 */
+const fountainVolume = 0.2;
+
+/* 音声ファイルの効果音を鳴らしはじめるまでの待ち時間（ミリ秒）
+
+   転倒音（fallDownSoundDelay）・ガサガサ音（ladybugRustleDelay）と
+   まったく同じ理由・同じ長さにしてある
+   この音が鳴るのは「次へ」を押して、できごとの画面へ切りかわった瞬間
+   すぐ鳴らすと、押したときの決定音「ポン♪」と重なってしまうため、
+   決定音が鳴り終わってから鳴るようにしてある
+
+   ※ 単位がちがうので、数字の見え方も別もの
+     あちらは Web Audio API の時計を使うので秒（0.45）だが、
+     こちらは setTimeout() で待つのでミリ秒（450）になる
+     どちらも同じ0.45秒で、間の長さはそろえてある
+
+   ※ 音源の頭に無音が入っていると、そのぶん鳴りだしが遅く聞こえる
+     決定音と重なる・間が空きすぎると感じたら、ここの数字だけを書きかえればよい
+*/
+const fileSoundDelay = 450;
+
+/* 音声ファイルの効果音を入れておく箱
+
+   null は「まだ作っていない」という意味
+   ※ ここで new Audio(...) をしないのが大事
+     Nuxtはサーバー側でも一度このコードを読むが、
+     サーバーには Audio が無いのでエラーになってしまう
+     （BGMの parkBgm などと、まったく同じ理由）
+*/
+let ambulanceSirenSe: HTMLAudioElement | null = null;
+let dogBarkSe: HTMLAudioElement | null = null;
+let fountainSe: HTMLAudioElement | null = null;
+
+/* 「あとで鳴らす」の予約票
+
+   null は「予約していない」という意味
+   BGMの予約票（parkBgmTimer など）と同じ役目で、
+   ページを離れるときに取り消すために取っておく
+
+   ※ 予約は1つだけ持てばよい
+     とつぜんのできごとは一度に1つしか起きないので、
+     3つの音が同時に予約されることはない
+*/
+let fileSoundTimer: ReturnType<typeof setTimeout> | null = null;
+
+/* 「あとで鳴らす」の予約を取り消す
+
+   残っていると、ページを離れたあとに鳴りだしてしまう
+   （→ onUnmounted で呼んでいる）
+*/
+function cancelFileSound() {
+  if (fileSoundTimer === null) {
+    return;
+  }
+
+  clearTimeout(fileSoundTimer);
+  fileSoundTimer = null;
+}
+
+/* 音声ファイルの効果音を鳴らす（3つとも、この1つの関数を通す）
+
+   src        … 鳴らす音声ファイルの場所（例：'/audio/sfx/dog-bark.mp3'）
+   baseVolume … その音源の音量（上で音源ごとに決めている数字）
+   cached     … すでに作ってあるもの（初めてのときは null）
+   返す値     … 今回使った（＝これから覚えておく）もの
+
+   ■ なぜ「箱」をやりとりするのか
+     new Audio() は、そのたびに mp3 を読み込みなおす
+     同じ音を鳴らすたびに作っていると、読み込みが積み上がって
+     だんだん重くなり、鳴りはじめも遅れてしまう
+     そこで、一度作ったものは覚えておいて、2回目からは作りなおさずに使う
+     （BGMの get〜Bgm() と同じ考えかた）
+
+   ■ サウンドOFF・音量0%のときは鳴らさない
+     計算して作る効果音は getAudioContext() が止めてくれるが、
+     こちらはその仕組みを通らないので、自分で見る必要がある
+     ※ 音量0%のときは getSoundVolume() が 0 を返すので、
+       volume に 0 を入れても鳴らないが、mp3の読み込みだけが起きてしまう
+       それも起きないように、鳴らす前に確かめている
+
+   ■ 少し待ってから鳴らす（fileSoundDelay）
+     決定音「ポン♪」と重ならないように、間を空けてから鳴らしはじめる
+     待たせるのは「音を鳴らすこと」だけで、
+     画面の切り替えやゲームの処理は、いつもどおりすぐ進む
+     （BGMの playParkBgmSoon() と同じ考えかた）
+
+     ※ new Audio() のほうは待たせず、ここですぐ作る
+       呼んだ側へ箱を返すのは「待ち時間のあと」ではできないため
+       （待っているあいだに mp3 の読み込みが進むので、鳴りだしも速くなる）
+*/
+function playFileSound(src: string, baseVolume: number, cached: HTMLAudioElement | null) {
+  // サーバー側には Audio が無いので、ここで終わり
+  if (!import.meta.client) {
+    return cached;
+  }
+
+  // サウンドOFFのときは、mp3の読み込みもしない
+  if (!soundEnabled.value) {
+    return cached;
+  }
+
+  /* 音量0%（＝ミュート）のときも、mp3の読み込みはしない
+
+     ここで見ているのは「いま鳴らす音の大きさ」ではなく、
+     「そもそも鳴らす必要があるか」だけ
+     実際に volume へ入れる数字は、待ち時間のあとで計算しなおす */
+  if (getSoundVolume(baseVolume) <= 0) {
+    return cached;
+  }
+
+  try {
+    // まだ無いときだけ作る（2回目からは、この行は通らない）
+    const sound = cached ?? new Audio(src);
+
+    // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+    cancelFileSound();
+
+    fileSoundTimer = setTimeout(() => {
+      fileSoundTimer = null;
+
+      /* 待っているあいだにサウンドをOFF・音量0%にされていたら、もう鳴らさない
+         （画面が切りかわってすぐミュートを押された場合など）
+
+         ※ 音量は、この待ち時間のあとに入れなおす
+           待っているあいだにスライダーを動かされていても追いつくように、
+           鳴らす直前のいまの設定で計算しなおしている */
+      if (!soundEnabled.value) {
+        return;
+      }
+
+      const delayedVolume = getSoundVolume(baseVolume);
+
+      if (delayedVolume <= 0) {
+        return;
+      }
+
+      try {
+        sound.volume = delayedVolume;
+
+        /* 必ず音の先頭から鳴らす
+
+           currentTime は「いま音のどこを再生しているか」を秒で表したもの
+           前に鳴らし終わったものは最後まで進んだままなので、
+           0 に戻さないと2回目から鳴らなくなってしまう
+           （途中でもう一度呼ばれたときも、頭から鳴りなおす） */
+        sound.currentTime = 0;
+
+        // play() は「再生できたかどうか」をあとから知らせる形（Promise）になっている
+        // ブラウザに止められることがあるので、失敗しても何もしないでおく
+        sound.play().catch(() => {});
+      } catch {
+        // 音が鳴らなくても、ゲームは止めない
+      }
+    }, fileSoundDelay);
+
+    // 次に呼ばれたときは作りなおさずに使えるよう、呼んだ側へ返して覚えてもらう
+    return sound;
+  } catch {
+    // 音が鳴らなくても、ゲームは止めない
+    return cached;
+  }
+}
+
+/* とつぜんのできごとの効果音を鳴らす（できごとごとの振り分け役）
+
+   「どのできごとで、どの音を鳴らすか」をこの1か所にまとめてある
+   呼ぶ側（goToNextPlace）は、できごとの名前を渡すだけでよい
+
+   ・emergencySiren … 救急車のサイレン（音声ファイル）
+   ・dog            … 犬の鳴き声    （音声ファイル）
+   ・fountain       … 噴水の音      （音声ファイル）
+   ・ladybug        … 葉っぱのガサガサ音（Web Audio APIで作る音）
+   ・fallDown       … 転倒音「ヒュッ、ポテッ」（Web Audio APIで作る音）
+
+   音の作りかたは2通りあるが、呼ぶ側はそれを気にしなくてよいようにしている
+   （音を差しかえて作りかたが変わっても、直すのはここだけで済む）
+
+   ※ 音声ファイルのほうは、鳴らしたものを箱へ覚えておく
+     次に同じできごとが起きたとき、作りなおさずに使うため
+*/
+function playSuddenEventSound(event: GameEvent) {
+  if (event === 'emergencySiren') {
+    ambulanceSirenSe = playFileSound('/audio/sfx/ambulance-siren.mp3', ambulanceSirenVolume, ambulanceSirenSe);
+    return;
+  }
+
+  if (event === 'dog') {
+    dogBarkSe = playFileSound('/audio/sfx/dog-bark.mp3', dogBarkVolume, dogBarkSe);
+    return;
+  }
+
+  if (event === 'fountain') {
+    fountainSe = playFileSound('/audio/sfx/fountain.mp3', fountainVolume, fountainSe);
+    return;
+  }
+
+  if (event === 'ladybug') {
+    playLadybugRustleSound();
+    return;
+  }
+
+  if (event === 'fallDown') {
+    playFallDownSound();
+  }
 }
 
 /* ============================================================
@@ -5841,16 +6091,11 @@ function goToNextPlace() {
 
        画面を見ているあいだではなく、ここで1回だけ鳴らす
        （同じ画面のまま何かしても、鳴りなおすことはない）
-       サウンドOFF・音量0%のときは、getAudioContext() が止めてくれる
 
-       ここに書いていないできごと（救急車・犬・噴水）は、今までどおり音を鳴らさない */
-    if (nextSuddenEvent === 'fallDown') {
-      playFallDownSound();
-    }
-
-    if (nextSuddenEvent === 'ladybug') {
-      playLadybugRustleSound();
-    }
+       どのできごとでどの音を鳴らすかは playSuddenEventSound() が知っているので、
+       ここではできごとの名前を渡すだけでよい
+       サウンドOFF・音量0%のときも、あちらで止めてくれる */
+    playSuddenEventSound(nextSuddenEvent);
 
     return;
   }
@@ -10797,11 +11042,13 @@ onUnmounted(() => {
   // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
   // 残っていると、ページを離れたあとも動きつづけてしまう
   // （GAME OVER BGMの0.7秒の予約が残っていると、別のページで鳴りだしてしまう）
+  // （cancelFileSound() は、救急車・犬・噴水の0.45秒の予約のぶん）
   cancelTitleBgmStart();
   cancelParkBgmStart();
   cancelSecretBgmStart();
   cancelResultBgmStart();
   cancelGameOverBgmStart();
+  cancelFileSound();
   cancelBgmFade();
 
   // いやいや発生の演出の「あとで消す」予約も取り消しておく
