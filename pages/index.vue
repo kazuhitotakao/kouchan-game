@@ -219,8 +219,8 @@ const randomEventEffects = ref<RandomEventEffect[]>([]);
 /* 今回の行動でいやいやが始まったときの文章（演出用）
 
    結果メッセージに書き足すと、あとから画面に足した
-   「アイテム発見」「ちいさなできごと」の表示より前に出てしまい、
-   起きた順（行動 → アイテム → ちいさなできごと → いやいや）と食いちがう
+   「アイテム発見」「ちょっとしたできごと」の表示より前に出てしまい、
+   起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）と食いちがう
    そこで文章だけここに持ち、画面のいちばん下に出す
 */
 const tantrumText = ref('');
@@ -4362,7 +4362,7 @@ function startStatusChanges() {
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
 
-  // 演出用：前の行動のちいさなできごとの表示も空へ戻す
+  // 演出用：前の行動のちょっとしたできごとの表示も空へ戻す
   randomEventText.value = '';
   randomEventEffects.value = [];
 
@@ -4687,7 +4687,7 @@ function tryCollectPlaceItem(place: ItemPlace) {
 }
 
 /* ランダムイベント
-   （通常行動中に起きる、ちいさなできごと）
+   （通常行動中に起きる、ちょっとしたできごと）
 
    5回に1回くらい（20%）だけ起こり、
    8種類の中から1つが選ばれる
@@ -5270,16 +5270,16 @@ function checkSuddenEvent() {
    ① その場所を探検済みにする
    ② 疲れていたら、機嫌が少し下がる
    ③ いやいやが始まるか判定する
-   ④ いやいやが起きなかったときだけ、たまにちいさなできごとが起こる
-   ⑤ 今回の変化量を記録する（機嫌ダウンと、いやいや・ちいさなできごとの分もふくむ）
+   ④ いやいやが起きなかったときだけ、たまにちょっとしたできごとが起こる
+   ⑤ 今回の変化量を記録する（機嫌ダウンと、いやいや・ちょっとしたできごとの分もふくむ）
    ⑥ ステータスを0〜100に収める
    ⑦ GAME OVERになっていないか判定する
    ⑧ とつぜんのできごとが起きるか抽選する（起きるなら予定表に書くだけ）
-   ※ いやいやをなだめる行動では呼ばない（ちいさなできごとを起こさないため）
+   ※ いやいやをなだめる行動では呼ばない（ちょっとしたできごとを起こさないため）
    ※ とつぜんのできごとの行動でも呼ばない（とつぜんのできごとが連続で起きないようにするため）
 
    ⑦を⑥の次に置いているので、
-   ちいさなできごとの「だっこ！」で親の体力が0になった場合も、
+   ちょっとしたできごとの「だっこ！」で親の体力が0になった場合も、
    いやいや発生で親の余裕が0になった場合も、まとめてGAME OVERになる
 
    ②がいやいや判定より前にあるのもポイント
@@ -5292,9 +5292,9 @@ function finishPlayAction(place: GameEvent) {
   dropMoodWhenTired();
   checkTantrum();
 
-  /* ④ ちいさなできごとの抽選
+  /* ④ ちょっとしたできごとの抽選
 
-     いやいやが起きた回は、ちいさなできごとを起こさない
+     いやいやが起きた回は、ちょっとしたできごとを起こさない
      いやいやは専用の画面とBGMまである大きなできごとなので、
      同じ結果カードに「ねこちゃん！（機嫌 +5）」と「いやいや発生」が並ぶと、
      どちらの話なのか分からなくなってしまう
@@ -5302,7 +5302,7 @@ function finishPlayAction(place: GameEvent) {
      （すぐ下の⑧「とつぜんのできごと」も、同じ考えかたでいやいや中は抽選しない）
 
      ※ いやいや判定（checkTantrum()）のあとに抽選するので、
-       ちいさなできごとの機嫌や余裕の増減が、
+       ちょっとしたできごとの機嫌や余裕の増減が、
        いやいやの起きやすさを変えることはない
   */
   if (!isTantrum.value) {
@@ -7363,7 +7363,7 @@ function handleSecretPathKeydown(event: KeyboardEvent) {
    あの関数は「その場所で遊んだ」ときの共通処理なので、中で
    ・playCount（遊んだ回数）を増やす
    ・visitedPlaces（探検済みの場所）に追加する
-   ・runRandomEvent()（ちいさなできごと）を起こす
+   ・runRandomEvent()（ちょっとしたできごと）を起こす
    ・checkTantrum()（いやいや抽選）
    ・checkSuddenEvent()（とつぜんのできごと抽選）
    までまとめて行っている
@@ -8681,7 +8681,7 @@ function judgeResult() {
       }
 
       // あまり遊べていないのに疲れたとき
-      // （いやいややちいさなできごとで、先に気持ちや体力を持っていかれた形）
+      // （いやいややちょっとしたできごとで、先に気持ちや体力を持っていかれた形）
       // ここで「遊びすぎた」と書くと、2回しか遊んでいない人と話が合わない
       endingTitle.value = '今日はちょっと大変…';
       endingMessage.value = 'あまり探検できないうちに、どっと疲れてしまいました。次は元気なうちに、どんどん先へ進んでみよう！';
@@ -12236,11 +12236,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -12253,7 +12253,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -12522,11 +12522,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -12539,7 +12539,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -12808,11 +12808,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -12825,7 +12825,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -13094,11 +13094,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -13111,7 +13111,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -13380,11 +13380,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -13397,7 +13397,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -13882,11 +13882,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -13899,7 +13899,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -14182,7 +14182,7 @@ onUnmounted(() => {
                   <p class="result-card__text">{{ resultMessage }}</p>
 
                   <!-- ナイス対応（いやいやの理由に合った対応をしたときだけ出す）
-                       「ちいさなできごと」と同じ形の枠を使い、色だけ緑に変えて「いいこと」と分かるようにする
+                       「ちょっとしたできごと」と同じ形の枠を使い、色だけ緑に変えて「いいこと」と分かるようにする
                        ボーナスの数字は、実際に足している niceTantrumBonus〜 をそのまま出す -->
                   <div v-if="niceTantrumResponseText" class="event-flash event-flash--nice">
                     <p class="event-flash__label">✨ ナイス対応！</p>
@@ -14218,11 +14218,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -14235,7 +14235,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -14405,11 +14405,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -14422,7 +14422,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -14544,11 +14544,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -14561,7 +14561,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -14687,11 +14687,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -14704,7 +14704,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -14826,11 +14826,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -14843,7 +14843,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -14965,11 +14965,11 @@ onUnmounted(() => {
                     <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
                   </template>
 
-                  <!-- 行動の最中に起きたちいさなできごと（ランダムイベント）
+                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
                        地の文にまぎれないように、専用の枠と
                        色つきのしるし（おでかけポイント +5 など）で出す -->
                   <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちいさなできごと！</p>
+                    <p class="event-flash__label">ちょっとしたできごと！</p>
 
                     <p class="event-flash__text">{{ randomEventText }}</p>
 
@@ -14982,7 +14982,7 @@ onUnmounted(() => {
                   </div>
 
                   <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちいさなできごと → いやいや）で
+                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
                        読めるように、いちばん最後に置く -->
                   <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -18523,12 +18523,12 @@ onUnmounted(() => {
   line-height: 1.8;
 }
 
-/* 行動の最中に起きたちいさなできごと（ランダムイベント）
+/* 行動の最中に起きたちょっとしたできごと（ランダムイベント）
 
    前は結果の文章のうしろに、そのまま文字で書き足していたので、
    「おでかけポイント +5」が地の文にまぎれて気づきにくかった
    ・専用の枠（左に太い線）
-   ・「ちいさなできごと！」の帯
+   ・「ちょっとしたできごと！」の帯
    ・ステータスの増減は、色つきのしるし
    の3つで、ひと目で分かるようにしている
 */
@@ -18541,6 +18541,58 @@ onUnmounted(() => {
   background: #f2f9fc;
   /* アイテムの帯と同じ動きで、少し遅れてふわっと出す */
   animation: found-in 0.4s ease-out 0.25s backwards;
+}
+
+/* 出てきた瞬間の「ポンッ」（ちょっとしたできごと専用）
+
+   ふわっと出てくる（found-in）だけだと、
+   アイテム発見の帯と同じ動きなので、結果カードの中で気づかずに読み飛ばされやすかった
+   そこで、少し小さい状態から通常サイズへ戻る動きと、
+   枠のまわりの淡い水色の光を、出てきた瞬間だけ重ねている
+
+   ■ やりすぎないようにしていること
+     ・左右にゆらす・大きく跳ねる動きは入れない（文章が読みにくくなるため）
+     ・小さくするのは 0.96倍まで（文字がにじんで見えない範囲）
+     ・光は 0.45秒で消えきる。出したままにすると、読んでいるあいだ気が散る
+     ・「✨」のような良いことに見えるしるしは付けない
+       このできごとには、うれしいこと（機嫌 +5）と
+       親がつかれること（体力 -5）の両方があるため、しるしは中立の「！」だけにしている
+
+   ■ .event-flash--nice には かからないようにしている
+     ナイス対応・木漏れ日ボーナスは同じ .event-flash の形を使っているが、
+     あちらは「良いことが起きた」という別の演出なので、動きは今までのまま
+     （:not() で、色が変わっていない ふつうのできごとだけに絞っている）
+
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定で、この動きも出ないようにしている
+*/
+.event-flash:not(.event-flash--nice) {
+  animation: event-flash-in 0.45s ease-out 0.25s backwards;
+}
+
+@keyframes event-flash-in {
+  /* 出てくる前：少し下がって、少しだけ小さい。光はまだ無い */
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    box-shadow: 0 0 0 0 rgb(134 198 221 / 0%);
+  }
+
+  /* 途中：通常サイズを少し通りすぎて、まわりの光がいちばん強くなる
+     ここで「ポンッ」と出てきた感じになる
+     （1.012倍なので、跳ねるというより、ふくらんで止まるくらいの大きさ） */
+  55% {
+    opacity: 1;
+    transform: translateY(0) scale(1.012);
+    box-shadow: 0 0 0 6px rgb(134 198 221 / 55%);
+  }
+
+  /* 最後：通常サイズに落ちつき、光も消える（ふだんの見た目にもどる） */
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgb(134 198 221 / 0%);
+  }
 }
 
 .event-flash__label {
@@ -18624,9 +18676,9 @@ onUnmounted(() => {
 
 /* ナイス対応の枠（いやいやの理由に合った対応をしたとき）
 
-   形は「ちいさなできごと」（.event-flash）をそのまま使い、色だけ緑に変える
+   形は「ちょっとしたできごと」（.event-flash）をそのまま使い、色だけ緑に変える
    ・緑 … 「今回の変化」のプラスと同じ系統の色で、良いことが起きたと分かる
-   ・アイテム発見（黄色）・ちいさなできごと（水色）・いやいや（さんご）と色がかぶらない
+   ・アイテム発見（黄色）・ちょっとしたできごと（水色）・いやいや（さんご）と色がかぶらない
    ※ 帯の背景は --good より少しだけ濃くして、白い文字を読みやすくしている
 */
 .event-flash--nice {
@@ -20378,7 +20430,7 @@ onUnmounted(() => {
     font-size: 16px;
   }
 
-  /* ちいさなできごとの枠も、背の低い画面では少しつめる */
+  /* ちょっとしたできごとの枠も、背の低い画面では少しつめる */
   .event-flash {
     margin-top: 10px;
     padding: 10px 14px 11px;
@@ -20480,6 +20532,15 @@ onUnmounted(() => {
      （forwards のまま一瞬で終わると、出たとたんに見えなくなってしまうため）
      ※ 枝と木漏れ日そのものは JavaScript で動かしているので、この設定でも止まらずに遊べる */
   .secret-path-player__plus {
+    animation: none !important;
+  }
+
+  /* ちょっとしたできごとの「ポンッ」は、完全に止める
+     上の指定でも一瞬で終わるが、大きさと光が途中で止まって見えないように、
+     動きそのものを出さないようにしておく
+     （水色の枠・「ちょっとしたできごと！」の帯は残るので、
+       動きが無くても、できごとが起きたことは分かる） */
+  .event-flash:not(.event-flash--nice) {
     animation: none !important;
   }
 }
