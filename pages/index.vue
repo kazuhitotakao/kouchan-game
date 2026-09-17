@@ -6535,9 +6535,34 @@ const secretPathBoostMultiplier = 1.5;
    押したしゅんかんに はやくならないように、少しだけ待つ */
 const secretPathHoldBoostDelay = 250;
 
-/* 押したまま横へ何px動かしたら、1レーン動かすか（マウスのドラッグ・指のフリック共通）
-   小さな手ぶれでは動かないようにするため */
-const secretPathSwipeThreshold = 32;
+/* 押したまま横へ何px動かしたら、1レーン動かすか
+   小さな手ぶれでは動かないようにするため
+
+   ■ マウスと指で数字を分けている
+     動かしかたがちがうので、同じ数字にすると操作感がそろわない
+
+     ・マウス   … 押しっぱなしのまま、こえるたびに何レーンでも動ける
+                  32pxだと少し大きくドラッグしただけで
+                  左はし → まん中 → 右はし と2レーン進んでしまい、
+                  行き先をねらいにくかったので、広めにしてある
+     ・指・ペン … 1回はらうあいだに1レーンだけ（何度も動くことはない）
+                  こちらは広げる必要がないので、今までの数字のまま
+                  （広げると、軽くはらっただけでは動かなくなってしまう）
+
+   ※ どちらも「こえるたびに1レーン」は同じ
+     ちがうのは、1回の操作で何レーンぶん動けるか（→ swipeSecretPathPlayer）
+*/
+const secretPathMouseSwipeThreshold = 70;
+const secretPathTouchSwipeThreshold = 32;
+
+/* いま操作しているものに合わせて、しきい値を選ぶ
+
+   pointerType … 'mouse' / 'touch'（指）/ 'pen' のどれか
+   マウス以外（指・ペン）は、まとめて指のほうの数字を使う
+*/
+function getSecretPathSwipeThreshold(pointerType: string) {
+  return pointerType === 'mouse' ? secretPathMouseSwipeThreshold : secretPathTouchSwipeThreshold;
+}
 
 /* 木漏れ日を取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
 const secretPathSparkleDuration = 600;
@@ -7103,9 +7128,10 @@ function releaseSecretPathPointer() {
      （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、道を押す操作だけ有利になるため）
      長押し・ドラッグと見分けるため、動かすのは はなしたとき（pointerup）
 
-   ■ 押したまま横へ動かす（しきい値 secretPathSwipeThreshold をこえるたびに1レーン）
-     ・マウス             … ドラッグ。こえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
-     ・指・ペン           … フリック。1回押すあいだに1レーンだけ（大きくはらっても、まん中で止まる）
+   ■ 押したまま横へ動かす（しきい値をこえるたびに1レーン）
+     しきい値はマウスと指で分けてある（→ getSecretPathSwipeThreshold）
+     ・マウス             … ドラッグ。70pxこえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
+     ・指・ペン           … フリック。32pxで1レーン。1回押すあいだに1レーンだけ（大きくはらっても、まん中で止まる）
      ・長押しになったあと … 指・ペンでも、スライドでこえるたびに1レーンずつ動ける
      長押しになる前に横へ動いたら、長押しの判定はやめる（フリック・ドラッグとして扱う）
 
@@ -7210,7 +7236,7 @@ function handleSecretPathPointerLeave(event: PointerEvent) {
 function swipeSecretPathPlayer(event: PointerEvent) {
   const distance = event.clientX - secretPathPointerLastX;
 
-  if (Math.abs(distance) < secretPathSwipeThreshold) {
+  if (Math.abs(distance) < getSecretPathSwipeThreshold(event.pointerType)) {
     return;
   }
 
