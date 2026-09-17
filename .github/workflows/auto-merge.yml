@@ -1,0 +1,87 @@
+name: Build and Auto Merge to Develop
+
+# develop向けのPull Requestが作成・更新されたときに実行
+on:
+  pull_request:
+    branches:
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+
+# GitHub Actions に
+# ・コードを書き込む権限
+# ・Pull Requestを操作する権限
+# を与える
+permissions:
+  contents: write
+  pull-requests: write
+
+# 同じPRで新しい処理が始まった場合、
+# 古い実行をキャンセルする
+concurrency:
+  group: auto-merge-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ========================================
+  # ① buildできるか確認
+  # ========================================
+  build:
+    name: build
+    runs-on: ubuntu-latest
+
+    # 自動マージ対象の作業ブランチだけ実行する
+    #
+    # develop や main からのPR、
+    # 想定外の名前のブランチは自動マージしない
+    if: >
+      github.event.pull_request.draft == false &&
+      (
+        startsWith(github.head_ref, 'feat/') ||
+        startsWith(github.head_ref, 'feature/') ||
+        startsWith(github.head_ref, 'fix/') ||
+        startsWith(github.head_ref, 'refactor/') ||
+        startsWith(github.head_ref, 'chore/')
+      )
+
+    steps:
+      # PRのコードを取得
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Node.js 24を使用
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # package-lock.jsonを使って依存関係をインストール
+      - name: Install dependencies
+        run: npm ci
+
+      # Nuxtが正常にbuildできるか確認
+      - name: Build
+        run: npm run build
+
+  # ========================================
+  # ② build成功後、developへ自動マージ
+  # ========================================
+  merge:
+    name: Merge to develop
+    needs: build
+    runs-on: ubuntu-latest
+
+    env:
+      # GitHub CLI（gh）が使うトークン
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Merge pull request
+        run: |
+          gh pr merge "${{ github.event.pull_request.number }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --squash \
+            --delete-branch
