@@ -20986,7 +20986,8 @@ onUnmounted(() => {
       'warning warning'
       'notice notice';
     grid-template-columns: 1fr 1fr;
-    padding: 10px 12px 12px;
+    gap: 3px 10px;
+    padding: 6px 12px 8px;
   }
 
   /* スマホでは、タイトル＋サウンドと時計を横1列に収める幅が足りず、
@@ -20994,68 +20995,182 @@ onUnmounted(() => {
      そこで2段に分ける
        1段目 … タイトル＋サウンドコントロール（.status-area__titleRow）
        2段目 … 時計（右寄せ） */
+  /* ===== スマホ用コンパクトHUD =====
+     PC版を縦に積むのではなく、高さを最小にしたスマホ専用の並びにする
+       1段目：時計（左）＋サウンド（右）
+       2〜3段目：こうちゃん／親（名前は左、体力・機嫌／体力・余裕を横2列）
+       凡例：あぶない／ぐずり を1行
+       4段目：おでかけポイント／おやつ残り（横1列）
+       5段目：見つけたもの（1行） */
+
+  /* 1段目：時計を左・サウンドを右の横1列に戻す
+     ゲーム中はタイトル（.status-area__title）を隠して、そのぶんを時計とサウンドに使う */
   .status-area__head {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 4px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
     width: 100%;
     padding-right: 0;
     border-right: none;
   }
 
-  /* スマホでは、スライダーだけ少し短くする
-
-     ボタンはそのままの大きさにしておく（小さくすると指で押しにくくなるため）
-     [ 🔊 ][━━●━] の形のまま、せまい画面でも横にはみ出さずに収まる
-     ※ 読み上げ用の名前（aria-label）は、画面の広さにかかわらず、いつも付いている */
-  .sound-control {
-    --sound-slider-width: 76px;
+  /* ゲーム中の上部バーだけタイトルを隠す（タイトル画面のタイトルは消さない） */
+  .status-area__title {
+    display: none;
   }
 
-  /* 1段目：タイトルを左、サウンドコントロールを右に置く */
+  /* タイトルを隠したので、この行の中身はサウンドだけ。右側に置く */
   .status-area__titleRow {
-    width: 100%;
-    justify-content: space-between;
+    width: auto;
     gap: 8px;
   }
 
-  /* 2段目：時計は右寄せにする */
+  /* 時計を左端へ（サウンドは右端） */
   .status-clock {
-    align-self: flex-end;
-    text-align: right;
+    order: -1;
+    text-align: left;
   }
 
   .status-clock__now {
-    font-size: 24px;
+    font-size: 22px;
+    line-height: 1.05;
   }
 
+  .status-clock__limit {
+    font-size: 12px;
+  }
+
+  /* 増減（+20分）の予約幅は最小限。出るときだけ広がる（左寄せなので右のサウンドは動かない） */
+  .status-clock__change {
+    width: auto;
+  }
+
+  /* サウンドは、スライダーだけ短くする（ボタンは指で押せる大きさのまま） */
+  .sound-control {
+    --sound-slider-width: 54px;
+  }
+
+  /* 2〜3段目：こうちゃん／親。名前を大きな札で1段使わず、左側に置いて高さを節約する
+     ［名前］ 体力 100  機嫌 55
+             ゲージ     ゲージ */
+  .status-group {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    padding: 1px 8px 2px;
+  }
+
+  .status-group__name {
+    margin: 0;
+    padding: 1px 8px;
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+  }
+
+  /* 体力／機嫌（余裕）を横2列のまま、間をつめる */
   .status-list {
     grid-template-columns: 1fr 1fr;
-    gap: 6px 10px;
+    gap: 3px 10px;
   }
 
-  /* スマホは画面ごとスクロールできるので、
-     背の低い画面向けに小さくした目もりの説明を、読みやすい大きさに戻す
-     （このブロックは背の低い画面用の指定より後ろにあるので、こちらが勝つ） */
+  /* 1項目を「ラベル 数字 増減」＋「ゲージ」の2段にする（PCは3段） */
+  .status-item {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 5px;
+    row-gap: 1px;
+  }
+
+  .status-item__label {
+    grid-column: auto;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .status-item__value {
+    min-width: 2.5ch;
+    font-size: 16px;
+    line-height: 1.1;
+  }
+
+  .status-change {
+    font-size: 12px;
+  }
+
+  /* ゲージは少し細く */
+  .gauge {
+    height: 6px;
+  }
+
+  /* 凡例：あぶない／ぐずり を折り返さず1行（高さ約18px）。線の意味は残す */
   .gauge-legend {
-    gap: 3px 14px;
-    font-size: 12.5px;
-    line-height: 1.5;
+    flex-wrap: nowrap;
+    gap: 4px 12px;
+    font-size: 11px;
+    line-height: 1.35;
   }
 
   .gauge-legend__mark {
-    height: 12px;
+    height: 11px;
   }
 
-  /* スマホでは「おでかけポイント」「おやつ残り」の2つを横1列に押し込むと、
-     ラベルが長くて幅が足りず、右へはみ出す（とくに320px）
-     縦積み（column）にして、それぞれ画面幅いっぱいに置く
-     （数字はデスクトップの .pill と同じ右寄せのまま。縦積みなので左のふち／余白は消す） */
+  /* 4段目：おでかけポイント／おやつ残り を横1列に戻す（320pxでも収まるよう小さめ） */
   .status-pills {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 5px;
     padding-left: 0;
     border-left: none;
+  }
+
+  .pill {
+    flex: 1;
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: left;
+  }
+
+  .pill b {
+    min-width: 1.5ch;
+    margin-left: 4px;
+    font-size: 15px;
+    line-height: 1.1;
+  }
+
+  .pill__change,
+  .pill__unit {
+    width: 22px;
+  }
+
+  /* 5段目：見つけたもの は1行のコンパクト表示
+     多いときは、この箱の中だけ横スクロール（ページ全体は横スクロールさせない） */
+  .status-found {
+    gap: 8px;
+    max-height: none;
+    padding: 2px 10px;
+    line-height: 1.3;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .status-found__label {
+    font-size: 12px;
+  }
+
+  .status-found__empty {
+    font-size: 12.5px;
+  }
+
+  .status-found__list {
+    flex-wrap: nowrap;
+  }
+
+  .status-found__item {
+    padding: 2px 10px;
+    font-size: 12.5px;
+    white-space: nowrap;
   }
 
   .stage {
@@ -21113,9 +21228,10 @@ onUnmounted(() => {
     grid-template-columns: 1fr;
   }
 
-  /* 上部ステータスも、こうちゃん と 親 を上下に積む */
+  /* 上部ステータスも、こうちゃん と 親 を上下に積む（間もつめる） */
   .status-groups {
     grid-template-columns: 1fr;
+    gap: 3px;
   }
 
   /* スマホでは横にならべると幅が足りないので、たてにならべる
