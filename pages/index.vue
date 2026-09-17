@@ -20989,10 +20989,16 @@ onUnmounted(() => {
     padding: 10px 12px 12px;
   }
 
+  /* スマホでは、タイトル＋サウンドと時計を横1列に収める幅が足りず、
+     時計（09:00 ／ 12:00 ＋増減）が右へはみ出してしまう
+     そこで2段に分ける
+       1段目 … タイトル＋サウンドコントロール（.status-area__titleRow）
+       2段目 … 時計（右寄せ） */
   .status-area__head {
-    flex-direction: row;
-    align-items: baseline;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 4px;
     width: 100%;
     padding-right: 0;
     border-right: none;
@@ -21007,8 +21013,17 @@ onUnmounted(() => {
     --sound-slider-width: 76px;
   }
 
+  /* 1段目：タイトルを左、サウンドコントロールを右に置く */
   .status-area__titleRow {
+    width: 100%;
+    justify-content: space-between;
     gap: 8px;
+  }
+
+  /* 2段目：時計は右寄せにする */
+  .status-clock {
+    align-self: flex-end;
+    text-align: right;
   }
 
   .status-clock__now {
@@ -21033,15 +21048,14 @@ onUnmounted(() => {
     height: 12px;
   }
 
+  /* スマホでは「おでかけポイント」「おやつ残り」の2つを横1列に押し込むと、
+     ラベルが長くて幅が足りず、右へはみ出す（とくに320px）
+     縦積み（column）にして、それぞれ画面幅いっぱいに置く
+     （数字はデスクトップの .pill と同じ右寄せのまま。縦積みなので左のふち／余白は消す） */
   .status-pills {
-    flex-direction: row;
+    flex-direction: column;
     padding-left: 0;
     border-left: none;
-  }
-
-  .pill {
-    flex: 1;
-    text-align: center;
   }
 
   .stage {
@@ -21049,6 +21063,15 @@ onUnmounted(() => {
     gap: 12px;
     overflow-y: visible;
     padding: 14px 12px 18px;
+  }
+
+  /* 中央エリアのカード類（場所カード・コマンドなど）は width: 100% だが、
+     このゲームは content-box のままの場所があり、padding とふちが width の外に足されて
+     右へはみ出す（.place-card は左に太い色ふち＋左右paddingがある）
+     せまいスマホではそのぶんが画面からはみ出すので、border-box にして幅の中に収める
+     （PCは中央エリアが広く、もともとはみ出さないので指定は不要） */
+  .stage > * {
+    box-sizing: border-box;
   }
 
   .place-card {
