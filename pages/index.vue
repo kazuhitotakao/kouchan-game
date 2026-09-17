@@ -4626,6 +4626,16 @@ const placeItems: Record<ItemPlace, string> = {
   secretSpot: 'ふしぎな形の枝',
 };
 
+/* その場所のアイテムを、もう見つけているかどうか
+
+   公園入口の行き先ボタンの「★ 発見済み」バッジで使う
+   見ているのは collectedItems だけなので、
+   取得のルール（はじめては60%・2回目はかならず）には関係しない
+*/
+function hasFoundPlaceItem(place: ItemPlace) {
+  return collectedItems.value.includes(placeItems[place]);
+}
+
 /* アイテムごとの、こうちゃんのひとこと
 
    結果カードの「★ アイテム発見！」「『○○』を見つけました！」の下に、1文だけ出す
@@ -12138,27 +12148,44 @@ onUnmounted(() => {
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
                 <span class="cmd__text">すべり台へ行く</span>
-                <span v-if="isVisited('slide')" class="cmd__badge">探検済み</span>
+                <!-- 探検済みバッジのとなりに、その場所のアイテムを見つけたかどうかも出す
+                     （まだ行っていない場所では、アイテムのバッジは出さない） -->
+                <span v-if="isVisited('slide')" class="cmd__badges">
+                  <span class="cmd__badge">探検済み</span>
+                  <span v-if="hasFoundPlaceItem('slide')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                 <span class="cmd__text">砂場へ行く</span>
-                <span v-if="isVisited('sandbox')" class="cmd__badge">探検済み</span>
+                <span v-if="isVisited('sandbox')" class="cmd__badges">
+                  <span class="cmd__badge">探検済み</span>
+                  <span v-if="hasFoundPlaceItem('sandbox')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                 <span class="cmd__text">どんぐりの木へ行く</span>
-                <span v-if="isVisited('acornArea')" class="cmd__badge">探検済み</span>
+                <span v-if="isVisited('acornArea')" class="cmd__badges">
+                  <span class="cmd__badge">探検済み</span>
+                  <span v-if="hasFoundPlaceItem('acornArea')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3" @focus="selectedCommandIndex = 3">
                 <span class="cmd__text">池へ行く</span>
-                <span v-if="isVisited('pond')" class="cmd__badge">探検済み</span>
+                <span v-if="isVisited('pond')" class="cmd__badges">
+                  <span class="cmd__badge">探検済み</span>
+                  <span v-if="hasFoundPlaceItem('pond')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('grassArea')" @mouseenter="selectedCommandIndex = 4" @focus="selectedCommandIndex = 4">
                 <span class="cmd__text">芝生広場へ行く</span>
-                <span v-if="isVisited('grassArea')" class="cmd__badge">探検済み</span>
+                <span v-if="isVisited('grassArea')" class="cmd__badges">
+                  <span class="cmd__badge">探検済み</span>
+                  <span v-if="hasFoundPlaceItem('grassArea')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                </span>
               </button>
 
               <button
@@ -12169,7 +12196,10 @@ onUnmounted(() => {
                 @mouseenter="selectedCommandIndex = 5"
                 @focus="selectedCommandIndex = 5">
                 <span class="cmd__text">細い道の先へ行く</span>
-                <span v-if="isVisited('secretSpot')" class="cmd__badge">探検済み</span>
+                <span v-if="isVisited('secretSpot')" class="cmd__badges">
+                  <span class="cmd__badge">探検済み</span>
+                  <span v-if="hasFoundPlaceItem('secretSpot')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                </span>
               </button>
 
               <!-- 押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く） -->
@@ -20088,14 +20118,39 @@ onUnmounted(() => {
   flex: 1;
 }
 
+/* バッジを入れる箱（「探検済み」＋アイテムのバッジ）
+
+   ・バッジが2つ並ぶので、せまい画面では下に折り返す（flex-wrap: wrap）
+   ・justify-content: flex-end で、折り返しても右にそろえる
+   ・flex: 0 1 auto ＝ 場所が足りないときは、この箱のほうが縮む
+     （ボタンの文字より先にバッジが折り返すので、行き先の名前が読めなくならない）
+*/
+.cmd__badges {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
 .cmd__badge {
   flex: none;
+  max-width: 100%;
   padding: 1px 10px;
   border-radius: 999px;
   background: #e7edf6;
   color: #63758d;
   font-size: 12.5px;
   font-weight: 400;
+  white-space: nowrap;
+}
+
+/* ★ 発見済み … アイテムを見つけた場所（淡い金色）
+   文字は濃い茶色にして、白い下地でも読めるようにしている */
+.cmd__badge--item-found {
+  background: #fbeec4;
+  color: #8a6512;
 }
 
 /* 控えめなコマンドボタン（紺色の下地になじむ、うすい色）
@@ -20178,6 +20233,17 @@ onUnmounted(() => {
 .cmd--secret .cmd__badge {
   background: rgb(255 255 255 / 25%);
   color: #fff;
+}
+
+/* 紫の下地でも、「★ 発見済み」が「探検済み」と見分けられるようにする
+
+   白い下地のボタン（すべり台など）と同じ淡い金色をそのまま使うと、
+   紫の上では沈んで読みにくいので、
+   こちらは金色の文字＋うっすら金色の下地にして浮かせている
+   （「探検済み」は .cmd--secret .cmd__badge の白のまま） */
+.cmd--secret .cmd__badge--item-found {
+  background: rgb(255 226 150 / 30%);
+  color: #ffeab5;
 }
 
 /* 紫の下地には紺色の▶が沈んでしまうので、文字と同じ白にする */
