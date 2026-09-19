@@ -3,7 +3,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
-/* ゲーム画面の上部ステータス（表示するだけの部品） */
+/* ゲーム画面の上部ステータス・行動後の結果カード（どちらも表示するだけの部品） */
+import ResultCard from '~/components/game/ResultCard.vue';
 import StatusBar from '~/components/game/StatusBar.vue';
 
 /* ゲームで使う型（どんな形のデータか、という決めごとだけ）
@@ -4359,34 +4360,6 @@ const placeItems: Record<ItemPlace, string> = {
 */
 function hasFoundPlaceItem(place: ItemPlace) {
   return collectedItems.value.includes(placeItems[place]);
-}
-
-/* アイテムごとの、こうちゃんのひとこと
-
-   結果カードの「★ アイテム発見！」「『○○』を見つけました！」の下に、1文だけ出す
-   見出し（キー）は placeItems のアイテム名とそろえてあるので、
-   placeItems の名前を変えたときは、ここも合わせて変えること
-
-   ※ 同じ文を画面のほうに何度も書かないように、文章はここだけに置いてある
-     （結果カードは場所ごとに同じ形のものが並んでいるため）
-*/
-const itemReactions: Record<string, string> = {
-  ちいさな松ぼっくり: '「みてみて！」こうちゃんは、まつぼっくりを見せてくれました。',
-  きれいな石: '「つるつるしてる！」こうちゃんは、何度もさわっています。',
-  大きなどんぐり: '「大きいのあった〜！」こうちゃんは、うれしそうに見せてくれました。',
-  水色のガラス玉: '「きらきら！」こうちゃんは、光にかざして見ています。',
-  黄色い花: '「おはな！」こうちゃんは、大事そうに持っています。',
-  ふしぎな形の枝: '「これなに？」こうちゃんは、くるくる回して見ています。',
-};
-
-/* アイテムの名前から、こうちゃんのひとことを取り出す
-
-   対応表に無い名前のときは空文字を返す
-   画面のほうは v-if で見ているので、その行はまるごと出ない
-   （あとからひとことの無いアイテムを足しても、空の行が残らないようにするため）
-*/
-function itemReaction(itemName: string) {
-  return itemReactions[itemName] ?? '';
 }
 
 /* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */
@@ -11813,95 +11786,17 @@ onUnmounted(() => {
               </article>
 
               <!-- 結果が出たあと -->
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
-                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
-                       ここにも出すと同じことを2回言うことになる
-                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
-                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -12099,95 +11994,17 @@ onUnmounted(() => {
                 <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
               </article>
 
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
-                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
-                       ここにも出すと同じことを2回言うことになる
-                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
-                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -12385,95 +12202,17 @@ onUnmounted(() => {
                 <p class="place-card__text">大きな木の下に、どんぐりがたくさん落ちています。</p>
               </article>
 
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
-                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
-                       ここにも出すと同じことを2回言うことになる
-                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
-                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -12671,95 +12410,17 @@ onUnmounted(() => {
                 <p class="place-card__text">池には白鳥が泳ぎ、コイもたくさん集まっています。こうちゃんは指をさして大はしゃぎです。</p>
               </article>
 
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
-                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
-                       ここにも出すと同じことを2回言うことになる
-                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
-                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -12957,95 +12618,17 @@ onUnmounted(() => {
                 <p class="place-card__text">やわらかい芝生が広がっています。思いきり走り回れそうです。</p>
               </article>
 
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
-                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
-                       ここにも出すと同じことを2回言うことになる
-                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
-                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -13459,95 +13042,17 @@ onUnmounted(() => {
                 </p>
               </article>
 
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- ※ 小さな「いやいや発生！」の帯は置かない
-                       発生した瞬間は、画面いっぱいのオーバーレイ（.tantrum-alert）で知らせているので、
-                       ここにも出すと同じことを2回言うことになる
-                       カードが軽く左右に揺れる演出（.result-card--tantrum）と、
-                       いちばん下のいやいや文（.tantrum-line）はそのまま残している -->
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンド欄（サブメニュー ＋ メインコマンド）
 
@@ -13777,113 +13282,20 @@ onUnmounted(() => {
                 </p>
               </article>
 
-              <article v-if="resultMessage" class="result-card" :class="{ 'result-card--tantrum': isTantrum }">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <!-- いやいやが起きたときだけ出す（カードも軽く左右に揺れる） -->
-                  <!-- 対応が効かなかった・少し落ち着いただけで、まだいやいやが続いているときに出す -->
-                  <p v-if="isTantrum" class="result-alert">まだ いやいや は続いています…</p>
-
-                  <!-- 今回の行動で新しく見つけたものがあるときだけ出す -->
-                  <p v-if="foundItemsThisAction.length > 0" class="found-flash">
-                    <span class="found-flash__label">★ アイテム発見！</span>
-                    <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-                  </p>
-
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- ナイス対応（いやいやの理由に合った対応をしたときだけ出す）
-                       「ちょっとしたできごと」と同じ形の枠を使い、色だけ緑に変えて「いいこと」と分かるようにする
-                       ボーナスの数字は、実際に足している niceTantrumBonus〜 をそのまま出す -->
-                  <div v-if="niceTantrumResponseText" class="event-flash event-flash--nice">
-                    <p class="event-flash__label">✨ ナイス対応！</p>
-
-                    <p class="event-flash__text">{{ niceTantrumResponseText }}</p>
-
-                    <ul class="event-flash__list">
-                      <li class="event-flash__item">
-                        <span class="event-flash__item-label">おでかけポイント</span>
-                        <span class="event-flash__item-value change--good">{{ formatChange(niceTantrumBonusOutingPoint) }}</span>
-                      </li>
-                      <li class="event-flash__item">
-                        <span class="event-flash__item-label">親の余裕</span>
-                        <span class="event-flash__item-value change--good">{{ formatChange(niceTantrumBonusParentCalm) }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="tantrum"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups"
+                :nice-tantrum-response-text="niceTantrumResponseText"
+                :nice-tantrum-bonus-outing-point="niceTantrumBonusOutingPoint"
+                :nice-tantrum-bonus-parent-calm="niceTantrumBonusParentCalm" />
 
               <!-- コマンドボックス（枠の中に選択肢を縦に並べる） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
@@ -13994,83 +13406,17 @@ onUnmounted(() => {
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-              <article v-if="resultMessage" class="result-card">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="suddenEvent"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
@@ -14133,83 +13479,17 @@ onUnmounted(() => {
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-              <article v-if="resultMessage" class="result-card">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="suddenEvent"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
@@ -14276,83 +13556,17 @@ onUnmounted(() => {
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-              <article v-if="resultMessage" class="result-card">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="suddenEvent"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
@@ -14415,83 +13629,17 @@ onUnmounted(() => {
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-              <article v-if="resultMessage" class="result-card">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="suddenEvent"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
@@ -14554,83 +13702,17 @@ onUnmounted(() => {
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
-              <article v-if="resultMessage" class="result-card">
-                <h3 class="result-card__title">結果</h3>
-
-                <!-- ここから下が、高さが足りないときにスクロールする部分
-                     上の「結果」バッジ（h3）は外に置いてあるので、
-                     スクロールしても切れずに残る -->
-                <div class="result-card__body">
-                  <p class="result-card__text">{{ resultMessage }}</p>
-
-                  <!-- 見つけたものの文
-                       アイテムの名前だけ、色をつけて文の中でも目立つようにする
-
-                       そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-                       （文章は script の itemReactions にまとめてある）
-                       今回の行動で新しく見つけたときだけ出る
-                       （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-                  <template v-for="item in foundItemsThisAction" :key="item">
-                    <p class="found-line">
-                      「
-                      <b class="found-line__name">{{ item }}</b>
-                      」を見つけました！
-                    </p>
-
-                    <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-                  </template>
-
-                  <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-                       地の文にまぎれないように、専用の枠と
-                       色つきのしるし（おでかけポイント +5 など）で出す -->
-                  <div v-if="randomEventText" class="event-flash">
-                    <p class="event-flash__label">ちょっとしたできごと！</p>
-
-                    <p class="event-flash__text">{{ randomEventText }}</p>
-
-                    <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-                      <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-                        <span class="event-flash__item-label">{{ effect.label }}</span>
-                        <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  <!-- いやいやが始まったときの文
-                       起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
-                       読めるように、いちばん最後に置く -->
-                  <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
-
-                  <!-- 今回の行動で、どのステータスがどれだけ変わったか -->
-                  <div v-if="statusChanges" class="change-box">
-                    <p class="change-box__title">今回の変化（合計）</p>
-
-                    <!-- こうちゃん／親／おでかけ の3つに分けて横に並べる
-                         外側のループでグループ、内側のループでその中の項目を出す -->
-                    <div class="change-groups">
-                      <section v-for="group in changeGroups" :key="group.name" class="change-group" :class="group.groupClass">
-                        <p class="change-group__name">{{ group.name }}</p>
-
-                        <ul class="change-list">
-                          <li v-for="row in group.rows" :key="row.label" class="change-item">
-                            <span class="change-item__label">{{ row.label }}</span>
-
-                            <!-- 行動前 → 行動後
-                                 「いまいくつになったか」がすぐ分かるように、
-                                 行動前は小さく控えめに、行動後は大きく濃い色にしている -->
-                            <span class="change-item__flow">
-                              <span class="change-item__before">{{ row.before }}</span>
-                              <span class="change-item__arrow">→</span>
-                              <span class="change-item__after">{{ row.after }}</span>
-                            </span>
-                            <span class="change-item__value" :class="row.className">{{ row.changeText }}</span>
-                          </li>
-                        </ul>
-                      </section>
-                    </div>
-                  </div>
-                </div>
-              </article>
+              <ResultCard
+                v-if="resultMessage"
+                variant="suddenEvent"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
 
               <!-- コマンドボックス（通常の場所とおなじ見た目を使う） -->
               <nav class="command-box" :class="[choiceGridClass, { 'command-box--pointer-paused': isCommandPointerPaused }]">
