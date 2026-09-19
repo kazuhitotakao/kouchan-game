@@ -7,6 +7,7 @@ import { changeClass, formatChange } from '~/utils/statusChange';
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
 import CommandBox from '~/components/game/CommandBox.vue';
 import ResultCard from '~/components/game/ResultCard.vue';
+import SoundControl from '~/components/game/SoundControl.vue';
 import StatusBar from '~/components/game/StatusBar.vue';
 
 /* ゲームで使う型（どんな形のデータか、という決めごとだけ）
@@ -108,11 +109,22 @@ const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
 const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
 const howToPlayButtonRef = ref<HTMLButtonElement | null>(null); // B画面の「？ あそびかた」
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
-const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
+/* サウンドのコントロール（ミュートボタン ＋ 音量スライダー）のまとまり
+   中身は components/game/SoundControl.vue にある
 
-/* 音量スライダー
-   A画面・B画面で Tab を回りこませるときに、いちばん後ろの行き先として使う */
-const soundVolumeSliderRef = ref<HTMLInputElement | null>(null);
+   A画面・B画面・おやつ選択・あそびかた の4画面に置いてあるが、
+   いちどに出るのは1画面だけなので、ここは「いま出ているもの」1つを指す */
+const soundControlRef = ref<InstanceType<typeof SoundControl> | null>(null);
+
+/* ミュートボタンと音量スライダーの本体（キーボード操作で直接さわるため）
+
+   SoundControl の中にあるので、コンポーネントごしに借りてくる
+   （読むだけなので、今までの ref と同じように soundToggleButtonRef.value で使える）
+
+   ※ 音量スライダーは、A画面・B画面で Tab を回りこませるときに、
+     いちばん後ろの行き先として使う */
+const soundToggleButtonRef = computed<HTMLButtonElement | null>(() => soundControlRef.value?.toggleButton ?? null);
+const soundVolumeSliderRef = computed<HTMLInputElement | null>(() => soundControlRef.value?.volumeSlider ?? null);
 
 /* あそびかた画面の「← ひとつ前の画面へ戻る」（上のツールバーの左）
    画面が出おわったときに、ここへフォーカスを当てる */
@@ -10878,58 +10890,12 @@ onUnmounted(() => {
                  ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
                  0% ＝ ミュートなので、2つはいつも同じ状態になる
                  （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
-            <div class="sound-control">
-              <button
-                ref="soundToggleButtonRef"
-                type="button"
-                class="sound-toggle"
-                :aria-pressed="soundEnabled"
-                :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
-                @click="toggleSound">
-                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
-                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
-                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
-                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
-                <span class="sound-toggle__icon">
-                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
-                       いま使わないほうを見えなくするだけなので、
-                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
-                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
-
-                  <span class="sound-toggle__state sound-toggle__state--off">
-                    <span class="sound-toggle__speaker">🔊</span>
-                    <span class="sound-toggle__muteMark">×</span>
-                  </span>
-                </span>
-
-                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
-              </button>
-
-              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
-
-                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
-                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
-                   （サウンドトラックページの音量スライダーと同じ作りかた）
-
-                   0%まで下げるとミュート、そこから上げるとミュート解除になる
-                   （スピーカーのアイコンも、いっしょに切りかわる） -->
-              <span class="sound-control__sliderWrap">
-                <input
-                  ref="soundVolumeSliderRef"
-                  type="range"
-                  class="sound-control__slider"
-                  min="0"
-                  max="100"
-                  step="1"
-                  :value="soundVolumePercent"
-                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
-                  aria-label="音量"
-                  :aria-valuetext="soundVolumePercent + 'パーセント'"
-                  @input="changeSoundVolume" />
-
-                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
-              </span>
-            </div>
+            <SoundControl
+              ref="soundControlRef"
+              :sound-enabled="soundEnabled"
+              :sound-volume-percent="soundVolumePercent"
+              @toggle="toggleSound"
+              @volume-change="changeSoundVolume" />
           </div>
 
           <h1 class="howto-heading">
@@ -11163,58 +11129,12 @@ onUnmounted(() => {
                  ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
                  0% ＝ ミュートなので、2つはいつも同じ状態になる
                  （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
-            <div class="sound-control">
-              <button
-                ref="soundToggleButtonRef"
-                type="button"
-                class="sound-toggle"
-                :aria-pressed="soundEnabled"
-                :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
-                @click="toggleSound">
-                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
-                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
-                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
-                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
-                <span class="sound-toggle__icon">
-                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
-                       いま使わないほうを見えなくするだけなので、
-                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
-                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
-
-                  <span class="sound-toggle__state sound-toggle__state--off">
-                    <span class="sound-toggle__speaker">🔊</span>
-                    <span class="sound-toggle__muteMark">×</span>
-                  </span>
-                </span>
-
-                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
-              </button>
-
-              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
-
-                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
-                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
-                   （サウンドトラックページの音量スライダーと同じ作りかた）
-
-                   0%まで下げるとミュート、そこから上げるとミュート解除になる
-                   （スピーカーのアイコンも、いっしょに切りかわる） -->
-              <span class="sound-control__sliderWrap">
-                <input
-                  ref="soundVolumeSliderRef"
-                  type="range"
-                  class="sound-control__slider"
-                  min="0"
-                  max="100"
-                  step="1"
-                  :value="soundVolumePercent"
-                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
-                  aria-label="音量"
-                  :aria-valuetext="soundVolumePercent + 'パーセント'"
-                  @input="changeSoundVolume" />
-
-                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
-              </span>
-            </div>
+            <SoundControl
+              ref="soundControlRef"
+              :sound-enabled="soundEnabled"
+              :sound-volume-percent="soundVolumePercent"
+              @toggle="toggleSound"
+              @volume-change="changeSoundVolume" />
           </div>
 
           <h1 class="title-card__name">{{ gameTitle }}</h1>
@@ -11278,58 +11198,12 @@ onUnmounted(() => {
                    ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
                    0% ＝ ミュートなので、2つはいつも同じ状態になる
                    （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
-              <div class="sound-control">
-                <button
-                  ref="soundToggleButtonRef"
-                  type="button"
-                  class="sound-toggle"
-                  :aria-pressed="soundEnabled"
-                  :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
-                  @click="toggleSound">
-                  <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
-                       OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
-                       ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
-                       小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
-                  <span class="sound-toggle__icon">
-                    <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
-                         いま使わないほうを見えなくするだけなので、
-                         ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
-                    <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
-
-                    <span class="sound-toggle__state sound-toggle__state--off">
-                      <span class="sound-toggle__speaker">🔊</span>
-                      <span class="sound-toggle__muteMark">×</span>
-                    </span>
-                  </span>
-
-                  <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
-                </button>
-
-                <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
-
-                     吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
-                     :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
-                     （サウンドトラックページの音量スライダーと同じ作りかた）
-
-                     0%まで下げるとミュート、そこから上げるとミュート解除になる
-                     （スピーカーのアイコンも、いっしょに切りかわる） -->
-                <span class="sound-control__sliderWrap">
-                  <input
-                    ref="soundVolumeSliderRef"
-                    type="range"
-                    class="sound-control__slider"
-                    min="0"
-                    max="100"
-                    step="1"
-                    :value="soundVolumePercent"
-                    :style="{ '--volume-progress': soundVolumePercent + '%' }"
-                    aria-label="音量"
-                    :aria-valuetext="soundVolumePercent + 'パーセント'"
-                    @input="changeSoundVolume" />
-
-                  <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
-                </span>
-              </div>
+              <SoundControl
+                ref="soundControlRef"
+                :sound-enabled="soundEnabled"
+                :sound-volume-percent="soundVolumePercent"
+                @toggle="toggleSound"
+                @volume-change="changeSoundVolume" />
             </div>
           </div>
 
@@ -11506,58 +11380,12 @@ onUnmounted(() => {
                  ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
                  0% ＝ ミュートなので、2つはいつも同じ状態になる
                  （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
-            <div class="sound-control">
-              <button
-                ref="soundToggleButtonRef"
-                type="button"
-                class="sound-toggle"
-                :aria-pressed="soundEnabled"
-                :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
-                @click="toggleSound">
-                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
-                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
-                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
-                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
-                <span class="sound-toggle__icon">
-                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
-                       いま使わないほうを見えなくするだけなので、
-                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
-                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
-
-                  <span class="sound-toggle__state sound-toggle__state--off">
-                    <span class="sound-toggle__speaker">🔊</span>
-                    <span class="sound-toggle__muteMark">×</span>
-                  </span>
-                </span>
-
-                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
-              </button>
-
-              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
-
-                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
-                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
-                   （サウンドトラックページの音量スライダーと同じ作りかた）
-
-                   0%まで下げるとミュート、そこから上げるとミュート解除になる
-                   （スピーカーのアイコンも、いっしょに切りかわる） -->
-              <span class="sound-control__sliderWrap">
-                <input
-                  ref="soundVolumeSliderRef"
-                  type="range"
-                  class="sound-control__slider"
-                  min="0"
-                  max="100"
-                  step="1"
-                  :value="soundVolumePercent"
-                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
-                  aria-label="音量"
-                  :aria-valuetext="soundVolumePercent + 'パーセント'"
-                  @input="changeSoundVolume" />
-
-                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
-              </span>
-            </div>
+            <SoundControl
+              ref="soundControlRef"
+              :sound-enabled="soundEnabled"
+              :sound-volume-percent="soundVolumePercent"
+              @toggle="toggleSound"
+              @volume-change="changeSoundVolume" />
           </div>
 
           <h1 class="snack-heading">🍪 きょうのおやつ</h1>
@@ -11612,51 +11440,12 @@ onUnmounted(() => {
                  ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
                  0% ＝ ミュートなので、2つはいつも同じ状態になる
                  （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
-            <div class="sound-control sound-control--bar">
-              <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'" @click="toggleSound">
-                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
-                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
-                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
-                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
-                <span class="sound-toggle__icon">
-                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
-                       いま使わないほうを見えなくするだけなので、
-                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
-                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
-
-                  <span class="sound-toggle__state sound-toggle__state--off">
-                    <span class="sound-toggle__speaker">🔊</span>
-                    <span class="sound-toggle__muteMark">×</span>
-                  </span>
-                </span>
-
-                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
-              </button>
-
-              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
-
-                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
-                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
-                   （サウンドトラックページの音量スライダーと同じ作りかた）
-
-                   0%まで下げるとミュート、そこから上げるとミュート解除になる
-                   （スピーカーのアイコンも、いっしょに切りかわる） -->
-              <span class="sound-control__sliderWrap">
-                <input
-                  type="range"
-                  class="sound-control__slider"
-                  min="0"
-                  max="100"
-                  step="1"
-                  :value="soundVolumePercent"
-                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
-                  aria-label="音量"
-                  :aria-valuetext="soundVolumePercent + 'パーセント'"
-                  @input="changeSoundVolume" />
-
-                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
-              </span>
-            </div>
+            <SoundControl
+              variant="status"
+              :sound-enabled="soundEnabled"
+              :sound-volume-percent="soundVolumePercent"
+              @toggle="toggleSound"
+              @volume-change="changeSoundVolume" />
           </template>
         </StatusBar>
 
