@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
+import { changeClass, formatChange } from '~/utils/statusChange';
+
+/* ゲーム画面の上部ステータス（表示するだけの部品） */
+import StatusBar from '~/components/game/StatusBar.vue';
 
 /* ゲームで使う型（どんな形のデータか、という決めごとだけ）
    中身は types/game.ts にまとめてある
@@ -4156,11 +4160,6 @@ function saveStatusChanges() {
   };
 }
 
-/* 変化量を「+5」「-10」「0」の形の文字にする */
-function formatChange(value: number) {
-  return value > 0 ? `+${value}` : String(value);
-}
-
 /* 「分」で持っている時間を「09:25」の形の文字にする
 
    statusBefore.minutes には 09:00 が 540（＝9×60）のように
@@ -4190,28 +4189,6 @@ function removeLeadingZero(time: string) {
   }
 
   return time;
-}
-
-/* 変化が「良い」「悪い」「変化なし」のどれかを判定して、CSSのクラス名を返す
-
-   ステータスは4つとも「100に近いほど良い・0に近いほど危ない」でそろえてあるので、
-   判定はとてもシンプルになる
-     ・プラス（ふえた） → 良い変化
-     ・マイナス（減った） → 悪い変化
-   ※ 時間だけは、どの行動でも必ずふえるので色はつけない
-*/
-function changeClass(statusName: string, value: number) {
-  // 時間は良い・悪いで見ないので、いつも「変化なし」の色にする
-  if (statusName === 'minutes') {
-    return 'change--neutral';
-  }
-
-  if (value === 0) {
-    return 'change--neutral';
-  }
-
-  // 体力・機嫌・ポイント・親の余裕は、どれも ふえると良い変化
-  return value > 0 ? 'change--good' : 'change--bad';
 }
 
 /* 中央の「今回の変化」を、誰の情報かで3つのまとまりに分けたもの
@@ -11627,226 +11604,86 @@ onUnmounted(() => {
         <!-- ==========================================================
              【上部】常時表示のステータスエリア
              ========================================================== -->
-        <header class="status-area">
-          <div class="status-area__head">
-            <!-- タイトルと音ボタンを同じ行に並べる
-                 新しい行を作らないので、上部ステータスの高さは変わらない -->
-            <div class="status-area__titleRow">
-              <span class="status-area__title">{{ gameTitle }}</span>
+        <!-- 中身は components/game/StatusBar.vue（受け取った値を表示するだけ）
+             サウンドのコントロールは音の処理とつながっているので、ここに残して #sound で差しこむ -->
+        <StatusBar
+          :game-title="gameTitle"
+          :current-time="currentTime"
+          :child-energy="childEnergy"
+          :child-mood="childMood"
+          :parent-energy="parentEnergy"
+          :parent-calm="parentCalm"
+          :outing-point="outingPoint"
+          :snack-left="snackLeft"
+          :collected-items="collectedItems"
+          :status-changes="statusChanges"
+          :fuss-energy-line="fussEnergyLine"
+          :fuss-mood-line="fussMoodLine"
+          :danger-energy-line="dangerEnergyLine"
+          :danger-calm-line="dangerCalmLine"
+          :is-child-energy-danger="isChildEnergyDanger"
+          :is-parent-energy-danger="isParentEnergyDanger"
+          :is-parent-calm-danger="isParentCalmDanger"
+          :danger-warnings="dangerWarnings"
+          :is-almost-noon="isAlmostNoon"
+          :is-result-scene="isResultScene">
+          <template #sound>
+            <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
 
-              <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                 何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
 
-                   文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
-                   何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+                 ・ミュートボタン … 音を出すか、出さないか
+                 ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
+                 0% ＝ ミュートなので、2つはいつも同じ状態になる
+                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+            <div class="sound-control sound-control--bar">
+              <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'" @click="toggleSound">
+                <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
+                     OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
+                     ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
+                     小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
+                <span class="sound-toggle__icon">
+                  <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
+                       いま使わないほうを見えなくするだけなので、
+                       ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
+                  <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
 
-                   ・ミュートボタン … 音を出すか、出さないか
-                   ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
-                   0% ＝ ミュートなので、2つはいつも同じ状態になる
-                   （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
-              <div class="sound-control sound-control--bar">
-                <button type="button" class="sound-toggle sound-toggle--bar" :aria-pressed="soundEnabled" :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'" @click="toggleSound">
-                  <!-- スピーカーは、ONでもOFFでも同じ絵文字のまま
-                       OFFのときだけ、右どなりに「×」を出す（🔊×）。スピーカーには重ねない
-                       ミュートの絵文字 🔇 のような「斜めの線」だけの表しかたはしていない
-                       小さく出すと、音が出ない状態なのかどうかが、ぱっと見では分かりにくいため -->
-                  <span class="sound-toggle__icon">
-                    <!-- ON用（🔊）とOFF用（🔊×）を、同じマスに重ねて置いてある
-                         いま使わないほうを見えなくするだけなので、
-                         ボタンの幅はいつも長いほう（🔊×）のままで、押しても変わらない -->
-                    <span class="sound-toggle__state sound-toggle__state--on">🔊</span>
-
-                    <span class="sound-toggle__state sound-toggle__state--off">
-                      <span class="sound-toggle__speaker">🔊</span>
-                      <span class="sound-toggle__muteMark">×</span>
-                    </span>
+                  <span class="sound-toggle__state sound-toggle__state--off">
+                    <span class="sound-toggle__speaker">🔊</span>
+                    <span class="sound-toggle__muteMark">×</span>
                   </span>
-
-                  <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
-                </button>
-
-                <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
-
-                     吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
-                     :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
-                     （サウンドトラックページの音量スライダーと同じ作りかた）
-
-                     0%まで下げるとミュート、そこから上げるとミュート解除になる
-                     （スピーカーのアイコンも、いっしょに切りかわる） -->
-                <span class="sound-control__sliderWrap">
-                  <input
-                    type="range"
-                    class="sound-control__slider"
-                    min="0"
-                    max="100"
-                    step="1"
-                    :value="soundVolumePercent"
-                    :style="{ '--volume-progress': soundVolumePercent + '%' }"
-                    aria-label="音量"
-                    :aria-valuetext="soundVolumePercent + 'パーセント'"
-                    @input="changeSoundVolume" />
-
-                  <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
                 </span>
-              </div>
+
+                <span class="sound-control__tooltip" aria-hidden="true">{{ soundEnabled ? 'サウンドをミュート' : 'サウンドをオン' }}</span>
+              </button>
+
+              <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
+
+                   吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
+                   :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
+                   （サウンドトラックページの音量スライダーと同じ作りかた）
+
+                   0%まで下げるとミュート、そこから上げるとミュート解除になる
+                   （スピーカーのアイコンも、いっしょに切りかわる） -->
+              <span class="sound-control__sliderWrap">
+                <input
+                  type="range"
+                  class="sound-control__slider"
+                  min="0"
+                  max="100"
+                  step="1"
+                  :value="soundVolumePercent"
+                  :style="{ '--volume-progress': soundVolumePercent + '%' }"
+                  aria-label="音量"
+                  :aria-valuetext="soundVolumePercent + 'パーセント'"
+                  @input="changeSoundVolume" />
+
+                <span class="sound-control__tooltip" aria-hidden="true">音量 {{ soundVolumePercent }}%</span>
+              </span>
             </div>
-
-            <span class="status-clock">
-              <span class="status-clock__now">{{ currentTime }}</span>
-              <span class="status-clock__limit">／ 12:00</span>
-
-              <!-- 直前の行動でかかった時間（結果を表示している間だけ出す）
-                   出たり消えたりしても幅が変わらないように、
-                   外側の span で置き場所（幅）をいつも確保しておく -->
-              <span class="status-clock__change">
-                <span v-if="statusChanges && statusChanges.minutes !== 0" class="status-change">{{ formatChange(statusChanges.minutes) }}分</span>
-              </span>
-            </span>
-          </div>
-
-          <!-- ゲージを「こうちゃん」と「親」の2つのまとまりに分ける
-               見出し＋うすい背景だけでグループに見せているので、
-               増える高さは見出し1行ぶんだけ（1280×720でも一画面に収まる） -->
-          <div class="status-groups">
-            <section class="status-group status-group--child">
-              <p class="status-group__name">こうちゃん</p>
-
-              <ul class="status-list">
-                <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
-                  <span class="status-item__label">
-                    <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
-                    体力
-                  </span>
-                  <span class="status-item__value">{{ childEnergy }}</span>
-                  <span v-if="statusChanges && statusChanges.childEnergy !== 0" class="status-change" :class="changeClass('childEnergy', statusChanges.childEnergy)">
-                    {{ formatChange(statusChanges.childEnergy) }}
-                  </span>
-                  <span class="gauge">
-                    <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
-
-                    <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
-                    <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
-
-                    <!-- 目もり：あぶないライン（体力20以下で電池切れが近い） -->
-                    <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下は電池切れが近いです（体力20）"></span>
-                  </span>
-                </li>
-
-                <li class="status-item">
-                  <span class="status-item__label">機嫌</span>
-                  <span class="status-item__value">{{ childMood }}</span>
-                  <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
-                    {{ formatChange(statusChanges.childMood) }}
-                  </span>
-                  <span class="gauge">
-                    <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
-
-                    <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
-                    <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
-                  </span>
-                </li>
-              </ul>
-            </section>
-
-            <section class="status-group status-group--parent">
-              <p class="status-group__name">親</p>
-
-              <ul class="status-list">
-                <li class="status-item" :class="{ 'status-item--danger': isParentEnergyDanger }">
-                  <span class="status-item__label">
-                    <span v-if="isParentEnergyDanger" class="status-item__alert">⚠</span>
-                    体力
-                  </span>
-                  <span class="status-item__value">{{ parentEnergy }}</span>
-                  <span v-if="statusChanges && statusChanges.parentEnergy !== 0" class="status-change" :class="changeClass('parentEnergy', statusChanges.parentEnergy)">
-                    {{ formatChange(statusChanges.parentEnergy) }}
-                  </span>
-                  <span class="gauge">
-                    <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
-
-                    <!-- 目もり：あぶないライン（親の体力20以下） -->
-                    <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
-                  </span>
-                </li>
-
-                <li class="status-item" :class="{ 'status-item--danger': isParentCalmDanger }">
-                  <span class="status-item__label">
-                    <span v-if="isParentCalmDanger" class="status-item__alert">⚠</span>
-                    余裕
-                  </span>
-                  <span class="status-item__value">{{ parentCalm }}</span>
-                  <span v-if="statusChanges && statusChanges.parentCalm !== 0" class="status-change" :class="changeClass('parentCalm', statusChanges.parentCalm)">
-                    {{ formatChange(statusChanges.parentCalm) }}
-                  </span>
-                  <span class="gauge">
-                    <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
-
-                    <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
-                    <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
-                  </span>
-                </li>
-              </ul>
-            </section>
-          </div>
-
-          <!-- ゲージの目もりの説明
-
-               並べる順番は、ゲージの上での位置と同じ「左 → 右」にそろえてある
-               ・あぶないライン   … 20 のあたり（ゲージの左のほう）
-               ・ぐずりだすライン … 71 のあたり（ゲージの右のほう）
-               説明の並びとゲージの線の並びが同じなので、
-               どちらの線の話をしているのか見つけやすい -->
-          <p class="gauge-legend">
-            <span class="gauge-legend__item">
-              <span class="gauge-legend__mark gauge-legend__mark--danger"></span>
-              あぶないライン
-            </span>
-
-            <span class="gauge-legend__item">
-              <span class="gauge-legend__mark gauge-legend__mark--fuss"></span>
-              ぐずりだすライン
-            </span>
-          </p>
-
-          <div class="status-pills">
-            <span class="pill pill--point">
-              おでかけポイント
-              <b>{{ outingPoint }}</b>
-              <span class="pill__change">
-                <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
-                  {{ formatChange(statusChanges.outingPoint) }}
-                </span>
-              </span>
-            </span>
-
-            <span class="pill pill--snack">
-              おやつ残り
-              <b>{{ snackLeft }}</b>
-
-              <!-- 「個」も、上のおでかけポイントの増減表示と同じ幅の置き場所に入れる
-                   こうすると、2つの数字が上下でぴったり同じ位置にそろう -->
-              <span class="pill__unit">個</span>
-            </span>
-          </div>
-
-          <div class="status-found">
-            <span class="status-found__label">見つけたもの</span>
-
-            <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
-
-            <ul v-else class="status-found__list">
-              <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
-            </ul>
-          </div>
-
-          <!-- 危険な状態の警告（GAME OVERになる前の合図）
-               リザルト画面では、もう気をつけようがないので出さない -->
-          <ul v-if="dangerWarnings.length > 0 && !isResultScene" class="status-warnings">
-            <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
-          </ul>
-
-          <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
-          <p v-if="isAlmostNoon && !isResultScene" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
-        </header>
+          </template>
+        </StatusBar>
 
         <!-- ==========================================================
              【中央】イベント表示 ＋ 【下部】コマンド欄
