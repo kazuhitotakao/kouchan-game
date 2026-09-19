@@ -17080,12 +17080,24 @@ onUnmounted(() => {
   grid-area: gauges;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 18px;
+
+  /* 入れものの幅を、いつもグリッドの1マスぴったりにする
+     こうしておくと、中の文字数（「余裕 100 -18」など）で
+     こうちゃん側・親側の幅が変わってしまうことがない */
+  width: 100%;
+  min-width: 0;
 }
 
 /* ひとつのまとまり（こうちゃん／親）
    カードを重ねると高さが増えてしまうので、
    うすい背景と細い枠だけで「ここまでが同じ人」と分かるようにしている */
 .status-group {
+  /* box-sizing: border-box … 左右の余白とふちも width: 100% の中にふくめる
+     これが無いと、枠のぶんだけ列からはみ出して、左右の幅がそろわない
+     min-width: 0 … 中身（長いラベルや増減の数字）に押し広げられないようにする */
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   padding: 4px 10px 6px;
   border: 1px solid rgb(255 255 255 / 20%);
   border-radius: 8px;
@@ -17134,6 +17146,8 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 14px;
+  width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -17141,6 +17155,10 @@ onUnmounted(() => {
 
 .status-item {
   display: grid;
+  /* 中身の文字数で、片方の項目だけが横に広がらないようにする
+     （これが無いと grid の列は「中身より小さくならない」ため、
+       「余裕 100 -18」のような長い行のほうが広くなってしまう） */
+  min-width: 0;
   /* 上から3段に分けて置く
      1段目 … ラベル（横はばいっぱい）
      2段目 … 現在値 ／ 直前の増減
@@ -17237,6 +17255,11 @@ onUnmounted(() => {
   position: relative;
   display: block;
   grid-column: 1 / -1;
+  /* 4本のゲージの長さを、どの項目でも同じにそろえる
+     （項目の幅いっぱいに広げ、中身に押し広げられないようにする） */
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
   height: 10px;
   overflow: hidden;
   border-radius: 999px;
@@ -21043,9 +21066,52 @@ onUnmounted(() => {
     width: auto;
   }
 
-  /* サウンドは、スライダーだけ短くする（ボタンは指で押せる大きさのまま） */
-  .sound-control {
+  /* ===== サウンドの横幅は、置き場所ごとに分けて決める =====
+
+     共通クラス（.sound-control など）そのものには、幅の指定を書かない
+     同じ部品が ゲーム画面の上部バー と タイトル系の画面（A/B・おやつ選択・あそびかた）の
+     両方で使われていて、ほしい幅が正反対だから
+
+     ・ゲーム中（.status-area の中）… 時計との あいだの空きを使って、スライダーをのばす
+     ・A/B画面（.title-card__tools の中）… のばさず、中身ぶんのコンパクトな固定幅のまま
+
+     共通クラスに width: 100% を書くと、A/B画面のサウンド枠まで
+     カードいっぱいに広がって、上のツールバーが折り返してしまう
+     （見た目・ボタン・アイコン・スライダーの形は、今までどおり共通のまま） */
+
+  /* --- ゲーム中の上部ステータス：空きスペースまでスライダーをのばす ---
+
+     この行は「時計（左）… サウンド（右）」の両はし寄せなので、
+     スライダーを短く決め打ちにすると、まんなかに余白がぽっかり残ってしまう
+
+     ・.status-area__titleRow に flex: 1 … あまっている幅を、この行がぜんぶ受け取る
+     ・.sound-control に width: 100%     … 受け取った幅いっぱいまで枠をひろげる
+     ・スライダーに flex: 1               … ボタンの右の のこり幅を、ぜんぶスライダーが使う
+       （--sound-slider-width は「これ以下には縮まない」下限としてだけ残す）
+
+     ※ min-width: 0 … flex の箱は、ふつう中身より小さくならない
+       これが無いと、時計に「+25分」が出たときに、行が横にはみ出してしまう
+       （320px でも横スクロールしないのは、この3か所のおかげ） */
+  .status-area__titleRow {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .status-area .sound-control {
     --sound-slider-width: 54px;
+
+    width: 100%;
+    min-width: 0;
+  }
+
+  .status-area .sound-control__sliderWrap {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .status-area .sound-control__slider {
+    width: 100%;
+    min-width: var(--sound-slider-width);
   }
 
   /* 2〜3段目：こうちゃん／親。名前を大きな札で1段使わず、左側に置いて高さを節約する
@@ -21059,16 +21125,44 @@ onUnmounted(() => {
     padding: 1px 8px 2px;
   }
 
+  /* 名札（こうちゃん／親）の幅を、2つともそろえる
+
+     ■ なぜ必要か
+       名札は左、その右に 体力／機嫌（余裕）がならぶ作りなので、
+       名札の幅がちがうと、その右がわの中身の始まる位置もずれてしまう
+         ［こうちゃん］体力 100  機嫌 55
+         ［親］    体力 100  余裕 55   ← 左へずれて、ゲージの位置もそろわない
+
+     ■ どうそろえたか
+       長いほうの「こうちゃん」に合わせて、両方を同じ幅にする
+       ・min-width  … 2つとも同じ幅になるので、名札の右はしがそろう
+                      ＝ その右の 体力／機嫌（余裕）も、同じ位置から始まる
+       ・text-align: center … 「親」を、広げた名札のまんなかに置く
+                              （右や左に寄せると、1文字だけ片側にはりついて見えるため）
+
+     ■ 5.6em の決めかた
+       日本語の全角文字は1文字＝1em、そこに letter-spacing 0.04em が付くので
+       「こうちゃん」5文字 ＝ 5 × 1.04em ＝ 5.2em
+       フォントによる多少のちがいで はみ出さないよう、少し余裕をみて 5.6em
+       （min-width は中身の幅なので、左右の padding 8px は別に足される）
+
+     ■ nowrap
+       幅を決めたぶん、万一足りないときに「こうちゃ／ん」と
+       2行に折り返して高さが変わらないようにしておく */
   .status-group__name {
+    min-width: 5.6em;
     margin: 0;
     padding: 1px 8px;
     font-size: 11.5px;
     letter-spacing: 0.04em;
+    text-align: center;
+    white-space: nowrap;
   }
 
-  /* 体力／機嫌（余裕）を横2列のまま、間をつめる */
+  /* 体力／機嫌（余裕）を横2列のまま、間をつめる
+     minmax(0, 1fr) にして、文字数で片方だけが広がらないようにする（PCと同じ考えかた） */
   .status-list {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 3px 10px;
   }
 
@@ -21362,6 +21456,26 @@ onUnmounted(() => {
     --sound-button-size: 36px;
     --sound-icon-size: 19px;
     --sound-slider-width: 84px;
+
+    /* A/B画面では、サウンド枠をのばさない（中身ぶんのコンパクトな幅のまま）
+
+       ・width: auto … カードいっぱいに広がらない
+       ・flex: none  … ツールバー（display: flex）の中で、伸びも縮みもしない
+       これが無いと枠だけが長くなって、左の「♪ サウンドトラック」
+       「はじめの画面へ戻る」が下の行へ折り返してしまう
+       （ゲーム中だけのばす指定は、上の .status-area 配下に書いてある） */
+    width: auto;
+    flex: none;
+  }
+
+  /* スライダーも、A/B画面では決めた幅（--sound-slider-width）のまま
+     ゲーム中のような width: 100% ／ flex: 1 にはしない */
+  .title-card__tools .sound-control__sliderWrap {
+    flex: none;
+  }
+
+  .title-card__tools .sound-control__slider {
+    width: var(--sound-slider-width);
   }
 
   /* B画面の「？ あそびかた」も、スマホでは「?」だけの短い表示にする
