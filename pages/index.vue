@@ -14,6 +14,10 @@ import { useKeyboardControls } from '~/composables/useKeyboardControls';
 
 /* いやいや（かんしゃく）の判定と結果（中身は composables/useTantrum.ts） */
 import { useTantrum } from '~/composables/useTantrum';
+
+/* 総合スコアとランクの計算（中身は composables/useScore.ts）
+   どちらも「渡した数から答えを返すだけ」で、ゲームの状態はさわらない */
+import { calculateScore, judgeEnding } from '~/composables/useScore';
 import StatusBar from '~/components/game/StatusBar.vue';
 
 /* ゲームで使う型（どんな形のデータか、という決めごとだけ）
@@ -7403,339 +7407,61 @@ function walkOnFromFountain() {
 
 /* ===== ゴール ===== */
 
-/* 今回のプレイの総合スコアを計算する
+/* 総合スコア（0〜100点）と、その内訳を作る
 
-   この関数は「点数を数えるだけ」で、ランクの判定はしない
-   （ランクを決めるのは judgeResult() の役目）
-
-   やっていること
-   ① scoreBreakdown を空にする（前回の結果を消す）
-   ② 加点・減点を1項目ずつ計算して scoreBreakdown に push する
-   ③ scoreBreakdown の points を全部たす
-   ④ 0〜100に収めて finalScore に入れる
-
-   ※ 0点の項目は、結果画面がごちゃごちゃしないように push しない
+   点数の計算そのものは composables/useScore.ts の calculateScore() にある
+   ここは「いまの状態を渡して、返ってきた答えを入れる」だけ
+   （配点・ボーナス・減点の数字は、ぜんぶあちらにまとめてある）
 */
 function calculateFinalScore() {
-  // ① 前回のプレイの内訳が残らないように、まず空っぽに戻す
-  scoreBreakdown.value = [];
+  const { totalScore, breakdown } = calculateScore({
+    outingPoint: outingPoint.value,
+    hasVisitedSecretSpot: isVisited('secretSpot'),
+    collectedItemCount: collectedItems.value.length,
+    currentMinutes: currentMinutes.value,
+    parentEnergy: parentEnergy.value,
+    childMood: childMood.value,
+    childEnergy: childEnergy.value,
+    parentCalm: parentCalm.value,
+    tantrumCount: tantrumCount.value,
+    keepInRange,
+  });
 
-  // ② 基本点：おでかけポイントは、そのまま点数になる
-  //   （0点でも「ここがスコアの土台」と分かるように、いつも表示する）
-  scoreBreakdown.value.push({ label: 'おでかけポイント', points: outingPoint.value });
-
-  // ③ 秘密の場所ボーナス：探検できていれば +10点
-  if (isVisited('secretSpot')) {
-    scoreBreakdown.value.push({ label: '秘密の場所発見', points: 10 });
-  }
-
-  // ④ 見つけたものボーナス：1種類につき +2点
-  const itemPoints = collectedItems.value.length * 2;
-
-  if (itemPoints > 0) {
-    scoreBreakdown.value.push({ label: '見つけたもの', points: itemPoints });
-  }
-
-  // ⑤ 帰宅時間ボーナス
-  //   goToGoal() で出口まで10分歩いたあとの時間で判定される
-  //   ・11:45まで      → +8点
-  //   ・11:46〜12:00   → +4点
-  //   ・12:00を過ぎた  → -10点
-  //   ※ 11:45 にしているのは、6か所ぜんぶ回ると
-  //     いやいや や とつぜんのできごと の時間で必ずはみ出してしまい、
-  //     +8点が「ぜったいに取れないボーナス」になっていたため
-  if (currentMinutes.value <= 11 * 60 + 45) {
-    scoreBreakdown.value.push({ label: '余裕をもって帰宅', points: 8 });
-  } else if (currentMinutes.value <= 12 * 60) {
-    scoreBreakdown.value.push({ label: '時間内に帰宅', points: 4 });
-  } else {
-    scoreBreakdown.value.push({ label: '時間オーバー', points: -10 });
-  }
-
-  // ⑥ 親の体力ボーナス：50以上で+5点、30〜49で+3点、29以下は0点
-  if (parentEnergy.value >= 50) {
-    scoreBreakdown.value.push({ label: '親の体力', points: 5 });
-  } else if (parentEnergy.value >= 30) {
-    scoreBreakdown.value.push({ label: '親の体力', points: 3 });
-  }
-
-  // ⑦ こうちゃんの機嫌ボーナス：70以上で+5点、50〜69で+3点、49以下は0点
-  if (childMood.value >= 70) {
-    scoreBreakdown.value.push({ label: 'こうちゃんの機嫌', points: 5 });
-  } else if (childMood.value >= 50) {
-    scoreBreakdown.value.push({ label: 'こうちゃんの機嫌', points: 3 });
-  }
-
-  // ⑧ こうちゃんの体力ボーナス：30以上なら+3点
-  if (childEnergy.value >= 30) {
-    scoreBreakdown.value.push({ label: 'こうちゃんの体力', points: 3 });
-  }
-
-  // ⑨ 親の余裕ボーナス：親の余裕が70以上なら+3点
-  //   「余裕を残したまま帰れた」ごほうび
-  if (parentCalm.value >= 70) {
-    scoreBreakdown.value.push({ label: '親の余裕', points: 3 });
-  }
-
-  // ⑩ いやいや減点：1回につき -2点
-  if (tantrumCount.value > 0) {
-    scoreBreakdown.value.push({ label: 'いやいや', points: tantrumCount.value * -2 });
-  }
-
-  // ⑪ 内訳の点数を全部たす
-  let total = 0;
-
-  for (const item of scoreBreakdown.value) {
-    total += item.points;
-  }
-
-  // ⑫ 0〜100に収める（100を超えたら100、0未満なら0）
-  //   ※ ここで丸めるので、内訳の単純合計と finalScore がずれることがある
-  finalScore.value = keepInRange(total);
+  scoreBreakdown.value = breakdown;
+  finalScore.value = totalScore;
 }
 
-/* 遊びつかれて、親かこうちゃんの体力が減っているかどうか（isWornOut() の理由のうち「体力」だけ）
+/* ゴールしたときの成績（ランク・見出し・文章）を決める
 
-   Cランクの「ちょっと遊びすぎた！」は、これが true のときだけ出す
-   isWornOut() は、機嫌・余裕・いやいや・お昼すぎ でも true になるので、
-   それだけで決めると、少ししか遊んでいないのに「遊びすぎた」と出てしまう
-   （機嫌は55スタートで、ぐずりだすライン50のすぐ上。少し下がっただけで isWornOut() が true になる）
-   体力は遊ぶたびにしっかり減るので、ここが下がっていれば「たくさん遊んで疲れた」と言える */
-function isTiredFromPlaying() {
-  return parentEnergy.value < 50 || childEnergy.value < 30;
-}
-
-/* へとへとで帰ってきたかどうかを判定する
-
-   スコアが低くなる理由は、大きく分けて2つある
-   ① 遊びすぎて、こうちゃんも親もクタクタになった
-   ② ほとんど遊ばずに、すぐ帰ってきた
-
-   点数はどちらも同じくらい低くなるけれど、
-   ①に「まだまだ元気だね」と言うのも、
-   ②に「遊びすぎたね」と言うのもおかしいので、ここで見分けて文章を変える
-
-   ※ 使っている数字は、calculateFinalScore() のボーナスの基準とそろえている
-     （＝「ボーナスをもらえなかった項目が1つでもあれば、疲れて帰ってきた」）
-*/
-function isWornOut() {
-  // 親かこうちゃんの体力が減っている
-  if (isTiredFromPlaying()) {
-    return true;
-  }
-
-  // こうちゃんの機嫌がよくない
-  if (childMood.value < 50) {
-    return true;
-  }
-
-  // 親の余裕が少なくなっている
-  if (parentCalm.value < 70) {
-    return true;
-  }
-
-  // いやいやが1回でも起きた
-  if (tantrumCount.value > 0) {
-    return true;
-  }
-
-  // お昼を過ぎてしまった
-  if (currentMinutes.value > 12 * 60) {
-    return true;
-  }
-
-  // どれにも当てはまらない＝二人とも元気なまま帰ってきた
-  return false;
-}
-
-/* 結果のランクを判定する
-
-   上から順番に見て、あてはまった時点で決まる
    ① 総合スコアを計算する（特殊エンドでもスコアは表示するので、いちばん先に呼ぶ）
-   ② いやいや3回以上 → 特殊エンド（通常ランクより優先）
-   ③ 総合スコアで S+ / S / A / B / C / D を決める
-
-   ※ 同じランクでも、実際に何が起きたかで文章を変えている
-     画面には「回った場所」「帰った時間」「機嫌」も出ているので、
-     文章がそれとくいちがうと、遊んでいる人が混乱してしまうため
-     ・Aランク … こうちゃんの機嫌が低いときは「楽しそう」と書かない
-     ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
-     ・C／Dランク … 「あまり遊べなかった」系の文は、遊んだ回数が少ないときだけ使う
-                     （同じ場所でくりかえし遊んだ人に言うと話が合わない）
-     ・Cランク    … 「遊びすぎた」は、体力が減っているときだけ使う（isTiredFromPlaying()）
-                     （機嫌・余裕・いやいや・時間だけで疲れた判定になった人に言うと話が合わない）
+   ② ランクと文章は composables/useScore.ts の judgeEnding() が決める
+      （いやいや3回以上の特殊エンド、S+ / S / A / B / C / D の境目や、
+        同じランクの中での文章の出しわけも、ぜんぶあちらにある）
 
    ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
+   ※ S+の曲の解放（localStorageへの保存）は、このあとの unlockSPlusSongIfEarned() が受けもつ
 */
 function judgeResult() {
-  // ① まずスコアを計算する（ランク判定はこのあと）
   calculateFinalScore();
 
-  // ② 特殊エンド（スコアよりも優先される。通常ランクは表示しない）
-  if (tantrumCount.value >= 3) {
-    endingRank.value = '特殊エンド';
-    endingTitle.value = 'いやいや大爆発！';
-    endingMessage.value = 'いやいやが' + tantrumCount.value + '回もありました。ほっぺをふくらませたこうちゃんをだっこして、いっしょにおうちへ帰ります。それはそれで、わすれられない1日になりました。';
-    return;
-  }
+  const { rank, title, message } = judgeEnding({
+    totalScore: finalScore.value,
+    tantrumCount: tantrumCount.value,
+    childEnergy: childEnergy.value,
+    childMood: childMood.value,
+    parentEnergy: parentEnergy.value,
+    parentCalm: parentCalm.value,
+    currentMinutes: currentMinutes.value,
+    visitedPlaceCount: visitedPlaces.value.length,
+    playCount: playCount.value,
+    fussMoodLine,
+    totalPlaceCount,
+    playedALotLine,
+  });
 
-  // ③ ここから下は、総合スコアだけでランクが決まる（点数の高いほうから順に見ていく）
-
-  // 92〜100点
-  if (finalScore.value >= 92) {
-    endingRank.value = 'S+ランク';
-    endingTitle.value = '伝説の公園大冒険！';
-    endingMessage.value = 'たくさん探検して、こうちゃんも親も大満足！ずっとわすれられない大冒険になりました！';
-    return;
-  }
-
-  // 84〜91点
-  if (finalScore.value >= 84) {
-    endingRank.value = 'Sランク';
-    endingTitle.value = '公園探検マスター！';
-    endingMessage.value = 'たくさんの場所を探検して、楽しい思い出をいっぱい作れました！';
-    return;
-  }
-
-  // 70〜83点
-  if (finalScore.value >= 70) {
-    endingRank.value = 'Aランク';
-
-    // こうちゃんの機嫌が下がったまま帰ってきたとき
-    // （点数はよくても「こうちゃんも楽しそう」と書くと、
-    //   画面に出ている機嫌の数字と食いちがってしまう）
-    if (childMood.value < fussMoodLine) {
-      endingTitle.value = 'いい探検、でもおつかれ気味';
-      endingMessage.value = 'いろいろな場所を回れました！ただ、こうちゃんは最後すこしぐずり気味。次は休みやおやつをはさみながら回ってみよう！';
-      return;
-    }
-
-    endingTitle.value = '最高のおでかけ！';
-    endingMessage.value = 'いろいろな場所を回って、こうちゃんも楽しそう。とてもいいおでかけになりました！';
-    return;
-  }
-
-  // 55〜69点
-  if (finalScore.value >= 55) {
-    endingRank.value = 'Bランク';
-
-    // ① お昼をすぎて帰ってきたとき
-    //   Bランクのほとんどがこれ
-    //   たくさん回れたぶん時間がかかり、時間オーバーで10点ひかれている
-    //   ここで「次はちがう場所にも行ってみよう」と書くと、
-    //   6か所ぜんぶ回った人にまで探検不足だと言うことになってしまう
-    if (currentMinutes.value > 12 * 60) {
-      endingTitle.value = '時間ぎりぎり大冒険！';
-      endingMessage.value = 'たくさん探検できました！でも、夢中になっているうちにお昼をすぎてしまいました。次はもう少し早めに切りあげてみよう！';
-      return;
-    }
-
-    // ② 時間内に帰れたけれど、まだ行っていない場所が残っているとき
-    if (visitedPlaces.value.length < totalPlaceCount) {
-      endingTitle.value = '楽しい公園探検！';
-      endingMessage.value = '楽しく公園を探検できました。次はちがう場所にも行ってみよう！';
-      return;
-    }
-
-    // ③ 時間内に6か所ぜんぶ回れたとき
-    endingTitle.value = '公園ぜんぶ制覇！';
-    endingMessage.value = '公園をぜんぶ回って、時間内に帰ってこられました！次はこうちゃんの機嫌や、見つけたものの数も気にしてみよう！';
-    return;
-  }
-
-  // 38〜54点
-  if (finalScore.value >= 38) {
-    endingRank.value = 'Cランク';
-
-    // 疲れて帰ってきたとき
-    if (isWornOut()) {
-      // たくさん回ったうえで、遊びつかれて体力が減ったのなら「遊びすぎた」でよい
-      if (visitedPlaces.value.length >= 3 && isTiredFromPlaying()) {
-        endingTitle.value = 'ちょっと遊びすぎた！';
-        endingMessage.value = 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！';
-        return;
-      }
-
-      // いろいろ回ったけれど、体力はまだ残っているとき
-      // （機嫌が下がった・親の余裕が減った・いやいやが起きた・お昼をすぎた、で疲れた判定になった形）
-      // ここで「遊びすぎた」と書くと、そんなに遊んでいない人と話が合わない
-      if (visitedPlaces.value.length >= 3) {
-        endingTitle.value = 'ちょっとバタバタ探検！';
-        endingMessage.value = 'いろいろな場所を回れたけれど、ちょっとバタバタした1日でした。次は機嫌や時間も見ながら、ゆったり回ってみよう！';
-        return;
-      }
-
-      // 回った場所は少ないけれど、同じ場所でたっぷり遊んだとき
-      // （お気に入りの場所を見つけて、そこで遊びこんだ形）
-      // ここで「あまり遊べなかった」と書くと、
-      // 何回も遊んだ人に「遊べていない」と言うことになってしまう
-      if (playCount.value >= playedALotLine) {
-        endingTitle.value = 'お気に入りでたっぷり！';
-        endingMessage.value = 'お気に入りの場所で、たっぷり遊べました！そのぶん少しおつかれです。次はちがう場所にも行ってみよう！';
-        return;
-      }
-
-      // あまり遊べていないのに疲れたとき
-      // （いやいややちょっとしたできごとで、先に気持ちや体力を持っていかれた形）
-      // ここで「遊びすぎた」と書くと、2回しか遊んでいない人と話が合わない
-      endingTitle.value = '今日はちょっと大変…';
-      endingMessage.value = 'あまり探検できないうちに、どっと疲れてしまいました。次は元気なうちに、どんどん先へ進んでみよう！';
-      return;
-    }
-
-    // たっぷり遊んだのに、二人とも元気なまま帰ってきたとき
-    // （のんびりしたコマンドばかり選ぶと、疲れないかわりに点も伸びない）
-    // ここで「あっさり」と書くと、何回も遊んだ人と話が合わない
-    if (playCount.value >= playedALotLine) {
-      endingTitle.value = 'のんびりマイペース！';
-      endingMessage.value = 'あわてず、のんびり遊びました。二人ともまだまだ元気です！次はもう少し思いきり遊んで、おでかけポイントもためてみよう！';
-      return;
-    }
-
-    // あまり遊ばないうちに、元気なまま帰ってきたとき
-    endingTitle.value = 'あっさり公園さんぽ';
-    endingMessage.value = '二人ともまだまだ元気なまま、おうちへ帰ってきました。次はもう少し公園の中を探検してみよう！';
-    return;
-  }
-
-  // 0〜37点
-  endingRank.value = 'Dランク';
-
-  // 疲れて帰ってきたとき
-  if (isWornOut()) {
-    // たくさん回ったうえで疲れたとき
-    if (visitedPlaces.value.length >= 3) {
-      endingTitle.value = '今日は大変だった……';
-      endingMessage.value = '今日はちょっと大変な公園探検でした。次は無理せず、休みながら遊んでみよう！';
-      return;
-    }
-
-    // 回った場所は少ないけれど、同じ場所でたっぷり遊んだとき
-    // 遊んだ回数は多いので「あまり遊べないうちに」とは書かない
-    if (playCount.value >= playedALotLine) {
-      endingTitle.value = '遊びこんでへとへと…';
-      endingMessage.value = 'お気に入りの場所で遊びこんで、二人ともへとへとになりました。次はいろいろな場所も探検してみよう！';
-      return;
-    }
-
-    // あまり遊べていないのに疲れたとき
-    // 「無理せず休みながら」と書くと、まだ遊んでいない人には合わないので変える
-    endingTitle.value = '今日は大変だった……';
-    endingMessage.value = 'あまり遊べないうちに、二人ともへとへとになってしまいました。次は元気なうちに探検してみよう！';
-    return;
-  }
-
-  // たっぷり遊んだのに、二人とも元気なまま帰ってきたとき
-  // 遊んだ回数は多いので「着いたばかり」とは書かない
-  if (playCount.value >= playedALotLine) {
-    endingTitle.value = 'のんびり公園さんぽ';
-    endingMessage.value = 'のんびり遊んで、二人ともまだまだ元気なまま帰ってきました。次はもっと思いきり遊んで、おでかけポイントをためてみよう！';
-    return;
-  }
-
-  // 公園に来たばかりで帰ってきたとき
-  endingTitle.value = 'ちょっとだけ公園';
-  endingMessage.value = '公園に着いたばかりなのに、もう帰り道。こうちゃんはまだ遊びたそうです。次はもっと探検してみよう！';
+  endingRank.value = rank;
+  endingTitle.value = title;
+  endingMessage.value = message;
 }
 
 /* S+ランクになったら、うた入りエンディングBGMをサウンドトラックに解放する
