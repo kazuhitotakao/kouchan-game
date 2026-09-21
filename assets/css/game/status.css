@@ -1,0 +1,960 @@
+/* ============================================================
+   ゲーム画面の上部ステータスバーの見た目
+
+   assets/css/game.css から、上部ステータスバーに関わるところだけを
+   そのまま移してきたファイル（中身は1つも変えていない）
+
+   ・時計、こうちゃんと親のゲージ、目もりの説明
+   ・おでかけポイント／おやつ残りの pill、見つけたもの
+   ・危険の警告、「そろそろお昼」のお知らせ
+   ・上のそれぞれに対する、画面の幅・高さごとの上書き（@media）
+
+   ※ サウンドのコントロール（.sound-control 〜）は、まだ game.css のまま
+   ※ 読みこんでいるのは game.css の先頭の @import 1か所だけなので、
+     これまでと同じ順番・同じ組み合わせで効く
+   ============================================================ */
+
+/* ============================================================
+   【上部】ステータスエリア
+   横1列に「時計」「ゲージ4本」「ポイント類」を並べる
+   ============================================================ */
+.status-area {
+  display: grid;
+  flex: none;
+  grid-template-areas:
+    'clock gauges pills'
+    'legend legend legend'
+    'found found found'
+    'warning warning warning'
+    'notice notice notice';
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* 文字を大きくしたぶん、列のすき間と左右の余白を少しつめて場所を作る */
+  gap: 10px 20px;
+  align-items: center;
+  padding: 12px 24px 14px;
+  border-bottom: 3px solid var(--gold);
+  background: linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgb(16 29 44 / 45%);
+}
+
+/* タイトルと時計 */
+.status-area__head {
+  display: flex;
+  grid-area: clock;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding-right: 18px;
+  border-right: 1px solid var(--navy-line);
+}
+
+.status-area__title {
+  color: #eef9ff;
+  /* clamp(いちばん小さいとき, 画面幅に合わせた大きさ, いちばん大きいとき)
+     画面が広いほど大きく、せまい画面でも小さくなりすぎないようにする書き方
+     1.15vw ＝ 画面の横幅の1.15%（1280pxの画面なら約14.7px） */
+  font-size: clamp(14px, 1.15vw, 17px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* ゲームタイトルと音ボタンを、同じ1行に並べるための入れもの
+   新しい行を増やさないので、上部ステータスの高さは今までと変わらない */
+.status-area__titleRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-clock {
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.status-clock__now {
+  font-size: clamp(30px, 2.3vw, 36px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.status-clock__limit {
+  color: #daeffb;
+  font-size: clamp(13px, 1vw, 15px);
+}
+
+/* 時間の増減（+20分）を置く場所
+   中身が出ても消えても幅が変わらないように、いつも同じ幅を空けておく
+   ここが伸び縮みすると、右にあるゲージやポイントの位置までずれてしまう
+   （時間は増えるだけなので「+25分」が入る幅にしてある）
+*/
+.status-clock__change {
+  display: inline-block;
+  width: 52px;
+  text-align: left;
+}
+
+.status-clock .status-change {
+  margin-left: 8px;
+}
+
+/* 「こうちゃん」と「親」の2つのまとまりを、左右に並べる場所
+   PCでは 1fr : 1fr なので、左右がぴったり同じ幅になり、
+   ラベル・数字・増減・ゲージの位置が左右対称にそろう */
+.status-groups {
+  display: grid;
+  grid-area: gauges;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 18px;
+
+  /* 入れものの幅を、いつもグリッドの1マスぴったりにする
+     こうしておくと、中の文字数（「余裕 100 -18」など）で
+     こうちゃん側・親側の幅が変わってしまうことがない */
+  width: 100%;
+  min-width: 0;
+}
+
+/* ひとつのまとまり（こうちゃん／親）
+   カードを重ねると高さが増えてしまうので、
+   うすい背景と細い枠だけで「ここまでが同じ人」と分かるようにしている */
+.status-group {
+  /* box-sizing: border-box … 左右の余白とふちも width: 100% の中にふくめる
+     これが無いと、枠のぶんだけ列からはみ出して、左右の幅がそろわない
+     min-width: 0 … 中身（長いラベルや増減の数字）に押し広げられないようにする */
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding: 4px 10px 6px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 8px;
+}
+
+/* 人の区別は、うすいベージュ と うすい青 の弱い差だけでつける
+   ※ 赤や緑は「増えた・減った」を表す色なので、人の見わけには使わない */
+.status-group--child {
+  background: rgb(255 240 214 / 14%);
+}
+
+.status-group--parent {
+  background: rgb(206 232 247 / 16%);
+}
+
+/* 「こうちゃん」「親」の見出し
+
+   前は 10.5〜12px で、中の項目ラベル（13〜15px）より小さかった
+   見出しのほうが小さいと「まとまりの名前」だと伝わらないので、
+   ・文字を大きく（13〜15px）
+   ・色を白にしてはっきりさせる
+   ・うすい札（チップ）の形にして、数字の行と見た目を分ける
+   の3つで目立たせている
+
+   ※ 札にしても、増える高さは数pxだけ
+     display: inline-block なので、文字の長さぶんだけ横に広がる
+     （「親」の1文字でも、左右の余白で読みやすい大きさになる）
+*/
+.status-group__name {
+  display: inline-block;
+  margin: 0 0 3px;
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
+  font-size: clamp(13px, 1.05vw, 15px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.5;
+}
+
+/* まとまりの中の2項目（横に並べる）
+   ここを縦積みにすると上部ステータスの高さが倍になってしまうので、
+   PCでは必ず横に2つ並べる */
+.status-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-item {
+  display: grid;
+  /* 中身の文字数で、片方の項目だけが横に広がらないようにする
+     （これが無いと grid の列は「中身より小さくならない」ため、
+       「余裕 100 -18」のような長い行のほうが広くなってしまう） */
+  min-width: 0;
+  /* 上から3段に分けて置く
+     1段目 … ラベル（横はばいっぱい）
+     2段目 … 現在値 ／ 直前の増減
+     3段目 … ゲージ（横はばいっぱい）
+     ラベルを独立した行にすることで、文字を大きくしても
+     「こうちゃんの体力」が「こうちゃんの…」と切れなくなる */
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 8px;
+}
+
+.status-item__label {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: #eaf7ff;
+  font-size: clamp(13px, 1.05vw, 15px);
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-item__value {
+  /* 100 → 98 → 9 とけた数が変わっても右の増減表示が動かないように、
+     数字3けたぶん（3ch）の幅をいつも確保しておく */
+  min-width: 3ch;
+  font-size: clamp(20px, 1.7vw, 24px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+/* 上部ステータスの増減表示
+   結果を表示している間だけ、現在値の右側に小さく出す
+*/
+.status-change {
+  /* 出たときに少し大きく見せてから、通常サイズへ戻す
+     ※ span のままだと transform が効かないので inline-block にする */
+  display: inline-block;
+  animation: status-pop 0.35s ease-out;
+  font-size: clamp(13px, 1vw, 15px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* 暗い背景なので、明るめの色で見分ける */
+.status-change.change--good {
+  color: var(--good-light);
+}
+
+.status-change.change--bad {
+  color: var(--bad-light);
+}
+
+.status-change.change--neutral {
+  color: #daeffb;
+}
+
+/* 危険な状態のステータス（GAME OVERが近い）
+   背景と枠を付けて、ふだんより目立たせる
+
+   ※ padding ではなく box-shadow で背景を外側に広げているので、
+     危険になってもゲージの位置や高さはずれない
+*/
+.status-item--danger {
+  border-radius: 6px;
+  background: rgb(242 112 95 / 20%);
+  box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
+  /* 2.4秒かけてゆっくり明るくなって戻る（チカチカさせない） */
+  animation: danger-pulse 2.4s ease-in-out infinite;
+}
+
+.status-item--danger .status-item__label {
+  color: #ffd6cd;
+}
+
+.status-item--danger .status-item__value {
+  color: #ffd2c9;
+}
+
+/* 危険なゲージは枠を付けて強調する（outline は場所を取らない） */
+.status-item--danger .gauge {
+  outline: 2px solid #ff9d8c;
+  outline-offset: 1px;
+}
+
+/* ラベルの前に出す警告アイコン */
+.status-item__alert {
+  margin-right: 3px;
+}
+
+.gauge {
+  /* 目もり（.gauge__mark）を上に重ねるので、位置の基準にする */
+  position: relative;
+  display: block;
+  grid-column: 1 / -1;
+  /* 4本のゲージの長さを、どの項目でも同じにそろえる
+     （項目の幅いっぱいに広げ、中身に押し広げられないようにする） */
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgb(16 52 70 / 26%);
+}
+
+/* ゲージのしきい値を示す縦線（目もり）
+   left にしきい値の数字（％）を入れて、その位置に立てる
+   ゲージの伸び縮みとは関係なく、いつも同じ場所にある
+*/
+.gauge__mark {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  /* 線の中心をしきい値の位置に合わせる（左に半分ずらす） */
+  margin-left: -1.5px;
+  border-radius: 1px;
+}
+
+/* ぐずりだすライン（水色・細め）
+   まわりを暗く縁取りして、明るいゲージの上でもはっきり見えるようにする
+*/
+.gauge__mark--fuss {
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
+}
+
+/* あぶないライン（黒・太め）
+   暗い下地に重なっても消えないように、まわりを白く縁取る
+*/
+.gauge__mark--danger {
+  width: 4px;
+  margin-left: -2px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
+}
+
+.gauge__fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  /* ステータスが変わったとき、パッと変わらず「スーッ」と伸び縮みする */
+  transition: width 0.5s ease-out;
+}
+
+.gauge__fill--child-energy {
+  background: var(--child-energy);
+}
+
+.gauge__fill--child-mood {
+  background: var(--child-mood);
+}
+
+.gauge__fill--parent-energy {
+  background: var(--parent-energy);
+}
+
+.gauge__fill--parent-calm {
+  background: var(--parent-calm);
+}
+
+/* ゲージの目もりの説明（ゲージの下に1行だけ） */
+.gauge-legend {
+  display: flex;
+  grid-area: legend;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  margin: 0;
+  color: #daeffb;
+  font-size: clamp(11.5px, 0.9vw, 13px);
+  line-height: 1.4;
+}
+
+.gauge-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  /* 「ぐずりだす／ライン」のように語の途中で折り返らないようにする
+     せまいときは、2つの説明のあいだで折り返る */
+  white-space: nowrap;
+}
+
+/* 説明の前に置く、ゲージの目もりと同じ見た目の小さな線 */
+.gauge-legend__mark {
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+}
+
+.gauge-legend__mark--fuss {
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
+}
+
+.gauge-legend__mark--danger {
+  width: 4px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
+}
+
+/* おでかけポイント・おやつ残り（右端に縦積み） */
+.status-pills {
+  display: flex;
+  grid-area: pills;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 18px;
+  border-left: 1px solid var(--navy-line);
+}
+
+.pill {
+  padding: 4px 14px;
+  border: 1px solid var(--navy-line);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 8%);
+  font-size: clamp(13px, 1.05vw, 15px);
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* 数字の右がわの置き場所（おでかけポイントの増減 と おやつの「個」）
+
+   ・増減（+5など）は出たり消えたりするので、いつも同じ幅を空けておく
+   ・「個」も同じ幅にそろえる
+     ピルは右寄せなので、右がわの幅が同じなら
+     2つの数字（ポイントとおやつ）が上下でぴったり同じ位置に並ぶ
+*/
+.pill__change,
+.pill__unit {
+  display: inline-block;
+  width: 34px;
+  text-align: left;
+}
+
+/* 「個」は数字にくっつきすぎるので、少しあける
+   増減表示（+5 など）の margin-left と同じ 6px にそろえている
+
+   ※ padding ではなく text-indent を使う
+     text-indent は「文字を右へずらす」だけで枠の幅（34px）は変わらないので、
+     上下2つの数字の位置がそろったままになる
+*/
+.pill__unit {
+  text-indent: 6px;
+}
+
+.pill .status-change {
+  margin-left: 6px;
+}
+
+/* 見つけたもの（横1列のチップ） */
+.status-found {
+  display: flex;
+  grid-area: found;
+  align-items: center;
+  gap: 12px;
+  max-height: 64px;
+  overflow-y: auto;
+  padding: 7px 14px;
+  border-radius: 8px;
+  background: rgb(16 52 70 / 20%);
+}
+
+.status-found__label {
+  flex: none;
+  color: #eaf7ff;
+  font-size: clamp(13px, 1.05vw, 15px);
+  white-space: nowrap;
+}
+
+.status-found__empty {
+  color: #bfe2f0;
+  font-size: clamp(13px, 1vw, 15px);
+}
+
+.status-found__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-found__item {
+  padding: 3px 12px;
+  border-radius: 999px;
+  background: #fff3cf;
+  color: #7a5410;
+  font-size: clamp(13px, 1.05vw, 15px);
+  line-height: 1.6;
+}
+
+/* 危険な状態の警告（親の体力・親の余裕・こうちゃんの体力） */
+.status-warnings {
+  display: flex;
+  grid-area: warning;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-warnings__item {
+  padding: 2px 12px;
+  border: 1px solid #ff9d8c;
+  border-radius: 999px;
+  background: rgb(242 112 95 / 24%);
+  color: #ffd6cd;
+  font-size: clamp(13.5px, 1.1vw, 16px);
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* そろそろお昼のお知らせ */
+.status-notice {
+  grid-area: notice;
+  margin: 0;
+  padding: 5px 12px;
+  border-left: 4px solid var(--gold);
+  border-radius: 4px;
+  background: rgb(255 192 67 / 18%);
+  color: #ffe6b0;
+  font-size: clamp(13.5px, 1.1vw, 16px);
+  line-height: 1.5;
+}
+
+/* --- 直前の増減値（-18 や +6）が出るときのポップ --- */
+@keyframes status-pop {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 危険の警告メッセージも、出るときだけふわっと出す */
+.status-warnings__item {
+  animation: found-in 0.35s ease-out;
+}
+@media (max-height: 800px) {
+  /* 上下の余白は、目もりの説明（.gauge-legend）を残す場所をつくるために
+     2pxずつつめてある */
+  .status-area {
+    gap: 6px 24px;
+    padding: 6px 28px 8px;
+  }
+
+  .status-clock__now {
+    font-size: clamp(24px, 1.9vw, 30px);
+  }
+
+  /* 文字は大きいままにしたいので、いちばん大きいときの値だけ少し下げる */
+  .status-item__value {
+    font-size: clamp(18px, 1.5vw, 21px);
+  }
+
+  .status-found {
+    max-height: 52px;
+  }
+
+  /* 高さが足りなくても、目もりの説明は消さない
+
+     前は display: none で丸ごと隠していたが、
+     それだと「あぶないライン」「ぐずりだすライン」がどの線のことなのか
+     まったく分からなくなってしまう
+     （マウスを乗せれば説明は出るが、タッチ操作や小さな窓では出せない）
+
+     そこで「隠す」のではなく「小さくして残す」ようにしている
+     ・文字を少し小さくする（それでも11pxは下まわらない）
+     ・行の高さ（line-height）をつめる
+     ・2つの説明のあいだのすき間を少しせまくする
+     ・目もりの見本の線も少し短くする
+     これで1行ぶんの高さは約16px → 約13px になる
+
+     増えるぶんの高さは、この下で余白（ステータス欄・ゲージのまとまり・
+     中央エリア）を1〜3pxずつつめて取り返しているので、
+     1280×720 でも今までとほぼ同じ高さに収まる */
+  .gauge-legend {
+    gap: 2px 12px;
+    font-size: clamp(11px, 0.85vw, 12.5px);
+    line-height: 1.25;
+  }
+
+  .gauge-legend__mark {
+    height: 10px;
+  }
+
+  /* 「こうちゃん」「親」の札も少しだけつめる
+     （小さくしすぎると見出しに見えなくなるので、ほんの少しだけ） */
+  .status-group__name {
+    margin-bottom: 2px;
+    padding: 0 10px;
+    font-size: clamp(12.5px, 1vw, 14px);
+  }
+
+  .status-group {
+    padding: 2px 9px 4px;
+  }
+}
+
+@media (max-height: 700px) {
+
+  /* ===== 余白をつめる（文字は小さくしない） ===== */
+
+  .status-area {
+    gap: 5px 20px;
+    padding: 5px 24px 6px;
+  }
+
+  /* 「見つけたもの」は、増えるほど高くなってしまう場所なので、
+     背の低い画面では見せる高さを少しおさえる
+     （あふれたぶんは、この枠の中でスクロールできる） */
+  .status-found {
+    max-height: 44px;
+    padding: 5px 12px;
+  }
+
+  .status-groups {
+    gap: 4px 18px;
+  }
+
+  .status-list {
+    gap: 4px 14px;
+  }
+}
+
+@media (max-height: 620px) {
+
+  .status-area {
+    gap: 4px 20px;
+    padding: 4px 22px 5px;
+  }
+
+  .status-found {
+    max-height: 38px;
+  }
+}
+
+@media (max-width: 900px) {
+
+  .status-area {
+    gap: 8px 18px;
+    padding: 10px 18px 12px;
+  }
+}
+
+@media (max-width: 700px) {
+
+  /* ステータスとコマンドはスクロールしても画面に残す */
+  .status-area {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    grid-template-areas:
+      'clock clock'
+      'gauges gauges'
+      'legend legend'
+      'pills pills'
+      'found found'
+      'warning warning'
+      'notice notice';
+    grid-template-columns: 1fr 1fr;
+    gap: 3px 10px;
+    padding: 6px 12px 8px;
+  }
+
+  /* スマホでは、タイトル＋サウンドと時計を横1列に収める幅が足りず、
+     時計（09:00 ／ 12:00 ＋増減）が右へはみ出してしまう
+     そこで2段に分ける
+       1段目 … タイトル＋サウンドコントロール（.status-area__titleRow）
+       2段目 … 時計（右寄せ） */
+  /* ===== スマホ用コンパクトHUD =====
+     PC版を縦に積むのではなく、高さを最小にしたスマホ専用の並びにする
+       1段目：時計（左）＋サウンド（右）
+       2〜3段目：こうちゃん／親（名前は左、体力・機嫌／体力・余裕を横2列）
+       凡例：あぶない／ぐずり を1行
+       4段目：おでかけポイント／おやつ残り（横1列）
+       5段目：見つけたもの（1行） */
+
+  /* 1段目：時計を左・サウンドを右の横1列に戻す
+     ゲーム中はタイトル（.status-area__title）を隠して、そのぶんを時計とサウンドに使う */
+  .status-area__head {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    padding-right: 0;
+    border-right: none;
+  }
+
+  /* ゲーム中の上部バーだけタイトルを隠す（タイトル画面のタイトルは消さない） */
+  .status-area__title {
+    display: none;
+  }
+
+  /* タイトルを隠したので、この行の中身はサウンドだけ。右側に置く */
+  .status-area__titleRow {
+    width: auto;
+    gap: 8px;
+  }
+
+  /* 時計を左端へ（サウンドは右端） */
+  .status-clock {
+    order: -1;
+    text-align: left;
+  }
+
+  .status-clock__now {
+    font-size: 22px;
+    line-height: 1.05;
+  }
+
+  .status-clock__limit {
+    font-size: 12px;
+  }
+
+  /* 増減（+20分）の予約幅は最小限。出るときだけ広がる（左寄せなので右のサウンドは動かない） */
+  .status-clock__change {
+    width: auto;
+  }
+
+  /* ===== サウンドの横幅は、置き場所ごとに分けて決める =====
+
+     共通クラス（.sound-control など）そのものには、幅の指定を書かない
+     同じ部品が ゲーム画面の上部バー と タイトル系の画面（A/B・おやつ選択・あそびかた）の
+     両方で使われていて、ほしい幅が正反対だから
+
+     ・ゲーム中（.status-area の中）… 時計との あいだの空きを使って、スライダーをのばす
+     ・A/B画面（.title-card__tools の中）… のばさず、中身ぶんのコンパクトな固定幅のまま
+
+     共通クラスに width: 100% を書くと、A/B画面のサウンド枠まで
+     カードいっぱいに広がって、上のツールバーが折り返してしまう
+     （見た目・ボタン・アイコン・スライダーの形は、今までどおり共通のまま） */
+
+  /* --- ゲーム中の上部ステータス：空きスペースまでスライダーをのばす ---
+
+     この行は「時計（左）… サウンド（右）」の両はし寄せなので、
+     スライダーを短く決め打ちにすると、まんなかに余白がぽっかり残ってしまう
+
+     ・.status-area__titleRow に flex: 1 … あまっている幅を、この行がぜんぶ受け取る
+     ・.sound-control に width: 100%     … 受け取った幅いっぱいまで枠をひろげる
+     ・スライダーに flex: 1               … ボタンの右の のこり幅を、ぜんぶスライダーが使う
+       （--sound-slider-width は「これ以下には縮まない」下限としてだけ残す）
+
+     ※ min-width: 0 … flex の箱は、ふつう中身より小さくならない
+       これが無いと、時計に「+25分」が出たときに、行が横にはみ出してしまう
+       （320px でも横スクロールしないのは、この3か所のおかげ） */
+  .status-area__titleRow {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* 2〜3段目：こうちゃん／親。名前を大きな札で1段使わず、左側に置いて高さを節約する
+     ［名前］ 体力 100  機嫌 55
+             ゲージ     ゲージ */
+  .status-group {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+    padding: 1px 8px 2px;
+  }
+
+  /* 名札（こうちゃん／親）の幅を、2つともそろえる
+
+     ■ なぜ必要か
+       名札は左、その右に 体力／機嫌（余裕）がならぶ作りなので、
+       名札の幅がちがうと、その右がわの中身の始まる位置もずれてしまう
+         ［こうちゃん］体力 100  機嫌 55
+         ［親］    体力 100  余裕 55   ← 左へずれて、ゲージの位置もそろわない
+
+     ■ どうそろえたか
+       長いほうの「こうちゃん」に合わせて、両方を同じ幅にする
+       ・min-width  … 2つとも同じ幅になるので、名札の右はしがそろう
+                      ＝ その右の 体力／機嫌（余裕）も、同じ位置から始まる
+       ・text-align: center … 「親」を、広げた名札のまんなかに置く
+                              （右や左に寄せると、1文字だけ片側にはりついて見えるため）
+
+     ■ 5.6em の決めかた
+       日本語の全角文字は1文字＝1em、そこに letter-spacing 0.04em が付くので
+       「こうちゃん」5文字 ＝ 5 × 1.04em ＝ 5.2em
+       フォントによる多少のちがいで はみ出さないよう、少し余裕をみて 5.6em
+       （min-width は中身の幅なので、左右の padding 8px は別に足される）
+
+     ■ nowrap
+       幅を決めたぶん、万一足りないときに「こうちゃ／ん」と
+       2行に折り返して高さが変わらないようにしておく */
+  .status-group__name {
+    min-width: 5.6em;
+    margin: 0;
+    padding: 1px 8px;
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  /* 体力／機嫌（余裕）を横2列のまま、間をつめる
+     minmax(0, 1fr) にして、文字数で片方だけが広がらないようにする（PCと同じ考えかた） */
+  .status-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px 10px;
+  }
+
+  /* 1項目を「ラベル 数字 増減」＋「ゲージ」の2段にする（PCは3段） */
+  .status-item {
+    grid-template-columns: auto auto minmax(0, 1fr);
+    align-items: baseline;
+    column-gap: 5px;
+    row-gap: 1px;
+  }
+
+  .status-item__label {
+    grid-column: auto;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  .status-item__value {
+    min-width: 2.5ch;
+    font-size: 16px;
+    line-height: 1.1;
+  }
+
+  .status-change {
+    font-size: 12px;
+  }
+
+  /* ゲージは少し細く */
+  .gauge {
+    height: 6px;
+  }
+
+  /* 凡例：あぶない／ぐずり を折り返さず1行（高さ約18px）。線の意味は残す */
+  .gauge-legend {
+    flex-wrap: nowrap;
+    gap: 4px 12px;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .gauge-legend__mark {
+    height: 11px;
+  }
+
+  /* 4段目：おでかけポイント／おやつ残り を横1列に戻す（320pxでも収まるよう小さめ） */
+  .status-pills {
+    flex-direction: row;
+    gap: 5px;
+    padding-left: 0;
+    border-left: none;
+  }
+
+  .pill {
+    flex: 1;
+    padding: 2px 8px;
+    font-size: 12px;
+    line-height: 1.35;
+    text-align: left;
+  }
+
+  .pill__change,
+  .pill__unit {
+    width: 22px;
+  }
+
+  /* 5段目：見つけたもの は1行のコンパクト表示
+     多いときは、この箱の中だけ横スクロール（ページ全体は横スクロールさせない） */
+  .status-found {
+    gap: 8px;
+    max-height: none;
+    padding: 2px 10px;
+    line-height: 1.3;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .status-found__label {
+    font-size: 12px;
+  }
+
+  .status-found__empty {
+    font-size: 12.5px;
+  }
+
+  .status-found__list {
+    flex-wrap: nowrap;
+  }
+
+  .status-found__item {
+    padding: 2px 10px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  /* 上部ステータスも、こうちゃん と 親 を上下に積む（間もつめる） */
+  .status-groups {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  /* ===== 秘密の小道（スマホ幅） =====
+
+     ・上部ステータスを、小道の画面のあいだだけ固定しない（ページといっしょに流れる）
+       固定したままだと、画面の半分近くを上部ステータスが使ってしまい、
+       フィールドと下の案内が同時に見えなくなるため
+     ・遊びはじめたら、カードが画面のいちばん上に来るようにスクロールする（scrollSecretPathIntoView()）
+     ・フィールドは、カードと案内がいっしょに画面に収まる高さにする
+       （iPhone SE ほどの背の低い画面でも、案内まで見える） */
+  .game-screen--secret-path .status-area {
+    position: static;
+  }
+}
+
+@media (max-width: 700px) and (max-height: 700px) {
+  /* ===== いちばん効く1行 =====
+     上部ステータスを貼りつけない（ページといっしょに上へ流れる） */
+  .status-area {
+    position: static;
+    gap: 5px 12px;
+    padding: 7px 12px 8px;
+  }
+
+  /* 「見つけたもの」は、アイテムが増えるほど高くなる場所
+     小さい画面では見せる高さをおさえる（あふれたぶんは中でスクロールできる） */
+  .status-found {
+    max-height: 40px;
+    padding: 5px 12px;
+  }
+
+  .status-groups {
+    gap: 4px;
+  }
+}
+
+@media (max-width: 700px) and (max-height: 620px) {
+  .status-area {
+    gap: 4px 10px;
+    padding: 6px 10px 7px;
+  }
+
+  .status-found {
+    max-height: 34px;
+  }
+}
+
+@media (max-width: 700px) {
+
+  /* リザルトとGAME OVERのあいだは、上部ステータスを貼りつけない
+     （下部の2つのボタンは、貼りついたままで押せるようにしておく）
+
+     :has() ＝「中に○○を持っている要素」を選ぶ書きかた
+     ここでは「リザルト（またはGAME OVER）の場面を出しているゲーム画面」の
+     上部ステータスだけを、貼りつけない指定にしている
+
+     ※ :has() が使えない古いブラウザでは、この指定だけが無視される
+       （貼りついたままになるが、ページはスクロールできるので読めなくはならない） */
+  .game-screen:has(.scene--result) .status-area,
+  .game-screen:has(.scene--gameover) .status-area {
+    position: static;
+  }
+}
