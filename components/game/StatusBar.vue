@@ -231,13 +231,18 @@ defineProps<{
   </header>
 </template>
 
-<!-- 見た目は、ゲーム本編と同じ assets/css/game.css を使う
+<!-- 見た目は、このコンポーネント専用の assets/css/game/status.css だけを読みこむ
 
      index.vue の <style scoped> は index.vue の中の要素にしか効かず、
      このコンポーネントの中の要素（ゲージ・警告など）には届かない
-     そこで、同じCSSをこちらでも scoped で読みこんで、今までと同じ見た目にしている
+     そこで、必要なCSSをこちらでも scoped で読みこんで、今までと同じ見た目にしている
 
-     ※ ステータスまわりのCSSは、スマホ用・画面の高さ用など
-       いくつもの @media の中に分かれて書かれているため、今回は切り分けていない
-       （CSSの整理は、あとの段階でまとめて行う） -->
-<style scoped src="~/assets/css/game.css"></style>
+     ■ game.css まるごとではなく status.css だけにした理由
+       game.css を読むと、結果カードやコマンド欄など、ここでは使わないCSSまで
+       このコンポーネントぶんとして、もう一度ビルド結果に出てしまう
+       ここで使うCSSは status.css にぜんぶ入っているので、それだけを読めばよい
+
+     ※ 二重読みこみにならないよう、game.css 側の
+       @import './game/status.css'; は外してある
+       （status.css を読んでいるのは、この1か所だけ） -->
+<style scoped src="~/assets/css/game/status.css"></style>

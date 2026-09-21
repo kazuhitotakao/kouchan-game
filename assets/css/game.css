@@ -5,16 +5,19 @@
    ここに書いてある順番が、そのまま CSS の効く順番になる
    （同じ強さの指定どうしでは、あとに読みこんだほうが勝つ）
 
-   1. status    … 上部ステータスバー
-   2. result    … 結果カード・リザルト・GAME OVER
-   3. command   … 選択コマンド欄・ひとやすみ・おやつバッグ
-   4. sound     … サウンドON/OFF ＋ 音量スライダー
-   5. base      … ゲーム画面の土台（わく・中央エリア・タイトル画面など）
-   6. responsive … 画面の大きさに合わせた上書き（全体レイアウト）
+   1. result    … 結果カード・リザルト・GAME OVER
+   2. command   … 選択コマンド欄・ひとやすみ・おやつバッグ
+   3. sound     … サウンドON/OFF ＋ 音量スライダー
+   4. base      … ゲーム画面の土台（わく・中央エリア・タイトル画面など）
+   5. responsive … 画面の大きさに合わせた上書き（全体レイアウト）
       ※ base のあとに置くこと。先に読むと上書きが効かなくなる
+
+   ■ status（上部ステータスバー）は、ここからは読みこまない
+     components/game/StatusBar.vue が、自分で
+     assets/css/game/status.css を <style scoped src> で読みこむ
+     ここでも読むと、同じCSSがビルド結果に二重に出てしまうため
    ============================================================ */
 
-@import './game/status.css';
 @import './game/result.css';
 @import './game/command.css';
 @import './game/sound.css';
