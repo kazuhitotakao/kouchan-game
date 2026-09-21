@@ -2,6 +2,9 @@
    （元の game.css に書いてあったときと同じ順番で読みこまれる） */
 @import './game/status.css';
 
+/* 結果表示まわりの見た目も、別ファイルにまとめてある */
+@import './game/result.css';
+
 /* ============================================================
    ページ全体の下地
    ゲーム枠の外側は暗くして、ゲーム画面が浮いて見えるようにする
@@ -1641,20 +1644,6 @@
   max-width: var(--stage-width);
 }
 
-/* 結果カードだけは縮んでよい
-
-   flex: 0 1 auto ＝ 「大きくはならないが、小さくはなってよい」
-   場所のカードとコマンドボックスが縮まないので、
-   高さが足りないときに縮むのは結果カードだけになる
-   → コマンドボックスがいつも画面の中に残る
-
-   ※ セレクタを .stage > .result-card にしているのは、
-     すぐ上の .stage > * より強くして、確実に上書きするため
-*/
-.stage > .result-card {
-  flex: 0 1 auto;
-}
-
 /* 今いる場所のカード */
 .place-card {
   padding: 22px 28px;
@@ -1785,568 +1774,10 @@
   animation: found-in 0.4s ease-out 0.15s backwards;
 }
 
-/* 結果メッセージのボックス */
-/* 行動の結果カード
-
-   前は .stage（中央エリア）ぜんぶがスクロールしていたので、
-   結果カードが縦に長くなると、いちばん下にあるコマンドボックスが
-   画面の外へ押し出されてしまい、スクロールしないと次の行動を選べなかった
-
-   そこで、たてに積む flex にして「中身が多いときだけ縮む」形にしている
-   ・display: flex + column … 中の要素をたてに並べる
-   ・min-height: 0          … 「中身より小さくなってよい」という意味
-                              これが無いと、縮まずに画面を押し広げてしまう
-
-   ※ このカード自体には overflow を付けないこと
-     「結果」のバッジ（.result-card__title）は top: -14px で
-     カードの上へわざとはみ出しているので、
-     ここで overflow を付けるとバッジが途中で切れてしまう
-
-     そこで、バッジ以外の中身を .result-card__body で包み、
-     そちらをスクロールさせている（下を参照）
-*/
-.result-card {
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  min-height: 0;
-  animation: result-in 0.3s ease-out;
-  padding: 26px 28px 22px;
-  border: 2px dashed #f2dcae;
-  border-radius: 14px;
-  background: #fffaeb;
-}
-
-/* 結果カードの中身（「結果」バッジ以外ぜんぶ）
-
-   高さが足りないときは、ここがまとめてスクロールする
-   バッジは この外側（.result-card の直下）にあるので、
-   スクロールしても切れずに残る
-
-   ・min-height     … 「ここまでは必ず見せる」という下限（下の説明を参照）
-   ・overflow-y: auto … はみ出したぶんだけスクロールバーが出る
-                        （収まっているときは何も出ない）
-
-   ■ min-height を 0 ではなく --result-body-min にしている理由
-
-     前は min-height: 0 だったので、「いくらでも小さくなってよい」状態だった
-     そのため背の低い画面では、上部ステータスと下部コマンドを画面に残そうとして
-     結果カードだけがどんどん縮み、本文が1〜2行しか見えないことがあった
-     （スクロールはできるが、1行ずつしか読めないので、とても読みにくい）
-
-     そこで「ここまでは必ず見せる」という下限を決めてある
-     本文は 16〜17px・行間1.8 なので、1行 約30px
-     初期値 8.5em ＝ 約136px ＝ 本文4行ぶん より少し多いくらい
-
-     この値は変数にしてあるので、画面の高さに応じて下の media query から
-     段階的に小さくできる（ただし、下げすぎないようにしてある）
-
-   ※ ここでも min() で頭打ちにしてある（.stage の min-height と同じ考えかた）
-
-     結果カードの上下には、場所のカードとコマンドの枠もならぶので、
-     .stage よりさらに多め（340px）を引いた残りを上限にしている
-     とても背の低い画面で、下限のせいで結果カードがふくらみ、
-     下部コマンドを押し出してしまわないようにするため
-*/
-.result-card__body {
-  min-height: max(0px, min(var(--result-body-min), calc(100dvh - 340px)));
-  overflow-y: auto;
-}
-
-.result-card__title {
-  position: absolute;
-  top: -14px;
-  left: 20px;
-  margin: 0;
-  padding: 2px 16px;
-  border-radius: 999px;
-  background: var(--gold);
-  color: #4a3208;
-  font-size: 13px;
-  letter-spacing: 0.1em;
-}
-
-.result-card__text {
-  margin: 0;
-  font-size: 17px;
-  line-height: 1.8;
-  white-space: pre-line;
-}
-
-/* 今回の変化（結果カードの中）
-   PCの横幅を活かして3列に並べ、たての高さをおさえる
-*/
-.change-box {
-  margin-top: 16px;
-  padding-top: 14px;
-  border-top: 1px dashed #f2dcae;
-}
-
-/* 「今回の変化（合計）」の見出し
-   下の こうちゃん／親／おでかけ より小さいとおかしいので、
-   こちらも少し大きくしている */
-.change-box__title {
-  margin: 0 0 8px;
-  color: #8a6a1e;
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-}
-
-/* 「今回の変化」を こうちゃん／親／おでかけ の3つに分けて横に並べる場所 */
-.change-groups {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-/* ひとつのまとまり */
-.change-group {
-  padding: 5px 8px 7px;
-  border: 1px solid #f0e2c8;
-  border-radius: 10px;
-}
-
-/* 人の区別は、上部ステータスと同じ うすいベージュ と うすい青 でそろえる
-   ※ 赤や緑は増減の色なので、ここでは使わない */
-.change-group--child {
-  border-color: #efe2c8;
-  background: #fffaf0;
-}
-
-.change-group--parent {
-  border-color: #d9e9f3;
-  background: #f5fbff;
-}
-
-/* おでかけは人ではないので、中立的な紙の色にする */
-.change-group--outing {
-  border-color: #e8e0d2;
-  background: var(--paper);
-}
-
-/* 「こうちゃん」「親」「おでかけ」の見出し
-
-   前は 11.5px で、中の項目ラベル（12px）より小さかった
-   見出しのほうが小さいと「まとまりの名前」だと伝わらないので、
-   上部ステータスの見出しと同じ考えかたで目立たせている
-   ・文字を大きく（11.5px → 13.5px）
-   ・うすい札（チップ）の形にして、数字の行と見た目を分ける
-
-   ※ 札の色は3つとも同じ（紺色のうすい札）
-     こうちゃん／親／おでかけ の区別は、枠の背景色でついているので、
-     見出しの色まで変えると、かえってごちゃごちゃして見えるため
-*/
-.change-group__name {
-  display: inline-block;
-  margin: 0 0 5px;
-  padding: 1px 10px;
-  border-radius: 999px;
-  background: rgb(42 118 143 / 13%);
-  color: var(--navy);
-  font-size: 13.5px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  line-height: 1.5;
-}
-
-/* まとまりの中の項目は、たてに積む（1グループ2つまで） */
-.change-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 5px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-/* 1枚のカードの中を、上下2段に分ける
-
-     こうちゃんの体力      ← 1段目：ラベル（横はばいっぱい）
-     100 → 82      -18    ← 2段目：左に「前 → 後」、右に増減
-
-   flex から grid に変えているのは、
-   「ラベルだけ1行まるごと使う」という置きかたが grid のほうが書きやすいため
-*/
-.change-item {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  column-gap: 8px;
-  padding: 4px 12px 5px;
-  border: 1px solid #f7ead0;
-  border-radius: 8px;
-  background: #fff;
-  line-height: 1.6;
-}
-
-.change-item__label {
-  /* 1 / -1 ＝ 左はしから右はしまで（＝1行まるごと使う） */
-  grid-column: 1 / -1;
-  overflow: hidden;
-  color: var(--ink-soft);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* 「100 → 82」の部分をならべる入れもの
-   中の3つ（前・矢印・後）を、たての中心ではなく
-   文字の下ラインでそろえる（baseline）と、大きさがちがってもきれいに並ぶ
-
-   tabular-nums ＝ 数字の幅をぜんぶ同じにする書きかた
-   100 でも 82 でも幅が変わらないので、6枚のカードがガタガタしない
-*/
-.change-item__flow {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  overflow: hidden;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* 行動前の値（100）
-   「もう終わった値」なので、小さく・うすい色にして一歩下がってもらう
-*/
-.change-item__before {
-  color: var(--ink-soft);
-  font-size: 12.5px;
-}
-
-/* 矢印
-   数字ではないので、いちばんうすくする
-*/
-.change-item__arrow {
-  color: var(--ink-soft);
-  font-size: 11px;
-}
-
-/* 行動後の値（82）＝ いま何点なのか
-   このカードでいちばん知りたい数字なので、
-   大きく・濃い紺色（見出しと同じ色）にして目立たせる
-
-   ※ 良い・悪いの色は付けない
-     色で意味を伝えるのは、となりの増減（+6 / -18）の役目
-*/
-.change-item__after {
-  color: var(--navy);
-  font-size: 19px;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.change-item__value {
-  /* 右はしにそろえる（grid では flex: none ではなく justify-self を使う） */
-  justify-self: end;
-  /* 出たときに、上部ステータスの増減と同じ小さなポップをする
-     ※ 動きを減らす設定（prefers-reduced-motion）のときは、
-       ページ下のまとめて止める指定でここも自動的に止まる */
-  animation: status-pop 0.35s ease-out;
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* 良い変化・悪い変化・変化なし の色分け
-   ※ ステータスは4つとも「ふえると良い」でそろえてあるので、判定は changeClass() にまかせている
-*/
-.change-item__value.change--good {
-  color: var(--good);
-}
-
-.change-item__value.change--bad {
-  color: var(--bad);
-}
-
-.change-item__value.change--neutral {
-  color: var(--ink-soft);
-}
-
-/* ゴールのエンディング */
-.ending-card {
-  padding: 22px 28px;
-  border: 2px solid var(--gold);
-  border-radius: 14px;
-  background: linear-gradient(160deg, #fff7e2 0%, #ffeec4 100%);
-  text-align: center;
-}
-
-/* 「今回のランク」の小さなラベル
-   総合スコアの「総合スコア」ラベルと、わざと同じ見た目にしてそろえている */
-.ending-card__rank-label {
-  margin: 0 0 6px;
-  color: #a07a2a;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-/* ランクのバッジ
-   ・min-width で、Dランクでも S+ランクでも同じ大きさに見えるようにする
-   ・box-sizing: border-box にしているので、padding をふくめた幅が
-     max-width: 100% におさまり、せまい画面でもカードからはみ出さない
-   ・色は上部バーと同じ --navy と --gold を使って、画面から浮かないようにする */
-.ending-card__rank {
-  animation: rank-in 0.5s ease-out 0.12s backwards;
-  display: inline-block;
-  box-sizing: border-box;
-  min-width: 180px;
-  max-width: 100%;
-  margin: 0 0 14px;
-  padding: 10px 26px;
-  border: 3px solid var(--gold);
-  border-radius: 14px;
-  background: var(--navy);
-  box-shadow: 0 3px 0 rgb(34 105 129 / 35%);
-  color: var(--gold);
-  font-size: clamp(30px, 3vw, 36px);
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  line-height: 1.25;
-}
-
-.ending-card__title {
-  margin: 0 0 10px;
-  color: #8a5a00;
-  font-size: 26px;
-  line-height: 1.4;
-}
-
-.ending-card__text {
-  max-width: 640px;
-  margin: 0 auto;
-  font-size: 16.5px;
-  line-height: 1.8;
-}
-
-/* 総合スコア（エンディングカードのいちばん上に大きく出す） */
-.ending-card__score-label {
-  margin: 0 0 2px;
-  color: #a07a2a;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
-.ending-card__score {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 6px;
-  /* ランクのバッジを大きくしたぶん、ここの下の余白は少しつめる
-     （カード全体が縦に長くなりすぎないようにするため） */
-  margin: 0 0 10px;
-}
-
-.ending-card__score-value {
-  color: #8a5a00;
-  font-size: 48px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.ending-card__score-max {
-  color: #b08a3c;
-  font-size: 16px;
-  font-weight: 700;
-}
-
-/* S+ランクのときだけ出す、うた入りエンディングBGMの小さな表示
-   主役（スコア・ランク・結果の文）より目立たないよう、結果の文の下に小さな帯で出す
-   ・ランクのバッジと同じ rank-in の動きで、少しおくれて、ふわっと出す
-   ・せまい画面では「お知らせ」と「曲名」が2行に分かれる（flex-wrap）
-     2行になっても形がくずれないよう、角の丸みは まんまるにせず 12px にしている */
-.ending-card__song {
-  animation: rank-in 0.5s ease-out 0.6s backwards;
-  display: inline-flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0 6px;
-  box-sizing: border-box;
-  max-width: 100%;
-  margin: 12px 0 0;
-  padding: 4px 14px;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  background: rgb(255 255 255 / 60%);
-  color: #8a5a00;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 1.6;
-}
-
-/* はじめて解放したときだけ、金色のふちを付けて「ごほうび」だと分かるようにする */
-.ending-card__song--new {
-  border-color: var(--gold);
-  background: #fffaf0;
-}
-
-/* スコア内訳（何で何点もらったかの一覧） */
-.score-card {
-  padding: 18px 22px;
-  border: 2px solid #f0e0bd;
-  border-radius: 14px;
-  background: var(--paper);
-}
-
-.score-card__title {
-  margin: 0 0 10px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #f6eeda;
-  color: var(--navy);
-  font-size: 15px;
-}
-
-.score-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.score-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 0;
-  border-bottom: 1px dotted #ece2cd;
-  font-size: 15px;
-}
-
-.score-item:last-child {
-  border-bottom: none;
-}
-
-.score-item__value {
-  flex: none;
-  font-size: 16px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-/* プラスは緑・マイナスは赤（changeClass() が付けるクラス名にあわせている） */
-.score-item__value.change--good {
-  color: var(--good);
-}
-
-.score-item__value.change--bad {
-  color: var(--bad);
-}
-
-.score-item__value.change--neutral {
-  color: var(--ink-soft);
-}
-
-/* GAME OVERのカード（ゴールのエンディングカードと対になる見た目） */
-.gameover-card {
-  animation: gameover-in 0.5s ease-out;
-  padding: 22px 28px;
-  border: 3px solid #c9412f;
-  border-radius: 14px;
-  background: linear-gradient(160deg, #3b2733 0%, #241f2b 100%);
-  color: #ffeae5;
-  text-align: center;
-}
-
-.gameover-card__label {
-  /* 少し遅れて、ゆっくり大きく出す（backwards ＝ 待っている間は消えたまま） */
-  animation: gameover-label-in 0.55s ease-out 0.15s backwards;
-  margin: 0 0 10px;
-  color: #ff9d8c;
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: 0.24em;
-  line-height: 1.2;
-}
-
-.gameover-card__title {
-  margin: 0 0 10px;
-  color: var(--gold);
-  font-size: 24px;
-  line-height: 1.4;
-}
-
-.gameover-card__text {
-  max-width: 640px;
-  margin: 0 auto;
-  font-size: 16.5px;
-  line-height: 1.8;
-}
-
-/* 今日の記録／見つけたもの（2枚を横並び） */
-.record-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  align-items: start;
-}
-
-.record-card {
-  padding: 18px 22px;
-  border: 2px solid #dbe4ef;
-  border-radius: 14px;
-  background: var(--paper);
-}
-
-.record-card__title {
-  margin: 0 0 10px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #eef2f7;
-  color: var(--navy);
-  font-size: 15px;
-}
-
-.record-card__empty {
-  margin: 0;
-  color: var(--ink-soft);
-  font-size: 15px;
-}
-
-.record-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.record-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 0;
-  border-bottom: 1px dotted #dfe6ef;
-  font-size: 15px;
-}
-
-.record-item:last-child {
-  border-bottom: none;
-}
-
 .record-item b {
   color: var(--navy);
   font-size: 16px;
   font-variant-numeric: tabular-nums;
-}
-
-.found-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.found-list__item {
-  padding: 3px 14px;
-  border: 1px solid #f5e2be;
-  border-radius: 999px;
-  background: #fff6e0;
-  color: #6a4a10;
-  font-size: 13px;
 }
 
 /* ============================================================
@@ -2376,19 +1807,6 @@
 
 .scene-leave-to {
   opacity: 0;
-}
-
-/* --- 結果カードが下から浮き上がる --- */
-@keyframes result-in {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 
 /* --- いやいや発生：中央のカードだけを軽く左右に揺らす --- */
@@ -2426,31 +1844,6 @@
   50% {
     transform: translateY(-6px);
   }
-}
-
-/* いやいやが起きた結果カード
-   浮き上がってから、2回だけ小さく揺れる
-   ※ .result-card の animation を上書きするので、両方をここに書いている
-*/
-.result-card--tantrum {
-  animation:
-    result-in 0.3s ease-out,
-    shake 0.4s ease-in-out 0.3s 2;
-  border-color: #eba79c;
-  background: #fff6f3;
-}
-
-/* 「いやいや発生！」の見出し */
-.result-alert {
-  display: inline-block;
-  margin: 0 0 12px;
-  padding: 2px 14px;
-  border-radius: 999px;
-  background: var(--parent-calm);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
 }
 
 /* ============================================================
@@ -2663,256 +2056,6 @@
   }
 }
 
-/* --- アイテム発見 --- */
-@keyframes found-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-/* 「★ アイテム発見！」の帯
-   少し遅れて、ふわっと浮き上がりながら出す
-*/
-.found-flash {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  margin: 0 0 12px;
-  padding: 8px 14px;
-  border: 1px solid #f5e2be;
-  border-radius: 10px;
-  background: #fff6e0;
-  animation: found-in 0.4s ease-out 0.2s backwards;
-}
-
-.found-flash__label {
-  color: #8a5a00;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.found-flash__item {
-  padding: 1px 12px;
-  border-radius: 999px;
-  background: var(--gold);
-  color: #4a3208;
-  font-size: 14px;
-  font-weight: 700;
-}
-
-/* 「〜を見つけました！」の文
-   アイテムの名前だけ、うすい黄色の下じきを敷いて
-   地の文の中でもすぐ目に入るようにする
-*/
-.found-line {
-  margin: 10px 0 0;
-  font-size: 17px;
-  line-height: 1.8;
-}
-
-.found-line__name {
-  padding: 1px 8px;
-  border-radius: 6px;
-  background: #fff1c9;
-  color: #7a5410;
-}
-
-/* アイテムごとの、こうちゃんのひとこと
-
-   すぐ上の「〜を見つけました！」に続く1文なので、
-   ・少し小さめ・やわらかい色にして、上の行を主役のままにする
-   ・左に細い線を入れて「上の行に付いている文」と分かるようにする
-     （線の色は「★ アイテム発見！」の帯のふちと同じ）
-*/
-.found-reaction {
-  margin: 4px 0 0;
-  padding-left: 10px;
-  border-left: 2px solid #f5e2be;
-  color: var(--ink-soft);
-  font-size: 16px;
-  line-height: 1.8;
-}
-
-/* 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-
-   前は結果の文章のうしろに、そのまま文字で書き足していたので、
-   「おでかけポイント +5」が地の文にまぎれて気づきにくかった
-   ・専用の枠（左に太い線）
-   ・「ちょっとしたできごと！」の帯
-   ・ステータスの増減は、色つきのしるし
-   の3つで、ひと目で分かるようにしている
-*/
-.event-flash {
-  margin: 12px 0 0;
-  padding: 12px 16px 14px;
-  border: 1px solid #cfe3ef;
-  border-left: 5px solid var(--navy-line);
-  border-radius: 10px;
-  background: #f2f9fc;
-  /* アイテムの帯と同じ動きで、少し遅れてふわっと出す */
-  animation: found-in 0.4s ease-out 0.25s backwards;
-}
-
-/* 出てきた瞬間の「ポンッ」（ちょっとしたできごと専用）
-
-   ふわっと出てくる（found-in）だけだと、
-   アイテム発見の帯と同じ動きなので、結果カードの中で気づかずに読み飛ばされやすかった
-   そこで、少し小さい状態から通常サイズへ戻る動きと、
-   枠のまわりの淡い水色の光を、出てきた瞬間だけ重ねている
-
-   ■ やりすぎないようにしていること
-     ・左右にゆらす・大きく跳ねる動きは入れない（文章が読みにくくなるため）
-     ・小さくするのは 0.96倍まで（文字がにじんで見えない範囲）
-     ・光は 0.45秒で消えきる。出したままにすると、読んでいるあいだ気が散る
-     ・「✨」のような良いことに見えるしるしは付けない
-       このできごとには、うれしいこと（機嫌 +5）と
-       親がつかれること（体力 -5）の両方があるため、しるしは中立の「！」だけにしている
-
-   ■ .event-flash--nice には かからないようにしている
-     ナイス対応・木漏れ日ボーナスは同じ .event-flash の形を使っているが、
-     あちらは「良いことが起きた」という別の演出なので、動きは今までのまま
-     （:not() で、色が変わっていない ふつうのできごとだけに絞っている）
-
-   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
-     ページ下のまとめて止める指定で、この動きも出ないようにしている
-*/
-.event-flash:not(.event-flash--nice) {
-  animation: event-flash-in 0.45s ease-out 0.25s backwards;
-}
-
-@keyframes event-flash-in {
-  /* 出てくる前：少し下がって、少しだけ小さい。光はまだ無い */
-  from {
-    opacity: 0;
-    transform: translateY(8px) scale(0.96);
-    box-shadow: 0 0 0 0 rgb(134 198 221 / 0%);
-  }
-
-  /* 途中：通常サイズを少し通りすぎて、まわりの光がいちばん強くなる
-     ここで「ポンッ」と出てきた感じになる
-     （1.012倍なので、跳ねるというより、ふくらんで止まるくらいの大きさ） */
-  55% {
-    opacity: 1;
-    transform: translateY(0) scale(1.012);
-    box-shadow: 0 0 0 6px rgb(134 198 221 / 55%);
-  }
-
-  /* 最後：通常サイズに落ちつき、光も消える（ふだんの見た目にもどる） */
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-    box-shadow: 0 0 0 0 rgb(134 198 221 / 0%);
-  }
-}
-
-.event-flash__label {
-  display: inline-block;
-  margin: 0 0 6px;
-  padding: 1px 12px;
-  border-radius: 999px;
-  background: var(--navy);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-}
-
-.event-flash__text {
-  margin: 0;
-  font-size: 17px;
-  line-height: 1.8;
-}
-
-/* ステータスの増減のしるし（おでかけポイント +5 など） */
-.event-flash__list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.event-flash__item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 2px 14px;
-  border: 1px solid #d8e7ef;
-  border-radius: 999px;
-  background: #fff;
-}
-
-.event-flash__item-label {
-  color: var(--ink-soft);
-  font-size: 13px;
-}
-
-/* 増減の数字（色は結果カードの「今回の変化」と同じ考えかた）
-   ※ 良い・悪いの判定は changeClass() にまかせている
-*/
-.event-flash__item-value {
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.event-flash__item-value.change--good {
-  color: var(--good);
-}
-
-.event-flash__item-value.change--bad {
-  color: var(--bad);
-}
-
-.event-flash__item-value.change--neutral {
-  color: var(--ink-soft);
-}
-
-/* いやいやが始まったときの文
-   結果カードのいちばん下に置き、
-   いやいやの色（さんご）の線をつけて、ここで場面が変わることを伝える
-*/
-.tantrum-line {
-  margin: 12px 0 0;
-  padding: 10px 14px;
-  border-left: 5px solid var(--parent-calm);
-  border-radius: 6px;
-  background: #fff5f3;
-  color: #a33a29;
-  font-size: 17px;
-  line-height: 1.8;
-}
-
-/* ナイス対応の枠（いやいやの理由に合った対応をしたとき）
-
-   形は「ちょっとしたできごと」（.event-flash）をそのまま使い、色だけ緑に変える
-   ・緑 … 「今回の変化」のプラスと同じ系統の色で、良いことが起きたと分かる
-   ・アイテム発見（黄色）・ちょっとしたできごと（水色）・いやいや（さんご）と色がかぶらない
-   ※ 帯の背景は --good より少しだけ濃くして、白い文字を読みやすくしている
-*/
-.event-flash--nice {
-  border-color: #cde9d7;
-  border-left-color: var(--good);
-  background: #f1faf4;
-}
-
-.event-flash--nice .event-flash__label {
-  background: #26844f;
-}
-
-.event-flash--nice .event-flash__item {
-  border-color: #d3eadb;
-}
-
 /* --- 危険なステータスのゆっくりした点滅 --- */
 @keyframes danger-pulse {
   0%,
@@ -2923,37 +2066,6 @@
   50% {
     box-shadow: 0 0 0 6px rgb(242 112 95 / 45%);
   }
-}
-
-/* --- GAME OVER --- */
-@keyframes gameover-in {
-  from {
-    opacity: 0;
-    transform: scale(0.94);
-  }
-
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes gameover-label-in {
-  from {
-    opacity: 0;
-    letter-spacing: 0.6em;
-  }
-
-  to {
-    opacity: 1;
-    letter-spacing: 0.24em;
-  }
-}
-
-/* GAME OVERの場面だけ、中央エリアの背景を少し暗くする */
-.scene--gameover .stage {
-  background: rgb(16 29 44 / 10%);
-  transition: background 0.5s ease-out;
 }
 
 /* --- ゴールのランク表示 --- */
@@ -2986,15 +2098,6 @@
   50% {
     box-shadow: 0 0 0 8px rgb(255 192 67 / 40%);
   }
-}
-
-.ending-card--s {
-  border-width: 3px;
-  animation: s-glow 2.6s ease-in-out infinite;
-}
-
-.ending-card--s .ending-card__title {
-  font-size: 30px;
 }
 
 /* ============================================================
@@ -4624,42 +3727,6 @@
     font-size: 22px;
   }
 
-  .result-card {
-    padding: 18px 22px 15px;
-  }
-
-  .result-card__title {
-    margin-bottom: 6px;
-  }
-
-  .change-box {
-    margin-top: 10px;
-    padding-top: 9px;
-  }
-
-  /* 「今回の変化」の3つの枠と、その中の項目も少しつめる
-     ここを1〜2pxずつ減らすだけで、カード全体では20px以上ちぢむ */
-  .change-group {
-    padding: 4px 7px 5px;
-  }
-
-  /* 見出しの札も少しだけつめる
-     （小さくしすぎると見出しに見えなくなるので、ほんの少しだけ） */
-  .change-box__title {
-    margin-bottom: 6px;
-    font-size: 13px;
-  }
-
-  .change-group__name {
-    margin-bottom: 3px;
-    padding: 0 9px;
-    font-size: 13px;
-  }
-
-  .change-item {
-    padding: 2px 10px 3px;
-  }
-
   /* コマンドボックスも少しつめて、選択肢が画面に収まりやすくする */
   .command-box {
     padding: 9px 12px 11px;
@@ -4694,12 +3761,6 @@
     font-size: 16px;
   }
 
-  /* ちょっとしたできごとの枠も、背の低い画面では少しつめる */
-  .event-flash {
-    margin-top: 10px;
-    padding: 10px 14px 11px;
-  }
-
   /* 本文は 17px → 16px までにとどめる
      高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ */
   .place-card__text,
@@ -4709,42 +3770,6 @@
   .tantrum-line {
     font-size: 16px;
     line-height: 1.75;
-  }
-
-  /* ゴールの結果カードも、たてにつめて1画面におさめる
-     ランクのバッジは主役なので、小さくしすぎないように気をつける */
-  .ending-card {
-    padding: 16px 24px;
-  }
-
-  .ending-card__score-value {
-    font-size: 40px;
-  }
-
-  .ending-card__rank {
-    margin-bottom: 10px;
-    padding: 8px 22px;
-    font-size: clamp(27px, 2.6vw, 31px);
-  }
-
-  .ending-card__text,
-  .gameover-card__text {
-    font-size: 15.5px;
-  }
-
-  /* 「前 → 後」で1行ふえたので、背の低い画面では文字を少しつめて
-     上部ステータス〜下部コマンドが一画面に収まるようにする
-     （枠の余白は、上の .change-item でいっしょにつめてある） */
-  .change-item__before {
-    font-size: 12px;
-  }
-
-  .change-item__after {
-    font-size: 17px;
-  }
-
-  .change-item__value {
-    font-size: 14px;
   }
 
   .command {
@@ -4796,10 +3821,6 @@
     padding: 11px 20px;
   }
 
-  .result-card {
-    padding: 15px 20px 12px;
-  }
-
   .command {
     gap: 7px 12px;
     padding: 8px 24px 10px;
@@ -4846,10 +3867,6 @@
     padding: 9px 18px;
   }
 
-  .result-card {
-    padding: 13px 18px 10px;
-  }
-
   .command {
     padding: 7px 20px 9px;
   }
@@ -4892,15 +3909,6 @@
   .secret-path-player__plus {
     animation: none !important;
   }
-
-  /* ちょっとしたできごとの「ポンッ」は、完全に止める
-     上の指定でも一瞬で終わるが、大きさと光が途中で止まって見えないように、
-     動きそのものを出さないようにしておく
-     （水色の枠・「ちょっとしたできごと！」の帯は残るので、
-       動きが無くても、できごとが起きたことは分かる） */
-  .event-flash:not(.event-flash--nice) {
-    animation: none !important;
-  }
 }
 
 /* ============================================================
@@ -4923,14 +3931,6 @@
      （content-box のままだと、タブレット幅で左右が少しはみ出してしまうため） */
   .stage--secret-path > .place-card {
     box-sizing: border-box;
-  }
-
-  /* ※ おやつ（.snack-list）は、パソコンのときからすでに2列なので
-       ここでは何もしない（スマホ幅で1列にするのは max-width: 700px のほう） */
-
-  /* 3グループ横並び → 2列（おでかけが下へ折り返す） */
-  .change-groups {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .stage {
@@ -5013,43 +4013,6 @@
     line-height: 1.8;
   }
 
-  .ending-card__text,
-  .gameover-card__text {
-    font-size: 15.5px;
-  }
-
-  .result-card {
-    padding: 18px 16px 14px;
-  }
-
-  /* 結果カードの「今回の変化（合計）」は、スマホでは出さない
-
-     スマホでは上部ステータスバーのほうに、行動のあとの増減が
-     ・時間（+25分）
-     ・こうちゃんの体力・機嫌
-     ・親の体力・余裕
-     ・おでかけポイント
-     と、6つぜんぶ + / - で出ている（.status-change）
-     結果カードにも同じ情報を出すと、せまい画面では
-     この枠だけで縦に200px近く使ってしまい、
-     結果メッセージやアイテム発見が画面からはみ出してしまう
-
-     そこで、スマホでは同じ情報が2か所に出ないように、こちらを消す
-     ・消すのは「今回の変化（合計）」の枠だけ
-       （結果メッセージ・アイテム発見・ちょっとしたできごと・
-         ナイス対応・いやいやの文章は、今までどおり出る）
-     ・PCでは今までどおり出す（この指定はスマホ幅の中だけ）
-     ・HTMLとVueの条件（v-if="statusChanges"）はさわらない
-       statusChanges は上部ステータスの増減にも使っているため
-
-     ※ 消したことで、スマホ用に「この枠を小さくつめる」ためだけに
-       書いていたCSSは要らなくなったので、いっしょに片づけてある
-       （.change-groups の1列、.change-item の余白・文字の調整など。
-         PC用の基本のCSSは、そのまま残してある） */
-  .result-card .change-box {
-    display: none;
-  }
-
   /* スマホでは横にならべると幅が足りないので、たてにならべる
      （上に「☕ ひとやすみ」、下に「どうする？」） */
   .command-area {
@@ -5093,28 +4056,6 @@
      たて1列には戻さない（← → で選ぶ向きと、見た目の向きをそろえるため） */
   .command-box--choices-3 {
     --choice-columns: 2;
-  }
-
-  .record-grid {
-    grid-template-columns: 1fr;
-  }
-
-  /* ゴールのランクバッジ
-     スマホでは min-width 180px のままだと画面いっぱいになるので、
-     少しだけ小さくして左右に余白を残す
-     （max-width: 100% と box-sizing のおかげで、はみ出しはしない） */
-  .ending-card__rank {
-    min-width: 150px;
-    padding: 8px 20px;
-    font-size: 28px;
-  }
-
-  .gameover-card__label {
-    font-size: 24px;
-  }
-
-  .gameover-card__title {
-    font-size: 20px;
   }
 
   /* せまい画面では説明文の折り返しが増えるぶん、B画面の中身が縦に伸びる
@@ -5496,10 +4437,6 @@
     padding: 12px 14px;
   }
 
-  .result-card {
-    padding: 16px 14px 12px;
-  }
-
   /* 「どうする？」の枠も、余白だけ少しつめる
      ボタンの上下の余白（押しやすさ）は削らない */
   .command-box,
@@ -5529,37 +4466,8 @@
     padding: 11px 12px;
   }
 
-  .result-card {
-    padding: 15px 12px 11px;
-  }
-
   .command {
     max-height: 46vh;
     padding: 8px 10px calc(9px + env(safe-area-inset-bottom));
-  }
-}
-
-/* ============================================================
-   ゴール後のリザルト画面（小さい画面）
-
-   リザルトには
-     総合スコア／ランク／結果メッセージ／スコア内訳／今日の記録／見つけたもの
-   がならぶので、小さいスマホではどうしても1画面に収まらない
-
-   ここは「1画面に押しこむ」より「ぜんぶきちんと読める」を優先する
-   ＝ カードを縮めず、自然に たてスクロールさせる
-
-   ・.stage の min-height（中央エリアの下限）は、ここでは外す
-     リザルトはもともと背が高いので、下限を使う場面がない
-   ・上部ステータスも貼りつけない（読むための高さを最大にする）
-
-   スクロールするのはページ側の1か所だけ
-   （.stage は overflow-y: visible のままなので、二重スクロールにはならない）
-   ============================================================ */
-@media (max-width: 700px) {
-  .scene--result .stage,
-  .scene--gameover .stage {
-    justify-content: flex-start;
-    min-height: 0;
   }
 }
