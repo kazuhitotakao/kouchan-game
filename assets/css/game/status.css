@@ -410,6 +410,20 @@
   white-space: nowrap;
 }
 
+.pill b {
+  /* こちらも数字2けたぶんの幅を確保して、けたが増えてもずれないようにする */
+  display: inline-block;
+  min-width: 2ch;
+  margin-left: 6px;
+  font-size: clamp(19px, 1.5vw, 22px);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.pill--point b {
+  color: var(--gold);
+}
+
 /* 数字の右がわの置き場所（おでかけポイントの増減 と おやつの「個」）
 
    ・増減（+5など）は出たり消えたりするので、いつも同じ幅を空けておく
@@ -437,6 +451,10 @@
 
 .pill .status-change {
   margin-left: 6px;
+}
+
+.pill--snack b {
+  color: #ffe1b0;
 }
 
 /* 見つけたもの（横1列のチップ） */
@@ -592,6 +610,10 @@
 
   .status-group {
     padding: 2px 9px 4px;
+  }
+
+  .pill b {
+    font-size: clamp(17px, 1.35vw, 20px);
   }
 }
 
@@ -907,6 +929,13 @@
        （iPhone SE ほどの背の低い画面でも、案内まで見える） */
   .game-screen--secret-path .status-area {
     position: static;
+  }
+
+  .pill b {
+    min-width: 1.5ch;
+    margin-left: 4px;
+    font-size: 15px;
+    line-height: 1.1;
   }
 }
 

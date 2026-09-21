@@ -1188,24 +1188,6 @@
   opacity: 0;
 }
 
-.pill b {
-  /* こちらも数字2けたぶんの幅を確保して、けたが増えてもずれないようにする */
-  display: inline-block;
-  min-width: 2ch;
-  margin-left: 6px;
-  font-size: clamp(19px, 1.5vw, 22px);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.pill--point b {
-  color: var(--gold);
-}
-
-.pill--snack b {
-  color: #ffe1b0;
-}
-
 /* ============================================================
    場面のまとまり（中央エリア＋下部コマンド欄）
    ============================================================ */
@@ -1399,12 +1381,6 @@
   font-weight: 700;
   letter-spacing: 0.1em;
   animation: found-in 0.4s ease-out 0.15s backwards;
-}
-
-.record-item b {
-  color: var(--navy);
-  font-size: 16px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ============================================================
@@ -2239,9 +2215,7 @@
     margin-top: 12px;
   }
 
-  .pill b {
-    font-size: clamp(17px, 1.35vw, 20px);
-  }
+  
 
   /* 本文は 17px → 16px までにとどめる
      高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ */
@@ -2280,12 +2254,7 @@
 /* スマホ幅：上下に積み直して1列に戻す */
 @media (max-width: 700px) {
 
-  .pill b {
-    min-width: 1.5ch;
-    margin-left: 4px;
-    font-size: 15px;
-    line-height: 1.1;
-  }
+  
 
   /* いやいやタイムのセリフも、見出しに合わせて少し小さくする */
   .tantrum-voice {
