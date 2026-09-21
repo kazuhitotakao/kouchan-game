@@ -25,6 +25,13 @@
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
 @import '~/assets/css/game/event-flash.css';
 
+/* 「どうする？」のコマンド欄（.command-box 〜）
+
+   CommandBox.vue と pages/index.vue（秘密の小道）の両方で使うので、
+   どちらか片方の scoped CSS に入れると、もう片方に届かない
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+@import '~/assets/css/game/command-shared.css';
+
 /* ============================================================
    スクロールバーの場所を、いつも空けておく
 

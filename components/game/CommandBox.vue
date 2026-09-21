@@ -415,6 +415,16 @@ defineEmits<{
   </nav>
 </template>
 
-<!-- 見た目は、ゲーム本編と同じ assets/css/game.css を使う
-     （理由は components/game/StatusBar.vue の <style> の説明と同じ） -->
-<style scoped src="~/assets/css/game.css"></style>
+<!-- 見た目は、このコンポーネント専用の assets/css/game/command-box.css だけを読みこむ
+     （理由は components/game/StatusBar.vue の <style> の説明と同じ。
+       index.vue の scoped CSS は、このコンポーネントの中の要素には届かないため）
+
+     ■ game.css まるごとではなく command-box.css だけにした理由
+       game.css を読むと、結果カードやリザルトなど、ここでは使わないCSSまで
+       このコンポーネントぶんとして、もう一度ビルド結果に出てしまう
+
+     ※ 「どうする？」のコマンド欄（.command-box 〜）は pages/index.vue の
+       秘密の小道でも使うので、app.vue からグローバルに読みこむ
+       command-shared.css にある
+     ※ command-box.css は game.css からは読みこまない（二重出力になるため） -->
+<style scoped src="~/assets/css/game/command-box.css"></style>
