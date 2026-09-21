@@ -1,0 +1,58 @@
+/* ============================================================
+   ページ全体で共通に使う @keyframes（グローバル）
+
+   ■ なぜ、このファイルだけ別あつかいなのか
+
+     Vue の <style scoped> は、@keyframes の名前も
+     「danger-pulse-<スコープID>」のように付けかえる
+     そのとき付けかえられるのは、
+     「同じ <style> の中で定義された名前」への参照だけ
+
+     そのため、定義と参照が別々の <style> に分かれてしまうと、
+     参照側だけが元の名前のまま残り、
+     どこにも無い名前を指すことになってアニメーションが効かなくなる
+
+     ・@keyframes danger-pulse … assets/css/game/status.css から参照
+     ・@keyframes found-in     … assets/css/game/status.css
+                                 assets/css/game/result.css
+                                 assets/css/game/base.css から参照
+
+     status.css は components/game/StatusBar.vue が、
+     result.css / base.css は game.css 経由で index.vue などが、
+     それぞれ別の <style scoped> として読みこんでいる
+
+   ■ どう直したか
+
+     この2つの @keyframes だけを、scoped が付かない
+     app.vue の <style> から読みこむ（＝名前が付けかえられない）ようにした
+     参照側もすべて元の名前のままなので、名前が一致する
+
+     ※ 中身（時間・色・easing・keyframe の内容）は、
+       移動前の base.css / result.css からそのまま持ってきている
+     ※ 同じ @keyframes を他のファイルに重複して残さないこと
+   ============================================================ */
+
+/* --- 危険なステータスのゆっくりした点滅（もとは base.css） --- */
+@keyframes danger-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgb(242 112 95 / 45%);
+  }
+}
+
+/* --- アイテム発見（もとは result.css） --- */
+@keyframes found-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -638,17 +638,10 @@
 }
 
 /* --- アイテム発見 --- */
-@keyframes found-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* @keyframes found-in は assets/css/game/keyframes.css へ移動した
+   （scoped で名前が付けかえられないよう、app.vue からグローバルに読みこむ）
+   このファイルは <style scoped> として読みこまれるため、ここに置くと
+   status.css / base.css からの参照と名前が合わなくなる */
 
 /* 「★ アイテム発見！」の帯
    少し遅れて、ふわっと浮き上がりながら出す

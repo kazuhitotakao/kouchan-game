@@ -1631,16 +1631,10 @@
 }
 
 /* --- 危険なステータスのゆっくりした点滅 --- */
-@keyframes danger-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
-  }
-
-  50% {
-    box-shadow: 0 0 0 6px rgb(242 112 95 / 45%);
-  }
-}
+/* @keyframes danger-pulse は assets/css/game/keyframes.css へ移動した
+   （scoped で名前が付けかえられないよう、app.vue からグローバルに読みこむ）
+   このファイルは <style scoped> として読みこまれるため、ここに置くと
+   status.css からの参照と名前が合わなくなる */
 
 /* --- ゴールのランク表示 --- */
 /* ランクの登場演出
