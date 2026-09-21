@@ -1,0 +1,1372 @@
+/* ============================================================
+   選択コマンド欄まわりの見た目（CommandBox）
+
+   assets/css/game.css から、コマンド欄に関わるところだけを
+   そのまま移してきたファイル（中身は1つも変えていない）
+
+   ・公園入口の「どこへ行く？」（.cmd 〜）
+   ・「どうする？」のコマンド枠（.command-box 〜）
+     3択・4択の横ならび（--choice-grid／--choices-3／--choices-4）も、ここ
+   ・☕ ひとやすみ と おやつバッグ（.care-menu 〜／.snack-menu 〜）
+   ・コマンド欄の外わく（.command／.command-area）
+     ゴール後・GAME OVER のボタン列（.command--result）もふくむ
+   ・スマホで下に貼りつく指定（position: sticky）や、画面の高さごとの上書き（@media）
+   ・コマンド専用のアニメーション（command-selected-glow／command-swap-in）
+
+   ※ サウンドのコントロール（.sound-control 〜）は、まだ game.css のまま
+   ※ 結果カードそのもの（.result-card 〜）は result.css のまま
+   ============================================================ */
+
+.title-card .cmd--start {
+  order: 4;
+}
+
+/* カードを縦に大きくしたぶん、メインの中身（タイトル・説明・開始ボタン）を
+   上下の余白で中央寄りに置く。左上のツールバーは上にそのまま残す
+   （name の margin-top: auto と、開始ボタンの margin-bottom: auto で上下を均す） */
+.title-card .cmd--start {
+  margin-bottom: auto;
+}
+
+/* キーボードで「はじめる」「きょうのおやつを選ぶ」を選んでいるとき
+
+   ふつうの .cmd のフォーカス枠は金色だが、このボタン自体が金色なので、
+   金色どうしでふちが見えなくなってしまう
+   ここだけ紺色の太めのふちにして、いま選んでいることがはっきり分かるようにする
+   （マウスで押しただけのときは出ない。:focus-visible ＝ キーボード操作のときだけ） */
+.title-card .cmd--start:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 3px;
+}
+
+/* ダイアログのボタンは、2つとも左右の余白をそろえる
+
+   ここは「もう少し遊ぶ」（白）と「出口へ向かう」（緑）の2つとも中央ぞろえ
+   .cmd のままだと左右の余白がちがう（左34px／右18px）ので、
+   文字がボタン全体から見て8pxずつ右へずれてしまう
+   （理由は .cmd--goal の説明を参照）
+
+   ずれの大きさは2つとも同じなので、片方だけ直すと
+   スマホでたてにならんだときに、上下で文字の位置が食いちがって見える
+   そこで、2つまとめてここでそろえておく
+
+   ※ 「出口へ向かう」は .cmd--goal も付いているが、
+     どちらも padding-inline: 34px なので、結果は変わらない
+
+   ※ セレクタを .cmd.goal-confirm__button（クラス2つ）にしてあるのが大事
+
+     このCSSは、背の低い画面やスマホ幅の .cmd { padding: ... }（クラス1つ）より
+     前に書いてある
+     同じ強さのままだと、あとに書いてある .cmd のほうが勝ってしまい、
+     せっかくそろえた左右の余白が、また元のちぐはぐな値に戻ってしまう
+     クラスを2つ重ねて強くしておけば、書いてある場所に関係なくこちらが残る */
+.cmd.goal-confirm__button {
+  padding-inline: 34px;
+}
+
+.goal-confirm__button .cmd__text {
+  text-align: center;
+}
+
+/* ============================================================
+   コマンドボックス（各場所の「どうする？」）
+   画面下部のフッターではなく、中央エリアの中に
+   「枠の中に選択肢が縦に並ぶ」形で置く
+
+   ※ 公園入口は下の .command（横並びグリッド）のままなので、
+     ここのCSSは公園入口には影響しない
+   ============================================================ */
+.command-box {
+  /* 中央エリアの「右下」に置く
+     ・align-self: flex-end … .stage の align-items: center を打ち消して右はしへ
+     ・margin-top: auto     … たての余白をぜんぶ上に寄せて、自分は下へ
+       （flexでは auto のマージンが justify-content より先に効くので、
+         場所の説明文は上、コマンドボックスは下、という並びになる）
+     ※ 中身があふれるときは余白が0になるので、はみ出したりはしない
+  */
+  align-self: flex-end;
+  margin-top: auto;
+
+  /* .stage > * で幅900pxが指定されているので、ここでせまく上書きする */
+  width: 100%;
+  max-width: 380px;
+  padding: 12px 14px 14px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--navy) 0%, var(--navy-deep) 100%);
+  box-shadow: 0 6px 18px rgb(16 29 44 / 40%);
+}
+
+/* 「どうする？」の見出し */
+.command-box__label {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--navy-line);
+  color: #dcf0f9;
+  font-size: 13.5px;
+  letter-spacing: 0.1em;
+}
+
+/* 選択肢1つぶん
+   大きなボタンには見せず、枠の中の「文字の行」に見えるようにする
+   左の28pxは、マウスを乗せたときに出る「▶」の場所
+*/
+/* ============================================================
+   【共通】いま選んでいるコマンドを、水色でふわっと光らせる演出
+
+   ねらい
+     キーボードで遊んでいるとき「いま Enter を押したら
+     どのボタンが実行されるのか」を一目で分かるようにする
+
+   仕組み
+     ボタンの上に ::after という「透明な板」を1枚だけ重ねて、
+     その板の box-shadow（内側の水色の枠＋外側の水色の光）だけを
+     ゆっくり強くしたり弱くしたりする。
+     ・板は透明なので、ボタン本来の色（紙／金／紫／緑）はそのまま残る
+     ・box-shadow は場所を取らないので、ボタンの幅や配置はズレない
+     ・pointer-events: none なので、クリックのじゃまもしない
+
+   対象
+     .cmd--selected              … 公園入口などで選んでいるボタン
+     .cmd--single                … ボタンが1つだけの画面のボタン（はじめる／きょうのおやつを選ぶ）
+     .command-box__item--selected … 各イベントの中で選んでいる行
+   ============================================================ */
+
+/* 水色の光の強さを 弱 → 少し強い → 弱 と往復させる
+   ※ transform（動き）はここでは一切さわらない。
+     hover や :active の translateY / translateX とケンカさせないため
+
+   影は3枚がさねになっている
+     1枚目 inset … ボタンのふちの内側に引く水色の線
+     2枚目 0 0 0 2px … ボタンのすぐ外に引く水色の線
+       ※ 水色は「紺色の下地」の上でいちばんよく見える（コントラスト4.25:1）。
+         紙のボタンや金色のボタンは色が明るく、内側の線だけでは見えにくいので、
+         紺色の下地に出るこの外側の線が「選択中」の目じるしの主役になる
+     3枚目 ぼかし … まわりへ広がる、ふんわりした光 */
+@keyframes command-selected-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 2px rgb(var(--command-selected) / 55%),
+      0 0 0 2px rgb(var(--command-selected) / 45%),
+      0 0 8px 2px rgb(var(--command-selected) / 25%);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgb(var(--command-selected) / 95%),
+      0 0 0 2px rgb(var(--command-selected) / 90%),
+      0 0 16px 3px rgb(var(--command-selected) / 55%);
+  }
+}
+
+.cmd--selected::after,
+.cmd--single::after,
+.command-box__item--selected::after,
+.care-menu__item--selected::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  content: '';
+
+  /* クリックのじゃまをしない、透明な板にする */
+  pointer-events: none;
+
+  /* アニメーションが止まっているときに残る「水色の枠」
+     （動きを減らす設定のときは、光の強弱が無くなり、この枠だけが表示される） */
+  box-shadow:
+    inset 0 0 0 2px rgb(var(--command-selected) / 85%),
+    0 0 0 2px rgb(var(--command-selected) / 75%);
+
+  /* 1.4秒かけてゆっくり。点滅ではなく「ふわっと光っている」速さ */
+  animation: command-selected-glow 1.4s ease-in-out infinite;
+}
+
+/* .cmd は枠（上・左右2px／下だけ4px）を持っているので、
+   そのぶん外へ広げて、水色の線をボタンのふちにぴったり重ねる。
+   選択中はボタンのふちが水色に変わって見えるが、
+   ボタン本体の色（紙・金・紫・緑）はそのまま残る */
+.cmd--selected::after,
+.cmd--single::after {
+  inset: -2px -2px -4px;
+}
+
+/* 押している最中は光を止める
+   （光が強いままだと「押しこんだ」感じが分からなくなるため） */
+.cmd:active::after,
+.command-box__item:active::after,
+.care-menu__item:active::after {
+  animation: none;
+}
+
+/* 押せないボタンは光らせない（押せると勘ちがいさせないため）
+   ※ いまのゲームに disabled のボタンは無いが、
+     あとから増えたときのための保険として書いておく */
+.cmd:disabled::after,
+.command-box__item:disabled::after,
+.care-menu__item:disabled::after {
+  display: none;
+}
+
+.command-box__item {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* クリックしたとき、一瞬押しこまれたように見せる */
+.command-box__item:active {
+  transform: translateX(4px) scale(0.98);
+}
+
+/* 選択カーソル「▶」（選ばれていない行では見えない）
+
+   top: 50% ＋ translateY(-50%) で、行のたての中央に置く
+   ・top: 50%              … 行の高さの半分の位置まで下げる
+   ・translateY(-50%)      … そこから自分の高さの半分だけ上へ戻す
+   この2つで、文字の大きさが変わっても中央のままになる
+
+   ※ これを書かないと、行が align-items: baseline なので
+     カーソルが文字のベースラインに合わせて少し上に出てしまう
+*/
+.command-box__item::before {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  transform: translateY(-50%);
+  color: var(--gold);
+  content: '▶';
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* 選んでいる項目の見た目
+
+   ・マウスを乗せた行（:hover）
+   ・キーボードの↑↓で選んでいる行（--selected）
+   のどちらも、まったく同じ見た目になるようにまとめて指定する
+*/
+.command-box__item:hover,
+.command-box__item:focus-visible,
+.command-box__item--selected {
+  background: rgb(255 255 255 / 12%);
+  font-weight: 700;
+  transform: translateX(3px);
+}
+
+.command-box__item:hover::before,
+.command-box__item:focus-visible::before,
+.command-box__item--selected::before {
+  opacity: 1;
+}
+
+.command-box__item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.command-box__text {
+  flex: 1;
+}
+
+/* おやつの残り個数など、行の右はしに出す小さな文字 */
+.command-box__badge {
+  flex: none;
+  color: #ffd9a0;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+/* おやつを食べきったときのお知らせ */
+.command-box__note {
+  margin: 0;
+  padding: 6px 10px 6px 28px;
+  color: #b8dfef;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 「その場所ならではの遊び」と「どこでも同じコマンド」の区切り
+
+   同じ「どうする？」の枠の中にならんでいても、
+   上の2つ（すべる・見守る など）と
+   下の2つ（休憩・おやつ／← 場所選びにもどる）は種類がちがう
+
+   そこで、あいだに細い線と「そのほか」という小さな見出しを入れて、
+   ひとめで「ここからは別のなかま」と分かるようにしている
+
+   「そのほか」の文字は左寄せにして、上下のコマンドの文字と
+   左はしをそろえてある
+   ・左の線 … 10px の短いちょこんとした線
+   ・左の余白10px ＋ 線10px ＋ すきま8px ＝ 28px
+     （コマンドの文字も、カーソル「▶」のぶんだけ左に28px空いている） */
+.command-box__divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 4px 10px;
+  color: #a9d6e8;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+
+  /* 見出しなので、コマンドとまちがえて押されないようにする
+     （もともとボタンではないが、指やマウスの反応も消しておく） */
+  pointer-events: none;
+}
+
+/* 「そのほか」の左右にのばす細い線
+
+   文字のそばを濃く、外側へいくほど薄くしている
+   見出しの下の線（command-box__label の border-bottom）より
+   目立たせないための工夫で、区切りだと分かるだけの細さにとどめる */
+.command-box__divider::before,
+.command-box__divider::after {
+  height: 1px;
+  content: '';
+}
+
+/* 左の線は、のばさずに10pxのまま
+   （flex: none なので、あまった幅は右の線だけが受け取る
+     ＝「そのほか」の文字が左に寄る） */
+.command-box__divider::before {
+  flex: none;
+  width: 10px;
+  background: linear-gradient(90deg, rgb(134 198 221 / 0%) 0%, rgb(134 198 221 / 55%) 100%);
+}
+
+/* 右の線が、残りの幅をぜんぶ使って右はしまでのびる */
+.command-box__divider::after {
+  flex: 1;
+  background: linear-gradient(90deg, rgb(134 198 221 / 55%) 0%, rgb(134 198 221 / 0%) 100%);
+}
+
+/* ============================================================
+   横ならびの選択肢（command-box--choice-grid）
+
+   いやいやタイム（まだ続いているとき）・とつぜんのできごと（選ぶ前）・
+   秘密の小道（はじまる前）の「どうする？」だけ、選択肢を横にならべる
+
+   これらの画面は、結果の文章や説明を ↑↓ でスクロールして読むことがあり、
+   そのあいだコマンドは ← → で選ぶ
+   見た目もキーの向きにそろえて「左右にならんだボタン」にしておく
+   （たて1列のままだと、上下にならんでいるのに ← → で動く、というちぐはぐな形になる）
+
+   ・command-box--choices-2 / 3 / 4 … 選択肢の数（commandCount）
+     列の数は選択肢の数と同じにして、せまい画面でだけ2列に折り返す（いちばん下の媒体クエリ）
+     折り返しても、← → で動く順番は左上から右下へ（0 → 1 → 2 → 3）のまま
+   ・おやつバッグを開いているあいだは付けない（バッグは今までどおりたて1列＋↑↓）
+   ・通常の場所の「どうする？」（.command-area の中）には付けない
+
+   付け外しは script の choiceGridClass で決めている
+   ============================================================ */
+.command-box--choice-grid {
+  --choice-columns: 2;
+
+  display: grid;
+  grid-template-columns: repeat(var(--choice-columns), minmax(0, 1fr));
+  gap: 6px 8px;
+
+  /* 右下の380pxの枠ではなく、上のカードと同じくらいの幅で中央に置く
+     box-sizing: border-box … width: 100% に padding と border をふくめて、横にはみ出さないようにする */
+  box-sizing: border-box;
+  align-self: center;
+  max-width: var(--stage-width);
+}
+
+.command-box--choices-3 {
+  --choice-columns: 3;
+}
+
+.command-box--choices-4 {
+  --choice-columns: 4;
+}
+
+/* 見出し「どうする？」と「おやつは、もうぜんぶ食べてしまいました…」は、1行をまるごと使う */
+.command-box--choice-grid .command-box__label,
+.command-box--choice-grid .command-box__note {
+  grid-column: 1 / -1;
+}
+
+.command-box--choice-grid .command-box__label {
+  margin-bottom: 2px;
+}
+
+/* おやつのお知らせは、DOMでは「だっこ」と「待つ」のあいだにあるが、
+   横ならびの行を分けてしまわないように、見た目だけいちばん下へ回す
+   （ボタンの順番は変わらないので、← → と Tab で動く順番もそのまま） */
+.command-box--choice-grid .command-box__note {
+  order: 1;
+  padding-left: 10px;
+}
+
+/* 1マスぶんのボタン
+   ・うすい枠で、1つ1つが別のボタンだと分かるようにする
+   ・マスに入りきらない文字は、ボタンの中で折り返す
+     「おやつをあげる ＞」と「残り2個」が1行に入らないときは、「残り2個」のほうを次の行へ送る
+     （文字のほうが先に折り返して「＞」だけが下の行に残る、という形にしない）
+   ・選んだときに右へずらす動きは、となりのマスとぶつかるので付けない */
+.command-box--choice-grid .command-box__item {
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 0;
+  width: auto;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 22%);
+}
+
+.command-box--choice-grid .command-box__text {
+  flex: 1 1 auto;
+}
+
+.command-box--choice-grid .command-box__item:hover,
+.command-box--choice-grid .command-box__item:focus-visible,
+.command-box--choice-grid .command-box__item--selected {
+  transform: none;
+}
+
+.command-box--choice-grid .command-box__item:active {
+  transform: scale(0.98);
+}
+
+/* ============================================================
+   コマンド欄（サブメニュー ＋ メインコマンド）
+
+   通常の場所6か所だけ、コマンドの枠を2つならべる
+   ・どうする？（command-box） … その場所ならではの遊び／紺色
+   ・ひとやすみ（care-menu）   … 親子の状態を整える行動／やさしい緑
+
+   PCでは [care-menu][command-box] の横ならび
+   スマホでは横幅が足りないので、たてにならぶ（いちばん下の媒体クエリ）
+
+   ※ いやいやタイムととつぜんのできごとでは command-box が1枚だけで、
+     この .command-area を通らない
+     そのため .command-box 自身の置きかた（align-self / margin-top）は
+     そのまま残してあり、ここでは入れものの中だけ上書きしている
+   ============================================================ */
+.command-area {
+  /* .stage の中では「右下」に置く（command-box が1枚だけのときと同じ位置）
+     margin-top: auto で、たての余白をぜんぶ上へ寄せている */
+  align-self: flex-end;
+  margin-top: auto;
+
+  display: flex;
+
+  /* 右はしにそろえる
+     こうしておくと、サブメニューが出ても command-box は動かず、
+     新しい枠が その左がわ に増えるだけになる */
+  justify-content: flex-end;
+
+  /* 2つの枠の上をそろえる（下ではなく上でそろえると、見出しの行が横に並ぶ） */
+  align-items: flex-start;
+
+  /* 入りきらない幅のときは、横にはみ出さずに折り返す
+     （スマホ幅になる前の、中くらいの幅のための保険） */
+  flex-wrap: wrap;
+
+  gap: 14px;
+
+  /* .stage > * の width:100% / max-width:900px をそのまま受けとる */
+}
+
+/* 入れものの中に入った command-box は、置きかたを .command-area にゆずる
+
+   ※ margin-top を0に戻すのが大事
+     横ならび（flex-direction: row）のままだと、auto のマージンが
+     たての余白をぜんぶ吸ってしまい、枠が下へ寄ってしまう
+*/
+.command-area .command-box {
+  flex: 0 1 380px;
+  min-width: 0;
+  align-self: flex-start;
+  margin-top: 0;
+}
+
+/* 「どうする？」の中身が入れかわったときに、ふわっと出す
+
+   通常の場所では、結果カードが出る／「← もどる」で消えるたびに、
+   「どうする？」の中身（4つのコマンド ⇄ 1つのボタン）が v-if でまるごと入れかわり、枠の高さも一気に変わる
+   中身だけを短くフェードインさせて、入れかわりがカクッと見えないようにしている
+
+   ・動かすのは opacity だけ（:active の押しこみの transform とぶつからない）
+   ・選択中の光（::after の animation）は別の要素なので、そのまま動く
+   ・場所に入ったときにも一度だけ動くが、場面のフェード（0.24秒）より短いので目立たない
+   ・動きを減らす設定のときは、ページ下のまとめて止める指定で一瞬になる */
+.command-area .command-box > * {
+  animation: command-swap-in 0.18s ease-out;
+}
+
+@keyframes command-swap-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/* 休憩・おやつの「← もどる」のあとや、公園入口へ戻ってきた直後、マウスを動かすまでコマンド枠をマウスで押せなくする
+   ・.command-box--pointer-paused … 場所の「どうする？」
+   ・.command--pointer-paused     … 公園入口の「どこへ行く？」
+   （理由と、指で操作しているときは付けないことは、script の isCommandPointerPaused の説明を参照） */
+.command-box--pointer-paused,
+.command--pointer-paused {
+  pointer-events: none;
+}
+
+/* サブメニュー「☕ ひとやすみ」の枠
+
+   「ならべても浮かない」ことを大事にしているので、
+   形・角のまるさ・文字の大きさ・選択中の見せかたは command-box とそろえ、
+   ちがうのは色（紺色 → やさしい緑）と幅だけにしている
+*/
+.care-menu {
+  /* command-box（380px）より少しせまくして、
+     2つならべても1280×720の画面に収まるようにする */
+  flex: 0 1 240px;
+  min-width: 0;
+
+  /* 見出し1行＋コマンド2行だけなので、command-box より少しだけ浅くする */
+  padding: 10px 14px 12px;
+  border: 3px solid #fff;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--care) 0%, var(--care-deep) 100%);
+  box-shadow: 0 6px 18px rgb(16 29 44 / 40%);
+}
+
+/* 「☕ ひとやすみ」の見出し（command-box の「どうする？」と同じ形） */
+.care-menu__label {
+  margin: 0 0 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgb(255 255 255 / 38%);
+  color: #e6f6ed;
+  font-size: 13.5px;
+  letter-spacing: 0.1em;
+}
+
+/* 選択肢1つぶん
+   command-box__item とまったく同じ形にして、
+   となりの枠と続いて見えるようにしている
+   左の28pxは、選ばれたときに出る「▶」の場所 */
+.care-menu__item {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px 6px 28px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-family: inherit;
+  font-size: 17px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+/* クリックしたとき、一瞬押しこまれたように見せる */
+.care-menu__item:active {
+  transform: translateX(4px) scale(0.98);
+}
+
+/* 選択カーソル「▶」（選ばれていない行では見えない）
+   たての中央に置く考えかたは command-box__item::before と同じ */
+.care-menu__item::before {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  transform: translateY(-50%);
+  color: var(--gold);
+  content: '▶';
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* 選んでいる項目の見た目
+
+   ・マウスを乗せた行（:hover）
+   ・キーボードの↑↓で選んでいる行（--selected）
+   のどちらも、まったく同じ見た目になるようにまとめて指定する
+*/
+.care-menu__item:hover,
+.care-menu__item:focus-visible,
+.care-menu__item--selected {
+  background: rgb(255 255 255 / 14%);
+  font-weight: 700;
+  transform: translateX(3px);
+}
+
+.care-menu__item:hover::before,
+.care-menu__item:focus-visible::before,
+.care-menu__item--selected::before {
+  opacity: 1;
+}
+
+.care-menu__item:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: -2px;
+}
+
+.care-menu__text {
+  flex: 1;
+}
+
+/* おやつの残り個数（行の右はしに出す小さな文字） */
+.care-menu__badge {
+  flex: none;
+  color: #ffe2ac;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+/* おやつを食べきったときのお知らせ */
+.care-menu__note {
+  margin: 0;
+  padding: 6px 10px 6px 28px;
+  color: #cfeadd;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* ============================================================
+   おやつバッグ（ゲーム中に、どのおやつを食べるか選ぶメニュー）
+
+   新しい枠は作らず、いま出ている枠の中身だけを入れかえて使う
+   ・休憩中               … ☕ ひとやすみ（care-menu）の枠の中
+   ・いやいやタイム       … どうする？（command-box）の枠の中
+
+   おやつ1つぶんの行には care-menu__item / command-box__item をそのまま付けているので、
+   ▶ カーソル・水色の光・hover・focus-visible の見た目は、ほかのコマンドと同じになる
+   ここで足すのは「名前の下に、効果の数字をもう1行出す」ための形だけ
+   ============================================================ */
+
+/* おやつ1つぶんの行
+
+   ふつうのコマンドは「文字 … 右はしに残り個数」の横ならびだが、
+   おやつは「🍇 グミ」の下に「体力 +5 機嫌 +20 5分」を出したいので、たてならびにする
+
+   うすい線でかこって、ほかのコマンドより少し「カード」らしく見せる
+   （線は border ではなく内側の影で引くので、行の大きさは変わらない）
+   スマホで指で押しやすいように、カードとカードのあいだも少しあける */
+.snack-menu__item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin-bottom: 6px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
+}
+
+/* おやつの名前（「🍇 グミ」） */
+.snack-menu__name {
+  line-height: 1.5;
+}
+
+/* 効果の数字（「体力 +5」「機嫌 +20」「5分」）
+
+   色・大きさ・太さは、いっしょに付けた care-menu__badge / command-box__badge
+   （「残り2個」の文字）をそのまま使う
+   ☕ ひとやすみ の枠はせまいので、3つが入りきらないときは はみ出さずに折り返す */
+.snack-menu__effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  line-height: 1.5;
+}
+
+/* --- サブメニューの開け閉め（Transition name="care-menu"） ---
+
+   PCでは command-box の左がわに出るので、
+   「少し左からすべって出てくる」動きにしている
+
+   場面の切り替え（name="scene"）と同じくらいの軽さ（0.2秒ほど）にして、
+   opacity と translateX だけを動かす
+   位置やはばは変えていないので、メインコマンドはぴくりとも動かない
+
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定でここも自動的に止まる
+     （transition-duration が 0.01ms になり、ぱっと出てぱっと消える）
+
+   ※ 休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをしない
+     （テンプレート側の <Transition name="care-menu" :css="!resultMessage"> を参照）
+*/
+.care-menu-enter-active {
+  transition:
+    opacity 0.2s ease-out,
+    transform 0.2s ease-out;
+}
+
+.care-menu-leave-active {
+  transition:
+    opacity 0.15s ease-in,
+    transform 0.15s ease-in;
+}
+
+.care-menu-enter-from,
+.care-menu-leave-to {
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+/* ============================================================
+   【下部】コマンド欄（公園入口・ゴール・GAME OVER）
+   横長を活かして、選択肢を2〜3列のグリッドで並べる
+   ============================================================ */
+.command {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-content: start;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 14px 28px 18px;
+  border-top: 3px solid var(--gold);
+  background: linear-gradient(180deg, var(--navy-deep) 0%, var(--navy) 100%);
+  box-shadow: 0 -6px 18px rgb(16 29 44 / 40%);
+}
+
+.command__label {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: #dcf0f9;
+  font-size: 13.5px;
+  letter-spacing: 0.1em;
+}
+
+.command__note {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 9px 14px;
+  border: 1px dashed var(--navy-line);
+  border-radius: 10px;
+  color: #b8dfef;
+  font-size: 14px;
+}
+
+/* コマンドボタン */
+.cmd {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  /* box-sizing: border-box … width: 100% に padding と border をふくめる
+
+     このゲームは box-sizing を border-box にしていないので、
+     これが無いと width: 100%（＝マス目の幅）に
+     左右の padding（30 + 14px）と border（2 + 2px）が足されてしまう
+
+     iPhone SE（320px）の「公園の出口へ向かう（ゴール）」だと
+     ・マス目の幅 … 320 − 左右の余白20px ＝ 300px
+     ・ボタンの幅 … 300 ＋ padding 44px ＋ border 4px ＝ 348px
+     となって、48pxぶん右へはみ出していた
+     （ゴールのボタンは grid-column: 1 / -1 で横1行をまるごと使い、
+       文字も中央ぞろえなので、いちばん目立っていただけで、
+       ほかのコマンドボタンも同じだけはみ出していた）
+
+     border-box にすると、padding と border をふくめて 300px に収まる
+     ※ 中の文字が使える幅は、そのぶん狭くなる（300 − 48 ＝ 252px）
+       「公園の出口へ向かう（ゴール）」は14文字なので、
+       16pxの文字（約224px）でも1行に収まる
+
+     ※ このゲームで box-sizing を使っている ほかの場所と同じ直しかた
+       （.command-box / .stage--secret-path > * などと同じ考えかた） */
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px 18px 12px 34px;
+  border: 2px solid #c8d4e6;
+  border-bottom-width: 4px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+/* 選択カーソル「▶」（選ばれていないボタンでは見えない）
+
+   ▶ の色は「そのボタンの文字と同じ色」にそろえる
+   こうすると、どの色のボタンでも文字と同じ濃さで読めるようになる
+   ・白いボタン（すべり台へ行く など）         … 紺色     ← ここで指定
+   ・紫のボタン（秘密の場所）                  … 白       ← .cmd--secret::before
+   ・緑のボタン（ゴール）                      … 白       ← .cmd--goal::before
+   ・金色のボタン（きょうのおやつを選ぶ など） … 濃い茶色 ← .cmd--start / --next::before
+   ・うすい青のボタン（はじめの画面へ戻る）    … 白       ← .cmd--back::before
+
+   ※ 以前は全部このgold（金色）だったが、白い下地では 1.6:1 しかなく、
+     緑の下地では 1.4:1 とほとんど見えなかった
+*/
+.cmd::before {
+  position: absolute;
+  left: 14px;
+  color: var(--navy);
+  content: '▶';
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+/* 選んでいるボタンの見た目
+
+   ・マウスを乗せたボタン（:hover）
+   ・キーボードの↑↓←→で選んでいるボタン（--selected）
+   のどちらも、まったく同じ見た目になるようにまとめて指定する
+*/
+.cmd:hover,
+.cmd--selected {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+}
+
+/* 選択中は、ボタンの背景にうっすら水色を重ねる
+
+   background（背景色）は書きかえずに、inset の box-shadow で上から薄く塗る。
+   ・inset の影は「背景の上・文字の下」に描かれるので、文字は濁らない
+   ・background を書きかえないので、金色・紫・緑など
+     そのボタンが本来持っている色がそのまま残る
+   ・0 0 0 100px は「ボタン全体をおおえるくらい大きく広げる」という意味 */
+.cmd--selected,
+.cmd--single {
+  box-shadow:
+    0 4px 12px rgb(0 0 0 / 30%),
+    inset 0 0 0 100px rgb(var(--command-selected) / 12%);
+}
+
+/* 白い文字のボタン（秘密の場所・ゴール）だけは、水色を重ねない
+
+   背景が明るくなるほど、白い文字は読みにくくなるため。
+   この2つは「水色の枠」と「水色の光」だけで選択中を表し、
+   紫・緑の下地と白文字のコントラストは今までどおりに保つ */
+.cmd--secret.cmd--selected,
+.cmd--goal.cmd--selected {
+  box-shadow: 0 4px 12px rgb(0 0 0 / 30%);
+}
+
+.cmd:hover::before,
+.cmd:focus-visible::before,
+.cmd--selected::before {
+  opacity: 1;
+}
+
+/* 「はじめる」「きょうのおやつを選ぶ」の選択カーソル「▶」
+
+   前は「このボタンを Enter で押せますよ」と伝えるために、いつも出していた
+   いまはキーボードで上のボタン（♪ サウンドトラック／はじめの画面へ戻る・
+   サウンドON/OFF）へも移動できるので、
+   ▶ は「いま選んでいるボタン」だけに出す
+   （そうしないと、上のボタンを選んでいるのに ▶ が下に出たままになってしまう）
+
+   :focus-visible ではなく :focus を使っているのは、
+   画面が出たときに、こちらからこのボタンへフォーカスを当てているため
+   キーボードをまだ1回も押していなくても、
+   「いまここが選ばれている」と分かるようにしておく
+
+   ※ 浮き上がる動きと、ふんわり光る演出（.cmd--single::after）は今までどおり
+*/
+.cmd--single:focus::before {
+  opacity: 1;
+}
+
+.cmd:active {
+  border-bottom-width: 2px;
+  transform: translateY(2px);
+  box-shadow: none;
+}
+
+.cmd:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.cmd__text {
+  flex: 1;
+}
+
+/* バッジを入れる箱（「探検済み」＋アイテムのバッジ）
+
+   ・バッジが2つ並ぶので、せまい画面では下に折り返す（flex-wrap: wrap）
+   ・justify-content: flex-end で、折り返しても右にそろえる
+   ・flex: 0 1 auto ＝ 場所が足りないときは、この箱のほうが縮む
+     （ボタンの文字より先にバッジが折り返すので、行き先の名前が読めなくならない）
+*/
+.cmd__badges {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 6px;
+  min-width: 0;
+}
+
+.cmd__badge {
+  flex: none;
+  max-width: 100%;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: #e7edf6;
+  color: #63758d;
+  font-size: 12.5px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+/* ★ 発見済み … アイテムを見つけた場所（淡い金色）
+   文字は濃い茶色にして、白い下地でも読めるようにしている */
+.cmd__badge--item-found {
+  background: #fbeec4;
+  color: #8a6512;
+}
+
+/* 控えめなコマンドボタン（紺色の下地になじむ、うすい色）
+
+   主役のボタン（金色・緑・紫）より一段うしろに見えるようにしたいときに使う
+   いまは、ゴール／GAME OVER画面の「← はじめの画面へ戻る」で使っている */
+.cmd--sub {
+  border-color: var(--navy-line);
+  background: rgb(255 255 255 / 8%);
+  color: #d5e2f5;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+/* はじめの画面へ戻る（ゴール／GAME OVER画面の、2つ目のボタン）
+
+   すぐ上の「もう一度あそぶ」と同じ幅（380px）で、中央にそろえて下に置く
+   1 / -1 は「1列目から最後の列まで、ぜんぶ使う」という意味 */
+.cmd--back {
+  grid-column: 1 / -1;
+  justify-self: center;
+  max-width: 380px;
+}
+
+.cmd--back .cmd__text {
+  text-align: center;
+}
+
+/* ▶ は、そのままだと紺色なので、紺色の下地に沈んで見えなくなる
+   このボタンだけ下地が暗いので、白にしてはっきり見えるようにする
+   （文字の #d5e2f5 より少し明るくして、いま選んでいることが分かりやすい） */
+.cmd--back::before {
+  color: #fff;
+}
+
+/* 次の場所を選ぶ／もう一度あそぶ（1つだけなので中央に置く） */
+.cmd--next {
+  grid-column: 1 / -1;
+  justify-self: center;
+  max-width: 380px;
+  border-color: #e8b23c;
+  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
+  color: #4a3208;
+}
+
+.cmd--next .cmd__text {
+  text-align: center;
+}
+
+/* ゴール／GAME OVER画面の2つのボタン（command--result）
+
+   「もう一度あそぶ」と「はじめの画面へ戻る」を、左右にならべる
+   リザルトは ↑↓ でスクロールして読むので、ボタンは ← → で選ぶ
+   見た目も左右にならべて、キーの向きとそろえている
+
+   ・パソコンでは、1つ380pxまでの幅で中央にそろえる
+   ・スマホ幅でも1列にはしない（いちばん下の max-width: 700px を参照）
+   ・公園入口の .command には付けないので、そちらの並びは変わらない */
+.command--result {
+  grid-template-columns: repeat(2, minmax(0, 380px));
+  justify-content: center;
+}
+
+/* 1行まるごと使って中央に置く指定（.cmd--next / .cmd--back）を、この画面だけ外す */
+.command--result .cmd--next,
+.command--result .cmd--back {
+  grid-column: auto;
+  justify-self: stretch;
+}
+
+/* 秘密の場所
+   大きさと形はほかの場所のボタンとそろえ、ほかの場所の続きに並べる
+   目立たせるのは色（紫）だけにする */
+.cmd--secret {
+  border-color: #7f5cc8;
+  background: linear-gradient(180deg, #bd9bef 0%, #8f6ad4 100%);
+  color: #fff;
+}
+
+.cmd--secret .cmd__badge {
+  background: rgb(255 255 255 / 25%);
+  color: #fff;
+}
+
+/* 紫の下地でも、「★ 発見済み」が「探検済み」と見分けられるようにする
+
+   白い下地のボタン（すべり台など）と同じ淡い金色をそのまま使うと、
+   紫の上では沈んで読みにくいので、
+   こちらは金色の文字＋うっすら金色の下地にして浮かせている
+   （「探検済み」は .cmd--secret .cmd__badge の白のまま） */
+.cmd--secret .cmd__badge--item-found {
+  background: rgb(255 226 150 / 30%);
+  color: #ffeab5;
+}
+
+/* 紫の下地には紺色の▶が沈んでしまうので、文字と同じ白にする */
+.cmd--secret::before {
+  color: #fff;
+}
+
+/* ゴールへ向かう（1行使って目立たせる） */
+.cmd--goal {
+  grid-column: 1 / -1;
+
+  /* 左右の余白を、同じ大きさにそろえる
+
+     ■ なぜ必要か
+
+       ふつうの .cmd の左右の余白は、わざと左右でちがう大きさにしてある
+         padding: 12px 18px 12px 34px  … 左34px／右18px
+       左が広いのは、選択カーソル「▶」を置く場所を空けておくため
+
+       ところが、下の .cmd__text は text-align: center
+       中央ぞろえになるのは「余白をのぞいた、文字が入る部分」の中だけなので、
+       左右の余白がちがうと、ボタン全体から見た文字は
+         (34 − 18) ÷ 2 ＝ 8px
+       だけ右へずれてしまう
+
+       行き先のボタン（すべり台へ行く など）は左ぞろえで、
+       右には「探検済み」のバッジが入るので、これで問題ない
+       中央ぞろえのこのボタンだけが、左が広く・右がせまく見えていた
+
+     ■ どう直したか
+
+       左右をどちらも34px（左の「▶」の場所に合わせた広いほう）にそろえる
+       こうすると、文字が入る部分の中心＝ボタンの中心になり、
+       ボタン全体から見ても文字がまんなかに来る
+
+       ※ 「▶」は position: absolute なので、幅を使わない
+         左右をそろえても、カーソルと文字が重なることはない
+
+     ■ padding-inline（左右だけ）を使う理由
+
+       padding（4つまとめて）で書くと、上下の余白も上書きしてしまう
+       上下の余白は画面の高さごとに変えてある（12px → 9px）ので、
+       ここでまとめて書くと、背の低い画面でボタンだけ高いままになる
+       左右だけを指定すれば、上下はそれぞれの画面の値がそのまま残る
+
+     ■ 指定そのものは、すぐ下の .cmd.cmd--goal に置いてある
+
+       背の低い画面（max-height: 800px / 700px）では、このあとに
+       .cmd { padding: 9px 16px 9px 32px } が書いてある
+       クラス1つどうしの同じ強さだと、あとに書いてあるほうが勝ってしまい、
+       左右が 32px／16px のちぐはぐな値に戻ってしまう
+       （1280×720 のノートパソコンが、ちょうどこの高さに入る）
+
+       そこで、クラスを2つ重ねた .cmd.cmd--goal で指定して、
+       書いてある場所に関係なく、こちらが残るようにしている */
+  border-color: #2f7d4f;
+  background: linear-gradient(180deg, #59bd7f 0%, #38955f 100%);
+  color: #fff;
+}
+
+/* 左右の余白をそろえる（考えかたは、すぐ上の .cmd--goal の説明を参照） */
+.cmd.cmd--goal {
+  padding-inline: 34px;
+}
+
+.cmd--goal .cmd__text {
+  text-align: center;
+}
+
+/* 緑の下地でも、文字と同じ白にする */
+.cmd--goal::before {
+  color: #fff;
+}
+
+/* はじめる */
+.cmd--start {
+  justify-content: center;
+  padding: 16px 24px;
+  border-color: #e8b23c;
+  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
+  color: #4a3208;
+  font-size: 19px;
+}
+
+/* 金色のボタン（はじめる・きょうのおやつを選ぶ／もう一度あそぶ）も、文字と同じ濃い茶色にする
+   下地が明るいので、▶ は文字と同じ濃い茶色にしないと沈んで見えなくなる
+   大きなボタンなので、▶ も少しだけ大きくしてそろえている
+*/
+.cmd--start::before,
+.cmd--next::before {
+  color: #4a3208;
+  font-size: 13px;
+}
+@media (max-height: 800px) {
+
+  /* コマンドボックスも少しつめて、選択肢が画面に収まりやすくする */
+  .command-box {
+    padding: 9px 12px 11px;
+  }
+
+  .command-box__item {
+    padding: 4px 10px 4px 28px;
+    font-size: 16px;
+  }
+
+  /* 区切りもつめる（線と文字は残したまま、上下の余白だけ減らす） */
+  .command-box__divider {
+    margin: 5px 10px 3px;
+    font-size: 11px;
+  }
+
+  /* サブメニューも同じだけつめる
+     ※ PCでは command-box の「横」に出るので、
+       サブメニューを開いてもコマンド欄の高さは変わらない
+       （高さは、背の高いほうの command-box で決まる） */
+  .care-menu {
+    padding: 7px 12px 9px;
+  }
+
+  .care-menu__label {
+    margin-bottom: 6px;
+    padding-bottom: 6px;
+  }
+
+  .care-menu__item {
+    padding: 4px 10px 4px 28px;
+    font-size: 16px;
+  }
+
+  .command {
+    gap: 8px 12px;
+    padding: 10px 28px 12px;
+  }
+
+  .cmd {
+    padding: 9px 16px 9px 32px;
+    font-size: 16px;
+  }
+}
+
+@media (max-height: 700px) {
+
+  .command {
+    gap: 7px 12px;
+    padding: 8px 24px 10px;
+  }
+
+  .command-box {
+    padding: 8px 12px 9px;
+  }
+
+  /* ボタンの上下の余白は、ここまでにとどめる
+     （これ以上つめると、指で押せる大きさより小さくなってしまう） */
+  .cmd {
+    padding: 9px 16px 9px 32px;
+  }
+
+  .command-box__item {
+    padding: 5px 10px 5px 28px;
+  }
+}
+
+@media (max-height: 620px) {
+
+  .command {
+    padding: 7px 20px 9px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  /* 選択中の水色の光は、強くなったり弱くなったりするのを完全に止める。
+     ただし ▶ ・背景・太字・水色の枠は残るので、
+     動きが無くても「いまここを選んでいる」ことは分かる */
+  .cmd--selected::after,
+  .cmd--single::after,
+  .command-box__item--selected::after,
+  .care-menu__item--selected::after {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .command {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 横ならびの選択肢（4つ）は、タブレット幅では 2列 × 2行 に折り返す
+     （← → で動く順番は、左上 → 右上 → 左下 → 右下 のまま） */
+  .command-box--choices-4 {
+    --choice-columns: 2;
+  }
+}
+
+@media (max-width: 700px) {
+
+  /* スマホでは横にならべると幅が足りないので、たてにならべる
+     （上に「☕ ひとやすみ」、下に「どうする？」） */
+  .command-area {
+    flex-direction: column;
+    align-items: stretch;
+    align-self: stretch;
+    gap: 10px;
+  }
+
+  /* たてならびでは、2つの枠を画面の幅いっぱいにそろえる
+
+     ・flex: none
+       たてならび（flex-direction: column）では flex の基準が「高さ」になるので、
+       横ならび用に付けた 380px / 240px の基準をここで外す
+
+     ・width: auto ＋ align-self: stretch
+       width: 100% にはしないのが大事
+       このゲームは box-sizing を border-box にしていないため、
+       width: 100% だと padding と border のぶんだけ横にはみ出してしまう
+       stretch にまかせれば、padding と border をふくめた外枠が
+       ちょうど画面の幅に収まり、2つの枠の幅もぴったりそろう
+  */
+  .command-area .command-box,
+  .command-area .care-menu {
+    flex: none;
+    align-self: stretch;
+    width: auto;
+    max-width: none;
+  }
+
+  /* width: auto … 幅は stretch にまかせる
+     width: 100% のままだと、padding と border のぶんだけ画面の右へはみ出してしまう
+     （いやいやタイム・とつぜんのできごとの「どうする？」。.command-area の中の枠と同じ考えかた） */
+  .command-box {
+    align-self: stretch;
+    width: auto;
+    max-width: none;
+  }
+
+  /* 横ならびの選択肢（3つ）は、スマホ幅では2列に折り返す（3つ目は下の行へ）
+     たて1列には戻さない（← → で選ぶ向きと、見た目の向きをそろえるため） */
+  .command-box--choices-3 {
+    --choice-columns: 2;
+  }
+
+  .command {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    grid-template-columns: 1fr;
+    max-height: 62vh;
+    padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* ゴール／GAME OVER の2つのボタンは、スマホ幅でも横にならべる
+     （← → で選ぶ向きと、見た目の向きをそろえる。長い文字はボタンの中で折り返す） */
+  .command--result {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cmd {
+    padding: 11px 14px 11px 30px;
+    font-size: 16px;
+  }
+
+  /* ゴールのボタンは、スマホでも左右の余白をそろえる
+
+     すぐ上の .cmd で、スマホの左右の余白は 左30px／右14px になる
+     （左が広いのは、選択カーソル「▶」の場所を空けておくため）
+     このままだと、中央ぞろえの文字がボタン全体から見て
+       (30 − 14) ÷ 2 ＝ 8px
+     だけ右へずれてしまう（PCと同じ理由。くわしくは .cmd--goal の説明を参照）
+
+     スマホの左の余白（30px）に合わせて、左右ともに30pxにする
+     iPhone SE（320px）だと、文字に使える幅は
+       320 − コマンド欄の左右20px − ふち4px − 余白60px ＝ 236px
+     「公園の出口へ向かう（ゴール）」は14文字・16pxで約224pxなので、1行に収まる
+
+     ※ セレクタは、PC用と同じ .cmd.cmd--goal（クラス2つ）にすること
+       PC用のほうもクラス2つで指定してあるので、
+       ここをクラス1つにすると、あとに書いてあってもPC用に負けてしまう
+     ※ 上下の余白（11px）は、上の .cmd のものがそのまま残る
+       （padding-inline は左右だけを指定する書きかた） */
+  .cmd.cmd--goal {
+    padding-inline: 30px;
+  }
+
+  /* 各場所の「どうする？」「ひとやすみ」も、せまい画面では1つ下のサイズにそろえる */
+  .command-box__item,
+  .care-menu__item {
+    font-size: 16px;
+  }
+
+  .cmd:hover {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .cmd--next,
+  .cmd--back {
+    max-width: none;
+  }
+}
+
+@media (max-width: 700px) and (max-height: 700px) {
+
+  /* 下部コマンドは貼りつけたまま残すが、高さは画面の半分までにする
+     （62vh のままだと、小さい画面では下半分以上をコマンドが占めてしまう） */
+  .command {
+    max-height: 50vh;
+    gap: 7px;
+    padding: 9px 12px calc(10px + env(safe-area-inset-bottom));
+  }
+
+  /* 「どうする？」の枠も、余白だけ少しつめる
+     ボタンの上下の余白（押しやすさ）は削らない */
+  .command-box,
+  .care-menu {
+    padding: 9px 12px 10px;
+  }
+
+  .command-area {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 700px) and (max-height: 620px) {
+
+  .command {
+    max-height: 46vh;
+    padding: 8px 10px calc(9px + env(safe-area-inset-bottom));
+  }
+}
