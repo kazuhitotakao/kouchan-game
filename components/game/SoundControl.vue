@@ -113,6 +113,15 @@ defineExpose({ toggleButton, volumeSlider });
   </div>
 </template>
 
-<!-- 見た目は、ゲーム本編と同じ assets/css/game.css を使う
-     （理由は components/game/StatusBar.vue の <style> の説明と同じ） -->
-<style scoped src="~/assets/css/game.css"></style>
+<!-- 見た目は、このコンポーネント専用の assets/css/game/sound-control.css だけを読みこむ
+     （理由は components/game/StatusBar.vue の <style> の説明と同じ。
+       index.vue の scoped CSS は、このコンポーネントの中の要素には届かないため）
+
+     ■ game.css まるごとではなく sound-control.css だけにした理由
+       game.css を読むと、結果カードやコマンド欄など、ここでは使わないCSSまで
+       このコンポーネントぶんとして、もう一度ビルド結果に出てしまう
+
+     ※ 「どこに・どの大きさで置くか」（.title-card__tools／.status-area の中）は
+       sound.css にあり、これまでどおり game.css から読みこまれる
+     ※ sound-control.css は game.css からは読みこまない（二重出力になるため） -->
+<style scoped src="~/assets/css/game/sound-control.css"></style>

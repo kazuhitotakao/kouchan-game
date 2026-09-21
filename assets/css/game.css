@@ -7,12 +7,12 @@
 
    1. result    … リザルト・GAME OVER
    2. command   … コマンドボタン（.cmd）・コマンド欄の外わく
-   3. sound     … サウンドON/OFF ＋ 音量スライダー
+   3. sound     … サウンドの置き場所（タイトル画面／ゲーム画面上部バー）
    4. base      … ゲーム画面の土台（わく・中央エリア・タイトル画面など）
    5. responsive … 画面の大きさに合わせた上書き（全体レイアウト）
       ※ base のあとに置くこと。先に読むと上書きが効かなくなる
 
-   ■ 次の6つは、ここからは読みこまない
+   ■ 次の7つは、ここからは読みこまない
      ここでも読むと、同じCSSがビルド結果に二重に出てしまうため
 
      ・game/status.css      … components/game/StatusBar.vue が
@@ -20,6 +20,9 @@
      ・game/result-card.css … components/game/ResultCard.vue が
                                <style scoped src> で自分で読みこむ
      ・game/command-box.css … components/game/CommandBox.vue が
+                               <style scoped src> で自分で読みこむ
+     ・game/sound-control.css
+                             … components/game/SoundControl.vue が
                                <style scoped src> で自分で読みこむ
      ・game/event-flash.css … ResultCard.vue と pages/index.vue の
                                両方で使うので、app.vue がグローバルに読みこむ
