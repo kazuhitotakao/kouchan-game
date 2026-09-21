@@ -536,17 +536,11 @@
 }
 
 /* --- 直前の増減値（-18 や +6）が出るときのポップ --- */
-@keyframes status-pop {
-  0% {
-    opacity: 0;
-    transform: scale(1.4);
-  }
-
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
+/* @keyframes status-pop は assets/css/game/keyframes.css へ移動した
+   このファイルの .status-change のほかに、
+   result-card.css の .change-item__value と
+   base.css の .secret-path-hud__count からも参照するため
+   （それぞれ別の <style scoped> なので、グローバルに置かないと名前が合わない） */
 
 /* 危険の警告メッセージも、出るときだけふわっと出す */
 .status-warnings__item {

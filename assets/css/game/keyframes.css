@@ -12,18 +12,21 @@
      参照側だけが元の名前のまま残り、
      どこにも無い名前を指すことになってアニメーションが効かなくなる
 
-     ・@keyframes danger-pulse … assets/css/game/status.css から参照
-     ・@keyframes found-in     … assets/css/game/status.css
-                                 assets/css/game/result.css
-                                 assets/css/game/base.css から参照
+     ・@keyframes danger-pulse … status.css から参照
+     ・@keyframes found-in     … status.css／result-card.css／
+                                 event-flash.css／base.css から参照
+     ・@keyframes result-in    … result-card.css／base.css から参照
+     ・@keyframes shake        … result-card.css／base.css から参照
+     ・@keyframes status-pop   … status.css／result-card.css／base.css から参照
 
      status.css は components/game/StatusBar.vue が、
+     result-card.css は components/game/ResultCard.vue が、
      result.css / base.css は game.css 経由で index.vue などが、
      それぞれ別の <style scoped> として読みこんでいる
 
    ■ どう直したか
 
-     この2つの @keyframes だけを、scoped が付かない
+     これらの @keyframes だけを、scoped が付かない
      app.vue の <style> から読みこむ（＝名前が付けかえられない）ようにした
      参照側もすべて元の名前のままなので、名前が一致する
 
@@ -54,5 +57,47 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+/* --- 結果カードが下から浮き上がる（もとは result.css） --- */
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- いやいや発生：中央のカードだけを軽く左右に揺らす（もとは base.css） --- */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* --- 直前の増減値（-18 や +6）が出るときのポップ（もとは status.css） --- */
+@keyframes status-pop {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
 }

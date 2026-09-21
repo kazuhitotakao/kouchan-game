@@ -18,6 +18,13 @@
    ※ @import は、CSSの決まりで <style> のいちばん先頭に置く必要がある */
 @import '~/assets/css/game/keyframes.css';
 
+/* ちょっとしたできごと／ナイス対応の枠（.event-flash 〜）
+
+   ResultCard.vue と pages/index.vue の両方で使うので、
+   どちらか片方の scoped CSS に入れると、もう片方に届かない
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+@import '~/assets/css/game/event-flash.css';
+
 /* ============================================================
    スクロールバーの場所を、いつも空けておく
 

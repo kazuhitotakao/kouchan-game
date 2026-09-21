@@ -217,7 +217,15 @@ function itemReaction(itemName: string) {
   </article>
 </template>
 
-<!-- 見た目は、ゲーム本編と同じ assets/css/game.css を使う
+<!-- 見た目は、このコンポーネント専用の assets/css/game/result-card.css だけを読みこむ
      （理由は components/game/StatusBar.vue の <style> の説明と同じ。
-       index.vue の scoped CSS は、このコンポーネントの中の要素には届かないため） -->
-<style scoped src="~/assets/css/game.css"></style>
+       index.vue の scoped CSS は、このコンポーネントの中の要素には届かないため）
+
+     ■ game.css まるごとではなく result-card.css だけにした理由
+       game.css を読むと、リザルトやコマンド欄など、ここでは使わないCSSまで
+       このコンポーネントぶんとして、もう一度ビルド結果に出てしまう
+
+     ※ ちょっとしたできごと（.event-flash 〜）は pages/index.vue でも使うので、
+       app.vue からグローバルに読みこむ event-flash.css にある
+     ※ result-card.css は game.css からは読みこまない（二重出力になるため） -->
+<style scoped src="~/assets/css/game/result-card.css"></style>
