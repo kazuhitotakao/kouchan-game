@@ -1413,20 +1413,10 @@
 }
 
 /* --- いやいや発生：中央のカードだけを軽く左右に揺らす --- */
-@keyframes shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-
-  25% {
-    transform: translateX(-5px);
-  }
-
-  75% {
-    transform: translateX(5px);
-  }
-}
+/* @keyframes shake は assets/css/game/keyframes.css へ移動した
+   このファイルの .secret-path-player__face--bumped と、
+   result-card.css の .result-card--tantrum の両方から参照するため
+   （別々の <style scoped> なので、グローバルに置かないと名前が合わない） */
 
 /* --- いやいや継続中：いやいやタイムのカードをゆっくり上下にバウンスさせる ---
 
@@ -1631,16 +1621,10 @@
 }
 
 /* --- 危険なステータスのゆっくりした点滅 --- */
-@keyframes danger-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
-  }
-
-  50% {
-    box-shadow: 0 0 0 6px rgb(242 112 95 / 45%);
-  }
-}
+/* @keyframes danger-pulse は assets/css/game/keyframes.css へ移動した
+   （scoped で名前が付けかえられないよう、app.vue からグローバルに読みこむ）
+   このファイルは <style scoped> として読みこまれるため、ここに置くと
+   status.css からの参照と名前が合わなくなる */
 
 /* --- ゴールのランク表示 --- */
 /* ランクの登場演出
@@ -2218,12 +2202,14 @@
   
 
   /* 本文は 17px → 16px までにとどめる
-     高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ */
-  .place-card__text,
-  .result-card__text,
-  .found-line,
-  .event-flash__text,
-  .tantrum-line {
+     高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ
+
+     ※ 同じ指定を、別の <style scoped> になった次の2か所にも置いてある
+       ・result-card.css … .result-card__text／.found-line／.tantrum-line
+       ・event-flash.css … .event-flash__text
+       （まとめ書きのままだと、このファイルのスコープでしか効かないため。
+         値は3か所とも同じ） */
+  .place-card__text {
     font-size: 16px;
     line-height: 1.75;
   }
@@ -2262,12 +2248,13 @@
   }
 
   /* 本文はスマホでも16pxを下まわらないようにする
-     （画面がせまいぶん、行間は1.8のままゆったり取る） */
-  .place-card__text,
-  .result-card__text,
-  .found-line,
-  .event-flash__text,
-  .tantrum-line {
+     （画面がせまいぶん、行間は1.8のままゆったり取る）
+
+     ※ 同じ指定を、別の <style scoped> になった次の2か所にも置いてある
+       ・result-card.css … .result-card__text／.found-line／.tantrum-line
+       ・event-flash.css … .event-flash__text
+       （値は3か所とも同じ） */
+  .place-card__text {
     font-size: 16px;
     line-height: 1.8;
   }

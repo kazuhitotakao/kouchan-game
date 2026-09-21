@@ -1,0 +1,156 @@
+/* ============================================================
+   ページ全体で共通に使う @keyframes（グローバル）
+
+   ■ なぜ、このファイルだけ別あつかいなのか
+
+     Vue の <style scoped> は、@keyframes の名前も
+     「danger-pulse-<スコープID>」のように付けかえる
+     そのとき付けかえられるのは、
+     「同じ <style> の中で定義された名前」への参照だけ
+
+     そのため、定義と参照が別々の <style> に分かれてしまうと、
+     参照側だけが元の名前のまま残り、
+     どこにも無い名前を指すことになってアニメーションが効かなくなる
+
+     ・@keyframes danger-pulse … status.css から参照
+     ・@keyframes found-in     … status.css／result-card.css／
+                                 event-flash.css／base.css から参照
+     ・@keyframes result-in    … result-card.css／base.css から参照
+     ・@keyframes shake        … result-card.css／base.css から参照
+     ・@keyframes status-pop   … status.css／result-card.css／base.css から参照
+     ・@keyframes command-selected-glow
+                               … command.css／command-shared.css／
+                                 command-box.css から参照
+
+     status.css は components/game/StatusBar.vue が、
+     result-card.css は components/game/ResultCard.vue が、
+     command-box.css は components/game/CommandBox.vue が、
+     result.css / base.css は game.css 経由で index.vue などが、
+     それぞれ別の <style scoped> として読みこんでいる
+
+   ■ どう直したか
+
+     これらの @keyframes だけを、scoped が付かない
+     app.vue の <style> から読みこむ（＝名前が付けかえられない）ようにした
+     参照側もすべて元の名前のままなので、名前が一致する
+
+     ※ 中身（時間・色・easing・keyframe の内容）は、
+       移動前の base.css / result.css からそのまま持ってきている
+     ※ 同じ @keyframes を他のファイルに重複して残さないこと
+   ============================================================ */
+
+/* --- 危険なステータスのゆっくりした点滅（もとは base.css） --- */
+@keyframes danger-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 6px rgb(242 112 95 / 20%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 6px rgb(242 112 95 / 45%);
+  }
+}
+
+/* --- アイテム発見（もとは result.css） --- */
+@keyframes found-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- 結果カードが下から浮き上がる（もとは result.css） --- */
+@keyframes result-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* --- いやいや発生：中央のカードだけを軽く左右に揺らす（もとは base.css） --- */
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-5px);
+  }
+
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* --- 直前の増減値（-18 や +6）が出るときのポップ（もとは status.css） --- */
+@keyframes status-pop {
+  0% {
+    opacity: 0;
+    transform: scale(1.4);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================================
+   【共通】いま選んでいるコマンドを、水色でふわっと光らせる演出
+
+   ねらい
+     キーボードで遊んでいるとき「いま Enter を押したら
+     どのボタンが実行されるのか」を一目で分かるようにする
+
+   仕組み
+     ボタンの上に ::after という「透明な板」を1枚だけ重ねて、
+     その板の box-shadow（内側の水色の枠＋外側の水色の光）だけを
+     ゆっくり強くしたり弱くしたりする。
+     ・板は透明なので、ボタン本来の色（紙／金／紫／緑）はそのまま残る
+     ・box-shadow は場所を取らないので、ボタンの幅や配置はズレない
+     ・pointer-events: none なので、クリックのじゃまもしない
+
+   対象
+     .cmd--selected              … 公園入口などで選んでいるボタン
+     .cmd--single                … ボタンが1つだけの画面のボタン（はじめる／きょうのおやつを選ぶ）
+     .command-box__item--selected … 各イベントの中で選んでいる行
+   ============================================================ */
+
+/* 水色の光の強さを 弱 → 少し強い → 弱 と往復させる
+   ※ transform（動き）はここでは一切さわらない。
+     hover や :active の translateY / translateX とケンカさせないため
+
+   影は3枚がさねになっている
+     1枚目 inset … ボタンのふちの内側に引く水色の線
+     2枚目 0 0 0 2px … ボタンのすぐ外に引く水色の線
+       ※ 水色は「紺色の下地」の上でいちばんよく見える（コントラスト4.25:1）。
+         紙のボタンや金色のボタンは色が明るく、内側の線だけでは見えにくいので、
+         紺色の下地に出るこの外側の線が「選択中」の目じるしの主役になる
+     3枚目 ぼかし … まわりへ広がる、ふんわりした光 */
+@keyframes command-selected-glow {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 0 0 2px rgb(var(--command-selected) / 55%),
+      0 0 0 2px rgb(var(--command-selected) / 45%),
+      0 0 8px 2px rgb(var(--command-selected) / 25%);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 0 0 2px rgb(var(--command-selected) / 95%),
+      0 0 0 2px rgb(var(--command-selected) / 90%),
+      0 0 16px 3px rgb(var(--command-selected) / 55%);
+  }
+}
