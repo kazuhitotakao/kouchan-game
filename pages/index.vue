@@ -80,10 +80,6 @@ import type {
   SnackId,
   SnackUseContext,
   StatusChanges,
-  TantrumAction,
-  TantrumLevel,
-  TantrumReason,
-  TantrumSnackFit,
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ
@@ -110,7 +106,7 @@ import {
   secretPathTapFlashDuration,
 } from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
-import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, snackTantrumFits, tantrumAlertDuration, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
+import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
 
@@ -258,10 +254,14 @@ const {
   collectedItems, // 公園で見つけたもの
   canEnterSecretSpot, // 秘密の場所へ行けるか（ポイント20以上かつ見つけたもの3種類以上）
   hasDiscoveredSecretSpot, // こもれびの広場を、このプレイでもう見つけたか
-} = useGameState();
 
-/* いやいや中かどうか */
-const isTantrum = ref(false);
+  /* いやいや（外からもよく見る2つだけ。理由・レベルなどの中身は useTantrum のまま） */
+  isTantrum, // いまいやいや中かどうか（画面の出しわけ・BGMの切りかえにも使う）
+  tantrumCount, // いやいやが起きた回数（最後のスコア計算に使う）
+
+  /* 上のぜんぶを最初の状態へ戻す（「もう一度あそぶ」の resetGame() から呼ぶ） */
+  resetGameState,
+} = useGameState();
 
 /* 今回の行動で新しく見つけたもの
    結果カードに「★ アイテム発見！」を出すためだけに使う（演出用）
@@ -293,9 +293,6 @@ const randomEventEffects = ref<RandomEventEffect[]>([]);
    そこで文章だけここに持ち、画面のいちばん下に出す
 */
 const tantrumText = ref('');
-
-/* いやいやが起きた回数（記録用） */
-const tantrumCount = ref(0);
 
 /* いやいや発生の演出（画面いっぱいのオーバーレイ）を出しているかどうか
 
@@ -430,160 +427,6 @@ function findSnackInBag(snackId: SnackId) {
 function removeSnackFromBag(snackId: SnackId) {
   selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
 }
-
-/* ============================================================
-   いやいやの理由（こうちゃんは、なぜ泣いているのか）
-
-   いやいやには4つの理由があり、理由によって「効く対応」がちがう
-   プレイヤーは、こうちゃんのセリフや様子から理由を考えて、対応を選ぶ
-
-   ■ 「発生するか」と「なぜ泣いているか」は別の抽選
-
-     ① checkTantrum()       … いやいやが「そもそも起きるか」を決める
-                               （体力・機嫌・時間から確率を出す。ここは前と同じ）
-     ② chooseTantrumReason() … ①で起きると決まったあとで「なぜ泣いているか」を決める
-
-     ①で起きなかったときは、②は呼ばれない（理由も変わらない）
-
-   ■ 同じいやいやのあいだは、理由を変えない
-
-     理由を決めるのは「新しいいやいやが起きた瞬間」の1回だけ
-     「少し待ってみる」に失敗して いやいや が続いても、理由はそのまま
-     （「おなかすいた」と泣いていたのに、待っていたら急に
-       「まだあそぶ」に変わった、ということが起きないようにする）
-
-   ■ 画面には理由の名前（'hungry' や「空腹」）を出さない
-
-     出すのは tantrumReasonInfo のセリフと様子だけ
-     答えを見せずに、プレイヤーに考えてもらうため
-   ============================================================ */
-
-/* いやいやの理由
-   tired        … つかれた
-   hungry       … おなかすいた
-   frustrated   … うまくできなくて悔しい
-   wantMorePlay … まだ遊びたい */
-
-/* いまのいやいやの理由
-
-   null … いやいやしていない（または、まだ理由が決まっていない）
-
-   ※ だっこ・おやつなどで いやいや が終わった瞬間には null に戻さない
-     結果の文章を読んでいるあいだも「何のいやいやだったか」を使うことがあるため
-     null に戻すのは、結果を読み終えて いやいやタイムの画面から出るとき（goToNextPlace()）
-     と、もう一度あそぶとき（resetGame()） */
-const tantrumReason = ref<TantrumReason | null>(null);
-
-/* ============================================================
-   いやいやの激しさ（いやいやレベル）
-
-   同じ1回のいやいやでも、対応しだいで激しさが変わる
-     1 … ぐずぐず   （はじまったばかり）
-     2 … 大泣き     （対応がずれて、泣き声が大きくなった）
-     3 … 大いやいや （地面にごろん。いちばん激しい）
-
-   ・新しいいやいやは、かならず 1 から始まる
-   ・ずれた対応をすると 1 → 2 → 3 と上がる（3 より上にはならない）
-   ・合った対応をすると、1段落ち着くこともある
-   ・いやいやが終わるのは、それぞれの対応で isTantrum を false にしたときだけ
-     （レベルが 1 まで下がっても、それだけでは終わらない）
-
-   ※ tantrumCount（いやいやが起きた回数）とは別もの
-     レベルが 1 → 2 → 3 と上がっても、同じ1回のいやいやなので、回数は増えない
-
-   ※ 画面には「Lv2」のような数字は出さない
-     見出しとこうちゃんの様子（ぐずぐず → 大泣き → 大いやいや）で伝える
-   ============================================================ */
-
-/* いまのいやいやの激しさ
-   いやいやしていないときは 1 のまま（新しいいやいやも 1 から始まる） */
-const tantrumLevel = ref<TantrumLevel>(1);
-
-/* いまのレベルの見出しと様子 */
-const currentTantrumLevelInfo = computed(() => tantrumLevelInfo[tantrumLevel.value]);
-
-/* いまのいやいやの理由に合ったことば（理由が決まっていないときは null） */
-const currentTantrumReasonInfo = computed(() => (tantrumReason.value === null ? null : tantrumReasonInfo[tantrumReason.value]));
-
-/* いやいやタイムのカードに出す、こうちゃんの様子
-   ぐずぐずのときは理由ごとの様子、大泣き・大いやいやのときはレベルごとの様子 */
-const currentTantrumScene = computed(() => currentTantrumLevelInfo.value.scene ?? currentTantrumReasonInfo.value?.scene ?? '');
-
-/* おやつと いやいやの理由の相性
-
-   great  … ぴったり     → どのレベルでも いやいや終了 ＋ ナイス対応
-   normal … ふつうに効く → ぐずぐずなら終了、大泣き以上なら1段落ち着くだけ（いやいやは続く）
-   weak   … ずれている   → 食べてはくれるが、いやいやは悪化する
-
-   ※ great が大いやいやでも効くのは、「理由にぴったりのおやつ」はそれだけ強い、というルールのため
-     normal は「おやつはうれしいけれど、泣いている理由には合っていない」ので、
-     はげしく泣いているときは、ひとまず少し落ち着くところまでしか効かない
-
-   ※ おやつ選択画面にもおやつバッグにも、この相性は出さない
-     こうちゃんの様子とおやつの説明から、プレイヤーに考えてもらう */
-
-/* いまのいやいやの理由に対して、そのおやつの相性はどうか
-
-   理由が決まっていないとき（ふつうは起きない）は normal にしておく
-   ＝ 相性を入れる前と同じく、どのおやつでも いやいや が終わる */
-function getSnackTantrumFit(snackId: SnackId): TantrumSnackFit {
-  if (tantrumReason.value === null) {
-    return 'normal';
-  }
-
-  return snackTantrumFits[snackId][tantrumReason.value];
-}
-
-/* ============================================================
-   いやいや中に選んだ対応の記録（同じ対応のくり返し）
-
-   「同じことを何度もやれば、いつかは勝てる」にならないように、
-   直前と同じ対応を続けたときは、少し効きにくくする
-
-   ■ lastTantrumAction … 直前に選んだ対応
-     'hug' だっこ／'talk' お話／'wait' 待つ／'snack:gummy' などのおやつ
-     おやつは種類ごとに別の対応としてあつかう
-     （グミが合わなかったあとに、せんべいへ変えるのは「くり返し」ではない）
-
-   ■ repeatedTantrumActionCount … 同じ対応を何回続けているか
-     0 … 1回目（直前とちがう対応）
-     1 … 2回続けた
-     2 … 3回以上続けた（2より大きくはしない）
-
-   ・ちがう対応を選ぶと 0 に戻る
-     （待つ → 待つ → お話 → 待つ なら、最後の待つは、また「1回目」）
-   ・書きかえるのは registerTantrumAction() の1か所だけ
-   ・新しいいやいやが始まったときと、いやいやタイムから出るときに、まとめて空へ戻す
-   ============================================================ */
-
-const lastTantrumAction = ref<TantrumAction | null>(null);
-const repeatedTantrumActionCount = ref(0);
-
-/* ===== ナイス対応（いやいやの理由に合った対応をしたときのごほうび） =====
-
-   ナイス対応になるのは次のとき（ボーナスを足すのは applyNiceTantrumResponse() の1か所だけ）
-   ・つかれた           ＋ だっこ（どのレベルでも）
-   ・悔しい             ＋ お話する（大いやいやで1段落ち着くだけのときもふくむ）
-   ・まだ遊びたい       ＋ お話する（同上）
-   ・悔しい             ＋ 少し待ってみる（成功したとき。1段落ち着くだけのときもふくむ）
-   ・相性 great のおやつ ＋ そのいやいやの理由（どのレベルでも）
-
-   ボーナスがもらえるのは、1回のいやいやにつき1回だけ（hasNiceTantrumResponse で見る） */
-
-/* このいやいやで、もうナイス対応のボーナスをもらったかどうか
-
-   ボーナスは1回のいやいやにつき1回だけ
-   たとえば「大いやいやで正しいお話 → 大泣きに下がる → もう一度お話で解決」のとき、
-   2回ともボーナスを入れると、わざと長引かせたほうが得になってしまうため
-
-   新しいいやいやが始まったときと、いやいやタイムから出るときに false へ戻す */
-const hasNiceTantrumResponse = ref(false);
-
-/* ナイス対応の表示に出す文章（演出用）
-
-   空っぽ … 今回の対応はナイス対応ではなかった（結果カードに「✨ ナイス対応！」を出さない）
-   行動をはじめるたび（startStatusChanges()）と、いやいやタイムから出るときに空へ戻す */
-const niceTantrumResponseText = ref('');
 
 /* 次に起こす予定のとつぜんのできごと（予定表）
 
@@ -1687,10 +1530,32 @@ function showTantrumAlert() {
    中身は composables/useTantrum.ts にある
    いま使っている ref・関数をそのまま渡して、今までと同じように動かしてもらう
 
-   ※ いやいやの状態（tantrumReason・tantrumLevel など）は、
-     画面の表示・結果カード・BGMの切りかえからも見るので、このファイルで持ったまま
+   ※ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応）は、
+     あちらが自分で持っている
+     こちらは、画面に出すぶんだけを下の { } で受けとって表示する
+
+   ※ いやいや中かどうか（isTantrum）と、いやいやが起きた回数（tantrumCount）は、
+     BGMの切りかえ（useAudio）や最後のスコア（useScore）からも見るので、
+     composables/useGameState.ts が持ち主。ここでは渡すだけ
 */
-const { checkTantrum, resetTantrumState, hugChild, giveSnack, talkToChild, waitCalmly } = useTantrum({
+const {
+  /* いやいやの判定と、いやいや中の4つの対応 */
+  checkTantrum,
+  resetTantrumState,
+  hugChild,
+  giveSnack,
+  talkToChild,
+  waitCalmly,
+
+  /* 画面に出すもの（持ち主は useTantrum。ここは読むだけ）
+     ※ niceTantrumResponseText だけは、行動をはじめるたびに
+       startStatusChanges() で空へ戻している */
+  tantrumLevel,
+  currentTantrumLevelInfo,
+  currentTantrumReasonInfo,
+  currentTantrumScene,
+  niceTantrumResponseText,
+} = useTantrum({
   childEnergy,
   childMood,
   parentEnergy,
@@ -1699,13 +1564,6 @@ const { checkTantrum, resetTantrumState, hugChild, giveSnack, talkToChild, waitC
   isTantrum,
   tantrumCount,
   tantrumText,
-  tantrumReason,
-  tantrumLevel,
-  currentTantrumReasonInfo,
-  lastTantrumAction,
-  repeatedTantrumActionCount,
-  hasNiceTantrumResponse,
-  niceTantrumResponseText,
   niceTantrumBonusOutingPoint,
   niceTantrumBonusParentCalm,
   resultMessage,
@@ -1717,7 +1575,6 @@ const { checkTantrum, resetTantrumState, hugChild, giveSnack, talkToChild, waitC
   addMinutes,
   findSnackInBag,
   removeSnackFromBag,
-  getSnackTantrumFit,
   startStatusChanges,
   saveStatusChanges,
   fixAllStatus,
@@ -4472,24 +4329,17 @@ function resetGame() {
   stopGameOverBgm();
   playTitleBgmSoon();
 
-  childEnergy.value = 100;
-  childMood.value = 55;
-  outingPoint.value = 0;
-  parentEnergy.value = 100;
-  parentCalm.value = 100;
-  currentTime.value = '09:00';
+  /* ステータス・おでかけポイント・時間・ゲームの進みぐあい（いる場所・探検済み・
+     見つけたもの・遊んだ回数・こもれびの広場を見つけたか）と、
+     いやいや中かどうか・いやいやの回数を、まとめて最初に戻す
 
-  visitedPlaces.value = [];
-  collectedItems.value = [];
-  playCount.value = 0;
+     初期値は composables/useGameState.ts が持っている
+     （はじめるときと同じ値になるので、ここに数字を書き写す必要がない） */
+  resetGameState();
 
-  // 秘密の小道も「まだ広場を見つけていない」状態に戻す
-  // （ミニゲームのループ・流れてくるもの・木漏れ日の数・こうちゃんの位置も、まとめて片づける）
+  // 秘密の小道のミニゲームも片づける
+  // （ループ・流れてくるもの・木漏れ日の数・こうちゃんの位置を、まとめて止めて戻す）
   resetSecretPathGame();
-  hasDiscoveredSecretSpot.value = false;
-
-  isTantrum.value = false;
-  tantrumCount.value = 0;
 
   // いやいやの理由・レベル・対応の記録・ナイス対応も「いやいやしていない」状態に戻す
   // （大いやいや中にGAME OVERになったときの様子が、次のプレイに残らないようにする）
@@ -4577,7 +4427,7 @@ function resetGame() {
     minutes: 0,
   };
 
-  currentEvent.value = 'parkEntrance';
+  // ※ 公園入口（currentEvent）に戻すのは、上の resetGameState() でまとめて行っている
   gameStarted.value = false;
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
