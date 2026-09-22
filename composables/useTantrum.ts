@@ -23,14 +23,22 @@
      ゲームのバランス（増減の数・抽選の順番・乱数を呼ぶ回数）を
      1つも変えないことを優先したため
 
-   ■ いやいやの状態（tantrumReason・tantrumLevel など）も、
-     今までどおり pages/index.vue が持っている ref をそのまま使う
-     （画面の表示・結果カード・BGMの切りかえなど、あちこちから見ているため）
+   ■ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応）は、
+     ここが自分で持っている
+     書きかえるのもこのファイルの中だけなので、持ち主と書き手をそろえてある
+     画面に出すものは、下の return から渡している
+
+   ■ いやいや中かどうか（isTantrum）と、いやいやが起きた回数（tantrumCount）は、
+     今までどおり受けとった ref をそのまま使う
+     こちらはBGMの切りかえ（useAudio）や最後のスコア（useScore）からも見るので、
+     composables/useGameState.ts が持ち主になっている
    ============================================================ */
 
+import { computed, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 
-import type { SnackId, Snack, TantrumAction, TantrumLevel, TantrumReason, TantrumReasonInfo, TantrumSnackFit } from '~/types/game';
+import { snackTantrumFits, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
+import type { SnackId, Snack, TantrumAction, TantrumLevel, TantrumReason, TantrumSnackFit } from '~/types/game';
 
 export type UseTantrumOptions = {
   /* ===== こうちゃんと親のステータス（そのまま増減する） ===== */
@@ -40,21 +48,13 @@ export type UseTantrumOptions = {
   parentCalm: Ref<number>;
   outingPoint: Ref<number>;
 
-  /* ===== いやいやの状態 ===== */
+  /* ===== いやいやの状態（ゲーム全体で共有しているぶんだけ受けとる） =====
+     理由・激しさ・直前の対応・ナイス対応は、このファイルの中で持っている */
   isTantrum: Ref<boolean>;
   tantrumCount: Ref<number>;
   tantrumText: Ref<string>;
-  tantrumReason: Ref<TantrumReason | null>;
-  tantrumLevel: Ref<TantrumLevel>;
-  currentTantrumReasonInfo: ComputedRef<TantrumReasonInfo | null>;
 
-  /* 同じ対応をくり返しているかの記録 */
-  lastTantrumAction: Ref<TantrumAction | null>;
-  repeatedTantrumActionCount: Ref<number>;
-
-  /* ナイス対応（1回のいやいやにつき1回だけ） */
-  hasNiceTantrumResponse: Ref<boolean>;
-  niceTantrumResponseText: Ref<string>;
+  /* ナイス対応のボーナス（1回のいやいやにつき1回だけ） */
   niceTantrumBonusOutingPoint: number;
   niceTantrumBonusParentCalm: number;
 
@@ -72,7 +72,6 @@ export type UseTantrumOptions = {
   /* ===== おやつ（バッグの中身） ===== */
   findSnackInBag: (snackId: SnackId) => Snack | undefined;
   removeSnackFromBag: (snackId: SnackId) => void;
-  getSnackTantrumFit: (snackId: SnackId) => TantrumSnackFit;
 
   /* ===== 共通の処理（中身は pages/index.vue のまま） ===== */
   startStatusChanges: () => void;
@@ -98,13 +97,6 @@ export function useTantrum(options: UseTantrumOptions) {
     isTantrum,
     tantrumCount,
     tantrumText,
-    tantrumReason,
-    tantrumLevel,
-    currentTantrumReasonInfo,
-    lastTantrumAction,
-    repeatedTantrumActionCount,
-    hasNiceTantrumResponse,
-    niceTantrumResponseText,
     niceTantrumBonusOutingPoint,
     niceTantrumBonusParentCalm,
     resultMessage,
@@ -116,7 +108,6 @@ export function useTantrum(options: UseTantrumOptions) {
     addMinutes,
     findSnackInBag,
     removeSnackFromBag,
-    getSnackTantrumFit,
     startStatusChanges,
     saveStatusChanges,
     fixAllStatus,
@@ -125,6 +116,170 @@ export function useTantrum(options: UseTantrumOptions) {
     stopParkBgm,
     stopSecretBgm,
   } = options;
+
+  /* ============================================================
+     いやいやの中だけで使う状態
+
+     ここから下の入れものは、このファイルが持ち主
+     書きかえるのもこのファイルの中だけで、
+     空に戻すのも resetTantrumState() の1か所にまとめてある
+
+     画面に出すもの（激しさ・理由に合ったことば・こうちゃんの様子・
+     ナイス対応の文章）は、いちばん下の return から渡している
+     ============================================================ */
+
+  /* ============================================================
+     いやいやの理由（こうちゃんは、なぜ泣いているのか）
+
+     いやいやには4つの理由があり、理由によって「効く対応」がちがう
+     プレイヤーは、こうちゃんのセリフや様子から理由を考えて、対応を選ぶ
+
+     ■ 「発生するか」と「なぜ泣いているか」は別の抽選
+
+       ① checkTantrum()       … いやいやが「そもそも起きるか」を決める
+                                 （体力・機嫌・時間から確率を出す。ここは前と同じ）
+       ② chooseTantrumReason() … ①で起きると決まったあとで「なぜ泣いているか」を決める
+
+       ①で起きなかったときは、②は呼ばれない（理由も変わらない）
+
+     ■ 同じいやいやのあいだは、理由を変えない
+
+       理由を決めるのは「新しいいやいやが起きた瞬間」の1回だけ
+       「少し待ってみる」に失敗して いやいや が続いても、理由はそのまま
+       （「おなかすいた」と泣いていたのに、待っていたら急に
+         「まだあそぶ」に変わった、ということが起きないようにする）
+
+     ■ 画面には理由の名前（'hungry' や「空腹」）を出さない
+
+       出すのは tantrumReasonInfo のセリフと様子だけ
+       答えを見せずに、プレイヤーに考えてもらうため
+     ============================================================ */
+
+  /* いやいやの理由
+     tired        … つかれた
+     hungry       … おなかすいた
+     frustrated   … うまくできなくて悔しい
+     wantMorePlay … まだ遊びたい */
+
+  /* いまのいやいやの理由
+
+     null … いやいやしていない（または、まだ理由が決まっていない）
+
+     ※ だっこ・おやつなどで いやいや が終わった瞬間には null に戻さない
+       結果の文章を読んでいるあいだも「何のいやいやだったか」を使うことがあるため
+       null に戻すのは、結果を読み終えて いやいやタイムの画面から出るとき（goToNextPlace()）
+       と、もう一度あそぶとき（resetGame()）
+       ※ どちらも resetTantrumState() を通る */
+  const tantrumReason = ref<TantrumReason | null>(null);
+
+  /* ============================================================
+     いやいやの激しさ（いやいやレベル）
+
+     同じ1回のいやいやでも、対応しだいで激しさが変わる
+       1 … ぐずぐず   （はじまったばかり）
+       2 … 大泣き     （対応がずれて、泣き声が大きくなった）
+       3 … 大いやいや （地面にごろん。いちばん激しい）
+
+     ・新しいいやいやは、かならず 1 から始まる
+     ・ずれた対応をすると 1 → 2 → 3 と上がる（3 より上にはならない）
+     ・合った対応をすると、1段落ち着くこともある
+     ・いやいやが終わるのは、それぞれの対応で isTantrum を false にしたときだけ
+       （レベルが 1 まで下がっても、それだけでは終わらない）
+
+     ※ tantrumCount（いやいやが起きた回数）とは別もの
+       レベルが 1 → 2 → 3 と上がっても、同じ1回のいやいやなので、回数は増えない
+
+     ※ 画面には「Lv2」のような数字は出さない
+       見出しとこうちゃんの様子（ぐずぐず → 大泣き → 大いやいや）で伝える
+     ============================================================ */
+
+  /* いまのいやいやの激しさ
+     いやいやしていないときは 1 のまま（新しいいやいやも 1 から始まる） */
+  const tantrumLevel = ref<TantrumLevel>(1);
+
+  /* いまのレベルの見出しと様子 */
+  const currentTantrumLevelInfo = computed(() => tantrumLevelInfo[tantrumLevel.value]);
+
+  /* いまのいやいやの理由に合ったことば（理由が決まっていないときは null） */
+  const currentTantrumReasonInfo = computed(() => (tantrumReason.value === null ? null : tantrumReasonInfo[tantrumReason.value]));
+
+  /* いやいやタイムのカードに出す、こうちゃんの様子
+     ぐずぐずのときは理由ごとの様子、大泣き・大いやいやのときはレベルごとの様子 */
+  const currentTantrumScene = computed(() => currentTantrumLevelInfo.value.scene ?? currentTantrumReasonInfo.value?.scene ?? '');
+
+  /* ============================================================
+     いやいや中に選んだ対応の記録（同じ対応のくり返し）
+
+     「同じことを何度もやれば、いつかは勝てる」にならないように、
+     直前と同じ対応を続けたときは、少し効きにくくする
+
+     ■ lastTantrumAction … 直前に選んだ対応
+       'hug' だっこ／'talk' お話／'wait' 待つ／'snack:gummy' などのおやつ
+       おやつは種類ごとに別の対応としてあつかう
+       （グミが合わなかったあとに、せんべいへ変えるのは「くり返し」ではない）
+
+     ■ repeatedTantrumActionCount … 同じ対応を何回続けているか
+       0 … 1回目（直前とちがう対応）
+       1 … 2回続けた
+       2 … 3回以上続けた（2より大きくはしない）
+
+     ・ちがう対応を選ぶと 0 に戻る
+       （待つ → 待つ → お話 → 待つ なら、最後の待つは、また「1回目」）
+     ・書きかえるのは registerTantrumAction() の1か所だけ
+     ・新しいいやいやが始まったときと、いやいやタイムから出るときに、まとめて空へ戻す
+     ============================================================ */
+
+  const lastTantrumAction = ref<TantrumAction | null>(null);
+  const repeatedTantrumActionCount = ref(0);
+
+  /* ===== ナイス対応（いやいやの理由に合った対応をしたときのごほうび） =====
+
+     ナイス対応になるのは次のとき（ボーナスを足すのは applyNiceTantrumResponse() の1か所だけ）
+     ・つかれた           ＋ だっこ（どのレベルでも）
+     ・悔しい             ＋ お話する（大いやいやで1段落ち着くだけのときもふくむ）
+     ・まだ遊びたい       ＋ お話する（同上）
+     ・悔しい             ＋ 少し待ってみる（成功したとき。1段落ち着くだけのときもふくむ）
+     ・相性 great のおやつ ＋ そのいやいやの理由（どのレベルでも）
+
+     ボーナスがもらえるのは、1回のいやいやにつき1回だけ（hasNiceTantrumResponse で見る） */
+
+  /* このいやいやで、もうナイス対応のボーナスをもらったかどうか
+
+     たとえば「大いやいやで正しいお話 → 大泣きに下がる → もう一度お話で解決」のとき、
+     2回ともボーナスを入れると、わざと長引かせたほうが得になってしまうため
+
+     新しいいやいやが始まったときと、いやいやタイムから出るときに false へ戻す */
+  const hasNiceTantrumResponse = ref(false);
+
+  /* ナイス対応の表示に出す文章（演出用）
+
+     空っぽ … 今回の対応はナイス対応ではなかった（結果カードに「✨ ナイス対応！」を出さない）
+     行動をはじめるたび（pages/index.vue の startStatusChanges()）と、
+     いやいやタイムから出るときに空へ戻す */
+  const niceTantrumResponseText = ref('');
+
+  /* おやつと いやいやの理由の相性
+
+     great  … ぴったり     → どのレベルでも いやいや終了 ＋ ナイス対応
+     normal … ふつうに効く → ぐずぐずなら終了、大泣き以上なら1段落ち着くだけ（いやいやは続く）
+     weak   … ずれている   → 食べてはくれるが、いやいやは悪化する
+
+     ※ great が大いやいやでも効くのは、「理由にぴったりのおやつ」はそれだけ強い、というルールのため
+       normal は「おやつはうれしいけれど、泣いている理由には合っていない」ので、
+       はげしく泣いているときは、ひとまず少し落ち着くところまでしか効かない
+
+     ※ おやつ選択画面にもおやつバッグにも、この相性は出さない
+       こうちゃんの様子とおやつの説明から、プレイヤーに考えてもらう
+
+     理由が決まっていないとき（ふつうは起きない）は normal にしておく
+     ＝ 相性を入れる前と同じく、どのおやつでも いやいや が終わる */
+  function getSnackTantrumFit(snackId: SnackId): TantrumSnackFit {
+    if (tantrumReason.value === null) {
+      return 'normal';
+    }
+
+    return snackTantrumFits[snackId][tantrumReason.value];
+  }
 
 
   /* いやいやの理由を決める（新しいいやいやが起きると決まったあとに、1回だけ呼ぶ）
@@ -917,5 +1072,14 @@ export function useTantrum(options: UseTantrumOptions) {
     giveSnack,
     talkToChild,
     waitCalmly,
+
+    /* ===== 画面に出すもの（読むだけ。書きかえるのはこのファイルの中） =====
+       ※ niceTantrumResponseText だけは、行動をはじめるたびに
+         pages/index.vue の startStatusChanges() が空へ戻している */
+    tantrumLevel,
+    currentTantrumLevelInfo,
+    currentTantrumReasonInfo,
+    currentTantrumScene,
+    niceTantrumResponseText,
   };
 }
