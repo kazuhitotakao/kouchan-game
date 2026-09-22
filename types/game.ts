@@ -55,6 +55,15 @@ export type GameEvent =
   | 'fallDown'
   | 'fountain';
 
+/* 結果カード・コマンド欄が、どの場面のものか
+   place       … 通常の場所6か所（すべり台・砂場など）
+   tantrum     … いやいやタイム
+   suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
+
+   CommandBox.vue と ResultCard.vue の variant で、同じものを見ている
+*/
+export type SceneVariant = 'place' | 'tantrum' | 'suddenEvent';
+
 /* ランダムイベントで動いたステータス1つぶんの型
    label     … 「おでかけポイント」などの項目名
    text      … 「+5」「-8」の形にした増減
@@ -99,6 +108,12 @@ export type Snack = {
   minutes: number;
   description: string;
 };
+
+/* どの場面からおやつバッグを開いたか
+   exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
+   tantrum   … いやいやタイムの「おやつをあげる ＞」
+*/
+export type SnackUseContext = 'exploring' | 'tantrum';
 
 /* いやいやの理由
    tired        … つかれた
@@ -178,6 +193,24 @@ export type StatusChanges = {
   minutes: number;
 };
 
+/* 「今回の変化（合計）」の1グループぶん（こうちゃん／親／おでかけ）
+   中身は pages/index.vue の changeGroups がつくり、ResultCard.vue がそのまま並べる
+   ・name       … 「こうちゃん」などの見出し
+   ・groupClass … 枠の色を変えるためのCSSクラス名
+   ・rows       … その人のステータスの行（項目名・前・後・増減・増減の色）
+*/
+export type ChangeGroup = {
+  name: string;
+  groupClass: string;
+  rows: {
+    label: string;
+    before: string;
+    after: string;
+    changeText: string;
+    className: string;
+  }[];
+};
+
 /* スコア内訳の1行ぶんの型
    label  … 「おでかけポイント」などの項目名
    points … その項目でもらった点数（マイナスもある）
@@ -185,4 +218,47 @@ export type StatusChanges = {
 export type ScoreBreakdownItem = {
   label: string;
   points: number;
+};
+
+/* アイテムが見つかる場所
+   場所で遊ぶ6か所だけ（公園入口・いやいや・とつぜんのできごとなどでは見つからないので、GameEvent 全部にはしない）
+*/
+export type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot';
+
+/* レーンの番号
+   0 = 左、1 = まん中、2 = 右 */
+export type SecretPathLane = 0 | 1 | 2;
+
+/* ミニゲームの進み具合
+   ready    … はじまる前
+   playing  … 遊んでいる最中
+   finished … 小道をぬけた */
+export type SecretPathPhase = 'ready' | 'playing' | 'finished';
+
+/* 上から流れてくるものの種類
+   branch   … 枝 🌿（よけるもの）
+   sunlight … 木漏れ日 ✨（集めるもの） */
+export type SecretPathItemKind = 'branch' | 'sunlight';
+
+/* 流れてくるもの1つぶん
+
+   id   … v-for の key にするための番号
+   kind … 枝か木漏れ日か
+   lane … どのレーンを流れてくるか
+   y    … フィールドの上から何%の位置にいるか（0 = いちばん上、100 = いちばん下）
+   hit  … もう当たった（枝）／取った（木漏れ日）か
+          1つにつき1回だけ数えるための印 */
+export type SecretPathItem = {
+  id: number;
+  kind: SecretPathItemKind;
+  lane: SecretPathLane;
+  y: number;
+  hit: boolean;
+};
+
+/* 「始まってから何ミリ秒たったら、どのレーンに何を出すか」の予定1つぶん */
+export type SecretPathSpawn = {
+  at: number;
+  kind: SecretPathItemKind;
+  lane: SecretPathLane;
 };

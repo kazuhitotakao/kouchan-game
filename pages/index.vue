@@ -1,7 +1,16 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
+import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
+
+/* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
+import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
+
+/* 「今回の変化」の表示データ作り（行動前・いまの値・増減 → 画面にならべる形） */
+import { buildChangeGroups } from '~/utils/changeGroups';
+
+/* ゲームの時計まわりの計算（「09:25」の文字 ↔ 分の数の変換） */
+import { addMinutesToTime, parseTimeToMinutes } from '~/utils/gameTime';
 
 /* ゲーム画面の部品（どれも表示と、押されたことを伝えるだけ）
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
@@ -18,6 +27,30 @@ import { useTantrum } from '~/composables/useTantrum';
 /* 総合スコアとランクの計算（中身は composables/useScore.ts）
    どちらも「渡した数から答えを返すだけ」で、ゲームの状態はさわらない */
 import { calculateScore, judgeEnding } from '~/composables/useScore';
+
+/* 秘密の小道（ミニゲーム）の計算だけを取り出したもの
+   予定表づくり・結果の文章・ボーナス・画面の位置の計算は、ぜんぶこちらにある */
+import { buildSecretPathSpawnQueue, getSecretPathBonusPoint, getSecretPathLaneLeft, getSecretPathResultText, getSecretPathSwipeThreshold } from '~/composables/useSecretPath';
+
+/* ランダムイベントの抽選だけを取り出したもの
+   「起こるか」「何が起きるか」を決めて返す（ステータスは動かさない） */
+import { drawRandomEvent } from '~/composables/useRandomEvent';
+
+/* 場所のアイテムが見つかるかの判定だけを取り出したもの
+   見つかったアイテムの名前を返す（持ちものは書きかえない） */
+import { judgePlaceItem } from '~/composables/usePlaceItem';
+
+/* とつぜんのできごとの抽選だけを取り出したもの
+   起こすできごとを返す（予定表には書かない） */
+import { drawSuddenEvent } from '~/composables/useSuddenEvent';
+
+/* 疲れ・空腹で機嫌が下がる分の判定だけを取り出したもの
+   下がる分を返す（機嫌そのものは減らさない） */
+import { judgeMoodDrop } from '~/composables/useMoodDrop';
+
+/* おでかけポイントの加算量の計算だけを取り出したもの
+   もらえる分を返す（ポイントそのものは足さない） */
+import { judgeOutingPoint } from '~/composables/useOutingPoint';
 import StatusBar from '~/components/game/StatusBar.vue';
 
 /* ゲームで使う型（どんな形のデータか、という決めごとだけ）
@@ -25,10 +58,16 @@ import StatusBar from '~/components/game/StatusBar.vue';
    import type と書いてあるので、ビルドするとこの行はまるごと消える */
 import type {
   GameEvent,
+  ItemPlace,
   RandomEventEffect,
   ScoreBreakdownItem,
+  SecretPathItem,
+  SecretPathLane,
+  SecretPathPhase,
+  SecretPathSpawn,
   Snack,
   SnackId,
+  SnackUseContext,
   StatusChanges,
   TantrumAction,
   TantrumLevel,
@@ -37,16 +76,30 @@ import type {
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ
-   （おやつの種類と回復量・いやいやのセリフ・相性表・通常の場所の一覧）
+   （ゲーム全体の設定・場所とアイテム・秘密の小道の設定・おやつの種類と回復量・いやいやのセリフ・相性表）
 
    ここにあるのは「読むだけ」のデータで、書きかえはしない
    いま何を持っているか・いま何のいやいやか、のような
    プレイ中に変わる値は、このファイルの ref のほうに残してある */
-import { normalPlaceEvents } from '~/data/game';
+import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, playedALotLine, suddenEvents, totalPlaceCount } from '~/data/game';
+import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import {
+  secretPathBoostMultiplier,
+  secretPathBumpEffectDuration,
+  secretPathDuration,
+  secretPathHoldBoostDelay,
+  secretPathLanes,
+  secretPathLeaveGuard,
+  secretPathPlayerY,
+  secretPathRemoveY,
+  secretPathSparkleDuration,
+  secretPathSpawnY,
+  secretPathSpeed,
+  secretPathSunlightTotal,
+  secretPathTapFlashDuration,
+} from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
-import { snackTantrumFits, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
-
-const gameTitle: string = 'こうちゃんの大冒険';
+import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, snackTantrumFits, tantrumAlertDuration, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
 
@@ -506,10 +559,6 @@ const repeatedTantrumActionCount = ref(0);
 
    ボーナスがもらえるのは、1回のいやいやにつき1回だけ（hasNiceTantrumResponse で見る） */
 
-/* ナイス対応でもらえるボーナスの量（画面の「おでかけポイント +3」もここを見る） */
-const niceTantrumBonusOutingPoint = 3;
-const niceTantrumBonusParentCalm = 2;
-
 /* このいやいやで、もうナイス対応のボーナスをもらったかどうか
 
    ボーナスは1回のいやいやにつき1回だけ
@@ -524,13 +573,6 @@ const hasNiceTantrumResponse = ref(false);
    空っぽ … 今回の対応はナイス対応ではなかった（結果カードに「✨ ナイス対応！」を出さない）
    行動をはじめるたび（startStatusChanges()）と、いやいやタイムから出るときに空へ戻す */
 const niceTantrumResponseText = ref('');
-
-/* とつぜんのできごとが起きる確率
-   0.2 ＝ 20%（5回に1回くらい）
-   ここの数字だけを書きかえれば、起きやすさを変えられる
-   例）0.15 なら15%、0.25 なら25%
-*/
-const suddenEventChance = 0.2;
 
 /* 次に起こす予定のとつぜんのできごと（予定表）
 
@@ -615,11 +657,7 @@ const gameOverMessage = ref('');
 /* 今の時間を「分」に直したもの
    09:00 なら 540、12:00 なら 720 になる
 */
-const currentMinutes = computed(() => {
-  const [hour, minute] = currentTime.value.split(':').map(Number);
-
-  return hour * 60 + minute;
-});
+const currentMinutes = computed(() => parseTimeToMinutes(currentTime.value));
 
 /* お昼（12:00）を過ぎたかどうか */
 const isTimeOver = computed(() => currentMinutes.value >= 12 * 60);
@@ -637,33 +675,15 @@ const isJustArrivedAtPark = computed(() => currentTime.value === '09:00');
 
 /* 公園入口のあいさつ文（3段階で切り替える）
 
-   公園入口には、行動のたびに何度も戻ってくる
-   そのため「やってきました」のままだと、2回目からは少しちぐはぐに聞こえる
-   そこで、いまがどの場面かで言いかたを変えている
-
-   ① 着いたばかり（時計がまだ09:00） … はじめてのあいさつ
-   ② 午前前半のおかえり（〜10:29）   … 入口へもどってきたときの言いかた
-   ③ 午前後半（10:30〜）             … お昼が近づいてきたことを伝える
+   どの言いかたにするかは utils/gameText.ts の buildParkEntranceText()
+   ここは、いまがどの場面かを渡すだけ
 
    ③の境目は、公園BGMがBGM2に変わる時刻とわざと同じにしてある
    （shouldUseParkBgm2 を使いまわしているので、境目の数字は1か所だけ）
    曲と文言がいっしょに変わることで、
    「午前前半の章 → 午前後半の章」へ進んだ感じが出る
 */
-const parkEntranceText = computed(() => {
-  // ① 着いたばかり
-  if (isJustArrivedAtPark.value) {
-    return 'こうちゃんと公園にやってきました。どこへ探検に行こう？';
-  }
-
-  // ③ 午前後半（10:30以降）
-  if (shouldUseParkBgm2()) {
-    return 'お日さまが高くなってきました。おひるまで、のこりすこし。どこへ探検に行こう？';
-  }
-
-  // ② 午前前半で、入口へもどってきたとき
-  return '公園入口にもどってきました。つぎはどこへ探検に行く？';
-});
+const parkEntranceText = computed(() => buildParkEntranceText(isJustArrivedAtPark.value, shouldUseParkBgm2()));
 
 /* 秘密の場所へ行ける条件
    ・おでかけポイントが20以上
@@ -943,9 +963,6 @@ function handleWindowPointer(event: PointerEvent) {
    どこから開いたかを snackUseContext に覚えておき、eatSnackFromBag() で呼び分ける
 */
 
-/* どの場面からおやつバッグを開いたか */
-type SnackUseContext = 'exploring' | 'tantrum';
-
 /* いまおやつバッグを開いている場面
 
    null なら「バッグは閉じている」
@@ -1102,9 +1119,6 @@ const commandCount = computed(() => {
   return 3;
 });
 
-/* とつぜんのできごと5つ（commandCount のいちばん最後の分岐に来るなかま） */
-const suddenEvents: GameEvent[] = ['emergencySiren', 'ladybug', 'dog', 'fallDown', 'fountain'];
-
 /* 「どうする？」の選択肢を横にならべる画面か（テンプレートの choiceGridClass で使う）
 
    ・いやいやタイムで、いやいやが続いているあいだ（結果が出ていても、次の対応を選ぶので横ならび）
@@ -1189,24 +1203,6 @@ const nextPlaceCommandLabel = computed(() => {
 */
 const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 
-/* 公園入口の「どこへ行く？」で、それぞれの場所へ入るコマンドが何番目か
-
-   画面（template の parkEntrance）と runSelectedCommand() の parkEntrance の並びと同じ
-     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先へ行く
-   ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
-     どちらも「細い道の先へ行く」から入るので、同じ5番にしている
-   ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
-*/
-const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
-  slide: 0,
-  sandbox: 1,
-  acornArea: 2,
-  pond: 3,
-  grassArea: 4,
-  secretPath: 5,
-  secretSpot: 5,
-};
-
 /* 公園入口へ戻ってきたとき、どのコマンドにカーソルを合わせるか（restoreEntranceCursor() で使う）
 
    その場所へ入るためのコマンドの番号を返す
@@ -1287,59 +1283,9 @@ const isGoalConfirmVisible = computed(() => isGoalConfirmOpen.value && gameStart
 
 /* ダイアログに出す「お昼まで、あとどれくらいか」の文
 
-   まだ遊ぶ時間が残っているかを見て決められるように、残り時間を出しておく
+   どう言いあらわすかは utils/gameText.ts の buildGoalConfirmTimeText()
    例）10:40 なら「お昼（12:00）まで、あと1時間20分あります。」 */
-const goalConfirmTimeText = computed(() => {
-  const minutesLeft = 12 * 60 - currentMinutes.value;
-
-  // ふつうは、12:00を過ぎると自動でゴールへ向かうので、ここへは来ない（念のため）
-  if (minutesLeft <= 0) {
-    return 'もうお昼の時間です。';
-  }
-
-  const hours = Math.floor(minutesLeft / 60);
-  const minutes = minutesLeft % 60;
-
-  let timeLeft = `${minutes}分`;
-
-  if (hours > 0) {
-    timeLeft = minutes > 0 ? `${hours}時間${minutes}分` : `${hours}時間`;
-  }
-
-  return `お昼（12:00）まで、あと${timeLeft}あります。`;
-});
-
-/* ===== ゲージのしきい値（目もり） =====
-   ゲームのルールで使っている数字を、ここに名前を付けてまとめておく
-   ・ゲージの上に線（目もり）を出すときの位置
-   ・ルールの判定（いやいや発生・危険な状態）
-   の両方で同じ定数を使うので、あとから数字を変えても線とルールがずれない
-*/
-
-/* こうちゃんの体力：これを下回ると「いやいや」が起きるようになる
-   （71以上あるうちは元気いっぱいなので、いやいやは起こらない）
-*/
-const fussEnergyLine = 71;
-
-/* 公園にある場所の数（すべり台・砂場・どんぐり・池・芝生広場・秘密の場所）
-   結果の文章で「ぜんぶ回れたか」を見るのに使う */
-const totalPlaceCount = 6;
-
-/* 遊んだ回数：これ以上あそんでいたら「たくさん遊んだ」とみなす
-   結果の文章を「たくさん遊んだ」と「あまり遊べなかった」で
-   書きわけるときの境目に使う
-   （1つの場所だけでも、3回あそべば十分たっぷり遊んでいる）
-*/
-const playedALotLine = 3;
-
-/* こうちゃんの機嫌：これ以下だと「いやいや」が起きやすくなる */
-const fussMoodLine = 50;
-
-/* こうちゃん・親の体力：これ以下はあぶない（GAME OVERが近い） */
-const dangerEnergyLine = 20;
-
-/* 親の余裕：これ以下はあぶない（0でGAME OVER） */
-const dangerCalmLine = 20;
+const goalConfirmTimeText = computed(() => buildGoalConfirmTimeText(currentMinutes.value));
 
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
@@ -1363,25 +1309,11 @@ const isChildEnergyDanger = computed(() => childEnergy.value <= dangerEnergyLine
 const isResultScene = computed(() => currentEvent.value === 'goal' || currentEvent.value === 'gameOver');
 
 /* 上部ステータスに出す警告メッセージ
-   危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
+
+   どの文をどの順番でならべるかは utils/gameText.ts の buildDangerWarnings()
+   ここは、いまあぶない状態かどうかを渡すだけ
 */
-const dangerWarnings = computed(() => {
-  const warnings: string[] = [];
-
-  if (isParentEnergyDanger.value) {
-    warnings.push('⚠ 親の体力が残りわずかです');
-  }
-
-  if (isParentCalmDanger.value) {
-    warnings.push('⚠ 親の余裕が残りわずかです');
-  }
-
-  if (isChildEnergyDanger.value) {
-    warnings.push('⚠ こうちゃんはかなり疲れています');
-  }
-
-  return warnings;
-});
+const dangerWarnings = computed(() => buildDangerWarnings(isParentEnergyDanger.value, isParentCalmDanger.value, isChildEnergyDanger.value));
 
 /* ============================================================
    効果音（Web Audio API）
@@ -4073,16 +4005,10 @@ function changeSoundVolume(event: Event) {
   }
 }
 
-/* 時間を進める共通処理 */
+/* 時間を進める共通処理
+   計算は utils/gameTime.ts にあり、ここは いまの時刻を書きかえるだけ */
 function addMinutes(minutes: number) {
-  const [hour, minute] = currentTime.value.split(':').map(Number);
-
-  const totalMinutes = hour * 60 + minute + minutes;
-
-  const newHour = Math.floor(totalMinutes / 60);
-  const newMinute = totalMinutes % 60;
-
-  currentTime.value = `${String(newHour).padStart(2, '0')}:${String(newMinute).padStart(2, '0')}`;
+  currentTime.value = addMinutesToTime(currentTime.value, minutes);
 }
 
 /* 数値を0〜100の範囲に収める */
@@ -4185,129 +4111,24 @@ function saveStatusChanges() {
   };
 }
 
-/* 「分」で持っている時間を「09:25」の形の文字にする
-
-   statusBefore.minutes には 09:00 が 540（＝9×60）のように
-   分だけの数で入っているので、そのままだと画面に出せない
-   60で割った答えが「時」、60で割ったあまりが「分」になる
-
-   padStart(2, '0') は「2けたに足りないぶんを0でうめる」という意味
-   （9 → 09）。addMinutes() の中の書きかたとそろえてある
-*/
-function formatMinutesToTime(totalMinutes: number) {
-  const hour = Math.floor(totalMinutes / 60);
-  const minute = totalMinutes % 60;
-
-  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-}
-
-/* 時計の文字から、先頭の「0」を取る（09:25 → 9:25）
-
-   結果カードの「時間」は 9:25 のほうがすっと読めるので、ここだけ0を外す
-   ※ 上部ステータスの時計は 09:25 のままにしてある
-     こちらはいつも同じ幅で並んでいたほうが、時間の進みが見やすいため
-*/
-function removeLeadingZero(time: string) {
-  // '0' ではじまっているときだけ、1文字目を取りのぞく
-  if (time.startsWith('0')) {
-    return time.slice(1);
-  }
-
-  return time;
-}
-
 /* 中央の「今回の変化」を、誰の情報かで3つのまとまりに分けたもの
 
-   ① こうちゃん … 体力・機嫌
-   ② 親         … 体力・余裕
-   ③ おでかけ   … ポイント・時間
-
-   「こうちゃんの体力」なのか「親の体力」なのかを探さなくてよいように、
-   同じ人のステータスを1つの枠にまとめている
-   グループの見出しが名前を言ってくれるので、中のラベルは「体力」だけでよい
-
-   1グループは { name, groupClass, rows } の3つを持つ
-   ・name       … 「こうちゃん」などの見出し
-   ・groupClass … 枠の色を変えるためのCSSクラス名
-   ・rows       … その人のステータス2つ
-
-   rows の1行ぶんは、次の5つ
-   ・label      … 「体力」などの項目名
-   ・before     … 行動する前の値（statusBefore に控えてあるもの）
-   ・after      … 行動したあとの値（いま画面に出ている現在値そのもの）
-   ・changeText … 「+6」「-18」の形にした増減
-   ・className  … 増減の色（良い・悪い・変化なし）
-
-   before と after を並べて出すことで、
-   「-18 減った」だけでなく「残り82になった」まで一目で分かるようにする
-
-   ※ after には fixAllStatus() で0〜100に丸めたあとの現在値を使う
-     たとえば 親の体力が 10 のときに 17 使うと、内部の計算では -7 になるが、
-     画面のステータスは 0 なので「10 → 0（-17）」と出る
-     （増減の -17 は statusChanges にそのまま残っているので、ここは変えない）
-
-   ※ この computed は表示を作るだけで、ゲームの値は書きかえない
+   表示のならびを組み立てるのは utils/changeGroups.ts の buildChangeGroups()
+   ここは、行動する前の値・いまの値・今回の増減を渡すだけ
+   （くわしい中身は、あちらのコメントを参照）
 */
-const changeGroups = computed(() => {
-  const changes = statusChanges.value;
-
-  // まだ今回の行動結果がないときは、からっぽにする
-  if (changes === null) {
-    return [];
-  }
-
-  // 毎回 statusBefore.value と書かなくてよいように、行動前の控えを取り出しておく
-  const before = statusBefore.value;
-
-  /* 1行ぶんの表示を作る小さな道具
-     同じ書きかたを6回くり返さなくてよくなる
-
-     label      … 画面に出す名前（グループ見出しがあるので「体力」だけでよい）
-     statusName … 色を決めるために changeClass() へ渡す中の名前
-     beforeValue … 行動する前の値
-     afterValue  … 行動したあとの値（0〜100に丸めたあとの、いま画面に出ている値）
-     amount      … 今回の増減
-  */
-  const makeRow = (label: string, statusName: string, beforeValue: number, afterValue: number, amount: number) => ({
-    label,
-    before: String(beforeValue),
-    after: String(afterValue),
-    changeText: formatChange(amount),
-    className: changeClass(statusName, amount),
-  });
-
-  return [
-    {
-      // 見出しがあるので、中のラベルは「体力」「機嫌」だけでよい
-      name: 'こうちゃん',
-      groupClass: 'change-group--child',
-      rows: [makeRow('体力', 'childEnergy', before.childEnergy, childEnergy.value, changes.childEnergy), makeRow('機嫌', 'childMood', before.childMood, childMood.value, changes.childMood)],
-    },
-    {
-      name: '親',
-      groupClass: 'change-group--parent',
-      rows: [makeRow('体力', 'parentEnergy', before.parentEnergy, parentEnergy.value, changes.parentEnergy), makeRow('余裕', 'parentCalm', before.parentCalm, parentCalm.value, changes.parentCalm)],
-    },
-    {
-      // こうちゃんでも親でもない「おでかけ全体」の情報
-      name: 'おでかけ',
-      groupClass: 'change-group--outing',
-      rows: [
-        makeRow('ポイント', 'outingPoint', before.outingPoint, outingPoint.value, changes.outingPoint),
-        {
-          // 時間だけは数ではなく時計の形で出すので、makeRow は使わない
-          // before は「分」で控えてあるので formatMinutesToTime() で 09:00 の形に直し、
-          // after は画面の時計と同じ currentTime をそのまま使う
-          label: '時間',
-          before: removeLeadingZero(formatMinutesToTime(before.minutes)),
-          after: removeLeadingZero(currentTime.value),
-          changeText: `${formatChange(changes.minutes)}分`,
-          className: changeClass('minutes', changes.minutes),
-        },
-      ],
-    },
-  ];
-});
+const changeGroups = computed(() =>
+  buildChangeGroups({
+    changes: statusChanges.value,
+    before: statusBefore.value,
+    childEnergy: childEnergy.value,
+    childMood: childMood.value,
+    outingPoint: outingPoint.value,
+    parentEnergy: parentEnergy.value,
+    parentCalm: parentCalm.value,
+    currentTime: currentTime.value,
+  }),
+);
 
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
@@ -4315,23 +4136,13 @@ function isVisited(place: GameEvent) {
 }
 
 /* おでかけポイントを加える
-   はじめての場所なら そのままのポイント
-   2回目以降の場所なら 半分のポイント（小数点以下は切り捨て、最低1点）
 
-   ※ 公園は6か所しかないので、2回目が1点しかもらえないと
-     「全部まわったら、あとは帰るだけ」になってしまう
-     半分もらえるようにすることで、体力が減ってきたときに
-     「もう1か所あそぶ？ それとも帰る？」と迷えるようにしている
+   いくつ足すかを決めるのは composables/useOutingPoint.ts の judgeOutingPoint()
+   （はじめての場所ならそのまま、2回目以降は半分。切り捨て・最低1点）
+   ここは、決まった分を実際に足すだけ
 */
 function addOutingPoint(place: GameEvent, point: number) {
-  if (isVisited(place)) {
-    const halfPoint = Math.floor(point / 2);
-
-    outingPoint.value += halfPoint < 1 ? 1 : halfPoint;
-    return;
-  }
-
-  outingPoint.value += point;
+  outingPoint.value += judgeOutingPoint(point, isVisited(place));
 }
 
 /* 探検済みの場所に追加する（すでに入っていれば何もしない） */
@@ -4361,21 +4172,6 @@ function addCollectedItem(itemName: string) {
   foundItemsThisAction.value.push(itemName);
 }
 
-/* アイテムが見つかる場所
-   場所で遊ぶ6か所だけ（公園入口・いやいや・とつぜんのできごとなどでは見つからないので、GameEvent 全部にはしない）
-*/
-type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot';
-
-/* 場所ごとに見つかるもの（1か所に1種類） */
-const placeItems: Record<ItemPlace, string> = {
-  slide: 'ちいさな松ぼっくり',
-  sandbox: 'きれいな石',
-  acornArea: '大きなどんぐり',
-  pond: '水色のガラス玉',
-  grassArea: '黄色い花',
-  secretSpot: 'ふしぎな形の枝',
-};
-
 /* その場所のアイテムを、もう見つけているかどうか
 
    公園入口の行き先ボタンの「★ 発見済み」バッジで使う
@@ -4386,73 +4182,27 @@ function hasFoundPlaceItem(place: ItemPlace) {
   return collectedItems.value.includes(placeItems[place]);
 }
 
-/* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */
-const firstVisitItemFindChance = 0.6;
-
 /* 場所で遊んだときに、その場所のアイテムが見つかるか判定する
 
-   ・どちらの行動を選んでも、条件は同じ
-   ・その場所ではじめて遊んだとき … 60%で見つかる
-   ・前にその場所で遊んだのに、まだ見つけていないとき … かならず見つかる
-     （運がわるくても、2回目でかならず取れるようにするための救済）
-   ・もう見つけているとき … 何もしない（抽選もしない）
+   見つかるかどうかを決めるのは composables/usePlaceItem.ts の judgePlaceItem()
+   ここは、見つかったものを実際に持ちものへ加えるだけ
+   （取得のルール…はじめては60%・2回目はかならず…は、あちらに書いてある）
 
    ※ かならず finishPlayAction() より前に呼ぶ
      finishPlayAction() の中でその場所が探検済みになるので、
      あとから呼ぶと、はじめての場所でも「2回目」あつかいになってしまう
 */
 function tryCollectPlaceItem(place: ItemPlace) {
-  const itemName = placeItems[place];
+  const itemName = judgePlaceItem(place, collectedItems.value, isVisited(place));
 
-  if (collectedItems.value.includes(itemName)) {
-    return;
-  }
-
-  // 探検済みなら抽選せずに見つかる（|| なので、そのときは Math.random() も呼ばない）
-  const isFound = isVisited(place) || Math.random() < firstVisitItemFindChance;
-
-  if (!isFound) {
+  // 今回は見つからなかった（または、もう持っている）
+  if (itemName === null) {
     return;
   }
 
   addCollectedItem(itemName);
 }
 
-/* ランダムイベント
-   （通常行動中に起きる、ちょっとしたできごと）
-
-   5回に1回くらい（20%）だけ起こり、
-   8種類の中から1つが選ばれる
-
-   ※ いやいやが起きた回は、そもそもこの関数が呼ばれない
-     いやいやは専用の画面とBGMまである大きなできごとなので、
-     同じ結果カードに並べず、1回の行動で目立つできごとは1つにそろえている
-     （呼ぶかどうかを決めているのは finishPlayAction()）
-
-     1 飛行機を見つける      … こうちゃんの機嫌 +5
-     2 急に「だっこ！」      … 親の体力 -5
-     3 ねこを見つける        … こうちゃんの機嫌 +5
-     4 急に走り出す          … 親の余裕 -6
-     5 ちょうちょ            … こうちゃんの機嫌 +4
-     6 落ち葉を踏む          … こうちゃんの機嫌 +5
-     7 靴に砂が入る          … 親の余裕 -3
-     8 水たまりで大はしゃぎ  … こうちゃんの機嫌 +5 ／ 親の余裕 -3
-
-   うれしいことが4つ・親がつかれることが3つ・その両方が1つ（8）という組み合わせ
-   どれも小さな数字にしてあるので、出る順番で有利不利が決まってしまうことはない
-
-   ※ ここに書く数字は「このできごとだけの増減」
-     中央の「今回の変化（合計）」は行動ぜんぶを足した数なので、
-     たとえば 一緒にすべる（親の体力 -14）＋ 急に「だっこ！」（-5）なら
-     合計は -19 になる
-
-   ※ どのイベントでも addMinutes() は呼ばない
-     「通常行動をしている、その最中に起きたこと」という扱いなので、
-     時間は通常行動のぶんだけ進む
-
-   ※ 専用画面へ移動する「とつぜんのできごと」とは別物
-     こちらは結果カードに文章とステータス変化が少し足されるだけ
-*/
 /* ランダムイベントで動いたステータスを、画面に出す形で1つ控える
 
    label    … 画面に出す項目名（「おでかけポイント」など）
@@ -4470,121 +4220,51 @@ function addRandomEventEffect(label: string, statName: string, amount: number) {
   });
 }
 
+/* ランダムイベント（通常行動中に起きる、ちょっとしたできごと）
+
+   何が起きるかを決めるのは composables/useRandomEvent.ts の drawRandomEvent()
+   ここは、返ってきたできごとを実際のステータスと画面に反映するだけ
+
+   ※ いやいやが起きた回は、そもそもこの関数が呼ばれない
+     （呼ぶかどうかを決めているのは finishPlayAction()）
+*/
 function runRandomEvent() {
-  // ① まず「そもそも起こるか？」の抽選（20%）
-  //   0.2以上（＝80%）なら、何もしないでここで終わり
-  if (Math.random() >= 0.2) {
+  const event = drawRandomEvent();
+
+  // 今回は何も起こらなかった（80%はこちら）
+  if (event === null) {
     return;
   }
 
-  // ② 起こると決まったので、8種類の中から1つ選ぶ
-  //   Math.random() * 8 で「0以上8未満の小数」を作り、
-  //   Math.floor() で小数点以下を切り捨てて 0〜7 の整数にする
-  //   8つの区間はどれも同じ幅なので、8種類が同じ確率で出る
-  const eventNumber = Math.floor(Math.random() * 8);
+  // ステータスを動かして、そのぶんを結果カードのメモにも足す
+  for (const effect of event.effects) {
+    if (effect.statName === 'childMood') {
+      childMood.value += effect.amount;
+    } else if (effect.statName === 'parentEnergy') {
+      parentEnergy.value += effect.amount;
+    } else {
+      parentCalm.value += effect.amount;
+    }
 
-  // ① 飛行機を見つける
-  if (eventNumber === 0) {
-    childMood.value += 5;
-    randomEventText.value = '「ひこうき！」こうちゃんは、うれしそうに空を見上げています。';
-    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
-    return;
+    addRandomEventEffect(effect.label, effect.statName, effect.amount);
   }
 
-  // ② 急に「だっこ！」
-  if (eventNumber === 1) {
-    parentEnergy.value -= 5;
-    randomEventText.value = 'こうちゃんが急に「だっこ！」と言い出しました。';
-    addRandomEventEffect('親の体力', 'parentEnergy', -5);
-    return;
-  }
-
-  // ③ ねこを見つける
-  if (eventNumber === 2) {
-    childMood.value += 5;
-    randomEventText.value = '「ねこちゃん！」こうちゃんは、うれしそうに指をさしました。';
-    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
-    return;
-  }
-
-  // ④ 急に走り出す
-  if (eventNumber === 3) {
-    parentCalm.value -= 6;
-    randomEventText.value = 'こうちゃんが急に走り出して、ちょっとヒヤッとしました！';
-    addRandomEventEffect('親の余裕', 'parentCalm', -6);
-    return;
-  }
-
-  // ⑤ ちょうちょ
-  if (eventNumber === 4) {
-    childMood.value += 4;
-    randomEventText.value = '「ちょうちょ！」こうちゃんは、うれしそうに追いかけています。';
-    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 4);
-    return;
-  }
-
-  // ⑥ 落ち葉を踏む
-  if (eventNumber === 5) {
-    childMood.value += 5;
-    randomEventText.value = '「カサカサする！」こうちゃんは、何度も落ち葉を踏んでいます。';
-    addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
-    return;
-  }
-
-  // ⑦ 靴に砂が入る
-  if (eventNumber === 6) {
-    parentCalm.value -= 3;
-    randomEventText.value = '「砂はいっちゃった〜」こうちゃんは、くつを見ながら立ち止まりました。';
-    addRandomEventEffect('親の余裕', 'parentCalm', -3);
-    return;
-  }
-
-  // ⑧ 水たまりで大はしゃぎ（良い面と悪い面の両方があるイベント）
-  //   ここまでの7つに当てはまらなかった＝eventNumber が 7 のとき
-  //   2つステータスが動くので、しるしも2つ並べる
-  childMood.value += 5;
-  parentCalm.value -= 3;
-  randomEventText.value = '「みずたまり！」こうちゃんは、楽しそうにバシャバシャしています。';
-  addRandomEventEffect('こうちゃんの機嫌', 'childMood', 5);
-  addRandomEventEffect('親の余裕', 'parentCalm', -3);
+  randomEventText.value = event.text;
 }
 
 /* 疲れたり、おなかがすいたりすると、だんだん機嫌もわるくなる
 
-   機嫌が下がる理由は2つあり、両方かさなることもある
-   ① 遊びつかれてきた … 体力が「ぐずりだすライン（71）」より下 → 機嫌 -4
-   ② おなかがすいてきた … 11:00をすぎた                        → 機嫌 -3
-
-   これが無いと、遊ぶ行動はどれも機嫌がふえるだけなので、
-   機嫌はすぐ100に張りついて「見るだけの数字」になってしまう
-
-   ②（時間）を入れているのは、控えめに遊ぶと体力がほとんど減らず、
-   ①だけでは機嫌がまったく下がらなくなってしまうため
-   お昼が近づけば、元気に遊んでいても だんだんぐずってくる、というルールにしている
-
-   下がる力があることで、
-   「もう1か所あそぶ？ 休む？ おやつを使う？ そろそろ帰る？」を
-   最後まで考えられる数字になる
+   いくつ下がるかを決めるのは composables/useMoodDrop.ts の judgeMoodDrop()
+   （① 遊びつかれてきた → -4／② お昼が近づいた → -3。かさなると -7）
+   ここは、決まった分を実際に機嫌から引くだけ
 
    ※ いやいやをなだめる行動ととつぜんのできごとでは呼ばれない
      （どちらも finishPlayAction() を通らないため）
      なだめている最中にさらに機嫌が下がると、立て直せなくなってしまう
 */
 function dropMoodWhenTired() {
-  // ① 遊びつかれてきた
-  if (childEnergy.value < fussEnergyLine) {
-    childMood.value -= 4;
-  }
-
-  // ② お昼が近づいて、おなかがすいてきた
-  if (currentMinutes.value >= 11 * 60) {
-    childMood.value -= 3;
-  }
+  childMood.value -= judgeMoodDrop(childEnergy.value, currentMinutes.value);
 }
-
-/* いやいや発生の演出を出しておく時間（ミリ秒）
-   1000 で1秒。ここだけ書きかえれば、出ている長さを調整できる */
-const tantrumAlertDuration = 2000;
 
 /* 「あとで消す」の予約票（公園BGMの予約票と同じ考え方）
 
@@ -4782,47 +4462,27 @@ function checkGameOver() {
 
 /* とつぜんのできごとの抽選
 
-   ① 20%（suddenEventChance）で発生するか決める
-   ② 発生したら、5種類の中からランダムで1つ選ぶ
-   ③ currentEvent はここでは変えず、pendingSuddenEvent（予定表）に書くだけ
+   起こすかどうか・どれを起こすかを決めるのは
+   composables/useSuddenEvent.ts の drawSuddenEvent()（20%で発生・5種類から1つ）
 
-   ③がいちばん大事なところ
+   ここがやるのは、currentEvent を変えずに
+   pendingSuddenEvent（予定表）へ書いておくことだけ
+
+   これがいちばん大事なところ
    ここで画面を切り替えてしまうと、いま終わったばかりの行動の
    結果メッセージと「今回の変化」が、読まれる前に消えてしまう
    実際に画面が切り替わるのは、プレイヤーが「次へ」を押して
    goToNextPlace() が呼ばれたとき
 */
 function checkSuddenEvent() {
-  // 0以上1未満のランダムな数を出して、0.2より小さければ発生（＝20%）
-  // 逆に0.2以上なら、今回は何も起こらないのでここで終わり（＝80%）
-  if (Math.random() >= suddenEventChance) {
+  const suddenEvent = drawSuddenEvent();
+
+  // 今回は何も起こらなかった（80%はこちら）
+  if (suddenEvent === null) {
     return;
   }
 
-  // 0・1・2・3・4 のどれかをランダムに作って、5種類から1つ選ぶ
-  const eventNumber = Math.floor(Math.random() * 5);
-
-  if (eventNumber === 0) {
-    pendingSuddenEvent.value = 'emergencySiren';
-    return;
-  }
-
-  if (eventNumber === 1) {
-    pendingSuddenEvent.value = 'ladybug';
-    return;
-  }
-
-  if (eventNumber === 2) {
-    pendingSuddenEvent.value = 'dog';
-    return;
-  }
-
-  if (eventNumber === 3) {
-    pendingSuddenEvent.value = 'fallDown';
-    return;
-  }
-
-  pendingSuddenEvent.value = 'fountain';
+  pendingSuddenEvent.value = suddenEvent;
 }
 
 /* 場所で1つ行動したあとの共通処理
@@ -5998,150 +5658,6 @@ function exploreClearingDepths() {
          小道の画面からは GAME OVER・ゴールへ直接は行けないが、万一のときもループは残らない）
    ============================================================ */
 
-/* レーンの番号
-   0 = 左、1 = まん中、2 = 右 */
-type SecretPathLane = 0 | 1 | 2;
-
-/* ミニゲームの進み具合
-   ready    … はじまる前
-   playing  … 遊んでいる最中
-   finished … 小道をぬけた */
-type SecretPathPhase = 'ready' | 'playing' | 'finished';
-
-/* 上から流れてくるものの種類
-   branch   … 枝 🌿（よけるもの）
-   sunlight … 木漏れ日 ✨（集めるもの） */
-type SecretPathItemKind = 'branch' | 'sunlight';
-
-/* 流れてくるもの1つぶん
-
-   id   … v-for の key にするための番号
-   kind … 枝か木漏れ日か
-   lane … どのレーンを流れてくるか
-   y    … フィールドの上から何%の位置にいるか（0 = いちばん上、100 = いちばん下）
-   hit  … もう当たった（枝）／取った（木漏れ日）か
-          1つにつき1回だけ数えるための印 */
-type SecretPathItem = {
-  id: number;
-  kind: SecretPathItemKind;
-  lane: SecretPathLane;
-  y: number;
-  hit: boolean;
-};
-
-/* 「始まってから何ミリ秒たったら、どのレーンに何を出すか」の予定1つぶん */
-type SecretPathSpawn = {
-  at: number;
-  kind: SecretPathItemKind;
-  lane: SecretPathLane;
-};
-
-const secretPathLanes: SecretPathLane[] = [0, 1, 2];
-
-/* ミニゲームの長さ（ミリ秒）。15000 で15秒 */
-const secretPathDuration = 15000;
-
-/* 1プレイで流れてくる木漏れ日の数（「✨ 木漏れ日 3 / 5」の 5）
-   下の secretPathSunlightRows の数とそろえること */
-const secretPathSunlightTotal = 5;
-
-/* 流れてくる速さ（1秒で、フィールドの高さの何%進むか）
-   60 なら、出てきてから こうちゃんの所まで 約1.5秒
-   （40・約2.3秒 → 48・約1.9秒 → 60 と、テンポと難しさを上げてきた） */
-const secretPathSpeed = 60;
-
-/* こうちゃんの位置（フィールドの上から何%か） */
-const secretPathPlayerY = 84;
-
-/* 出てくる位置と、片づける位置（どちらもフィールドの外） */
-const secretPathSpawnY = -8;
-const secretPathRemoveY = 110;
-
-/* 流れてくる「行」の予定
-
-   600ミリ秒後から、800ミリ秒ごとに16行
-   いちばん最後の行（約12.6秒）でも、15秒になる前に こうちゃんの所まで届く
-   （行の数や間隔を変えるときは「最後の行の時間 ＋ 届くまでの約1.5秒」が15秒を超えないようにする）
-
-   ・ふつうの行 … 枝を1本。secretPathDoubleBranchChance の割合で2本にして、空いているレーンを1つだけにする
-   ・secretPathSunlightRows の行 … 木漏れ日を1つ。secretPathSunlightBranchChance の割合で、べつのレーンに枝もいっしょ
-   ・secretPathRowJitter … 行ごとに少しだけ時間をずらして、同じリズムになりすぎないようにする
-
-   どの行も、少なくとも1つのレーンは空いている（3本とも枝の行は作らない）ので、よけられない形にはならない */
-const secretPathFirstRowAt = 600;
-const secretPathRowInterval = 800;
-const secretPathRowCount = 16;
-const secretPathRowJitter = 120;
-const secretPathSunlightRows = [1, 4, 7, 10, 13];
-const secretPathDoubleBranchChance = 0.35;
-const secretPathSunlightBranchChance = 0.7;
-
-/* 枝に当たったときの「いたっ！」「✨ -1」を出しておく長さ（ミリ秒）
-
-   見た目だけの長さで、このあいだも左右にはふつうに動ける
-   （枝のペナルティは「木漏れ日 -1」だけにして、動きは止めない） */
-const secretPathBumpEffectDuration = 600;
-
-/* 道（レーン）をクリック・タップしたとき、押したレーンを光らせておく長さ（ミリ秒） */
-const secretPathTapFlashDuration = 200;
-
-/* 「はやく進む」ときの速さ（ゲームの時計を何倍で進めるか）
-   ずっと押しっぱなしなら、15秒ぶんが実際には約10秒で終わる
-   （早く着けるかわりに、枝や木漏れ日へ反応できる時間も短くなる） */
-const secretPathBoostMultiplier = 1.5;
-
-/* フィールドを何ミリ秒押しつづけたら「長押し」（はやく進む）にするか
-   押したしゅんかんに はやくならないように、少しだけ待つ */
-const secretPathHoldBoostDelay = 250;
-
-/* 押したまま横へ何px動かしたら、1レーン動かすか
-   小さな手ぶれでは動かないようにするため
-
-   ■ マウスと指で数字を分けている
-     動かしかたがちがうので、同じ数字にすると操作感がそろわない
-
-     ・マウス   … 押しっぱなしのまま、こえるたびに何レーンでも動ける
-                  32pxだと少し大きくドラッグしただけで
-                  左はし → まん中 → 右はし と2レーン進んでしまい、
-                  行き先をねらいにくかったので、広めにしてある
-     ・指・ペン … 1回はらうあいだに1レーンだけ（何度も動くことはない）
-                  こちらは広げる必要がないので、今までの数字のまま
-                  （広げると、軽くはらっただけでは動かなくなってしまう）
-
-   ※ どちらも「こえるたびに1レーン」は同じ
-     ちがうのは、1回の操作で何レーンぶん動けるか（→ swipeSecretPathPlayer）
-*/
-const secretPathMouseSwipeThreshold = 70;
-const secretPathTouchSwipeThreshold = 32;
-
-/* いま操作しているものに合わせて、しきい値を選ぶ
-
-   pointerType … 'mouse' / 'touch'（指）/ 'pen' のどれか
-   マウス以外（指・ペン）は、まとめて指のほうの数字を使う
-*/
-function getSecretPathSwipeThreshold(pointerType: string) {
-  return pointerType === 'mouse' ? secretPathMouseSwipeThreshold : secretPathTouchSwipeThreshold;
-}
-
-/* 木漏れ日を取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
-const secretPathSparkleDuration = 600;
-
-/* 結果が出てから「先へ進む」を受けつけるまでの待ち時間（ミリ秒）
-
-   時間切れのしゅんかんに道をタップしていた指や、押していたキーで、
-   結果を読む前に先へ進んでしまわないようにする */
-const secretPathLeaveGuard = 600;
-
-/* 木漏れ日ボーナス（おでかけポイント）
-
-   結果の文章と同じ3段階で、たくさん集めたときだけ少しだけ足す
-   ・4〜5個 … +3（いやいやの「ナイス対応」と同じくらい）
-   ・2〜3個 … +1
-   ・0〜1個 … なし
-   量を変えたくなったら、ここの2つだけを書きかえればよい */
-const secretPathBonusGreatPoint = 3;
-const secretPathBonusGoodPoint = 1;
-
 /* いまの進み具合（小道へ入るたびに ready から始める） */
 const secretPathPhase = ref<SecretPathPhase>('ready');
 
@@ -6253,36 +5769,7 @@ const secretPathHoverDestination = computed(() => {
 const secretPathTimeLeft = computed(() => Math.max(0, Math.ceil((secretPathDuration - secretPathElapsed.value) / 1000)));
 
 /* 集めた木漏れ日の数に合わせた、結果の文章 */
-const secretPathResultText = computed(() => {
-  if (secretPathSunlightCount.value >= 4) {
-    return '✨ 木漏れ日が道を照らしています！「きらきらー！」こうちゃんはうれしそうに奥へ走っていきます。';
-  }
-
-  if (secretPathSunlightCount.value >= 2) {
-    return '木漏れ日を追いかけながら、こうちゃんと小道の奥へ進みました！';
-  }
-
-  return '木々のあいだをゆっくり進みました。道の奥が少し明るくなっています。';
-});
-
-/* 集めた木漏れ日の数から、ボーナスのおでかけポイントを決める（結果の文章と同じ区切り） */
-function getSecretPathBonusPoint(sunlightCount: number) {
-  if (sunlightCount >= 4) {
-    return secretPathBonusGreatPoint;
-  }
-
-  if (sunlightCount >= 2) {
-    return secretPathBonusGoodPoint;
-  }
-
-  return 0;
-}
-
-/* レーンの番号を、フィールドの左はしからの位置（%）にする
-   0 → 16.7%（左のまん中）、1 → 50%、2 → 83.3%（右のまん中） */
-function getSecretPathLaneLeft(lane: SecretPathLane) {
-  return `${((lane * 2 + 1) / 6) * 100}%`;
-}
+const secretPathResultText = computed(() => getSecretPathResultText(secretPathSunlightCount.value));
 
 /* 公園入口の「細い道の先へ行く」
 
@@ -6333,47 +5820,6 @@ function resetSecretPathGame() {
   secretPathHoverLane.value = null;
   secretPathSpawnQueue = [];
   secretPathFinishedAt = 0;
-}
-
-/* 候補のレーンから、ランダムに1つ選ぶ */
-function pickRandomSecretPathLane(candidates: SecretPathLane[] = secretPathLanes): SecretPathLane {
-  return candidates[Math.floor(Math.random() * candidates.length)] ?? 1;
-}
-
-/* 1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
-
-   木漏れ日の数（5つ）は毎回同じにして、出てくるレーンだけをランダムにする
-   どの行も、少なくとも1つのレーンは空いているので、よけられない形にはならない */
-function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
-  const queue: SecretPathSpawn[] = [];
-
-  for (let row = 0; row < secretPathRowCount; row++) {
-    const at = secretPathFirstRowAt + row * secretPathRowInterval + (Math.random() * 2 - 1) * secretPathRowJitter;
-
-    if (secretPathSunlightRows.includes(row)) {
-      const sunlightLane = pickRandomSecretPathLane();
-
-      queue.push({ at, kind: 'sunlight', lane: sunlightLane });
-
-      // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
-      if (Math.random() < secretPathSunlightBranchChance) {
-        queue.push({ at, kind: 'branch', lane: pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== sunlightLane)) });
-      }
-
-      continue;
-    }
-
-    // ふつうの行は枝を1本。ときどき2本にして、空いているレーンを1つだけにする（3本にはしない）
-    const branchLane = pickRandomSecretPathLane();
-
-    queue.push({ at, kind: 'branch', lane: branchLane });
-
-    if (Math.random() < secretPathDoubleBranchChance) {
-      queue.push({ at, kind: 'branch', lane: pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== branchLane)) });
-    }
-  }
-
-  return queue.sort((a, b) => a.at - b.at);
 }
 
 /* 「小道へ進む」（ミニゲームを始める）
@@ -7480,23 +6926,21 @@ function unlockSPlusSongIfEarned() {
   // 前のゴールのお知らせが残らないように、まず消しておく
   isSPlusSongNewlyUnlocked.value = false;
 
-  if (endingRank.value !== 'S+ランク') {
+  // 解放するかどうかの判定は utils/sPlusSong.ts の judgeSPlusSongUnlock()
+  const result = judgeSPlusSongUnlock(endingRank.value, hasUnlockedSPlusSong.value);
+
+  // S+ランクではないので、何もしない
+  if (result === 'none') {
     return;
   }
 
-  /* もう解放済みなら、お知らせは出さない
-     保存場所（localStorage）も読みなおしているのは、
-     このページを開いたあとに、別のタブでS+を取っていることもあるため */
-  if (hasUnlockedSPlusSong.value || loadHasUnlockedSPlusSong()) {
-    hasUnlockedSPlusSong.value = true;
-
-    return;
-  }
-
-  // このブラウザで、はじめての解放
   hasUnlockedSPlusSong.value = true;
-  isSPlusSongNewlyUnlocked.value = true;
-  saveSPlusSongUnlocked();
+
+  // このブラウザで、はじめての解放（お知らせを出して、解放したことを保存する）
+  if (result === 'newlyUnlocked') {
+    isSPlusSongNewlyUnlocked.value = true;
+    saveSPlusSongUnlocked();
+  }
 }
 
 /* ゴールへ向かう（判定して結果画面へ） */

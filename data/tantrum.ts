@@ -61,3 +61,11 @@ export const snackTantrumFits: Record<SnackId, Record<TantrumReason, TantrumSnac
   banana: { tired: 'great', hungry: 'great', frustrated: 'weak', wantMorePlay: 'weak' },
   jelly: { tired: 'normal', hungry: 'normal', frustrated: 'normal', wantMorePlay: 'normal' },
 };
+
+/* ナイス対応でもらえるボーナスの量（画面の「おでかけポイント +3」もここを見る） */
+export const niceTantrumBonusOutingPoint = 3;
+export const niceTantrumBonusParentCalm = 2;
+
+/* いやいや発生の演出を出しておく時間（ミリ秒）
+   1000 で1秒。ここだけ書きかえれば、出ている長さを調整できる */
+export const tantrumAlertDuration = 2000;

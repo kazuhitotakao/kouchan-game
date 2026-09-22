@@ -21,12 +21,12 @@
      suddenEvent … とつぜんのできごと（選択肢3つ）
    ============================================================ */
 
-import type { Snack } from '~/types/game';
+import type { SceneVariant, Snack } from '~/types/game';
 
 withDefaults(
   defineProps<{
     /* どの場面のコマンド欄か（上の説明を参照） */
-    variant: 'place' | 'tantrum' | 'suddenEvent';
+    variant: SceneVariant;
 
     /* その場面ならではの選択肢（place は2つ、suddenEvent は3つ、tantrum は使わない）
        押されたときは、何番目かを @select で親へ伝える */
