@@ -1,0 +1,96 @@
+/* ============================================================
+   画面に出す文の組み立て
+
+   ゲーム本編（pages/index.vue）にあった
+   「いまどんな状態か → 画面に出す文」の変換だけを、ここにまとめてある
+
+   ・buildParkEntranceText     公園入口のあいさつ文
+   ・buildGoalConfirmTimeText  ゴール確認ダイアログの残り時間の文
+   ・buildDangerWarnings       上部ステータスの警告メッセージ
+
+   どれも受けとった値を見て文を返すだけで、
+   ステータスや時計を見にいったり、書きかえたりはしない
+   （いまどの状態かを決めているのは pages/index.vue の computed のほう）
+
+   ※ しきい値や時刻の境目を、ここでもう一度書かないようにしている
+     同じ数字が2か所にできると、片方だけ直したときにずれてしまうため
+     （しきい値は data/game.ts、境目の判定は pages/index.vue にある）
+   ============================================================ */
+
+/* 公園入口のあいさつ文（3段階で切り替える）
+
+   公園入口には、行動のたびに何度も戻ってくる
+   そのため「やってきました」のままだと、2回目からは少しちぐはぐに聞こえる
+   そこで、いまがどの場面かで言いかたを変えている
+
+   ① 着いたばかり（時計がまだ09:00） … はじめてのあいさつ
+   ② 午前前半のおかえり（〜10:29）   … 入口へもどってきたときの言いかた
+   ③ 午前後半（10:30〜）             … お昼が近づいてきたことを伝える
+
+   ③の境目は、公園BGMがBGM2に変わる時刻とわざと同じにしてある
+   （shouldUseParkBgm2 を使いまわしているので、境目の数字は1か所だけ）
+   曲と文言がいっしょに変わることで、
+   「午前前半の章 → 午前後半の章」へ進んだ感じが出る
+*/
+export function buildParkEntranceText(isJustArrivedAtPark: boolean, isLateMorning: boolean) {
+  // ① 着いたばかり
+  if (isJustArrivedAtPark) {
+    return 'こうちゃんと公園にやってきました。どこへ探検に行こう？';
+  }
+
+  // ③ 午前後半（10:30以降）
+  if (isLateMorning) {
+    return 'お日さまが高くなってきました。おひるまで、のこりすこし。どこへ探検に行こう？';
+  }
+
+  // ② 午前前半で、入口へもどってきたとき
+  return '公園入口にもどってきました。つぎはどこへ探検に行く？';
+}
+
+/* ダイアログに出す「お昼まで、あとどれくらいか」の文
+
+   まだ遊ぶ時間が残っているかを見て決められるように、残り時間を出しておく
+   例）10:40 なら「お昼（12:00）まで、あと1時間20分あります。」 */
+export function buildGoalConfirmTimeText(currentMinutes: number) {
+  const minutesLeft = 12 * 60 - currentMinutes;
+
+  // ふつうは、12:00を過ぎると自動でゴールへ向かうので、ここへは来ない（念のため）
+  if (minutesLeft <= 0) {
+    return 'もうお昼の時間です。';
+  }
+
+  const hours = Math.floor(minutesLeft / 60);
+  const minutes = minutesLeft % 60;
+
+  let timeLeft = `${minutes}分`;
+
+  if (hours > 0) {
+    timeLeft = minutes > 0 ? `${hours}時間${minutes}分` : `${hours}時間`;
+  }
+
+  return `お昼（12:00）まで、あと${timeLeft}あります。`;
+}
+
+/* 上部ステータスに出す警告メッセージ
+   危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
+
+   あぶない状態かどうか（20以下か）を決めているのは pages/index.vue の
+   isParentEnergyDanger・isParentCalmDanger・isChildEnergyDanger
+*/
+export function buildDangerWarnings(isParentEnergyDanger: boolean, isParentCalmDanger: boolean, isChildEnergyDanger: boolean) {
+  const warnings: string[] = [];
+
+  if (isParentEnergyDanger) {
+    warnings.push('⚠ 親の体力が残りわずかです');
+  }
+
+  if (isParentCalmDanger) {
+    warnings.push('⚠ 親の余裕が残りわずかです');
+  }
+
+  if (isChildEnergyDanger) {
+    warnings.push('⚠ こうちゃんはかなり疲れています');
+  }
+
+  return warnings;
+}

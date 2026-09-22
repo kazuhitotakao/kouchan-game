@@ -1,16 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
+import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
-/* 上部ステータスの警告メッセージの組み立て（あぶない状態 → 出す文のならび） */
-import { buildDangerWarnings } from '~/utils/dangerWarnings';
+/* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
+import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
 /* 「今回の変化」の表示データ作り（行動前・いまの値・増減 → 画面にならべる形） */
 import { buildChangeGroups } from '~/utils/changeGroups';
-
-/* 公園入口のあいさつ文の組み立て（いまどの場面か → 出す文） */
-import { buildParkEntranceText } from '~/utils/parkEntranceText';
 
 /* ゲームの時計まわりの計算（「09:25」の文字 ↔ 分の数の変換） */
 import { addMinutesToTime, parseTimeToMinutes } from '~/utils/gameTime';
@@ -678,7 +675,7 @@ const isJustArrivedAtPark = computed(() => currentTime.value === '09:00');
 
 /* 公園入口のあいさつ文（3段階で切り替える）
 
-   どの言いかたにするかは utils/parkEntranceText.ts の buildParkEntranceText()
+   どの言いかたにするかは utils/gameText.ts の buildParkEntranceText()
    ここは、いまがどの場面かを渡すだけ
 
    ③の境目は、公園BGMがBGM2に変わる時刻とわざと同じにしてある
@@ -1286,27 +1283,9 @@ const isGoalConfirmVisible = computed(() => isGoalConfirmOpen.value && gameStart
 
 /* ダイアログに出す「お昼まで、あとどれくらいか」の文
 
-   まだ遊ぶ時間が残っているかを見て決められるように、残り時間を出しておく
+   どう言いあらわすかは utils/gameText.ts の buildGoalConfirmTimeText()
    例）10:40 なら「お昼（12:00）まで、あと1時間20分あります。」 */
-const goalConfirmTimeText = computed(() => {
-  const minutesLeft = 12 * 60 - currentMinutes.value;
-
-  // ふつうは、12:00を過ぎると自動でゴールへ向かうので、ここへは来ない（念のため）
-  if (minutesLeft <= 0) {
-    return 'もうお昼の時間です。';
-  }
-
-  const hours = Math.floor(minutesLeft / 60);
-  const minutes = minutesLeft % 60;
-
-  let timeLeft = `${minutes}分`;
-
-  if (hours > 0) {
-    timeLeft = minutes > 0 ? `${hours}時間${minutes}分` : `${hours}時間`;
-  }
-
-  return `お昼（12:00）まで、あと${timeLeft}あります。`;
-});
+const goalConfirmTimeText = computed(() => buildGoalConfirmTimeText(currentMinutes.value));
 
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
@@ -1331,7 +1310,7 @@ const isResultScene = computed(() => currentEvent.value === 'goal' || currentEve
 
 /* 上部ステータスに出す警告メッセージ
 
-   どの文をどの順番でならべるかは utils/dangerWarnings.ts の buildDangerWarnings()
+   どの文をどの順番でならべるかは utils/gameText.ts の buildDangerWarnings()
    ここは、いまあぶない状態かどうかを渡すだけ
 */
 const dangerWarnings = computed(() => buildDangerWarnings(isParentEnergyDanger.value, isParentCalmDanger.value, isChildEnergyDanger.value));
@@ -6947,23 +6926,21 @@ function unlockSPlusSongIfEarned() {
   // 前のゴールのお知らせが残らないように、まず消しておく
   isSPlusSongNewlyUnlocked.value = false;
 
-  if (endingRank.value !== 'S+ランク') {
+  // 解放するかどうかの判定は utils/sPlusSong.ts の judgeSPlusSongUnlock()
+  const result = judgeSPlusSongUnlock(endingRank.value, hasUnlockedSPlusSong.value);
+
+  // S+ランクではないので、何もしない
+  if (result === 'none') {
     return;
   }
 
-  /* もう解放済みなら、お知らせは出さない
-     保存場所（localStorage）も読みなおしているのは、
-     このページを開いたあとに、別のタブでS+を取っていることもあるため */
-  if (hasUnlockedSPlusSong.value || loadHasUnlockedSPlusSong()) {
-    hasUnlockedSPlusSong.value = true;
-
-    return;
-  }
-
-  // このブラウザで、はじめての解放
   hasUnlockedSPlusSong.value = true;
-  isSPlusSongNewlyUnlocked.value = true;
-  saveSPlusSongUnlocked();
+
+  // このブラウザで、はじめての解放（お知らせを出して、解放したことを保存する）
+  if (result === 'newlyUnlocked') {
+    isSPlusSongNewlyUnlocked.value = true;
+    saveSPlusSongUnlocked();
+  }
 }
 
 /* ゴールへ向かう（判定して結果画面へ） */
