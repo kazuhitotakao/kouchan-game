@@ -9,8 +9,9 @@ import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } 
 /* 「今回の変化」の表示データ作り（行動前・いまの値・増減 → 画面にならべる形） */
 import { buildChangeGroups } from '~/utils/changeGroups';
 
-/* ゲームの時計まわりの計算（「09:25」の文字 ↔ 分の数の変換） */
-import { addMinutesToTime, parseTimeToMinutes } from '~/utils/gameTime';
+/* ゲームの時計まわりの計算（いまの時刻から、何分か進んだ時刻を出す）
+   「09:25」の文字を分の数に直すほうは、composables/useGameState.ts のなかで使っている */
+import { addMinutesToTime } from '~/utils/gameTime';
 
 /* ゲーム画面の部品（どれも表示と、押されたことを伝えるだけ）
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
@@ -51,6 +52,11 @@ import { judgeMoodDrop } from '~/composables/useMoodDrop';
 /* おでかけポイントの加算量の計算だけを取り出したもの
    もらえる分を返す（ポイントそのものは足さない） */
 import { judgeOutingPoint } from '~/composables/useOutingPoint';
+
+/* ゲームのステータス・おでかけポイント・ゲーム内時間の入れもの（中身は composables/useGameState.ts）
+   入れものを置く場所だけをあちらへ移したもの
+   ステータスを上げ下げする行動の中身や、時間を進める処理は、このファイルに残してある */
+import { useGameState } from '~/composables/useGameState';
 
 /* 音（効果音・BGM・音量）のまとめ（中身は composables/useAudio.ts）
    鳴らす・止める・音量を変えるところだけを受けもつ
@@ -210,11 +216,6 @@ const howToBackButtonRef = ref<HTMLButtonElement | null>(null);
      （おやつのカード／出発／戻る／サウンドON/OFF） */
 const snackSelectionRef = ref<HTMLElement | null>(null);
 
-/* 現在いる場所
-   最初は「公園入口」からスタート
-*/
-const currentEvent = ref<GameEvent>('parkEntrance');
-
 /* いま選んでいるコマンドの番号（キーボード操作用）
    0 = 1番目、1 = 2番目、2 = 3番目 という意味
 
@@ -225,34 +226,39 @@ const currentEvent = ref<GameEvent>('parkEntrance');
 */
 const selectedCommandIndex = ref(0);
 
-/* ゲームのステータス */
-const childEnergy = ref(100); // こうちゃんの体力
-const childMood = ref(55); // こうちゃんの機嫌（ぐずりだすライン50のすぐ上からスタート）
-const outingPoint = ref(0); // おでかけポイント
-const parentEnergy = ref(100); // 親の体力
-const parentCalm = ref(100); // 親の余裕（100 = とても余裕がある、0 = GAME OVER）
-const currentTime = ref('09:00'); // 時間
+/* ゲームのステータス・時間・進みぐあい（中身は composables/useGameState.ts）
 
-/* 探検済みの場所
-   その場所で1つ行動すると、ここに追加される
-   ※ 公園入口・いやいや中・ゴールは入れない
+   入れものを置く場所をあちらへ移しただけで、
+   childEnergy.value = ... や visitedPlaces.value.push(...) のような
+   書きかえかたは今までと同じ（返ってくるのは ref / computed そのもの）
+
+   時間を進める addMinutes()、場所を移動する goToPlace()、
+   上限下限をそろえる fixAllStatus()、「もう一度あそぶ」の resetGame() など、
+   ゲームの進みかたを決めているところは、今までどおりこのファイルにある
+
+   ※ この行は、これらを受けとる useAudio()・useTantrum()・useKeyboardControls()
+     より前に置いておく
 */
-const visitedPlaces = ref<GameEvent[]>([]);
+const {
+  /* ステータス */
+  childEnergy, // こうちゃんの体力
+  childMood, // こうちゃんの機嫌
+  outingPoint, // おでかけポイント
+  parentEnergy, // 親の体力
+  parentCalm, // 親の余裕
 
-/* 場所で遊んだ回数
-   その場所で1つ行動するたびに、1ずつ増える（同じ場所で遊んでも増える）
+  /* 時間 */
+  currentTime, // 時間
+  currentMinutes, // 時間を「分」に直したもの（09:00 なら 540）
 
-   探検済みの場所（visitedPlaces）は「何か所回ったか」しか分からないので、
-   「同じすべり台で5回あそんだ」も「1か所だけ」になってしまう
-   結果の文章で「たくさん遊んだ／ほとんど遊べなかった」を見分けるために、
-   回った場所の数とは別に、遊んだ回数もここで数えておく
-*/
-const playCount = ref(0);
-
-/* 公園で見つけたもの
-   同じものは1つしか入らない
-*/
-const collectedItems = ref<string[]>([]);
+  /* ゲームの進みぐあい */
+  currentEvent, // 現在いる場所
+  visitedPlaces, // 探検済みの場所
+  playCount, // 場所で遊んだ回数
+  collectedItems, // 公園で見つけたもの
+  canEnterSecretSpot, // 秘密の場所へ行けるか（ポイント20以上かつ見つけたもの3種類以上）
+  hasDiscoveredSecretSpot, // こもれびの広場を、このプレイでもう見つけたか
+} = useGameState();
 
 /* いやいや中かどうか */
 const isTantrum = ref(false);
@@ -659,12 +665,8 @@ const scoreBreakdown = ref<ScoreBreakdownItem[]>([]);
 const gameOverTitle = ref('');
 const gameOverMessage = ref('');
 
-/* 今の時間を「分」に直したもの
-   09:00 なら 540、12:00 なら 720 になる
-*/
-const currentMinutes = computed(() => parseTimeToMinutes(currentTime.value));
-
-/* お昼（12:00）を過ぎたかどうか */
+/* お昼（12:00）を過ぎたかどうか
+   currentMinutes（時間を「分」に直したもの）は useGameState() から受けとっている */
 const isTimeOver = computed(() => currentMinutes.value >= 12 * 60);
 
 /* そろそろお昼（11:30以降）かどうか */
@@ -690,27 +692,9 @@ const isJustArrivedAtPark = computed(() => currentTime.value === '09:00');
 */
 const parkEntranceText = computed(() => buildParkEntranceText(isJustArrivedAtPark.value, shouldUseParkBgm2()));
 
-/* 秘密の場所へ行ける条件
-   ・おでかけポイントが20以上
-   ・見つけたものが3種類以上
-   の両方を満たすと解放される
-*/
-const canEnterSecretSpot = computed(() => outingPoint.value >= 20 && collectedItems.value.length >= 3);
-
-/* こもれびの広場（secretSpot）を、このプレイでもう見つけたかどうか
-
-   false … まだ見つけていない
-           公園入口の「細い道の先へ行く」を選ぶと、まずミニゲーム「秘密の小道」へ進む
-   true  … 秘密の小道を最後まで進んで、広場を見つけた
-           同じプレイのあいだは、ミニゲームをもう一度やらずに、そのまま広場へ入る
-
-   ※ visitedPlaces（探検済み）とは別もの
-     探検済みになるのは広場で遊んだときなので、
-     「広場を見つけたけれど、何もせずに出た」ときは探検済みにならない
-     それでもミニゲームをくり返さないように、見つけたことだけを別に覚えておく
-   ※ false に戻すのは resetGame()（もう一度あそぶ／はじめの画面へ戻る）だけ
-*/
-const hasDiscoveredSecretSpot = ref(false);
+/* ※ 秘密の場所へ行ける条件（canEnterSecretSpot）と、
+     こもれびの広場をもう見つけたか（hasDiscoveredSecretSpot）は
+     useGameState() から受けとっている（→ このファイルの上のほう） */
 
 /* ===== キーボード操作（「どうする？」コマンドボックス）用の計算 ===== */
 
