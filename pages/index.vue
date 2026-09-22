@@ -25,8 +25,13 @@ import StatusBar from '~/components/game/StatusBar.vue';
    import type と書いてあるので、ビルドするとこの行はまるごと消える */
 import type {
   GameEvent,
+  ItemPlace,
   RandomEventEffect,
   ScoreBreakdownItem,
+  SecretPathItem,
+  SecretPathLane,
+  SecretPathPhase,
+  SecretPathSpawn,
   Snack,
   SnackId,
   StatusChanges,
@@ -37,16 +42,41 @@ import type {
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ
-   （おやつの種類と回復量・いやいやのセリフ・相性表・通常の場所の一覧）
+   （ゲーム全体の設定・場所とアイテム・秘密の小道の設定・おやつの種類と回復量・いやいやのセリフ・相性表）
 
    ここにあるのは「読むだけ」のデータで、書きかえはしない
    いま何を持っているか・いま何のいやいやか、のような
    プレイ中に変わる値は、このファイルの ref のほうに残してある */
-import { normalPlaceEvents } from '~/data/game';
+import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, playedALotLine, suddenEventChance, suddenEvents, totalPlaceCount } from '~/data/game';
+import { firstVisitItemFindChance, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import {
+  secretPathBonusGoodPoint,
+  secretPathBonusGreatPoint,
+  secretPathBoostMultiplier,
+  secretPathBumpEffectDuration,
+  secretPathDoubleBranchChance,
+  secretPathDuration,
+  secretPathFirstRowAt,
+  secretPathHoldBoostDelay,
+  secretPathLanes,
+  secretPathLeaveGuard,
+  secretPathMouseSwipeThreshold,
+  secretPathPlayerY,
+  secretPathRemoveY,
+  secretPathRowCount,
+  secretPathRowInterval,
+  secretPathRowJitter,
+  secretPathSparkleDuration,
+  secretPathSpawnY,
+  secretPathSpeed,
+  secretPathSunlightBranchChance,
+  secretPathSunlightRows,
+  secretPathSunlightTotal,
+  secretPathTapFlashDuration,
+  secretPathTouchSwipeThreshold,
+} from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
-import { snackTantrumFits, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
-
-const gameTitle: string = 'こうちゃんの大冒険';
+import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, snackTantrumFits, tantrumAlertDuration, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
 
@@ -506,10 +536,6 @@ const repeatedTantrumActionCount = ref(0);
 
    ボーナスがもらえるのは、1回のいやいやにつき1回だけ（hasNiceTantrumResponse で見る） */
 
-/* ナイス対応でもらえるボーナスの量（画面の「おでかけポイント +3」もここを見る） */
-const niceTantrumBonusOutingPoint = 3;
-const niceTantrumBonusParentCalm = 2;
-
 /* このいやいやで、もうナイス対応のボーナスをもらったかどうか
 
    ボーナスは1回のいやいやにつき1回だけ
@@ -524,13 +550,6 @@ const hasNiceTantrumResponse = ref(false);
    空っぽ … 今回の対応はナイス対応ではなかった（結果カードに「✨ ナイス対応！」を出さない）
    行動をはじめるたび（startStatusChanges()）と、いやいやタイムから出るときに空へ戻す */
 const niceTantrumResponseText = ref('');
-
-/* とつぜんのできごとが起きる確率
-   0.2 ＝ 20%（5回に1回くらい）
-   ここの数字だけを書きかえれば、起きやすさを変えられる
-   例）0.15 なら15%、0.25 なら25%
-*/
-const suddenEventChance = 0.2;
 
 /* 次に起こす予定のとつぜんのできごと（予定表）
 
@@ -1102,9 +1121,6 @@ const commandCount = computed(() => {
   return 3;
 });
 
-/* とつぜんのできごと5つ（commandCount のいちばん最後の分岐に来るなかま） */
-const suddenEvents: GameEvent[] = ['emergencySiren', 'ladybug', 'dog', 'fallDown', 'fountain'];
-
 /* 「どうする？」の選択肢を横にならべる画面か（テンプレートの choiceGridClass で使う）
 
    ・いやいやタイムで、いやいやが続いているあいだ（結果が出ていても、次の対応を選ぶので横ならび）
@@ -1188,24 +1204,6 @@ const nextPlaceCommandLabel = computed(() => {
    まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
 */
 const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
-
-/* 公園入口の「どこへ行く？」で、それぞれの場所へ入るコマンドが何番目か
-
-   画面（template の parkEntrance）と runSelectedCommand() の parkEntrance の並びと同じ
-     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先へ行く
-   ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
-     どちらも「細い道の先へ行く」から入るので、同じ5番にしている
-   ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
-*/
-const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
-  slide: 0,
-  sandbox: 1,
-  acornArea: 2,
-  pond: 3,
-  grassArea: 4,
-  secretPath: 5,
-  secretSpot: 5,
-};
 
 /* 公園入口へ戻ってきたとき、どのコマンドにカーソルを合わせるか（restoreEntranceCursor() で使う）
 
@@ -1308,38 +1306,6 @@ const goalConfirmTimeText = computed(() => {
 
   return `お昼（12:00）まで、あと${timeLeft}あります。`;
 });
-
-/* ===== ゲージのしきい値（目もり） =====
-   ゲームのルールで使っている数字を、ここに名前を付けてまとめておく
-   ・ゲージの上に線（目もり）を出すときの位置
-   ・ルールの判定（いやいや発生・危険な状態）
-   の両方で同じ定数を使うので、あとから数字を変えても線とルールがずれない
-*/
-
-/* こうちゃんの体力：これを下回ると「いやいや」が起きるようになる
-   （71以上あるうちは元気いっぱいなので、いやいやは起こらない）
-*/
-const fussEnergyLine = 71;
-
-/* 公園にある場所の数（すべり台・砂場・どんぐり・池・芝生広場・秘密の場所）
-   結果の文章で「ぜんぶ回れたか」を見るのに使う */
-const totalPlaceCount = 6;
-
-/* 遊んだ回数：これ以上あそんでいたら「たくさん遊んだ」とみなす
-   結果の文章を「たくさん遊んだ」と「あまり遊べなかった」で
-   書きわけるときの境目に使う
-   （1つの場所だけでも、3回あそべば十分たっぷり遊んでいる）
-*/
-const playedALotLine = 3;
-
-/* こうちゃんの機嫌：これ以下だと「いやいや」が起きやすくなる */
-const fussMoodLine = 50;
-
-/* こうちゃん・親の体力：これ以下はあぶない（GAME OVERが近い） */
-const dangerEnergyLine = 20;
-
-/* 親の余裕：これ以下はあぶない（0でGAME OVER） */
-const dangerCalmLine = 20;
 
 /* ===== 危険な状態かどうか（GAME OVERが近いかどうかの目安） =====
    ここが true になったゲージは、上部ステータスで目立つ見た目にする
@@ -4361,21 +4327,6 @@ function addCollectedItem(itemName: string) {
   foundItemsThisAction.value.push(itemName);
 }
 
-/* アイテムが見つかる場所
-   場所で遊ぶ6か所だけ（公園入口・いやいや・とつぜんのできごとなどでは見つからないので、GameEvent 全部にはしない）
-*/
-type ItemPlace = 'slide' | 'sandbox' | 'acornArea' | 'pond' | 'grassArea' | 'secretSpot';
-
-/* 場所ごとに見つかるもの（1か所に1種類） */
-const placeItems: Record<ItemPlace, string> = {
-  slide: 'ちいさな松ぼっくり',
-  sandbox: 'きれいな石',
-  acornArea: '大きなどんぐり',
-  pond: '水色のガラス玉',
-  grassArea: '黄色い花',
-  secretSpot: 'ふしぎな形の枝',
-};
-
 /* その場所のアイテムを、もう見つけているかどうか
 
    公園入口の行き先ボタンの「★ 発見済み」バッジで使う
@@ -4385,9 +4336,6 @@ const placeItems: Record<ItemPlace, string> = {
 function hasFoundPlaceItem(place: ItemPlace) {
   return collectedItems.value.includes(placeItems[place]);
 }
-
-/* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */
-const firstVisitItemFindChance = 0.6;
 
 /* 場所で遊んだときに、その場所のアイテムが見つかるか判定する
 
@@ -4581,10 +4529,6 @@ function dropMoodWhenTired() {
     childMood.value -= 3;
   }
 }
-
-/* いやいや発生の演出を出しておく時間（ミリ秒）
-   1000 で1秒。ここだけ書きかえれば、出ている長さを調整できる */
-const tantrumAlertDuration = 2000;
 
 /* 「あとで消す」の予約票（公園BGMの予約票と同じ考え方）
 
@@ -5998,122 +5942,6 @@ function exploreClearingDepths() {
          小道の画面からは GAME OVER・ゴールへ直接は行けないが、万一のときもループは残らない）
    ============================================================ */
 
-/* レーンの番号
-   0 = 左、1 = まん中、2 = 右 */
-type SecretPathLane = 0 | 1 | 2;
-
-/* ミニゲームの進み具合
-   ready    … はじまる前
-   playing  … 遊んでいる最中
-   finished … 小道をぬけた */
-type SecretPathPhase = 'ready' | 'playing' | 'finished';
-
-/* 上から流れてくるものの種類
-   branch   … 枝 🌿（よけるもの）
-   sunlight … 木漏れ日 ✨（集めるもの） */
-type SecretPathItemKind = 'branch' | 'sunlight';
-
-/* 流れてくるもの1つぶん
-
-   id   … v-for の key にするための番号
-   kind … 枝か木漏れ日か
-   lane … どのレーンを流れてくるか
-   y    … フィールドの上から何%の位置にいるか（0 = いちばん上、100 = いちばん下）
-   hit  … もう当たった（枝）／取った（木漏れ日）か
-          1つにつき1回だけ数えるための印 */
-type SecretPathItem = {
-  id: number;
-  kind: SecretPathItemKind;
-  lane: SecretPathLane;
-  y: number;
-  hit: boolean;
-};
-
-/* 「始まってから何ミリ秒たったら、どのレーンに何を出すか」の予定1つぶん */
-type SecretPathSpawn = {
-  at: number;
-  kind: SecretPathItemKind;
-  lane: SecretPathLane;
-};
-
-const secretPathLanes: SecretPathLane[] = [0, 1, 2];
-
-/* ミニゲームの長さ（ミリ秒）。15000 で15秒 */
-const secretPathDuration = 15000;
-
-/* 1プレイで流れてくる木漏れ日の数（「✨ 木漏れ日 3 / 5」の 5）
-   下の secretPathSunlightRows の数とそろえること */
-const secretPathSunlightTotal = 5;
-
-/* 流れてくる速さ（1秒で、フィールドの高さの何%進むか）
-   60 なら、出てきてから こうちゃんの所まで 約1.5秒
-   （40・約2.3秒 → 48・約1.9秒 → 60 と、テンポと難しさを上げてきた） */
-const secretPathSpeed = 60;
-
-/* こうちゃんの位置（フィールドの上から何%か） */
-const secretPathPlayerY = 84;
-
-/* 出てくる位置と、片づける位置（どちらもフィールドの外） */
-const secretPathSpawnY = -8;
-const secretPathRemoveY = 110;
-
-/* 流れてくる「行」の予定
-
-   600ミリ秒後から、800ミリ秒ごとに16行
-   いちばん最後の行（約12.6秒）でも、15秒になる前に こうちゃんの所まで届く
-   （行の数や間隔を変えるときは「最後の行の時間 ＋ 届くまでの約1.5秒」が15秒を超えないようにする）
-
-   ・ふつうの行 … 枝を1本。secretPathDoubleBranchChance の割合で2本にして、空いているレーンを1つだけにする
-   ・secretPathSunlightRows の行 … 木漏れ日を1つ。secretPathSunlightBranchChance の割合で、べつのレーンに枝もいっしょ
-   ・secretPathRowJitter … 行ごとに少しだけ時間をずらして、同じリズムになりすぎないようにする
-
-   どの行も、少なくとも1つのレーンは空いている（3本とも枝の行は作らない）ので、よけられない形にはならない */
-const secretPathFirstRowAt = 600;
-const secretPathRowInterval = 800;
-const secretPathRowCount = 16;
-const secretPathRowJitter = 120;
-const secretPathSunlightRows = [1, 4, 7, 10, 13];
-const secretPathDoubleBranchChance = 0.35;
-const secretPathSunlightBranchChance = 0.7;
-
-/* 枝に当たったときの「いたっ！」「✨ -1」を出しておく長さ（ミリ秒）
-
-   見た目だけの長さで、このあいだも左右にはふつうに動ける
-   （枝のペナルティは「木漏れ日 -1」だけにして、動きは止めない） */
-const secretPathBumpEffectDuration = 600;
-
-/* 道（レーン）をクリック・タップしたとき、押したレーンを光らせておく長さ（ミリ秒） */
-const secretPathTapFlashDuration = 200;
-
-/* 「はやく進む」ときの速さ（ゲームの時計を何倍で進めるか）
-   ずっと押しっぱなしなら、15秒ぶんが実際には約10秒で終わる
-   （早く着けるかわりに、枝や木漏れ日へ反応できる時間も短くなる） */
-const secretPathBoostMultiplier = 1.5;
-
-/* フィールドを何ミリ秒押しつづけたら「長押し」（はやく進む）にするか
-   押したしゅんかんに はやくならないように、少しだけ待つ */
-const secretPathHoldBoostDelay = 250;
-
-/* 押したまま横へ何px動かしたら、1レーン動かすか
-   小さな手ぶれでは動かないようにするため
-
-   ■ マウスと指で数字を分けている
-     動かしかたがちがうので、同じ数字にすると操作感がそろわない
-
-     ・マウス   … 押しっぱなしのまま、こえるたびに何レーンでも動ける
-                  32pxだと少し大きくドラッグしただけで
-                  左はし → まん中 → 右はし と2レーン進んでしまい、
-                  行き先をねらいにくかったので、広めにしてある
-     ・指・ペン … 1回はらうあいだに1レーンだけ（何度も動くことはない）
-                  こちらは広げる必要がないので、今までの数字のまま
-                  （広げると、軽くはらっただけでは動かなくなってしまう）
-
-   ※ どちらも「こえるたびに1レーン」は同じ
-     ちがうのは、1回の操作で何レーンぶん動けるか（→ swipeSecretPathPlayer）
-*/
-const secretPathMouseSwipeThreshold = 70;
-const secretPathTouchSwipeThreshold = 32;
-
 /* いま操作しているものに合わせて、しきい値を選ぶ
 
    pointerType … 'mouse' / 'touch'（指）/ 'pen' のどれか
@@ -6122,25 +5950,6 @@ const secretPathTouchSwipeThreshold = 32;
 function getSecretPathSwipeThreshold(pointerType: string) {
   return pointerType === 'mouse' ? secretPathMouseSwipeThreshold : secretPathTouchSwipeThreshold;
 }
-
-/* 木漏れ日を取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
-const secretPathSparkleDuration = 600;
-
-/* 結果が出てから「先へ進む」を受けつけるまでの待ち時間（ミリ秒）
-
-   時間切れのしゅんかんに道をタップしていた指や、押していたキーで、
-   結果を読む前に先へ進んでしまわないようにする */
-const secretPathLeaveGuard = 600;
-
-/* 木漏れ日ボーナス（おでかけポイント）
-
-   結果の文章と同じ3段階で、たくさん集めたときだけ少しだけ足す
-   ・4〜5個 … +3（いやいやの「ナイス対応」と同じくらい）
-   ・2〜3個 … +1
-   ・0〜1個 … なし
-   量を変えたくなったら、ここの2つだけを書きかえればよい */
-const secretPathBonusGreatPoint = 3;
-const secretPathBonusGoodPoint = 1;
 
 /* いまの進み具合（小道へ入るたびに ready から始める） */
 const secretPathPhase = ref<SecretPathPhase>('ready');

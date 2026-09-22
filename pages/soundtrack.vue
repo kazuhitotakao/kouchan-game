@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
+/* ゲームの題名（pages/index.vue と同じものを data/game.ts から読む） */
+import { gameTitle } from '~/data/game';
+
 /* ============================================================
    サウンドトラックページ（/soundtrack）
 
@@ -15,8 +18,6 @@ import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/
    そのため、本編のBGMの関数（playParkBgm など）はいっさい使わない
    このページの中だけで完結する、シンプルな作りにしている
    ============================================================ */
-
-const gameTitle: string = 'こうちゃんの大冒険';
 
 /* 1曲ぶんの情報のかたち
 
