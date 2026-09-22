@@ -24,6 +24,7 @@ import StatusBar from '~/components/game/StatusBar.vue';
    中身は types/game.ts にまとめてある
    import type と書いてあるので、ビルドするとこの行はまるごと消える */
 import type {
+  ChangeGroup,
   GameEvent,
   ItemPlace,
   RandomEventEffect,
@@ -34,6 +35,7 @@ import type {
   SecretPathSpawn,
   Snack,
   SnackId,
+  SnackUseContext,
   StatusChanges,
   TantrumAction,
   TantrumLevel,
@@ -961,9 +963,6 @@ function handleWindowPointer(event: PointerEvent) {
    ちがうのは「選んだあとに呼ぶ関数（＝おやつの効果）」だけなので、
    どこから開いたかを snackUseContext に覚えておき、eatSnackFromBag() で呼び分ける
 */
-
-/* どの場面からおやつバッグを開いたか */
-type SnackUseContext = 'exploring' | 'tantrum';
 
 /* いまおやつバッグを開いている場面
 
@@ -4214,7 +4213,7 @@ function removeLeadingZero(time: string) {
 
    ※ この computed は表示を作るだけで、ゲームの値は書きかえない
 */
-const changeGroups = computed(() => {
+const changeGroups = computed<ChangeGroup[]>(() => {
   const changes = statusChanges.value;
 
   // まだ今回の行動結果がないときは、からっぽにする

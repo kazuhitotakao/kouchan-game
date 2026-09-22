@@ -23,26 +23,12 @@
      suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
    ============================================================ */
 
-import type { RandomEventEffect, StatusChanges } from '~/types/game';
+import type { ChangeGroup, RandomEventEffect, SceneVariant, StatusChanges } from '~/types/game';
 import { formatChange } from '~/utils/statusChange';
-
-/* 「今回の変化（合計）」の1グループぶん（こうちゃん／親／おでかけ）
-   中身は親の changeGroups がつくる（くわしくは pages/index.vue の changeGroups を参照） */
-type ChangeGroup = {
-  name: string;
-  groupClass: string;
-  rows: {
-    label: string;
-    before: string;
-    after: string;
-    changeText: string;
-    className: string;
-  }[];
-};
 
 defineProps<{
   /* どの場面の結果カードか（上の表を参照） */
-  variant: 'place' | 'tantrum' | 'suddenEvent';
+  variant: SceneVariant;
 
   /* 結果の文章 */
   resultMessage: string;

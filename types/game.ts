@@ -55,6 +55,15 @@ export type GameEvent =
   | 'fallDown'
   | 'fountain';
 
+/* 結果カード・コマンド欄が、どの場面のものか
+   place       … 通常の場所6か所（すべり台・砂場など）
+   tantrum     … いやいやタイム
+   suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
+
+   CommandBox.vue と ResultCard.vue の variant で、同じものを見ている
+*/
+export type SceneVariant = 'place' | 'tantrum' | 'suddenEvent';
+
 /* ランダムイベントで動いたステータス1つぶんの型
    label     … 「おでかけポイント」などの項目名
    text      … 「+5」「-8」の形にした増減
@@ -99,6 +108,12 @@ export type Snack = {
   minutes: number;
   description: string;
 };
+
+/* どの場面からおやつバッグを開いたか
+   exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
+   tantrum   … いやいやタイムの「おやつをあげる ＞」
+*/
+export type SnackUseContext = 'exploring' | 'tantrum';
 
 /* いやいやの理由
    tired        … つかれた
@@ -176,6 +191,24 @@ export type StatusChanges = {
   parentEnergy: number;
   parentCalm: number;
   minutes: number;
+};
+
+/* 「今回の変化（合計）」の1グループぶん（こうちゃん／親／おでかけ）
+   中身は pages/index.vue の changeGroups がつくり、ResultCard.vue がそのまま並べる
+   ・name       … 「こうちゃん」などの見出し
+   ・groupClass … 枠の色を変えるためのCSSクラス名
+   ・rows       … その人のステータスの行（項目名・前・後・増減・増減の色）
+*/
+export type ChangeGroup = {
+  name: string;
+  groupClass: string;
+  rows: {
+    label: string;
+    before: string;
+    after: string;
+    changeText: string;
+    className: string;
+  }[];
 };
 
 /* スコア内訳の1行ぶんの型
