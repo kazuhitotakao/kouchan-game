@@ -4131,8 +4131,16 @@ onUnmounted(() => {
 
                  ※ Enter/Space で「きょうのおやつを選ぶ」まで動いてしまわないのは、
                    handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
-                   ようにしているため（ボタン側で止める必要はない） -->
-            <button ref="backToBootButtonRef" type="button" class="title-card__back" @click="goBackToBoot">はじめの画面へ戻る</button>
+                   ようにしているため（ボタン側で止める必要はない）
+
+                 スマホ幅では「はじめの画面へ戻る」を「← 戻る」の短い表示に入れかえて、
+                 右上の「?」とサウンドのコントロールと、横1行に収まるようにしている
+                 どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
+                 （「あそびかた」を「?」だけにするのと同じ考えかた） -->
+            <button ref="backToBootButtonRef" type="button" class="title-card__back" aria-label="はじめの画面へ戻る" @click="goBackToBoot">
+              <span class="title-card__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
+              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+            </button>
 
             <!-- 右上のまとまり（？ あそびかた ＋ サウンドON/OFF）
                  2つを1つの入れものに入れて、いつも右はしに並んで出るようにしている

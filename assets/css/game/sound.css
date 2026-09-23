@@ -7,7 +7,8 @@
    ・タイトル画面・おやつ選択・あそびかた（.title-card__tools の中）
      … ひとまわり大きくして、枠はのばさずコンパクトなまま
    ・ゲーム画面の上部バー（.status-area の中）
-     … スマホでは、空いた横幅を使ってスライダーを長くする（width: 100%）
+     … スマホでは、枠はのばさず、決めた長さのまま右はしに置く
+   どちらも、入りきらないときだけスライダーが縮んで場所をゆずる
 
    先頭の .title-card__tools／.status-area は
    pages/index.vue・StatusBar.vue 側の要素で、
@@ -15,10 +16,8 @@
    ルート要素には親（pages/index.vue）のしるしも付くので、
    これまでどおり game.css から読みこめば当たる
 
-   ※ この2つの指定は「どちらが勝つか」が大事なので、
-     同じファイルの中に、この順番のまま置いておくこと
-     （.status-area で width: 100% にするのは、ゲーム画面のときだけ。
-       タイトル画面まで広がらないよう、.title-card__tools 側で width: auto に戻している）
+   ※ 置き場所ごとの指定は、同じファイルの中に、この順番のまま置いておくこと
+     （どちらが勝つかをまとめて見られるようにするため）
 
    ※ SoundControl.vue の中の要素を指すものは sound-control.css にある
      （理由は、そのファイルの先頭に書いてある）
@@ -37,10 +36,17 @@
 
 @media (max-width: 700px) {
 
-  .status-area .sound-control {
-    --sound-slider-width: 54px;
+  /* ゲーム中の上部バーでは、サウンド枠をのばさず、決めた長さのまま右はしに置く
+     （右へ寄せる指定は status.css の .status-area__titleRow）
 
-    width: 100%;
+     ・flex: 0 1 auto … 伸びはしないが、縮みはする
+     ・min-width: 0   … 時計に「+25分」が出て入りきらないときは、
+                        枠が縮み、そのぶん中の音量スライダーが短くなる（最低48px → sound-control.css） */
+  .status-area .sound-control {
+    --sound-slider-width: 100px;
+
+    width: auto;
+    flex: 0 1 auto;
     min-width: 0;
   }
 
@@ -53,12 +59,18 @@
 
     /* A/B画面では、サウンド枠をのばさない（中身ぶんのコンパクトな幅のまま）
 
-       ・width: auto … カードいっぱいに広がらない
-       ・flex: none  … ツールバー（display: flex）の中で、伸びも縮みもしない
-       これが無いと枠だけが長くなって、左の「♪ サウンドトラック」
-       「はじめの画面へ戻る」が下の行へ折り返してしまう
-       （ゲーム中だけのばす指定は、上の .status-area 配下に書いてある） */
+       ・width: auto      … カードいっぱいに広がらない
+       ・flex: 0 1 auto   … ツールバー（display: flex）の中で、伸びはしないが縮みはする
+       ・min-width: 0     … 中身（スライダー84px）の幅より小さくなれるようにする
+       左の補助リンクと横1行に入りきらないときは、枠が縮み、
+       そのぶん中の音量スライダーが短くなる（最低48px → sound-control.css）
+       こうして、サウンドのコントロールが下の行へ落ちないようにしている
+       （ゲーム中の上部バーも、上の .status-area 配下で同じ作りにしてある）
+       ※ とても細い画面（340px以下）で下の行へ回りこんだときも、
+         margin-left: auto で右はしに寄せる（B画面の右上のまとまりと同じ） */
     width: auto;
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: auto;
   }
 }
