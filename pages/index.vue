@@ -6,9 +6,6 @@ import { changeClass, formatChange } from '~/utils/statusChange';
 /* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
 import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
-/* 「今回の変化」の表示データ作り（行動前・いまの値・増減 → 画面にならべる形） */
-import { buildChangeGroups } from '~/utils/changeGroups';
-
 /* ゲームの時計まわりの計算（いまの時刻から、何分か進んだ時刻を出す）
    「09:25」の文字を分の数に直すほうは、composables/useGameState.ts のなかで使っている */
 import { addMinutesToTime } from '~/utils/gameTime';
@@ -29,6 +26,16 @@ import { useTantrum } from '~/composables/useTantrum';
    スコア・ランク・GAME OVERの文章・S+の曲の解放を持っておくところ
    計算そのものは composables/useScore.ts、localStorage は utils/sPlusSong.ts のまま */
 import { useGameResult } from '~/composables/useGameResult';
+
+/* 通常の行動1回ぶんの結果（中身は composables/useActionResult.ts）
+   結果の文章・今回の変化・見つけたもの・ちょっとしたできごとを持っておくところ
+   行動の中身（ステータスの増減・アイテム取得・抽選）は、このファイルに残してある */
+import { useActionResult } from '~/composables/useActionResult';
+
+/* きょうのおやつ（中身は composables/useSnackBag.ts）
+   バッグの中身と、そこから決まる表示用の値・出し入れを持っておくところ
+   おやつ選択画面の操作と、おやつを食べる行動は、このファイルに残してある */
+import { useSnackBag } from '~/composables/useSnackBag';
 
 /* 秘密の小道（ミニゲーム）の計算だけを取り出したもの
    ここで使うのは、レーンの番号を画面の位置（%）にする計算だけ
@@ -77,11 +84,8 @@ import StatusBar from '~/components/game/StatusBar.vue';
 import type {
   GameEvent,
   ItemPlace,
-  RandomEventEffect,
-  Snack,
   SnackId,
   SnackUseContext,
-  StatusChanges,
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ
@@ -251,27 +255,52 @@ const {
   resetGameState,
 } = useGameState();
 
-/* 今回の行動で新しく見つけたもの
-   結果カードに「★ アイテム発見！」を出すためだけに使う（演出用）
-   行動をはじめるたびに空にするので、直前の1回ぶんだけが入っている
-   ※ 見つけたものの本体は collectedItems のままで、取得のルールは変えていない
-*/
-const foundItemsThisAction = ref<string[]>([]);
+/* ============================================================
+   通常の行動1回ぶんの結果（画面に出すためのメモ）
 
-/* 今回の行動で起きたランダムイベント（演出用）
-   ・randomEventText    … 何が起きたかの文章
-   ・randomEventEffects … そのできごとだけのステータス増減
+   中身は composables/useActionResult.ts にある
+   ・結果の文章・今回の変化・行動前の控え・見つけたもの・
+     ちょっとしたできごと・休憩／おやつの結果かどうか、の入れもの
+   ・変化量を作る saveStatusChanges() と、「今回の変化」の表示データ changeGroups
+   ・そのぜんぶを最初に戻す resetActionResult()
 
-   前は結果メッセージの文章に「おでかけポイント +5」と書き足していたが、
-   それだと地の文にまぎれて見のがされてしまうので、
-   文章と増減を分けて持ち、画面では専用の枠に出す
+   ■ このファイルに残してあるもの
+     ・行動の中身（ステータスの増減・時間・アイテム取得・ちょっとしたできごとの抽選）
+       入れものへ入れるのは今までどおりこのファイルで、
+       resultMessage.value = ... のように、受けとった ref へ直接書きかえる
+     ・行動をはじめる共通の入口 startStatusChanges()
+       （決定音・サブメニューを閉じる・前の行動の表示を消す・行動前の控えを取る）
+     ・ゲームの途中で表示を消すところ（goToPlace()・goToNextPlace() など）
 
-   ※ ステータスの数字そのものは、今までどおり outingPoint などを直接動かしている
-     ここに入れるのは「画面に出すためのメモ」だけ
-   ※ 行動をはじめるたびに空へ戻すので、直前の1回ぶんだけが入っている
-*/
-const randomEventText = ref('');
-const randomEventEffects = ref<RandomEventEffect[]>([]);
+   ※ ゲームが終わったあとの結果（スコア・ランク・GAME OVER）は composables/useGameResult.ts
+   ============================================================ */
+const {
+  /* 結果カードに出すもの */
+  resultMessage,
+  foundItemsThisAction,
+  randomEventText,
+  randomEventEffects,
+  isCareActionResult,
+
+  /* 今回の変化（上部ステータスと結果カードに出す） */
+  statusChanges,
+  statusBefore,
+  changeGroups,
+
+  /* 行動が終わったあとに呼ぶ */
+  saveStatusChanges,
+
+  /* 行動の結果表示を、まとめて最初に戻す（resetGame() から呼ぶ） */
+  resetActionResult,
+} = useActionResult({
+  childEnergy,
+  childMood,
+  outingPoint,
+  parentEnergy,
+  parentCalm,
+  currentMinutes,
+  currentTime,
+});
 
 /* いやいや発生の演出（画面いっぱいのオーバーレイ）を出しているかどうか
 
@@ -284,128 +313,42 @@ const tantrumAlertVisible = ref(false);
 /* ============================================================
    きょうのおやつ（公園へ持っていくおやつ ＝ バッグの中身）
 
-   ゲームが始まる前に、6種類から2種類を選んでバッグに入れてもらう
-   公園へ出発したあとは、同じバッグから1つずつ取り出して食べる
+   中身は composables/useSnackBag.ts にある
+   ・バッグの中身（selectedSnackIds）と、そこから決まる表示用の値
+   ・名札からおやつをさがす／バッグにあるか確かめる／バッグから出す
+   ・バッグを空に戻す resetSnackBag()
 
-   ■ selectedSnackIds の2つの顔
-
-     ゲーム開始前 … 「公園へ持っていくおやつ」
-     ゲーム中     … 「いまバッグに残っているおやつ」
-
-     どちらも同じ配列で、食べるたびにそのおやつの名札が消えていく
-       出発したとき   ['gummy', 'senbei']
-       グミを食べた   ['senbei']
-       せんべいも食べた []
-
-     「残りのおやつ」を別の配列に写したりはしないので、
-     バッグの中身が2か所でずれることがない
-
-   ■ おやつの残り個数（snackLeft）
-
-     バッグの中身の数そのもの（selectedSnackIds.length）
-     数を別に持って増やしたり減らしたりはしない
-     ＝ おやつを食べて名札が消えれば、残り個数も自動で1つ減る
+   ■ このファイルに残してあるもの
+     ・おやつ選択画面の開け閉めと、カードを押したときの出し入れ
+       （openSnackSelection()・closeSnackSelection()・toggleSnackSelection()・
+         confirmSnacksAndStartGame()）
+       受けとった selectedSnackIds を、今までどおり直接書きかえる
+     ・おやつを食べる行動そのもの（ステータスの増減・時間・結果の文章）
+       いやいや中のおやつは composables/useTantrum.ts へ
+       findSnackInBag / removeSnackFromBag をそのまま渡している
 
    ■ ゲーム中にどのおやつを食べるか選ぶメニュー（おやつバッグ）は、
      もう少し下の「サブメニュー ☕ ひとやすみ」のあとにまとめてある
    ============================================================ */
+const {
+  /* バッグの中身（おやつ選択画面から直接 出し入れする） */
+  selectedSnackIds,
 
-/* 今日バッグに入れたおやつ（選んだ順にならぶ）
+  /* 中身から決まる表示用の値 */
+  selectedSnacks,
+  snackLeft,
+  isSnackBagFull,
+  canStartWithSnacks,
 
-   入っているのは名札だけで、['gummy', 'senbei'] のような見た目になる
-   おやつの中身（名前・絵文字・回復量）は snacks のほうが持っているので、
-   ここでは同じ情報を2か所に持たないようにしている
+  /* さがす・確かめる・取り出す */
+  findSnack,
+  isSnackSelected,
+  findSnackInBag,
+  removeSnackFromBag,
 
-   ゲーム中は「いまバッグに残っているおやつ」として使う
-   食べたおやつは removeSnackFromBag() でここから消える
-
-   ※ 同じおやつは1個までなので、['gummy', 'gummy'] にはならない
-   ※ localStorage には保存しない（その1プレイだけのもの）
-     ページを読みこみ直したら、また空から選びなおす
-   ※ 空に戻すのは resetGame()（もう一度あそぶ）と goBackToBoot()（A画面へ戻る）だけ
-     startGame() では書きかえないので、選んだおやつがそのまま公園へ持ちこまれる */
-const selectedSnackIds = ref<SnackId[]>([]);
-
-/* 名札（'gummy' など）から、おやつの中身（snacks の中の1件）をさがす
-
-   find() は、snacks の中から条件に合う最初の1件を返す
-   見つからなかったときは undefined になる */
-function findSnack(snackId: SnackId) {
-  return snacks.find((snack) => snack.id === snackId);
-}
-
-/* 選んだおやつの中身（名札 → snacks の中の本体）
-
-   画面で「🍇 グミ」と絵文字つきで出したいので、名札から本体を引いておく
-   おやつ選択画面のバッグ表示と、ゲーム中のおやつバッグの両方で、これを並べる
-   （食べたおやつは selectedSnackIds から消えるので、ここからも自動で消える）
-
-   ・map()    … 名札をひとつずつ本体に置きかえる（findSnack() でさがす）
-   ・filter() … 見つからなかったぶん（undefined）を取りのぞく
-
-   filter の中の「snack is Snack」は、
-   「ここを通りぬけたものは、もう undefined ではない」と
-   TypeScriptに伝えるための書きかた
-   これがないと、このあと snack.name と書くたびに
-   「undefined かもしれない」と言われてしまう */
-const selectedSnacks = computed(() => selectedSnackIds.value.map((id) => findSnack(id)).filter((snack): snack is Snack => snack !== undefined));
-
-/* おやつの残り個数（＝バッグに残っているおやつの数）
-
-   selectedSnackIds の長さをそのまま返すだけ
-   数を別に持たないので「バッグは空なのに残り1個」のようなずれが起きない
-
-   ※ computed なので snackLeft.value = 2 や snackLeft.value -= 1 は書けない
-     減らしたいときは、バッグからおやつを取り出す（removeSnackFromBag()）
-
-   「snackLeft > 0」は「バッグにおやつが1個以上残っている」という意味
-   （おやつのコマンドを出すか・コマンドの数・「少し待ってみる」の番号 で使う） */
-const snackLeft = computed(() => selectedSnackIds.value.length);
-
-/* バッグがいっぱいかどうか（＝これ以上は選べない）
-
-   いっぱいのときは、まだ選んでいないおやつのカードを押せなくする
-   （選んでいるおやつのカードは押せるままにして、解除できるようにする） */
-const isSnackBagFull = computed(() => selectedSnackIds.value.length >= maxSnackCount);
-
-/* 公園へ出発できるかどうか（ちょうど2種類そろっているか）
-
-   「このおやつで公園へ行く！」を押せるようにする条件 */
-const canStartWithSnacks = computed(() => selectedSnackIds.value.length === maxSnackCount);
-
-/* そのおやつが、いまバッグに入っているかどうか
-
-   おやつ選択画面では、「選択中」の見た目にするかどうかと、
-   カードを押せなくするかどうかの、両方で使う
-   ゲーム中は「そのおやつをまだ食べていないか」の確認に使う（findSnackInBag()） */
-function isSnackSelected(snackId: SnackId) {
-  return selectedSnackIds.value.includes(snackId);
-}
-
-/* バッグの中にあるおやつの中身を返す（ここではまだバッグから消さない）
-
-   ゲーム中におやつを食べる関数が、いちばん最初にこれを呼ぶ
-   ・バッグに入っていない（もう食べた／持ってきていない）おやつ … undefined
-   ・バッグに入っているおやつ                                   … そのおやつの中身
-
-   画面にはバッグにあるおやつしか出していないが、
-   関数を直接呼ばれても「持っていないおやつで回復する」ことがないように、ここでも確かめる */
-function findSnackInBag(snackId: SnackId) {
-  if (!isSnackSelected(snackId)) {
-    return undefined;
-  }
-
-  return findSnack(snackId);
-}
-
-/* おやつをバッグから出す（selectedSnackIds から名札を消す）
-
-   同じおやつは1個までなので、同じ名札をぜんぶ消す形で問題ない
-   ゲーム中は、ステータスの計算がぜんぶ終わってから呼ぶこと
-   （先に呼ぶと、途中で何かあったときに「おやつだけ減った」ことになってしまう） */
-function removeSnackFromBag(snackId: SnackId) {
-  selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
-}
+  /* バッグを空に戻す（resetGame() と goBackToBoot() から呼ぶ） */
+  resetSnackBag,
+} = useSnackBag();
 
 /* 次に起こす予定のとつぜんのできごと（予定表）
 
@@ -419,30 +362,6 @@ function removeSnackFromBag(snackId: SnackId) {
      （いやいや（isTantrum）とまったく同じ考え方）
 */
 const pendingSuddenEvent = ref<GameEvent | null>(null);
-
-/* 結果メッセージ */
-const resultMessage = ref('');
-
-/* 今回の行動による変化
-   null は「まだ今回の行動結果がない」という意味
-   場所を移動したら null に戻して、前の変化が残らないようにする
-*/
-const statusChanges = ref<StatusChanges | null>(null);
-
-/* 行動する前のステータスを、いったん控えておく箱
-   行動が終わったあとに「今の値 － 行動前の値」で変化量を計算する
-
-   ※ GAME OVER画面で「親の体力 10 → 0」のように行動前の値も出したいので、
-     ふつうの変数ではなく ref にして、画面からも読めるようにしている
-*/
-const statusBefore = ref({
-  childEnergy: 0,
-  childMood: 0,
-  outingPoint: 0,
-  parentEnergy: 0,
-  parentCalm: 0,
-  minutes: 0,
-});
 
 /* ============================================================
    ゲームが終わったあとの結果（リザルト・GAME OVER・S+の曲の解放）
@@ -678,10 +597,6 @@ function toggleCareMenu() {
    休憩・おやつは、その場所で ひと息ついただけで、場所は離れていない
    なので結果カードには①ではなく③を出し、押したら同じ場所の「どうする？」へ戻す
 */
-
-/* いま出ている結果カードが、休憩・おやつの結果かどうか
-   finishCareAction() で true、次の行動をはじめたとき（startStatusChanges()）や場所を出たときに false */
-const isCareActionResult = ref(false);
 
 /* 休憩・おやつの結果カードに「← もどる」を出すかどうか
 
@@ -1296,50 +1211,6 @@ function startStatusChanges() {
   };
 }
 
-/* 行動の中身がぜんぶ終わったあとに呼ぶ
-   「今の値 － 行動前の値」で、今回の変化量を作る
-
-   この計算は行動につき1回だけ行うので、
-   ・ランダムイベントの分
-   ・いやいや発生の分
-   ・再訪でポイントが1に減った分
-   もぜんぶ合計された数になる
-
-   ※ 必ず fixAllStatus()（0〜100に丸める処理）より前に呼ぶこと
-     たとえば 親の体力が0のときに だっこ をすると、
-     丸めたあとでは 0 のままなので「-15」が消えてしまう
-     丸める前に計算することで、その行動にかかったコストがきちんと出る
-*/
-function saveStatusChanges() {
-  statusChanges.value = {
-    childEnergy: childEnergy.value - statusBefore.value.childEnergy,
-    childMood: childMood.value - statusBefore.value.childMood,
-    outingPoint: outingPoint.value - statusBefore.value.outingPoint,
-    parentEnergy: parentEnergy.value - statusBefore.value.parentEnergy,
-    parentCalm: parentCalm.value - statusBefore.value.parentCalm,
-    minutes: currentMinutes.value - statusBefore.value.minutes,
-  };
-}
-
-/* 中央の「今回の変化」を、誰の情報かで3つのまとまりに分けたもの
-
-   表示のならびを組み立てるのは utils/changeGroups.ts の buildChangeGroups()
-   ここは、行動する前の値・いまの値・今回の増減を渡すだけ
-   （くわしい中身は、あちらのコメントを参照）
-*/
-const changeGroups = computed(() =>
-  buildChangeGroups({
-    changes: statusChanges.value,
-    before: statusBefore.value,
-    childEnergy: childEnergy.value,
-    childMood: childMood.value,
-    outingPoint: outingPoint.value,
-    parentEnergy: parentEnergy.value,
-    parentCalm: parentCalm.value,
-    currentTime: currentTime.value,
-  }),
-);
-
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
   return visitedPlaces.value.includes(place);
@@ -1935,8 +1806,10 @@ function goBackToBoot() {
      A画面まで戻るのは「最初から始め直す」ことなので、
      前に選んだグミ・せんべいが残っていると、
      次に公園へ行くときに知らないうちに持たされてしまう
-     （B画面 ⇄ おやつ選択画面の行き来では、わざと残している） */
-  selectedSnackIds.value = [];
+     （B画面 ⇄ おやつ選択画面の行き来では、わざと残している）
+
+     バッグを空にする中身は composables/useSnackBag.ts の resetSnackBag() */
+  resetSnackBag();
   isSnackSelectionOpen.value = false;
 
   /* あそびかた画面も閉じた状態に戻しておく
@@ -3635,8 +3508,10 @@ function resetGame() {
        ここでバッグを空にすれば いっしょに0になる（別に戻す必要はない）
        次のプレイでは、おやつ選択画面でまた2つ選んでから出発する
 
-     ※ ゲーム中に開いていたおやつバッグは、このあとの closeCareMenu() で閉じる */
-  selectedSnackIds.value = [];
+     ※ ゲーム中に開いていたおやつバッグは、このあとの closeCareMenu() で閉じる
+
+     バッグを空にする中身は composables/useSnackBag.ts の resetSnackBag() */
+  resetSnackBag();
   isSnackSelectionOpen.value = false;
 
   // あそびかた画面も閉じた状態に戻しておく
@@ -3654,9 +3529,12 @@ function resetGame() {
   // 「公園の出口へ向かう？」の確認ダイアログも閉じておく（念のため）
   closeGoalConfirm();
 
-  resultMessage.value = '';
-  statusChanges.value = null;
-  isCareActionResult.value = false;
+  /* 通常の行動1回ぶんの結果（結果の文章・今回の変化・行動前の控え・見つけたもの・
+     ちょっとしたできごと・休憩／おやつの結果かどうか）を、まとめて最初に戻す
+
+     初期値は composables/useActionResult.ts が持っている
+     （はじめるときと同じ値になるので、ここに書き写す必要がない） */
+  resetActionResult();
 
   // 前回のプレイで最後に入った場所を忘れる（新しいプレイの公園入口は、先頭から選ぶ）
   lastSelectedPlace.value = null;
@@ -3674,10 +3552,8 @@ function resetGame() {
        （あちらの resetGameResult() でも、そこだけは戻していない） */
   resetGameResult();
 
-  // 演出用に控えていたものも空に戻す
-  foundItemsThisAction.value = [];
-  randomEventText.value = '';
-  randomEventEffects.value = [];
+  // ※ 演出用に控えていたもの（見つけたもの・ちょっとしたできごと）と、行動前の控えは、
+  //   上の resetActionResult() で空に戻している
   // ※ いやいやの文章と「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
   // ※ GAME OVER画面に出す文章は、上の resetGameResult() で空に戻している
 
@@ -3685,16 +3561,6 @@ function resetGame() {
   // ※ 戻しておかないと、前回のプレイの予定が
   //   次のゲームの1回目の行動のあとに出てきてしまう
   pendingSuddenEvent.value = null;
-
-  // 行動前の控えも0に戻しておく（前回の記録が残らないようにする）
-  statusBefore.value = {
-    childEnergy: 0,
-    childMood: 0,
-    outingPoint: 0,
-    parentEnergy: 0,
-    parentCalm: 0,
-    minutes: 0,
-  };
 
   // ※ 公園入口（currentEvent）に戻すのは、上の resetGameState() でまとめて行っている
   gameStarted.value = false;
