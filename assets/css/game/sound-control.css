@@ -389,23 +389,22 @@
 
 @media (max-width: 700px) {
 
-  .status-area .sound-control__sliderWrap {
-    flex: 1;
-    min-width: 0;
-  }
+  /* スライダーは、どちらの置き場所でも、決めた幅（--sound-slider-width）がふつうの長さ
+     のばして、あいている幅いっぱいにはしない
 
-  .status-area .sound-control__slider {
-    width: 100%;
-    min-width: var(--sound-slider-width);
-  }
-
-  /* スライダーも、A/B画面では決めた幅（--sound-slider-width）のまま
-     ゲーム中のような width: 100% ／ flex: 1 にはしない */
+     ただし、となりの時計・補助リンクと横1行に入りきらないときだけは縮んで、場所をゆずる
+     （枠の .sound-control が縮めるようにしてあるのは sound.css）
+     短くなりすぎると動かしにくいので、48pxより短くはしない */
+  .status-area .sound-control__sliderWrap,
   .title-card__tools .sound-control__sliderWrap {
-    flex: none;
+    flex: 0 1 auto;
+    min-width: 48px;
   }
 
+  .status-area .sound-control__slider,
   .title-card__tools .sound-control__slider {
+    flex: 0 1 auto;
     width: var(--sound-slider-width);
+    min-width: 48px;
   }
 }
