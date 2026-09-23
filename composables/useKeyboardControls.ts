@@ -12,7 +12,7 @@
    ■ ここがやらないこと
      ゲームの中身は、ぜんぶ親（pages/index.vue）に残してある
      「どの番号で、どの遊びの関数を呼ぶか」を決める runSelectedCommand() も親のまま
-     （すべり台の playSlide() などは、今までどおり pages/index.vue にある）
+     （すべり台の遊びなども、今までどおり pages/index.vue の runPlaceAction() が実行する）
 
      ステータス・時間・いやいや・おやつ・BGM・効果音も、いっさいさわらない
 

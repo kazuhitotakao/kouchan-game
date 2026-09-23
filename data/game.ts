@@ -1,7 +1,7 @@
 /* ============================================================
    ゲーム全体の設定（ゲーム中に変わらないデータ）
 
-   場所関係は data/places.ts、
+   場所関係は data/places.ts（その場所での行動は data/placeActions.ts）、
    おやつ関係は data/snacks.ts、
    いやいやタイム関係は data/tantrum.ts、
    秘密の小道関係は data/secretPath.ts のほうにまとめてある

@@ -3,7 +3,7 @@
 
    ここにあるのは「どんなセリフを出すか」「どのおやつがどの理由に効くか」だけで、
    「いま何のいやいやか」（tantrumReason）や「いまのレベル」（tantrumLevel）は
-   プレイ中に変わるので pages/index.vue の ref のほうに残してある
+   プレイ中に変わるので composables/useTantrum.ts のほうが持っている
    ============================================================ */
 
 import type { SnackId, TantrumLevel, TantrumLevelInfo, TantrumReason, TantrumReasonInfo, TantrumSnackFit } from '~/types/game';

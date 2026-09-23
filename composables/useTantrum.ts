@@ -93,11 +93,13 @@ export type UseTantrumOptions = {
   fussMoodLine: number;
   addMinutes: (minutes: number) => void;
 
-  /* ===== おやつ（バッグの中身） ===== */
+  /* ===== おやつ（バッグの中身。中身は composables/useSnackBag.ts） ===== */
   findSnackInBag: (snackId: SnackId) => Snack | undefined;
   removeSnackFromBag: (snackId: SnackId) => void;
 
-  /* ===== 共通の処理（中身は pages/index.vue のまま） ===== */
+  /* ===== 共通の処理 =====
+     startStatusChanges()・fixAllStatus()・checkGameOver() は pages/index.vue、
+     saveStatusChanges() は composables/useActionResult.ts のもの */
   startStatusChanges: () => void;
   saveStatusChanges: () => void;
   fixAllStatus: () => void;

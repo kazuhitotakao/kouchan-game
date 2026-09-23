@@ -24,7 +24,8 @@
 
      「もう一度あそぶ」の resetGame() も pages/index.vue のまま
      ここが受けもつのは、そのうち「自分が持っている状態を戻すところ」だけ
-     （いやいや・秘密の小道・結果の表示・画面の状態・音は、あちらが戻す）
+     （いやいや・秘密の小道・行動の結果・ゲーム終了後の結果・おやつ袋は、
+       それぞれの composable の reset 関数が戻す。resetGame() がまとめて呼んでいる）
 
      状態を書きかえる専用の関数（setter）も用意していない
      受けとった側から currentEvent.value = ... のように、今までどおり書きかえる
@@ -47,9 +48,15 @@
        そちらは composables/useTantrum.ts と pages/index.vue のまま
      ・次に起こす予定のとつぜんのできごと（pendingSuddenEvent）
        「次へ」を押すまでのあいだだけ持っておく、画面の切りかえ待ちなので
-     ・結果や変化の記録（statusBefore・statusChanges など）
+     ・行動1回ぶんの結果や変化の記録（statusBefore・statusChanges など）
+       そちらは composables/useActionResult.ts が持っている
+     ・ゲームが終わったあとの結果（スコア・ランク・GAME OVERの文章）
+       そちらは composables/useGameResult.ts が持っている
+     ・きょうのおやつ（selectedSnackIds）
+       そちらは composables/useSnackBag.ts が持っている
      ・画面の状態（タイトル画面かどうか・選んでいるコマンド・ダイアログの開閉・DOMのref）
      ・秘密の小道（ミニゲーム）の中の状態（secretPath* 系）
+       そちらは composables/useSecretPathGame.ts が持っている
      ・音の状態（そちらは composables/useAudio.ts が持っている）
    ============================================================ */
 
@@ -164,8 +171,9 @@ export function useGameState() {
   /* ここで持っている状態を、ぜんぶ最初の状態へ戻す（「もう一度あそぶ」用）
 
      戻すのは、この composable が持っているものだけ
-     いやいや・秘密の小道・結果の表示・画面の状態・音は、
-     今までどおり pages/index.vue の resetGame() が受けもつ
+     いやいや・秘密の小道・行動の結果・ゲーム終了後の結果・おやつ袋は、
+     それぞれの composable の reset 関数が戻す
+     （画面の状態と音をふくめて、まとめて呼ぶのは pages/index.vue の resetGame()）
 
      ※ 探検済みの場所と見つけたものは、からっぽの配列を作りなおして入れかえる
        （前と同じ配列を使いまわして中身だけ消す、というやりかたはしない。
