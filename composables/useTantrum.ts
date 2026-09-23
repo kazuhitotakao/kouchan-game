@@ -23,10 +23,14 @@
      ゲームのバランス（増減の数・抽選の順番・乱数を呼ぶ回数）を
      1つも変えないことを優先したため
 
-   ■ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応）は、
-     ここが自分で持っている
+   ■ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応・
+     いやいやが始まったときの文章）は、ここが自分で持っている
      書きかえるのもこのファイルの中だけなので、持ち主と書き手をそろえてある
      画面に出すものは、下の return から渡している
+
+   ■ 初期値の置き場所は、このファイルの「最初の状態（初期値）」1か所だけ
+     ref を作るときと、resetTantrumState() で戻すときの両方がそこを見るので、
+     同じ値を2か所に書いておく必要がない（composables/useGameState.ts と同じ考えかた）
 
    ■ いやいや中かどうか（isTantrum）と、いやいやが起きた回数（tantrumCount）は、
      今までどおり受けとった ref をそのまま使う
@@ -40,6 +44,27 @@ import type { ComputedRef, Ref } from 'vue';
 import { snackTantrumFits, tantrumLevelInfo, tantrumReasonInfo } from '~/data/tantrum';
 import type { SnackId, Snack, TantrumAction, TantrumLevel, TantrumReason, TantrumSnackFit } from '~/types/game';
 
+/* ============================================================
+   最初の状態（初期値）
+
+   ・useTantrum() を呼んで、入れものを作るとき
+   ・いやいやの記録を空に戻すとき（resetTantrumState()）
+
+   の両方が、ここに書いた値を見る
+   初期値を変えたいときは、この場所だけを直せばよい
+
+   ※ ここにあるのは、このファイルが持ち主の状態だけ
+     いやいや中かどうか（isTantrum）と、いやいやが起きた回数（tantrumCount）の初期値は、
+     持ち主の composables/useGameState.ts のほうにある
+   ============================================================ */
+const initialTantrumReason: TantrumReason | null = null; // いまのいやいやの理由（null = いやいやしていない）
+const initialTantrumLevel: TantrumLevel = 1; // いやいやの激しさ（1 = ぐずぐず）
+const initialLastTantrumAction: TantrumAction | null = null; // 直前に選んだ対応
+const initialRepeatedTantrumActionCount: number = 0; // 同じ対応を続けている回数
+const initialHasNiceTantrumResponse: boolean = false; // このいやいやで、もうナイス対応のボーナスをもらったか
+const initialNiceTantrumResponseText: string = ''; // 「✨ ナイス対応！」に出す文章
+const initialTantrumText: string = ''; // いやいやが始まったときの文章
+
 export type UseTantrumOptions = {
   /* ===== こうちゃんと親のステータス（そのまま増減する） ===== */
   childEnergy: Ref<number>;
@@ -49,10 +74,9 @@ export type UseTantrumOptions = {
   outingPoint: Ref<number>;
 
   /* ===== いやいやの状態（ゲーム全体で共有しているぶんだけ受けとる） =====
-     理由・激しさ・直前の対応・ナイス対応は、このファイルの中で持っている */
+     理由・激しさ・直前の対応・ナイス対応・いやいやが始まったときの文章は、このファイルの中で持っている */
   isTantrum: Ref<boolean>;
   tantrumCount: Ref<number>;
-  tantrumText: Ref<string>;
 
   /* ナイス対応のボーナス（1回のいやいやにつき1回だけ） */
   niceTantrumBonusOutingPoint: number;
@@ -96,7 +120,6 @@ export function useTantrum(options: UseTantrumOptions) {
     outingPoint,
     isTantrum,
     tantrumCount,
-    tantrumText,
     niceTantrumBonusOutingPoint,
     niceTantrumBonusParentCalm,
     resultMessage,
@@ -170,7 +193,7 @@ export function useTantrum(options: UseTantrumOptions) {
        null に戻すのは、結果を読み終えて いやいやタイムの画面から出るとき（goToNextPlace()）
        と、もう一度あそぶとき（resetGame()）
        ※ どちらも resetTantrumState() を通る */
-  const tantrumReason = ref<TantrumReason | null>(null);
+  const tantrumReason = ref(initialTantrumReason);
 
   /* ============================================================
      いやいやの激しさ（いやいやレベル）
@@ -195,7 +218,7 @@ export function useTantrum(options: UseTantrumOptions) {
 
   /* いまのいやいやの激しさ
      いやいやしていないときは 1 のまま（新しいいやいやも 1 から始まる） */
-  const tantrumLevel = ref<TantrumLevel>(1);
+  const tantrumLevel = ref(initialTantrumLevel);
 
   /* いまのレベルの見出しと様子 */
   const currentTantrumLevelInfo = computed(() => tantrumLevelInfo[tantrumLevel.value]);
@@ -229,8 +252,8 @@ export function useTantrum(options: UseTantrumOptions) {
      ・新しいいやいやが始まったときと、いやいやタイムから出るときに、まとめて空へ戻す
      ============================================================ */
 
-  const lastTantrumAction = ref<TantrumAction | null>(null);
-  const repeatedTantrumActionCount = ref(0);
+  const lastTantrumAction = ref(initialLastTantrumAction);
+  const repeatedTantrumActionCount = ref(initialRepeatedTantrumActionCount);
 
   /* ===== ナイス対応（いやいやの理由に合った対応をしたときのごほうび） =====
 
@@ -249,14 +272,26 @@ export function useTantrum(options: UseTantrumOptions) {
      2回ともボーナスを入れると、わざと長引かせたほうが得になってしまうため
 
      新しいいやいやが始まったときと、いやいやタイムから出るときに false へ戻す */
-  const hasNiceTantrumResponse = ref(false);
+  const hasNiceTantrumResponse = ref(initialHasNiceTantrumResponse);
 
   /* ナイス対応の表示に出す文章（演出用）
 
      空っぽ … 今回の対応はナイス対応ではなかった（結果カードに「✨ ナイス対応！」を出さない）
      行動をはじめるたび（pages/index.vue の startStatusChanges()）と、
      いやいやタイムから出るときに空へ戻す */
-  const niceTantrumResponseText = ref('');
+  const niceTantrumResponseText = ref(initialNiceTantrumResponseText);
+
+  /* 今回の行動でいやいやが始まったときの文章（演出用）
+
+     結果メッセージに書き足すと、あとから画面に足した
+     「アイテム発見」「ちょっとしたできごと」の表示より前に出てしまい、
+     起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）と食いちがう
+     そこで文章だけここに持ち、画面のいちばん下に出す
+
+     入れるのは checkTantrum()（新しいいやいやが始まったとき）の1か所だけ
+     空に戻すのは、行動をはじめるたび（pages/index.vue の startStatusChanges()）と、
+     resetTantrumState() */
+  const tantrumText = ref(initialTantrumText);
 
   /* おやつと いやいやの理由の相性
 
@@ -535,7 +570,8 @@ export function useTantrum(options: UseTantrumOptions) {
 
   /* いやいやの状態を「いやいやしていない」に戻す
 
-     戻すもの：理由・レベル・対応の記録・ナイス対応（もらったかどうかと、その表示）
+     戻すもの：理由・レベル・対応の記録・ナイス対応（もらったかどうかと、その表示）・
+     いやいやが始まったときの文章
      呼ぶところは3か所
      ・新しいいやいやが始まったとき（checkTantrum()）… 前のいやいやの記録を持ちこさない
      ・いやいやタイムの画面から出るとき（goToNextPlace()）
@@ -545,12 +581,13 @@ export function useTantrum(options: UseTantrumOptions) {
        isTantrum は「いやいや中かどうか」を決める大事な印、
        tantrumCount はプレイ全体の記録なので、それぞれの場所ではっきり書き分けている */
   function resetTantrumState() {
-    tantrumReason.value = null;
-    tantrumLevel.value = 1;
-    lastTantrumAction.value = null;
-    repeatedTantrumActionCount.value = 0;
-    hasNiceTantrumResponse.value = false;
-    niceTantrumResponseText.value = '';
+    tantrumReason.value = initialTantrumReason;
+    tantrumLevel.value = initialTantrumLevel;
+    lastTantrumAction.value = initialLastTantrumAction;
+    repeatedTantrumActionCount.value = initialRepeatedTantrumActionCount;
+    hasNiceTantrumResponse.value = initialHasNiceTantrumResponse;
+    niceTantrumResponseText.value = initialNiceTantrumResponseText;
+    tantrumText.value = initialTantrumText;
   }
 
   /* いやいやを1段はげしくする（1 → 2 → 3。3 のときは 3 のまま）
@@ -1074,12 +1111,13 @@ export function useTantrum(options: UseTantrumOptions) {
     waitCalmly,
 
     /* ===== 画面に出すもの（読むだけ。書きかえるのはこのファイルの中） =====
-       ※ niceTantrumResponseText だけは、行動をはじめるたびに
+       ※ niceTantrumResponseText と tantrumText だけは、行動をはじめるたびに
          pages/index.vue の startStatusChanges() が空へ戻している */
     tantrumLevel,
     currentTantrumLevelInfo,
     currentTantrumReasonInfo,
     currentTantrumScene,
     niceTantrumResponseText,
+    tantrumText,
   };
 }

@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongTitle } from '~/utils/sPlusSong';
+import { sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
 /* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
 import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
-
-/* 「今回の変化」の表示データ作り（行動前・いまの値・増減 → 画面にならべる形） */
-import { buildChangeGroups } from '~/utils/changeGroups';
 
 /* ゲームの時計まわりの計算（いまの時刻から、何分か進んだ時刻を出す）
    「09:25」の文字を分の数に直すほうは、composables/useGameState.ts のなかで使っている */
@@ -25,13 +22,30 @@ import { useKeyboardControls } from '~/composables/useKeyboardControls';
 /* いやいや（かんしゃく）の判定と結果（中身は composables/useTantrum.ts） */
 import { useTantrum } from '~/composables/useTantrum';
 
-/* 総合スコアとランクの計算（中身は composables/useScore.ts）
-   どちらも「渡した数から答えを返すだけ」で、ゲームの状態はさわらない */
-import { calculateScore, judgeEnding } from '~/composables/useScore';
+/* ゲームが終わったあとの結果（中身は composables/useGameResult.ts）
+   スコア・ランク・GAME OVERの文章・S+の曲の解放を持っておくところ
+   計算そのものは composables/useScore.ts、localStorage は utils/sPlusSong.ts のまま */
+import { useGameResult } from '~/composables/useGameResult';
+
+/* 通常の行動1回ぶんの結果（中身は composables/useActionResult.ts）
+   結果の文章・今回の変化・見つけたもの・ちょっとしたできごとを持っておくところ
+   行動の中身（ステータスの増減・アイテム取得・抽選）は、このファイルに残してある */
+import { useActionResult } from '~/composables/useActionResult';
+
+/* きょうのおやつ（中身は composables/useSnackBag.ts）
+   バッグの中身と、そこから決まる表示用の値・出し入れを持っておくところ
+   おやつ選択画面の操作と、おやつを食べる行動は、このファイルに残してある */
+import { useSnackBag } from '~/composables/useSnackBag';
 
 /* 秘密の小道（ミニゲーム）の計算だけを取り出したもの
-   予定表づくり・結果の文章・ボーナス・画面の位置の計算は、ぜんぶこちらにある */
-import { buildSecretPathSpawnQueue, getSecretPathBonusPoint, getSecretPathLaneLeft, getSecretPathResultText, getSecretPathSwipeThreshold } from '~/composables/useSecretPath';
+   ここで使うのは、レーンの番号を画面の位置（%）にする計算だけ
+   （予定表づくり・結果の文章・ボーナス・しきい値は composables/useSecretPathGame.ts から使う） */
+import { getSecretPathLaneLeft } from '~/composables/useSecretPath';
+
+/* 秘密の小道（ミニゲーム）の「状態を持つ側」（中身は composables/useSecretPathGame.ts）
+   ミニゲームの中の状態・1コマごとの処理・キー操作・ポインター操作・小道専用のイベントは、ぜんぶあちら
+   ここは、ゲーム全体の状態と画面の切りかえ・音を渡してつなぐだけ */
+import { useSecretPathGame } from '~/composables/useSecretPathGame';
 
 /* ランダムイベントの抽選だけを取り出したもの
    「起こるか」「何が起きるか」を決めて返す（ステータスは動かさない） */
@@ -70,16 +84,8 @@ import StatusBar from '~/components/game/StatusBar.vue';
 import type {
   GameEvent,
   ItemPlace,
-  RandomEventEffect,
-  ScoreBreakdownItem,
-  SecretPathItem,
-  SecretPathLane,
-  SecretPathPhase,
-  SecretPathSpawn,
-  Snack,
   SnackId,
   SnackUseContext,
-  StatusChanges,
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ
@@ -88,23 +94,11 @@ import type {
    ここにあるのは「読むだけ」のデータで、書きかえはしない
    いま何を持っているか・いま何のいやいやか、のような
    プレイ中に変わる値は、このファイルの ref のほうに残してある */
-import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, playedALotLine, suddenEvents, totalPlaceCount } from '~/data/game';
+import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
-import {
-  secretPathBoostMultiplier,
-  secretPathBumpEffectDuration,
-  secretPathDuration,
-  secretPathHoldBoostDelay,
-  secretPathLanes,
-  secretPathLeaveGuard,
-  secretPathPlayerY,
-  secretPathRemoveY,
-  secretPathSparkleDuration,
-  secretPathSpawnY,
-  secretPathSpeed,
-  secretPathSunlightTotal,
-  secretPathTapFlashDuration,
-} from '~/data/secretPath';
+import { placeActions } from '~/data/placeActions';
+import type { PlaceActionDefinition } from '~/data/placeActions';
+import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY, secretPathSunlightTotal } from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
@@ -263,36 +257,52 @@ const {
   resetGameState,
 } = useGameState();
 
-/* 今回の行動で新しく見つけたもの
-   結果カードに「★ アイテム発見！」を出すためだけに使う（演出用）
-   行動をはじめるたびに空にするので、直前の1回ぶんだけが入っている
-   ※ 見つけたものの本体は collectedItems のままで、取得のルールは変えていない
-*/
-const foundItemsThisAction = ref<string[]>([]);
+/* ============================================================
+   通常の行動1回ぶんの結果（画面に出すためのメモ）
 
-/* 今回の行動で起きたランダムイベント（演出用）
-   ・randomEventText    … 何が起きたかの文章
-   ・randomEventEffects … そのできごとだけのステータス増減
+   中身は composables/useActionResult.ts にある
+   ・結果の文章・今回の変化・行動前の控え・見つけたもの・
+     ちょっとしたできごと・休憩／おやつの結果かどうか、の入れもの
+   ・変化量を作る saveStatusChanges() と、「今回の変化」の表示データ changeGroups
+   ・そのぜんぶを最初に戻す resetActionResult()
 
-   前は結果メッセージの文章に「おでかけポイント +5」と書き足していたが、
-   それだと地の文にまぎれて見のがされてしまうので、
-   文章と増減を分けて持ち、画面では専用の枠に出す
+   ■ このファイルに残してあるもの
+     ・行動の中身（ステータスの増減・時間・アイテム取得・ちょっとしたできごとの抽選）
+       入れものへ入れるのは今までどおりこのファイルで、
+       resultMessage.value = ... のように、受けとった ref へ直接書きかえる
+     ・行動をはじめる共通の入口 startStatusChanges()
+       （決定音・サブメニューを閉じる・前の行動の表示を消す・行動前の控えを取る）
+     ・ゲームの途中で表示を消すところ（goToPlace()・goToNextPlace() など）
 
-   ※ ステータスの数字そのものは、今までどおり outingPoint などを直接動かしている
-     ここに入れるのは「画面に出すためのメモ」だけ
-   ※ 行動をはじめるたびに空へ戻すので、直前の1回ぶんだけが入っている
-*/
-const randomEventText = ref('');
-const randomEventEffects = ref<RandomEventEffect[]>([]);
+   ※ ゲームが終わったあとの結果（スコア・ランク・GAME OVER）は composables/useGameResult.ts
+   ============================================================ */
+const {
+  /* 結果カードに出すもの */
+  resultMessage,
+  foundItemsThisAction,
+  randomEventText,
+  randomEventEffects,
+  isCareActionResult,
 
-/* 今回の行動でいやいやが始まったときの文章（演出用）
+  /* 今回の変化（上部ステータスと結果カードに出す） */
+  statusChanges,
+  statusBefore,
+  changeGroups,
 
-   結果メッセージに書き足すと、あとから画面に足した
-   「アイテム発見」「ちょっとしたできごと」の表示より前に出てしまい、
-   起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）と食いちがう
-   そこで文章だけここに持ち、画面のいちばん下に出す
-*/
-const tantrumText = ref('');
+  /* 行動が終わったあとに呼ぶ */
+  saveStatusChanges,
+
+  /* 行動の結果表示を、まとめて最初に戻す（resetGame() から呼ぶ） */
+  resetActionResult,
+} = useActionResult({
+  childEnergy,
+  childMood,
+  outingPoint,
+  parentEnergy,
+  parentCalm,
+  currentMinutes,
+  currentTime,
+});
 
 /* いやいや発生の演出（画面いっぱいのオーバーレイ）を出しているかどうか
 
@@ -305,128 +315,42 @@ const tantrumAlertVisible = ref(false);
 /* ============================================================
    きょうのおやつ（公園へ持っていくおやつ ＝ バッグの中身）
 
-   ゲームが始まる前に、6種類から2種類を選んでバッグに入れてもらう
-   公園へ出発したあとは、同じバッグから1つずつ取り出して食べる
+   中身は composables/useSnackBag.ts にある
+   ・バッグの中身（selectedSnackIds）と、そこから決まる表示用の値
+   ・名札からおやつをさがす／バッグにあるか確かめる／バッグから出す
+   ・バッグを空に戻す resetSnackBag()
 
-   ■ selectedSnackIds の2つの顔
-
-     ゲーム開始前 … 「公園へ持っていくおやつ」
-     ゲーム中     … 「いまバッグに残っているおやつ」
-
-     どちらも同じ配列で、食べるたびにそのおやつの名札が消えていく
-       出発したとき   ['gummy', 'senbei']
-       グミを食べた   ['senbei']
-       せんべいも食べた []
-
-     「残りのおやつ」を別の配列に写したりはしないので、
-     バッグの中身が2か所でずれることがない
-
-   ■ おやつの残り個数（snackLeft）
-
-     バッグの中身の数そのもの（selectedSnackIds.length）
-     数を別に持って増やしたり減らしたりはしない
-     ＝ おやつを食べて名札が消えれば、残り個数も自動で1つ減る
+   ■ このファイルに残してあるもの
+     ・おやつ選択画面の開け閉めと、カードを押したときの出し入れ
+       （openSnackSelection()・closeSnackSelection()・toggleSnackSelection()・
+         confirmSnacksAndStartGame()）
+       受けとった selectedSnackIds を、今までどおり直接書きかえる
+     ・おやつを食べる行動そのもの（ステータスの増減・時間・結果の文章）
+       いやいや中のおやつは composables/useTantrum.ts へ
+       findSnackInBag / removeSnackFromBag をそのまま渡している
 
    ■ ゲーム中にどのおやつを食べるか選ぶメニュー（おやつバッグ）は、
      もう少し下の「サブメニュー ☕ ひとやすみ」のあとにまとめてある
    ============================================================ */
+const {
+  /* バッグの中身（おやつ選択画面から直接 出し入れする） */
+  selectedSnackIds,
 
-/* 今日バッグに入れたおやつ（選んだ順にならぶ）
+  /* 中身から決まる表示用の値 */
+  selectedSnacks,
+  snackLeft,
+  isSnackBagFull,
+  canStartWithSnacks,
 
-   入っているのは名札だけで、['gummy', 'senbei'] のような見た目になる
-   おやつの中身（名前・絵文字・回復量）は snacks のほうが持っているので、
-   ここでは同じ情報を2か所に持たないようにしている
+  /* さがす・確かめる・取り出す */
+  findSnack,
+  isSnackSelected,
+  findSnackInBag,
+  removeSnackFromBag,
 
-   ゲーム中は「いまバッグに残っているおやつ」として使う
-   食べたおやつは removeSnackFromBag() でここから消える
-
-   ※ 同じおやつは1個までなので、['gummy', 'gummy'] にはならない
-   ※ localStorage には保存しない（その1プレイだけのもの）
-     ページを読みこみ直したら、また空から選びなおす
-   ※ 空に戻すのは resetGame()（もう一度あそぶ）と goBackToBoot()（A画面へ戻る）だけ
-     startGame() では書きかえないので、選んだおやつがそのまま公園へ持ちこまれる */
-const selectedSnackIds = ref<SnackId[]>([]);
-
-/* 名札（'gummy' など）から、おやつの中身（snacks の中の1件）をさがす
-
-   find() は、snacks の中から条件に合う最初の1件を返す
-   見つからなかったときは undefined になる */
-function findSnack(snackId: SnackId) {
-  return snacks.find((snack) => snack.id === snackId);
-}
-
-/* 選んだおやつの中身（名札 → snacks の中の本体）
-
-   画面で「🍇 グミ」と絵文字つきで出したいので、名札から本体を引いておく
-   おやつ選択画面のバッグ表示と、ゲーム中のおやつバッグの両方で、これを並べる
-   （食べたおやつは selectedSnackIds から消えるので、ここからも自動で消える）
-
-   ・map()    … 名札をひとつずつ本体に置きかえる（findSnack() でさがす）
-   ・filter() … 見つからなかったぶん（undefined）を取りのぞく
-
-   filter の中の「snack is Snack」は、
-   「ここを通りぬけたものは、もう undefined ではない」と
-   TypeScriptに伝えるための書きかた
-   これがないと、このあと snack.name と書くたびに
-   「undefined かもしれない」と言われてしまう */
-const selectedSnacks = computed(() => selectedSnackIds.value.map((id) => findSnack(id)).filter((snack): snack is Snack => snack !== undefined));
-
-/* おやつの残り個数（＝バッグに残っているおやつの数）
-
-   selectedSnackIds の長さをそのまま返すだけ
-   数を別に持たないので「バッグは空なのに残り1個」のようなずれが起きない
-
-   ※ computed なので snackLeft.value = 2 や snackLeft.value -= 1 は書けない
-     減らしたいときは、バッグからおやつを取り出す（removeSnackFromBag()）
-
-   「snackLeft > 0」は「バッグにおやつが1個以上残っている」という意味
-   （おやつのコマンドを出すか・コマンドの数・「少し待ってみる」の番号 で使う） */
-const snackLeft = computed(() => selectedSnackIds.value.length);
-
-/* バッグがいっぱいかどうか（＝これ以上は選べない）
-
-   いっぱいのときは、まだ選んでいないおやつのカードを押せなくする
-   （選んでいるおやつのカードは押せるままにして、解除できるようにする） */
-const isSnackBagFull = computed(() => selectedSnackIds.value.length >= maxSnackCount);
-
-/* 公園へ出発できるかどうか（ちょうど2種類そろっているか）
-
-   「このおやつで公園へ行く！」を押せるようにする条件 */
-const canStartWithSnacks = computed(() => selectedSnackIds.value.length === maxSnackCount);
-
-/* そのおやつが、いまバッグに入っているかどうか
-
-   おやつ選択画面では、「選択中」の見た目にするかどうかと、
-   カードを押せなくするかどうかの、両方で使う
-   ゲーム中は「そのおやつをまだ食べていないか」の確認に使う（findSnackInBag()） */
-function isSnackSelected(snackId: SnackId) {
-  return selectedSnackIds.value.includes(snackId);
-}
-
-/* バッグの中にあるおやつの中身を返す（ここではまだバッグから消さない）
-
-   ゲーム中におやつを食べる関数が、いちばん最初にこれを呼ぶ
-   ・バッグに入っていない（もう食べた／持ってきていない）おやつ … undefined
-   ・バッグに入っているおやつ                                   … そのおやつの中身
-
-   画面にはバッグにあるおやつしか出していないが、
-   関数を直接呼ばれても「持っていないおやつで回復する」ことがないように、ここでも確かめる */
-function findSnackInBag(snackId: SnackId) {
-  if (!isSnackSelected(snackId)) {
-    return undefined;
-  }
-
-  return findSnack(snackId);
-}
-
-/* おやつをバッグから出す（selectedSnackIds から名札を消す）
-
-   同じおやつは1個までなので、同じ名札をぜんぶ消す形で問題ない
-   ゲーム中は、ステータスの計算がぜんぶ終わってから呼ぶこと
-   （先に呼ぶと、途中で何かあったときに「おやつだけ減った」ことになってしまう） */
-function removeSnackFromBag(snackId: SnackId) {
-  selectedSnackIds.value = selectedSnackIds.value.filter((id) => id !== snackId);
-}
+  /* バッグを空に戻す（resetGame() と goBackToBoot() から呼ぶ） */
+  resetSnackBag,
+} = useSnackBag();
 
 /* 次に起こす予定のとつぜんのできごと（予定表）
 
@@ -441,72 +365,64 @@ function removeSnackFromBag(snackId: SnackId) {
 */
 const pendingSuddenEvent = ref<GameEvent | null>(null);
 
-/* 結果メッセージ */
-const resultMessage = ref('');
+/* ============================================================
+   ゲームが終わったあとの結果（リザルト・GAME OVER・S+の曲の解放）
 
-/* 今回の行動による変化
-   null は「まだ今回の行動結果がない」という意味
-   場所を移動したら null に戻して、前の変化が残らないようにする
-*/
-const statusChanges = ref<StatusChanges | null>(null);
+   中身は composables/useGameResult.ts にある
+   ・総合スコアと内訳・ランク・見出し・文章の入れもの
+   ・GAME OVER画面に出す文章の入れもの
+   ・S+ランク限定のうた入りBGMを解放したかどうか
+   ・そのぜんぶを最初に戻す resetGameResult()
 
-/* 行動する前のステータスを、いったん控えておく箱
-   行動が終わったあとに「今の値 － 行動前の値」で変化量を計算する
+   ■ 計算はどれも、今までどおり別のところにある
+     点数・ランク・エンディングの文章 … composables/useScore.ts
+     S+の曲の解放判定と localStorage  … utils/sPlusSong.ts
 
-   ※ GAME OVER画面で「親の体力 10 → 0」のように行動前の値も出したいので、
-     ふつうの変数ではなく ref にして、画面からも読めるようにしている
-*/
-const statusBefore = ref({
-  childEnergy: 0,
-  childMood: 0,
-  outingPoint: 0,
-  parentEnergy: 0,
-  parentCalm: 0,
-  minutes: 0,
+   ■ このファイルに残してあるもの
+     ・ゴールへ向かう流れ（goToGoal()）と、judgeResult() → unlockSPlusSongIfEarned() を呼ぶ順番
+     ・GAME OVERの条件判定・BGM・画面の切りかえ（checkGameOver()）
+       gameOverTitle / gameOverMessage は、受けとった ref へ今までどおり代入する
+     ・1回の行動ごとの結果（resultMessage・statusChanges・見つけたもの・
+       ちょっとしたできごと）は、今までどおりこのファイルが持っている
+
+   ※ 0〜100に収める keepInRange() は、ほかの場所でも使うのでこのファイルに残し、
+     スコア計算のときだけ渡している（今までと同じ渡しかた）
+   ============================================================ */
+const {
+  /* ゴールしたときの成績（画面に出す） */
+  finalScore,
+  scoreBreakdown,
+  endingRank,
+  endingTitle,
+  endingMessage,
+
+  /* GAME OVER画面に出す文章（入れるのは checkGameOver()） */
+  gameOverTitle,
+  gameOverMessage,
+
+  /* S+ランク限定のうた入りBGM */
+  hasUnlockedSPlusSong,
+  isSPlusSongNewlyUnlocked,
+
+  /* ゴールしたときに呼ぶ（順番は goToGoal() が決める） */
+  judgeResult,
+  unlockSPlusSongIfEarned,
+
+  /* 結果の状態を、まとめて最初に戻す（resetGame() から呼ぶ） */
+  resetGameResult,
+} = useGameResult({
+  childEnergy,
+  childMood,
+  parentEnergy,
+  parentCalm,
+  outingPoint,
+  currentMinutes,
+  tantrumCount,
+  visitedPlaces,
+  playCount,
+  collectedItems,
+  keepInRange,
 });
-
-/* ゴールしたときのランクと判定メッセージ */
-const endingRank = ref('');
-const endingTitle = ref('');
-const endingMessage = ref('');
-
-/* S+ランク限定の「うた入りエンディングBGM」を、このブラウザで解放済みかどうか
-
-   一度でもS+ランクを取ると true になり、localStorage にも保存される
-   （保存のしくみは utils/sPlusSong.ts。サウンドトラックのページも同じものを使う）
-
-   ※ 体力や機嫌とちがって「ゲームのステータス」ではなく「実績・解放情報」なので、
-     resetGame（もう一度あそぶ／はじめの画面へ戻る）では false に戻さない
-     （サウンドの設定 soundEnabled と同じあつかい）
-   ※ 前に解放しているかは、onMounted で localStorage から思い出す
-*/
-const hasUnlockedSPlusSong = ref(false);
-
-/* 今回のゴールで、うた入りBGMを「このブラウザではじめて」解放したかどうか
-
-   true のときだけ、リザルト画面に「✨ サウンドトラックに新しい曲が追加されました！」を出す
-   2回目以降のS+では出さない（曲そのものは毎回流す）
-   こちらはその1プレイだけの表示なので、resetGame() で false に戻す
-*/
-const isSPlusSongNewlyUnlocked = ref(false);
-
-/* 今回のプレイの総合スコア（0〜100点）
-   ゴールしたときに calculateFinalScore() で計算して入れる
-   まだゴールしていないときは0
-*/
-const finalScore = ref(0);
-
-/* スコアの内訳
-   「何で何点もらったのか」を1行ずつためておいて、結果画面に並べる
-   ゴールするたびに calculateFinalScore() の中で空に戻す
-*/
-const scoreBreakdown = ref<ScoreBreakdownItem[]>([]);
-
-/* GAME OVERになった理由（GAME OVER画面に出す文章）
-   まだGAME OVERになっていないときは、どちらも空っぽ
-*/
-const gameOverTitle = ref('');
-const gameOverMessage = ref('');
 
 /* お昼（12:00）を過ぎたかどうか
    currentMinutes（時間を「分」に直したもの）は useGameState() から受けとっている */
@@ -683,10 +599,6 @@ function toggleCareMenu() {
    休憩・おやつは、その場所で ひと息ついただけで、場所は離れていない
    なので結果カードには①ではなく③を出し、押したら同じ場所の「どうする？」へ戻す
 */
-
-/* いま出ている結果カードが、休憩・おやつの結果かどうか
-   finishCareAction() で true、次の行動をはじめたとき（startStatusChanges()）や場所を出たときに false */
-const isCareActionResult = ref(false);
 
 /* 休憩・おやつの結果カードに「← もどる」を出すかどうか
 
@@ -1301,50 +1213,6 @@ function startStatusChanges() {
   };
 }
 
-/* 行動の中身がぜんぶ終わったあとに呼ぶ
-   「今の値 － 行動前の値」で、今回の変化量を作る
-
-   この計算は行動につき1回だけ行うので、
-   ・ランダムイベントの分
-   ・いやいや発生の分
-   ・再訪でポイントが1に減った分
-   もぜんぶ合計された数になる
-
-   ※ 必ず fixAllStatus()（0〜100に丸める処理）より前に呼ぶこと
-     たとえば 親の体力が0のときに だっこ をすると、
-     丸めたあとでは 0 のままなので「-15」が消えてしまう
-     丸める前に計算することで、その行動にかかったコストがきちんと出る
-*/
-function saveStatusChanges() {
-  statusChanges.value = {
-    childEnergy: childEnergy.value - statusBefore.value.childEnergy,
-    childMood: childMood.value - statusBefore.value.childMood,
-    outingPoint: outingPoint.value - statusBefore.value.outingPoint,
-    parentEnergy: parentEnergy.value - statusBefore.value.parentEnergy,
-    parentCalm: parentCalm.value - statusBefore.value.parentCalm,
-    minutes: currentMinutes.value - statusBefore.value.minutes,
-  };
-}
-
-/* 中央の「今回の変化」を、誰の情報かで3つのまとまりに分けたもの
-
-   表示のならびを組み立てるのは utils/changeGroups.ts の buildChangeGroups()
-   ここは、行動する前の値・いまの値・今回の増減を渡すだけ
-   （くわしい中身は、あちらのコメントを参照）
-*/
-const changeGroups = computed(() =>
-  buildChangeGroups({
-    changes: statusChanges.value,
-    before: statusBefore.value,
-    childEnergy: childEnergy.value,
-    childMood: childMood.value,
-    outingPoint: outingPoint.value,
-    parentEnergy: parentEnergy.value,
-    parentCalm: parentCalm.value,
-    currentTime: currentTime.value,
-  }),
-);
-
 /* その場所を探検済みかどうか */
 function isVisited(place: GameEvent) {
   return visitedPlaces.value.includes(place);
@@ -1530,8 +1398,8 @@ function showTantrumAlert() {
    中身は composables/useTantrum.ts にある
    いま使っている ref・関数をそのまま渡して、今までと同じように動かしてもらう
 
-   ※ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応）は、
-     あちらが自分で持っている
+   ※ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応・
+     いやいやが始まったときの文章）は、あちらが自分で持っている
      こちらは、画面に出すぶんだけを下の { } で受けとって表示する
 
    ※ いやいや中かどうか（isTantrum）と、いやいやが起きた回数（tantrumCount）は、
@@ -1548,13 +1416,14 @@ const {
   waitCalmly,
 
   /* 画面に出すもの（持ち主は useTantrum。ここは読むだけ）
-     ※ niceTantrumResponseText だけは、行動をはじめるたびに
+     ※ niceTantrumResponseText と tantrumText だけは、行動をはじめるたびに
        startStatusChanges() で空へ戻している */
   tantrumLevel,
   currentTantrumLevelInfo,
   currentTantrumReasonInfo,
   currentTantrumScene,
   niceTantrumResponseText,
+  tantrumText,
 } = useTantrum({
   childEnergy,
   childMood,
@@ -1563,7 +1432,6 @@ const {
   outingPoint,
   isTantrum,
   tantrumCount,
-  tantrumText,
   niceTantrumBonusOutingPoint,
   niceTantrumBonusParentCalm,
   resultMessage,
@@ -1940,8 +1808,10 @@ function goBackToBoot() {
      A画面まで戻るのは「最初から始め直す」ことなので、
      前に選んだグミ・せんべいが残っていると、
      次に公園へ行くときに知らないうちに持たされてしまう
-     （B画面 ⇄ おやつ選択画面の行き来では、わざと残している） */
-  selectedSnackIds.value = [];
+     （B画面 ⇄ おやつ選択画面の行き来では、わざと残している）
+
+     バッグを空にする中身は composables/useSnackBag.ts の resetSnackBag() */
+  resetSnackBag();
   isSnackSelectionOpen.value = false;
 
   /* あそびかた画面も閉じた状態に戻しておく
@@ -2558,291 +2428,41 @@ function goToNextPlace() {
 /* ============================================================
    場所での行動（6か所 × 2コマンド）
 
-   親の2つのステータスは、減る理由をわけてある
-   ・親の体力 … 体をどれだけ使ったか（走る・だっこする・立ちっぱなし）
-   ・親の余裕 … どれだけヒヤッとしたか（水辺・高い所・見失いそう）
+   12個の行動は、どれもまったく同じ順番で進むので、
+   実際に動かすところは下の runPlaceAction() 1つにまとめてある
 
-   そのため、同じ「よく遊ぶ」コマンドでも場所によって中身がちがう
-   ・池を近くで見る         … 体力 -13 ／ 余裕 -14（水があるので、いちばん気が張る）
-   ・芝生広場で追いかけっこ … 体力 -15 ／ 余裕  -8（親もいっしょに走るので、体をいちばん使う）
-   ・どんぐりを拾う         … 体力 -10 ／ 余裕  -3（しゃがんで拾うだけなので穏やか）
-
-   こうすると
-   「体力は残っているけれど、余裕がないから池はやめておこう」
-   「余裕はあるから、静かなどんぐりの木で点をかせごう」
-   のように、2つの数字を見くらべて場所を選べるようになる
+   場所ごとの数値・時間・結果の文章は data/placeActions.ts のほう
+   （数字や文章を直したいときは、あちらのその場所のところだけを見ればよい）
    ============================================================ */
 
-/* ===== すべり台 ===== */
+/* 行動データを1件受け取って、その行動を実行する
 
-/* ① 一緒にすべる */
-function playSlide() {
+   進む順番は、12個の行動それぞれに書いてあったときとまったく同じ
+   ① 行動する前のステータスを控える
+   ② こうちゃんの体力・機嫌 → おでかけポイント → 親の体力・余裕
+   ③ 時間を進める
+   ④ 結果の文章を入れる
+   ⑤ アイテムが見つかるかを見る（抽選）
+   ⑥ 行動後の共通処理（遊んだ回数・探検済み・いやいや・ちょっとしたできごと・
+     今回の変化の記録・とつぜんのできごとの抽選）
+
+   ※ ⑤と⑥の中では乱数を使うので、呼ぶ順番と回数は変えないこと
+   ※ おでかけポイントは addOutingPoint() を通す（2回目の場所は半分になる） */
+function runPlaceAction(action: PlaceActionDefinition) {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 18;
-  childMood.value += 6;
-  addOutingPoint('slide', 6);
-  parentEnergy.value -= 14;
-  parentCalm.value -= 9;
-  addMinutes(25);
+  childEnergy.value += action.childEnergy;
+  childMood.value += action.childMood;
+  addOutingPoint(action.place, action.outingPoint);
+  parentEnergy.value += action.parentEnergy;
+  parentCalm.value += action.parentCalm;
+  addMinutes(action.minutes);
 
-  resultMessage.value = 'こうちゃんと一緒にすべりました。大喜びです！';
+  resultMessage.value = action.message;
 
-  tryCollectPlaceItem('slide');
-  finishPlayAction('slide');
-}
-
-/* ② 下で見守る
-
-   「いっしょにすべる」より軽い行動だが、親の余裕はあまり節約できない
-   こうちゃんが手の届かない高い所へひとりでのぼっていくので、
-   すぐそばで支えられる①よりも、かえって気が張る
-   （ころんだときの「見守る」も同じ考えで、親の余裕がいちばん減る）
-
-   そのぶん、親の体力と時間は①よりはっきり少なくすんでいる
-*/
-function watchSlide() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 12;
-  childMood.value += 3;
-  addOutingPoint('slide', 5);
-  parentEnergy.value -= 8;
-  parentCalm.value -= 9;
-  addMinutes(15);
-
-  resultMessage.value = '「みててー！」こうちゃんはてっぺんから手をふっています。下でハラハラしながら見守りました。';
-
-  tryCollectPlaceItem('slide');
-  finishPlayAction('slide');
-}
-
-/* ===== 砂場 ===== */
-
-/* ① 一緒に大きな山を作る */
-function playSandbox() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 13;
-  childMood.value += 5;
-  addOutingPoint('sandbox', 6);
-  parentEnergy.value -= 12;
-  parentCalm.value -= 4;
-  addMinutes(25);
-
-  resultMessage.value = '一緒に大きな山を作りました。こうちゃんは夢中です！';
-
-  tryCollectPlaceItem('sandbox');
-  finishPlayAction('sandbox');
-}
-
-/* ② 砂のトンネルを作る
-
-   山づくり（①）より軽いけれど、親子でいっしょに手を動かす「遊び」
-   休むための行動ではないので、親の体力もきちんと減る
-   （休みたいときは、別枠の「ひとやすみ」を使う）
-*/
-function buildSandTunnel() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 8;
-  childMood.value += 4;
-  addOutingPoint('sandbox', 4);
-  parentEnergy.value -= 7;
-  parentCalm.value -= 2;
-  addMinutes(15);
-
-  resultMessage.value = 'こうちゃんと一緒に砂のトンネルを作りました。向こう側から手が見えると、こうちゃんは大よろこびです！';
-
-  tryCollectPlaceItem('sandbox');
-  finishPlayAction('sandbox');
-}
-
-/* ===== どんぐりの木 ===== */
-
-/* ① 一緒にどんぐりを拾う */
-function collectAcorns() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 11;
-  childMood.value += 6;
-  addOutingPoint('acornArea', 8);
-  parentEnergy.value -= 10;
-  parentCalm.value -= 3;
-  addMinutes(20);
-
-  resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
-
-  tryCollectPlaceItem('acornArea');
-  finishPlayAction('acornArea');
-}
-
-/* ② どんぐりをころがして遊ぶ
-
-   前はここに「木かげで少し休む」があったが、
-   休む行動は別枠の「ひとやすみ」にまとめたので、
-   この場所ならではの遊びに置きかえている
-*/
-function rollAcorns() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 7;
-  childMood.value += 4;
-  addOutingPoint('acornArea', 5);
-  parentEnergy.value -= 5;
-  parentCalm.value -= 2;
-  addMinutes(15);
-
-  resultMessage.value = '拾ったどんぐりを坂になった地面からころがして遊びました。こうちゃんは何度も追いかけています！';
-
-  tryCollectPlaceItem('acornArea');
-  finishPlayAction('acornArea');
-}
-
-/* ===== 池 ===== */
-
-/* ① 白鳥を近くで見る */
-function watchSwansClose() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 11;
-  childMood.value += 8;
-  addOutingPoint('pond', 9);
-  parentEnergy.value -= 13;
-  parentCalm.value -= 14;
-  addMinutes(20);
-
-  resultMessage.value = '白鳥を近くで見ました。こうちゃんは大興奮です！';
-
-  tryCollectPlaceItem('pond');
-  finishPlayAction('pond');
-}
-
-/* ② コイに餌をあげる */
-function feedKoi() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 8;
-  childMood.value += 6;
-  addOutingPoint('pond', 7);
-  parentEnergy.value -= 5;
-  parentCalm.value -= 4;
-  addMinutes(15);
-
-  resultMessage.value = 'コイに餌をあげました。たくさんのコイが集まってきて、バシャンと水しぶきをたてながら餌を食べています。こうちゃんは大喜びです。';
-
-  tryCollectPlaceItem('pond');
-  finishPlayAction('pond');
-}
-
-/* ===== 芝生広場 ===== */
-
-/* ① 追いかけっこする */
-function playTagOnGrass() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 19;
-  childMood.value += 8;
-  addOutingPoint('grassArea', 10);
-  parentEnergy.value -= 15;
-  parentCalm.value -= 8;
-  addMinutes(25);
-
-  resultMessage.value = '芝生広場で、こうちゃんと元気いっぱい追いかけっこをしました。こうちゃんは笑いながら走り回っています！';
-
-  tryCollectPlaceItem('grassArea');
-  finishPlayAction('grassArea');
-}
-
-/* ② シャボン玉で遊ぶ
-
-   軽い行動（②）の中では、いちばん機嫌が上がる遊び
-   走り回らないので体力はあまり減らないが、
-   ふわふわ飛ぶシャボン玉はこうちゃんのお気に入りなので、
-   「体力が残っていないけれど機嫌を上げたい」ときの逃げ道になる
-*/
-function playWithBubbles() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 9;
-  childMood.value += 7;
-  addOutingPoint('grassArea', 6);
-  parentEnergy.value -= 6;
-  parentCalm.value -= 3;
-  addMinutes(20);
-
-  resultMessage.value = '芝生の上でシャボン玉を飛ばしました。ふわふわ飛んでいくシャボン玉を、こうちゃんは楽しそうに追いかけています。';
-
-  tryCollectPlaceItem('grassArea');
-  finishPlayAction('grassArea');
-}
-
-/* ===== こもれびの広場 ===== */
-
-/* ① 木漏れ日の中を探検する */
-function exploreSunlight() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 16;
-  childMood.value += 10;
-  addOutingPoint('secretSpot', 15);
-  parentEnergy.value -= 14;
-  parentCalm.value -= 4;
-  addMinutes(25);
-
-  resultMessage.value = '木漏れ日の中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。';
-
-  tryCollectPlaceItem('secretSpot');
-  finishPlayAction('secretSpot');
-}
-
-/* ② 広場の奥を見てみる
-
-   広場のさらに奥を少し探してみる遊び
-   （前はここに「二人で景色をながめる」があったが、
-     体力も余裕も回復する、ほとんど休憩の行動になっていた
-     休む行動は別枠の「ひとやすみ」にまとめたので、
-     ここは広場らしい「奥を探してみる」遊びに置きかえている）
-
-   ※ 文章で「枝を見つけた」と書かないこと
-     アイテム（ふしぎな形の枝）が見つかるかどうかは
-     tryCollectPlaceItem() の抽選で決まる（はじめては60%）
-     文章のほうで先に見つけたことにしてしまうと、
-     抽選にはずれた回に
-     「枝を見つけました」→ でも「★ アイテム発見！」が出ない
-     という食いちがいが起きてしまう
-     （実際にそうなっていたので、探すところまでの文章に直した）
-
-     見つけたことを伝えるのは、結果カードの
-     「★ アイテム発見！『ふしぎな形の枝』を見つけました！」の役目
-     （ほかの5か所の文章も、アイテムには触れずに遊びの様子だけを書いている）
-*/
-function exploreClearingDepths() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 10;
-  childMood.value += 5;
-  addOutingPoint('secretSpot', 9);
-  parentEnergy.value -= 8;
-  parentCalm.value -= 4;
-  addMinutes(20);
-
-  resultMessage.value = '広場の奥へ進んでみました。こうちゃんは木の根元をのぞきながら、「なにかあるかなー？」とわくわくしています。';
-
-  tryCollectPlaceItem('secretSpot');
-  finishPlayAction('secretSpot');
+  tryCollectPlaceItem(action.place);
+  finishPlayAction(action.place);
 }
 
 /* ============================================================
@@ -2850,6 +2470,21 @@ function exploreClearingDepths() {
 
    公園入口の「細い道の先へ行く」を、そのプレイではじめて選んだときだけ通る
    左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、木漏れ日を集める
+
+   ■ 中身は composables/useSecretPathGame.ts にある
+     ミニゲームの中だけで意味を持つ状態・1コマごとの処理（requestAnimationFrame）・
+     キー操作・ポインター操作・小道専用のイベント（keyup / blur / visibilitychange）の
+     登録と解除・はじまる前に戻す resetSecretPathGame() は、ぜんぶあちらが持っている
+     計算と判定（予定表づくり・結果の文章・ボーナス・しきい値）は、
+     今までどおり composables/useSecretPath.ts
+
+   ■ このファイルに残してあるもの
+     ・ゲーム全体で共有する状態（currentEvent・outingPoint・hasDiscoveredSecretSpot・
+       statusChanges・selectedCommandIndex）を、ref のまま渡す
+     ・場所の移動 goToPlace()・公園入口のカーソル合わせ restoreEntranceCursor()・
+       音を鳴らす4つを、関数のまま渡す
+     ・公園入口の「細い道の先へ行く」goToSecretArea()
+       （小道へ入るか、そのまま広場へ入るかを決めるところなので、ゲーム全体の側）
 
    ■ 流れ（secretPathPhase）
      ready    … 説明と「小道へ進む」「← 場所選びにもどる」ボタン（まだ何も動かない）
@@ -2863,142 +2498,66 @@ function exploreClearingDepths() {
        本編のステータス（体力・機嫌・余裕）にはダメージを与えず、左右にもそのまま動ける
      ・木漏れ日をいくつ取っても、かならず広場へ行ける
      ・親子のステータスと時間は、いっさい変えない
-     ・木漏れ日をたくさん集めたときだけ、おでかけポイントを少しだけボーナス（getSecretPathBonusPoint()）
+     ・木漏れ日をたくさん集めたときだけ、おでかけポイントを少しだけボーナス
        （集められなくても損はしない。木漏れ日の数で変わるのは、結果の文章とボーナスだけ）
 
    ■ BGM
      小道のあいだは公園BGMのまま（ここではBGMにさわらない）
      こもれびの広場BGMが始まるのは、広場へ入ったとき（goToPlace('secretSpot') の中）
-
-   ■ 動かしかた
-     requestAnimationFrame で、1コマごとに枝と木漏れ日の位置を進める
-     位置は「フィールドの高さの何%か」で持っているので、
-     画面の大きさが変わっても、こうちゃんの所まで届く時間は同じ
-
-     ※ CSSの animation で動かさないのは、ページ下の「動きを減らす設定」の指定で
-       animation がぜんぶ一瞬で終わるようになっていて、遊べなくなってしまうため
-
-     ループが残らないように、次のときにかならず止める
-     ・時間が終わったとき（finishSecretPathGame()）
-     ・もう一度あそぶ／はじめの画面へ戻る（resetGame() → resetSecretPathGame()）
-     ・ページから離れたとき（onUnmounted）
-     ・そのほか、なにかの理由で「小道で遊んでいる最中」ではなくなったとき
-       （1コマごとに確かめて、ちがえばその場で止まる。
-         小道の画面からは GAME OVER・ゴールへ直接は行けないが、万一のときもループは残らない）
    ============================================================ */
+const {
+  /* 画面に出す状態 */
+  secretPathPhase,
+  secretPathPlayerLane,
+  secretPathItems,
+  secretPathSunlightCount,
+  secretPathBonusPoint,
+  secretPathBumpLost,
+  secretPathBumpId,
+  secretPathSparkleId,
+  secretPathPlayRef,
 
-/* いまの進み具合（小道へ入るたびに ready から始める） */
-const secretPathPhase = ref<SecretPathPhase>('ready');
+  /* 画面に出す、計算した状態 */
+  isSecretPathPlaying,
+  isSecretPathBoosting,
+  isSecretPathBumped,
+  isSecretPathSparkling,
+  secretPathFlashLane,
+  secretPathHoverDestination,
+  secretPathTimeLeft,
+  secretPathResultText,
 
-/* こうちゃんのレーン（はじめは、まん中） */
-const secretPathPlayerLane = ref<SecretPathLane>(1);
+  /* コマンド（はじまる前・終わったあと） */
+  startSecretPathGame,
+  leaveSecretPathToEntrance,
+  enterSecretSpotFromPath,
 
-/* いまフィールドに出ている枝と木漏れ日 */
-const secretPathItems = ref<SecretPathItem[]>([]);
+  /* キー操作（useKeyboardControls へそのまま渡す） */
+  handleSecretPathKeydown,
 
-/* 集めた木漏れ日の数 */
-const secretPathSunlightCount = ref(0);
+  /* フィールドのポインター操作（template から直接つなぐ） */
+  handleSecretPathPointerDown,
+  handleSecretPathPointerMove,
+  handleSecretPathPointerUp,
+  handleSecretPathPointerCancel,
+  handleSecretPathPointerLeave,
 
-/* 小道をぬけたときにもらった木漏れ日ボーナス（結果カードに「+3」と出すため。0 = なし） */
-const secretPathBonusPoint = ref(0);
-
-/* 始まってから何ミリ秒たったか（ゲームの時計）
-
-   タブを切りかえているあいだは requestAnimationFrame が止まるので、この時計も止まる
-   （戻ってきたときに、いきなり何秒も進んでしまわない） */
-const secretPathElapsed = ref(0);
-
-/* 「いたっ！」を出しておくのは、ゲームの時計が何ミリ秒になるまでか（0 = 出していない） */
-const secretPathBumpUntil = ref(0);
-
-/* 直前に枝に当たったとき、木漏れ日が本当に1つ減ったか
-
-   0個のときに当たっても減らない（0のまま）ので、そのときは「✨ -1」を出さない
-   （数が変わっていないのに「-1」と出ると、何が起きたか分かりにくくなるため） */
-const secretPathBumpLost = ref(false);
-
-/* 「いたっ！」の番号
-   続けて枝に当たったときに、ふきだしを最初から出しなおすための key */
-const secretPathBumpId = ref(0);
-
-/* 道（レーン）をクリック・タップしたときに光らせるレーンと、ゲームの時計が何ミリ秒になるまで光らせるか
-   （見た目だけ。指で押したときは「マウスを乗せる」が無いので、押したことをこれで伝える） */
-const secretPathTapLane = ref<SecretPathLane | null>(null);
-const secretPathTapUntil = ref(0);
-
-/* マウスを乗せているレーン（乗せていないときは null）
-   マウスのときだけ使う（指で押したときは「乗せる」が無いので、ここは変えない） */
-const secretPathHoverLane = ref<SecretPathLane | null>(null);
-
-/* 「✨ +1」を出しておくのは、ゲームの時計が何ミリ秒になるまでか */
-const secretPathSparkleUntil = ref(0);
-
-/* 「✨ +1」の番号
-   続けて木漏れ日を取ったときに、ふわっと上がる動きを最初からやりなおすための key */
-const secretPathSparkleId = ref(0);
-
-/* 遊んでいる最中のカード（スマホ幅で、遊びはじめに画面の上へスクロールするための目印） */
-const secretPathPlayRef = ref<HTMLElement | null>(null);
-
-/* ここから下は画面に出さない入れもの（ref にしなくてよい） */
-let secretPathFrameId: number | null = null; // requestAnimationFrame の予約番号
-let secretPathLastTimestamp: number | null = null; // 前のコマの時刻
-let secretPathSpawnQueue: SecretPathSpawn[] = []; // まだ出していない予定（時間の早い順）
-let secretPathNextItemId = 0;
-let secretPathFinishedAt = 0; // 結果が出た時刻（performance.now()）
-
-/* フィールドを押しているポインター（マウス・指・ペン）の一時的な状態
-   はなしたとき・キャンセルされたとき・リセットや終了のときに、releaseSecretPathPointer() でまとめて戻す */
-let secretPathPointerId: number | null = null; // 押しているポインターの番号（押していないときは null）
-let secretPathPointerField: HTMLElement | null = null; // pointer capture をしているフィールド
-let secretPathPointerDownLane: SecretPathLane | null = null; // 押しはじめたレーン（短いタップのときに使う）
-let secretPathPointerLastX = 0; // 横の移動を数えはじめた位置（1レーン動くたびに、そこから数えなおす）
-let secretPathPointerDragged = false; // 押しているあいだに、横へ動かして1レーン動いたか（タップとして動かさない）
-let secretPathPointerHeld = false; // 長押しになったか（タップとして動かさない）
-let secretPathHoldTimer: ReturnType<typeof setTimeout> | null = null; // 長押しを待つ予約
-
-/* はやく進んでいるか（キーと、フィールドの長押しを別々に持つ）
-   片方をはなしても、もう片方を押しているあいだは はやいまま */
-const isSecretPathKeyBoosting = ref(false);
-const isSecretPathPointerBoosting = ref(false);
-
-/* いま「小道で遊んでいる最中」かどうか
-   キー操作・道のクリック／タップ・1コマごとの処理は、どれもこれを見てから動く */
-const isSecretPathPlaying = computed(() => currentEvent.value === 'secretPath' && secretPathPhase.value === 'playing');
-
-/* いま はやく進んでいるか（HUDの「⏩ 1.5x」と、1コマごとの時計の進め方に使う）
-   遊んでいる最中でなければ、かならず false（結果の画面に「⏩ 1.5x」が残らない） */
-const isSecretPathBoosting = computed(() => isSecretPathPlaying.value && (isSecretPathKeyBoosting.value || isSecretPathPointerBoosting.value));
-
-/* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない） */
-const isSecretPathBumped = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathBumpUntil.value);
-
-/* 木漏れ日を取った直後かどうか（「✨ +1」と光を出しているあいだ） */
-const isSecretPathSparkling = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathSparkleUntil.value);
-
-/* いま光らせているレーン（道をクリック・タップした直後だけ。それ以外は null） */
-const secretPathFlashLane = computed(() => (isSecretPathPlaying.value && secretPathElapsed.value < secretPathTapUntil.value ? secretPathTapLane.value : null));
-
-/* マウスを乗せているレーンを押したときに、こうちゃんが動く先のレーン
-
-   押したレーンの方向へ1レーンだけ動くので、遠いレーンに乗せているときは「まん中」が動く先になる
-   乗せていない・いまいるレーンに乗せているときは null（目印をはっきりさせない） */
-const secretPathHoverDestination = computed(() => {
-  const hoverLane = secretPathHoverLane.value;
-  const currentLane = secretPathPlayerLane.value;
-
-  if (!isSecretPathPlaying.value || hoverLane === null || hoverLane === currentLane) {
-    return null;
-  }
-
-  return hoverLane < currentLane ? currentLane - 1 : currentLane + 1;
+  /* はじまる前の状態に戻す（goToSecretArea() と resetGame() から呼ぶ） */
+  resetSecretPathGame,
+} = useSecretPathGame({
+  gameStarted,
+  currentEvent,
+  outingPoint,
+  hasDiscoveredSecretSpot,
+  statusChanges,
+  selectedCommandIndex,
+  goToPlace,
+  restoreEntranceCursor,
+  playDecisionSound,
+  playItemSound,
+  playSunlightSound,
+  playBranchBumpSound,
 });
-
-/* 残り時間（秒）。「あと 12秒」のように出す */
-const secretPathTimeLeft = computed(() => Math.max(0, Math.ceil((secretPathDuration - secretPathElapsed.value) / 1000)));
-
-/* 集めた木漏れ日の数に合わせた、結果の文章 */
-const secretPathResultText = computed(() => getSecretPathResultText(secretPathSunlightCount.value));
 
 /* 公園入口の「細い道の先へ行く」
 
@@ -3015,575 +2574,6 @@ function goToSecretArea() {
 
   resetSecretPathGame();
   goToPlace('secretPath');
-}
-
-/* requestAnimationFrame のループを止める（予約が無ければ何もしない） */
-function stopSecretPathLoop() {
-  if (secretPathFrameId !== null) {
-    cancelAnimationFrame(secretPathFrameId);
-    secretPathFrameId = null;
-  }
-
-  secretPathLastTimestamp = null;
-}
-
-/* 秘密の小道を、はじまる前の状態に戻す
-
-   ループ・流れてくるもの・木漏れ日の数・こうちゃんの位置・時計を、まとめて片づける
-   （hasDiscoveredSecretSpot はここでは戻さない。戻すのは resetGame() だけ） */
-function resetSecretPathGame() {
-  stopSecretPathLoop();
-  releaseSecretPathControls();
-
-  secretPathPhase.value = 'ready';
-  secretPathPlayerLane.value = 1;
-  secretPathItems.value = [];
-  secretPathSunlightCount.value = 0;
-  secretPathBonusPoint.value = 0;
-  secretPathElapsed.value = 0;
-  secretPathBumpUntil.value = 0;
-  secretPathBumpLost.value = false;
-  secretPathSparkleUntil.value = 0;
-  secretPathTapLane.value = null;
-  secretPathTapUntil.value = 0;
-  secretPathHoverLane.value = null;
-  secretPathSpawnQueue = [];
-  secretPathFinishedAt = 0;
-}
-
-/* 「小道へ進む」（ミニゲームを始める）
-
-   押すまでは何も動かないので、プレイヤーは説明を読んでから始められる */
-function startSecretPathGame() {
-  if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
-    return;
-  }
-
-  // 決定音「ポン♪」
-  playDecisionSound();
-
-  resetSecretPathGame();
-  secretPathSpawnQueue = buildSecretPathSpawnQueue();
-  secretPathPhase.value = 'playing';
-
-  secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
-
-  scrollSecretPathIntoView();
-}
-
-/* スマホ幅のときだけ、遊ぶカードを画面のいちばん上へスクロールする
-
-   スマホ幅ではページ全体がスクロールするので、
-   フィールドと下の案内がいっしょに見える位置へ合わせておく
-   （パソコンでは中央エリアの中に収まるので、何もしない） */
-async function scrollSecretPathIntoView() {
-  if (!import.meta.client || !window.matchMedia('(max-width: 700px)').matches) {
-    return;
-  }
-
-  // カードが画面に出るのを待ってから
-  await nextTick();
-
-  secretPathPlayRef.value?.scrollIntoView({ block: 'start' });
-}
-
-/* 1コマぶんの処理（requestAnimationFrame から呼ばれる） */
-function runSecretPathFrame(timestamp: number) {
-  secretPathFrameId = null;
-
-  // もう小道で遊んでいる最中ではない（リセット・画面が変わった など）ときは、ここで止まる
-  if (!gameStarted.value || !isSecretPathPlaying.value) {
-    stopSecretPathLoop();
-    releaseSecretPathControls();
-    return;
-  }
-
-  /* 前のコマからの時間
-
-     50ミリ秒より長くあいたときは、50ミリ秒ぶんだけ進める
-     処理が重くなったときなどに、枝がこうちゃんを「すり抜けて」しまわないようにするため */
-  const delta = secretPathLastTimestamp === null ? 0 : Math.min(Math.max(timestamp - secretPathLastTimestamp, 0), 50);
-
-  secretPathLastTimestamp = timestamp;
-
-  /* はやく進んでいるあいだは、ゲームの時計そのものを1.5倍で進める
-     出てくるタイミング・流れる速さ・残り時間・「いたっ！」などの長さが、ぜんぶ同じ時計でそろって速くなる
-     （1コマで進むのは最大 50 × 1.5 = 75ミリ秒。枝が進むのは4.5%で、当たり判定の幅10%より小さいので すり抜けない） */
-  advanceSecretPath(isSecretPathBoosting.value ? delta * secretPathBoostMultiplier : delta);
-
-  // 時間切れで終わっていなければ、次のコマを予約する
-  if (isSecretPathPlaying.value) {
-    secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
-  }
-}
-
-/* ゲームの時計を delta ミリ秒進めて、出す・動かす・当たりを見る・片づける */
-function advanceSecretPath(delta: number) {
-  const elapsed = Math.min(secretPathElapsed.value + delta, secretPathDuration);
-
-  secretPathElapsed.value = elapsed;
-
-  // ① 予定の時間になったものを、フィールドのいちばん上に出す
-  let nextSpawn = secretPathSpawnQueue[0];
-
-  while (nextSpawn && nextSpawn.at <= elapsed) {
-    secretPathSpawnQueue.shift();
-    secretPathNextItemId += 1;
-    secretPathItems.value.push({ id: secretPathNextItemId, kind: nextSpawn.kind, lane: nextSpawn.lane, y: secretPathSpawnY, hit: false });
-    nextSpawn = secretPathSpawnQueue[0];
-  }
-
-  // ② ぜんぶ下へ進めて、こうちゃんに当たったかを見る
-  const distance = (secretPathSpeed * delta) / 1000;
-  let needsCleanup = false;
-
-  for (const item of secretPathItems.value) {
-    item.y += distance;
-
-    if (item.y > secretPathRemoveY) {
-      needsCleanup = true;
-      continue;
-    }
-
-    // 当たり判定は「同じレーン ＋ こうちゃんの高さのあたりまで来た」だけで見る
-    if (item.hit || item.lane !== secretPathPlayerLane.value) {
-      continue;
-    }
-
-    // マイナス … まだ こうちゃんより上／プラス … こうちゃんより下
-    const offset = item.y - secretPathPlayerY;
-
-    // ③ 木漏れ日：こうちゃんに重なったら取る（枝より少しゆるめに見る）
-    if (item.kind === 'sunlight' && offset >= -10 && offset <= 6) {
-      item.hit = true;
-      needsCleanup = true;
-
-      secretPathSunlightCount.value += 1;
-      secretPathSparkleUntil.value = elapsed + secretPathSparkleDuration;
-      secretPathSparkleId.value += 1;
-
-      // 「✨ +1」と「いたっ！」は同じ場所（こうちゃんの上）に出るので、
-      // 重なって読めなくならないように、あとから起きたほうだけを出す
-      secretPathBumpUntil.value = 0;
-
-      playSunlightSound();
-      continue;
-    }
-
-    // ④ 枝：こうちゃんの所まで来たら当たる → 集めた木漏れ日を1つ減らす（0より下にはしない）
-    //    ・本編のステータス（体力・機嫌・余裕）には、いっさいさわらない（小道の中だけのペナルティ）
-    //    ・枝1本につき1回だけ（item.hit）なので、同じ枝で何度も減ることはない
-    //    ・当たったあとも、左右にはそのまま動ける
-    if (item.kind === 'branch' && offset >= -7 && offset <= 3) {
-      item.hit = true;
-
-      const hasSunlightToLose = secretPathSunlightCount.value > 0;
-
-      secretPathSunlightCount.value = Math.max(0, secretPathSunlightCount.value - 1);
-      secretPathBumpLost.value = hasSunlightToLose;
-      secretPathBumpUntil.value = elapsed + secretPathBumpEffectDuration;
-      secretPathBumpId.value += 1;
-
-      // 木漏れ日を取った直後の「✨ +1」が残っていたら消す（「いたっ！」と重ならないように、あとから起きたほうだけを出す）
-      secretPathSparkleUntil.value = 0;
-
-      playBranchBumpSound();
-    }
-  }
-
-  // ⑤ 下へ出ていったものと、取った木漏れ日を片づける
-  if (needsCleanup) {
-    secretPathItems.value = secretPathItems.value.filter((item) => item.y <= secretPathRemoveY && !(item.kind === 'sunlight' && item.hit));
-  }
-
-  // ⑥ 15秒たったら、おしまい
-  if (elapsed >= secretPathDuration) {
-    finishSecretPathGame();
-  }
-}
-
-/* 時間切れ（小道をぬけた）
-
-   ここで「こもれびの広場を見つけた」ことになる
-   このあと同じプレイのあいだは、ミニゲームをくり返さない */
-function finishSecretPathGame() {
-  stopSecretPathLoop();
-  releaseSecretPathControls();
-
-  secretPathPhase.value = 'finished';
-  secretPathItems.value = [];
-  secretPathSpawnQueue = [];
-  secretPathBumpUntil.value = 0;
-  secretPathBumpLost.value = false;
-  secretPathSparkleUntil.value = 0;
-  secretPathFinishedAt = performance.now();
-
-  /* 木漏れ日ボーナス
-
-     ・addOutingPoint() ではなく、そのまま足す
-       （「2回目の場所は半分」は場所の探検のためのルールで、小道は場所ではないため）
-     ・上部ステータスの「おでかけポイント」の横にも +3 と出るように、今回の変化にも入れておく
-       ほかのステータスと時間は動かしていないので 0 のまま（上部には何も出ない）
-       statusChanges は、広場へ入るとき goToPlace() の中で null に戻る
-     ・時間切れは1回の小道につき1回だけなので、ボーナスが二重に入ることはない */
-  const bonusPoint = getSecretPathBonusPoint(secretPathSunlightCount.value);
-
-  secretPathBonusPoint.value = bonusPoint;
-
-  if (bonusPoint > 0) {
-    outingPoint.value += bonusPoint;
-    statusChanges.value = { childEnergy: 0, childMood: 0, outingPoint: bonusPoint, parentEnergy: 0, parentCalm: 0, minutes: 0 };
-  }
-
-  hasDiscoveredSecretSpot.value = true;
-
-  // 「先へ進む」だけの画面になるので、選択中のコマンドを一番上（0）に戻す
-  selectedCommandIndex.value = 0;
-
-  // 「木々のすき間から、まぶしい光が…」に合わせて、キラリン♪
-  playItemSound();
-}
-
-/* 「先へ進む」（こもれびの広場へ）
-
-   BGMの入れかえ（公園BGMを止める → こもれびの広場BGM）は、goToPlace() の中のまま
-   ＝ 広場へ着いたこの瞬間に「こもれびの奥で」が始まる */
-function enterSecretSpotFromPath() {
-  if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'finished') {
-    return;
-  }
-
-  if (performance.now() - secretPathFinishedAt < secretPathLeaveGuard) {
-    return;
-  }
-
-  goToPlace('secretSpot');
-
-  /* 小道の状態は、画面が変わってから片づける
-     <Transition> で消えていく小道の画面は、もう描きなおされないので、
-     フェードアウトの途中で結果の文章が変わって見えることはない */
-  resetSecretPathGame();
-}
-
-/* 「← 場所選びにもどる」（はじまる前だけ。公園入口の「どこへ行く？」へ戻る）
-
-   小道に入らずに引き返すだけなので、何も変えない
-   ・時間・親子のステータス・おでかけポイント・アイテム・visitedPlaces は、そのまま
-   ・hasDiscoveredSecretSpot も false のまま
-     → あとでもう一度「細い道の先へ行く」を選ぶと、また ready 画面から始まる
-   ・BGMは公園BGMのまま（goToPlace() がBGMを入れかえるのは secretSpot のときだけ）
-   ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ）
-   ・カーソルは「細い道の先へ行く」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
-function leaveSecretPathToEntrance() {
-  if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
-    return;
-  }
-
-  goToPlace('parkEntrance');
-  resetSecretPathGame();
-  restoreEntranceCursor();
-}
-
-/* こうちゃんを左（-1）か右（+1）へ、1レーンだけ動かす
-
-   ・遊んでいる最中でなければ動かさない
-   ・枝に当たった直後も、ふつうに動ける（枝のペナルティは木漏れ日 -1 だけ）
-   ・左はしでさらに左、右はしでさらに右は、その場のまま */
-function moveSecretPathPlayer(direction: -1 | 1) {
-  if (!isSecretPathPlaying.value) {
-    return;
-  }
-
-  const nextLane = secretPathPlayerLane.value + direction;
-
-  if (nextLane === 0 || nextLane === 1 || nextLane === 2) {
-    secretPathPlayerLane.value = nextLane;
-  }
-}
-
-/* フィールドの横の位置（clientX）が、どのレーンの上か（フィールドの外なら null） */
-function getSecretPathLaneAt(field: HTMLElement, clientX: number, clientY: number): SecretPathLane | null {
-  const rect = field.getBoundingClientRect();
-
-  if (rect.width <= 0 || clientX < rect.left || clientX >= rect.right || clientY < rect.top || clientY >= rect.bottom) {
-    return null;
-  }
-
-  const lane = Math.floor(((clientX - rect.left) / rect.width) * 3);
-
-  return lane === 0 || lane === 1 || lane === 2 ? lane : null;
-}
-
-/* はやく進む・ポインターを押している状態を、ぜんぶ元に戻す
-
-   キーをはなしたこと（keyup）や、指をはなしたこと（pointerup）が届かないときでも、
-   はやいまま・押したままの扱いが残らないように、次のときにかならず呼ぶ
-   ・時間が終わったとき（finishSecretPathGame()）
-   ・リセットしたとき（resetSecretPathGame()）
-   ・ウィンドウからフォーカスが外れた・タブが見えなくなったとき
-   ・ページから離れたとき（onUnmounted）
-   ・なにかの理由で「小道で遊んでいる最中」ではなくなったとき（runSecretPathFrame()） */
-function releaseSecretPathControls() {
-  isSecretPathKeyBoosting.value = false;
-  releaseSecretPathPointer();
-}
-
-/* ポインター（マウス・指・ペン）を押している状態だけを、元に戻す */
-function releaseSecretPathPointer() {
-  if (secretPathHoldTimer !== null) {
-    clearTimeout(secretPathHoldTimer);
-    secretPathHoldTimer = null;
-  }
-
-  if (secretPathPointerField && secretPathPointerId !== null) {
-    try {
-      if (secretPathPointerField.hasPointerCapture(secretPathPointerId)) {
-        secretPathPointerField.releasePointerCapture(secretPathPointerId);
-      }
-    } catch {
-      // もう押していないポインターのときは、何もしなくてよい
-    }
-  }
-
-  secretPathPointerId = null;
-  secretPathPointerField = null;
-  secretPathPointerDownLane = null;
-  secretPathPointerLastX = 0;
-  secretPathPointerDragged = false;
-  secretPathPointerHeld = false;
-  isSecretPathPointerBoosting.value = false;
-}
-
-/* フィールドのポインター操作（マウス・指・ペンを Pointer Events でまとめて受け取る）
-
-   ■ 短く押す（クリック・タップ）
-     押したレーンの方向へ、1レーンだけ動く（← → キーと同じ「1回で1レーン」）
-     左はしで右はしのレーンを押すと まん中へ、もう1回押すと右はしへ
-     （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、道を押す操作だけ有利になるため）
-     長押し・ドラッグと見分けるため、動かすのは はなしたとき（pointerup）
-
-   ■ 押したまま横へ動かす（しきい値をこえるたびに1レーン）
-     しきい値はマウスと指で分けてある（→ getSecretPathSwipeThreshold）
-     ・マウス             … ドラッグ。70pxこえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
-     ・指・ペン           … フリック。32pxで1レーン。1回押すあいだに1レーンだけ（大きくはらっても、まん中で止まる）
-     ・長押しになったあと … 指・ペンでも、スライドでこえるたびに1レーンずつ動ける
-     長押しになる前に横へ動いたら、長押しの判定はやめる（フリック・ドラッグとして扱う）
-
-   ■ 長押し（secretPathHoldBoostDelay だけ押しつづける）
-     はなすまで、はやく進む（ゲームの時計が1.5倍）
-
-   ※ setPointerCapture … 押したままフィールドの外へ出ても、pointerup / pointercancel を受け取るため
-   ※ 最初に押したポインターだけで操作する（2本目の指は使わない） */
-function handleSecretPathPointerDown(event: PointerEvent) {
-  // 右クリックなど、遊んでいる最中以外では動かさない
-  if (event.button !== 0 || !isSecretPathPlaying.value) {
-    return;
-  }
-
-  // 長押しのメニュー・文字の選択・フォーカス移動を起こさない
-  event.preventDefault();
-
-  const field = event.currentTarget as HTMLElement;
-
-  if (secretPathPointerId !== null) {
-    // べつの指で まだ押している（capture が続いている）ときは、あとから押したほうを使わない
-    if (secretPathPointerId !== event.pointerId && field.hasPointerCapture(secretPathPointerId)) {
-      return;
-    }
-
-    // はなしたことが届かなかった古い状態は、ここで片づけてから始めなおす
-    releaseSecretPathPointer();
-  }
-
-  const pointerId = event.pointerId;
-
-  secretPathPointerId = pointerId;
-  secretPathPointerField = field;
-  secretPathPointerDownLane = getSecretPathLaneAt(field, event.clientX, event.clientY);
-  secretPathPointerLastX = event.clientX;
-
-  try {
-    field.setPointerCapture(pointerId);
-  } catch {
-    // capture できなくても、フィールドの中で はなせばふつうに動く
-  }
-
-  secretPathHoldTimer = setTimeout(() => {
-    secretPathHoldTimer = null;
-
-    if (!isSecretPathPlaying.value || secretPathPointerId !== pointerId) {
-      return;
-    }
-
-    secretPathPointerHeld = true;
-    isSecretPathPointerBoosting.value = true;
-  }, secretPathHoldBoostDelay);
-}
-
-function handleSecretPathPointerMove(event: PointerEvent) {
-  // マウスを乗せているレーン（動く先の目印をはっきりさせるため。指には「乗せる」が無いので、マウスのときだけ）
-  if (event.pointerType === 'mouse') {
-    secretPathHoverLane.value = getSecretPathLaneAt(event.currentTarget as HTMLElement, event.clientX, event.clientY);
-  }
-
-  if (event.pointerId !== secretPathPointerId || !isSecretPathPlaying.value) {
-    return;
-  }
-
-  swipeSecretPathPlayer(event);
-}
-
-function handleSecretPathPointerUp(event: PointerEvent) {
-  if (event.pointerId !== secretPathPointerId) {
-    return;
-  }
-
-  if (isSecretPathPlaying.value) {
-    // pointermove が届く前に はなした、すばやいフリックも拾う
-    swipeSecretPathPlayer(event);
-
-    // 横へ動かさず、長押しにもならなかった → 短いクリック・タップ
-    if (!secretPathPointerDragged && !secretPathPointerHeld) {
-      tapSecretPathLane(secretPathPointerDownLane);
-    }
-  }
-
-  releaseSecretPathPointer();
-}
-
-/* キャンセルされたとき（ブラウザがジェスチャーを引き取った など）は、動かさずに元へ戻すだけ */
-function handleSecretPathPointerCancel(event: PointerEvent) {
-  if (event.pointerId !== secretPathPointerId) {
-    return;
-  }
-
-  releaseSecretPathPointer();
-}
-
-function handleSecretPathPointerLeave(event: PointerEvent) {
-  if (event.pointerType === 'mouse') {
-    secretPathHoverLane.value = null;
-  }
-}
-
-/* 押したまま横へ、しきい値より大きく動いていたら、その方向へ1レーンだけ動かす */
-function swipeSecretPathPlayer(event: PointerEvent) {
-  const distance = event.clientX - secretPathPointerLastX;
-
-  if (Math.abs(distance) < getSecretPathSwipeThreshold(event.pointerType)) {
-    return;
-  }
-
-  // 指・ペンのフリックは、1回押すあいだに1レーンだけ（長押しになったあとのスライドと、マウスのドラッグは何度でも）
-  const canMoveAgain = event.pointerType === 'mouse' || secretPathPointerHeld;
-
-  if (secretPathPointerDragged && !canMoveAgain) {
-    return;
-  }
-
-  // 長押しになる前に横へ動いたら、長押しにはしない
-  if (secretPathHoldTimer !== null) {
-    clearTimeout(secretPathHoldTimer);
-    secretPathHoldTimer = null;
-  }
-
-  secretPathPointerDragged = true;
-  secretPathPointerLastX = event.clientX;
-
-  const laneBefore = secretPathPlayerLane.value;
-
-  moveSecretPathPlayer(distance < 0 ? -1 : 1);
-
-  // 動いた先のレーンを一瞬光らせる（はしで動けなかったときは光らせない）
-  if (secretPathPlayerLane.value !== laneBefore) {
-    secretPathTapLane.value = secretPathPlayerLane.value;
-    secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
-  }
-}
-
-/* 短く押したレーンの方向へ、1レーンだけ動かす（いまいるレーンを押したときは、何もしない・光らせもしない）
-   押したレーンを一瞬光らせて、どこを押したかが目で分かるようにする */
-function tapSecretPathLane(lane: SecretPathLane | null) {
-  const currentLane = secretPathPlayerLane.value;
-
-  if (lane === null || lane === currentLane) {
-    return;
-  }
-
-  moveSecretPathPlayer(lane < currentLane ? -1 : 1);
-
-  secretPathTapLane.value = lane;
-  secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
-}
-
-/* ↑ キーをはなしたとき（window の keyup。遊んでいる最中かどうかに関係なく、はやく進むのをやめる） */
-function handleSecretPathKeyup(event: KeyboardEvent) {
-  if (event.key === 'ArrowUp') {
-    isSecretPathKeyBoosting.value = false;
-  }
-}
-
-/* ウィンドウからフォーカスが外れた・タブが見えなくなったとき
-   keyup や pointerup が届かないことがあるので、はやく進む・押している状態を戻しておく */
-function handleSecretPathWindowBlur() {
-  releaseSecretPathControls();
-}
-
-function handleSecretPathVisibilityChange() {
-  if (document.visibilityState === 'hidden') {
-    releaseSecretPathControls();
-  }
-}
-
-/* 小道で遊んでいる最中のキー操作（handleKeydown() から呼ばれる）
-
-   ・← / A … 左へ1レーン
-   ・→ / D … 右へ1レーン
-   ・↑       … 押しているあいだだけ、はやく進む（はなすと handleSecretPathKeyup() で元の速さに戻る）
-   ・↓ / Enter / Space … 何もしない（ページのスクロールや、ボタンの押しまちがいを止めるだけ）
-   ・それ以外（Tab など）… ブラウザのふつうの動きにまかせる
-
-   ※ ← → は押しっぱなし（event.repeat）では続けて動かさない（1回押すと1レーン）
-   ※ ↑ は押しっぱなしで何度届いても、はやいままでよい
-   ※ はじまる前・終わったあとは、ここへは来ない（ふつうのコマンド操作に戻る） */
-function handleSecretPathKeydown(event: KeyboardEvent) {
-  // Ctrl + A（ぜんぶ選択）などのショートカットは、じゃましない
-  const hasModifier = event.ctrlKey || event.metaKey || event.altKey;
-  const isLeftKey = event.key === 'ArrowLeft' || (!hasModifier && event.code === 'KeyA');
-  const isRightKey = event.key === 'ArrowRight' || (!hasModifier && event.code === 'KeyD');
-
-  if (isLeftKey || isRightKey) {
-    event.preventDefault();
-
-    if (event.repeat) {
-      return;
-    }
-
-    moveSecretPathPlayer(isLeftKey ? -1 : 1);
-    return;
-  }
-
-  if (event.key === 'ArrowUp') {
-    event.preventDefault();
-    isSecretPathKeyBoosting.value = true;
-    return;
-  }
-
-  if (event.key === 'ArrowDown') {
-    event.preventDefault();
-    return;
-  }
-
-  if (event.key === 'Enter' || event.key === ' ') {
-    // サウンドON/OFFのボタンを選んでいるときだけは、ボタン本来の操作にまかせる
-    const target = event.target as HTMLElement | null;
-
-    if (target?.closest?.('.sound-toggle')) {
-      return;
-    }
-
-    event.preventDefault();
-  }
 }
 
 /* ============================================================
@@ -4082,96 +3072,6 @@ function walkOnFromFountain() {
 
 /* ===== ゴール ===== */
 
-/* 総合スコア（0〜100点）と、その内訳を作る
-
-   点数の計算そのものは composables/useScore.ts の calculateScore() にある
-   ここは「いまの状態を渡して、返ってきた答えを入れる」だけ
-   （配点・ボーナス・減点の数字は、ぜんぶあちらにまとめてある）
-*/
-function calculateFinalScore() {
-  const { totalScore, breakdown } = calculateScore({
-    outingPoint: outingPoint.value,
-    hasVisitedSecretSpot: isVisited('secretSpot'),
-    collectedItemCount: collectedItems.value.length,
-    currentMinutes: currentMinutes.value,
-    parentEnergy: parentEnergy.value,
-    childMood: childMood.value,
-    childEnergy: childEnergy.value,
-    parentCalm: parentCalm.value,
-    tantrumCount: tantrumCount.value,
-    keepInRange,
-  });
-
-  scoreBreakdown.value = breakdown;
-  finalScore.value = totalScore;
-}
-
-/* ゴールしたときの成績（ランク・見出し・文章）を決める
-
-   ① 総合スコアを計算する（特殊エンドでもスコアは表示するので、いちばん先に呼ぶ）
-   ② ランクと文章は composables/useScore.ts の judgeEnding() が決める
-      （いやいや3回以上の特殊エンド、S+ / S / A / B / C / D の境目や、
-        同じランクの中での文章の出しわけも、ぜんぶあちらにある）
-
-   ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
-   ※ S+の曲の解放（localStorageへの保存）は、このあとの unlockSPlusSongIfEarned() が受けもつ
-*/
-function judgeResult() {
-  calculateFinalScore();
-
-  const { rank, title, message } = judgeEnding({
-    totalScore: finalScore.value,
-    tantrumCount: tantrumCount.value,
-    childEnergy: childEnergy.value,
-    childMood: childMood.value,
-    parentEnergy: parentEnergy.value,
-    parentCalm: parentCalm.value,
-    currentMinutes: currentMinutes.value,
-    visitedPlaceCount: visitedPlaces.value.length,
-    playCount: playCount.value,
-    fussMoodLine,
-    totalPlaceCount,
-    playedALotLine,
-  });
-
-  endingRank.value = rank;
-  endingTitle.value = title;
-  endingMessage.value = message;
-}
-
-/* S+ランクになったら、うた入りエンディングBGMをサウンドトラックに解放する
-
-   ・S+ランクでなければ、何もしない（Sランク・特殊エンドなどでは解放しない）
-   ・このブラウザではじめての解放なら、リザルト画面に「新しい曲が追加されました！」を出す
-   ・すでに解放済みなら、お知らせは出さない
-     （うた入りの曲そのものは、解放済みかどうかに関係なく、S+ランクなら毎回流す → getResultBgmSrc）
-
-   ※ 解放したかどうかは、ゲームの記録とは別の「実績」として localStorage に残す
-     もう一度あそんでも、ブラウザを閉じても、ロックには戻らない
-
-   ※ judgeResult() でランクが決まったあとに呼ぶこと（→ goToGoal）
-*/
-function unlockSPlusSongIfEarned() {
-  // 前のゴールのお知らせが残らないように、まず消しておく
-  isSPlusSongNewlyUnlocked.value = false;
-
-  // 解放するかどうかの判定は utils/sPlusSong.ts の judgeSPlusSongUnlock()
-  const result = judgeSPlusSongUnlock(endingRank.value, hasUnlockedSPlusSong.value);
-
-  // S+ランクではないので、何もしない
-  if (result === 'none') {
-    return;
-  }
-
-  hasUnlockedSPlusSong.value = true;
-
-  // このブラウザで、はじめての解放（お知らせを出して、解放したことを保存する）
-  if (result === 'newlyUnlocked') {
-    isSPlusSongNewlyUnlocked.value = true;
-    saveSPlusSongUnlocked();
-  }
-}
-
 /* ゴールへ向かう（判定して結果画面へ） */
 function goToGoal() {
   // GAME OVERになったときは、S+〜Dランクの判定はしない
@@ -4360,8 +3260,10 @@ function resetGame() {
        ここでバッグを空にすれば いっしょに0になる（別に戻す必要はない）
        次のプレイでは、おやつ選択画面でまた2つ選んでから出発する
 
-     ※ ゲーム中に開いていたおやつバッグは、このあとの closeCareMenu() で閉じる */
-  selectedSnackIds.value = [];
+     ※ ゲーム中に開いていたおやつバッグは、このあとの closeCareMenu() で閉じる
+
+     バッグを空にする中身は composables/useSnackBag.ts の resetSnackBag() */
+  resetSnackBag();
   isSnackSelectionOpen.value = false;
 
   // あそびかた画面も閉じた状態に戻しておく
@@ -4379,53 +3281,38 @@ function resetGame() {
   // 「公園の出口へ向かう？」の確認ダイアログも閉じておく（念のため）
   closeGoalConfirm();
 
-  resultMessage.value = '';
-  statusChanges.value = null;
-  isCareActionResult.value = false;
+  /* 通常の行動1回ぶんの結果（結果の文章・今回の変化・行動前の控え・見つけたもの・
+     ちょっとしたできごと・休憩／おやつの結果かどうか）を、まとめて最初に戻す
+
+     初期値は composables/useActionResult.ts が持っている
+     （はじめるときと同じ値になるので、ここに書き写す必要がない） */
+  resetActionResult();
 
   // 前回のプレイで最後に入った場所を忘れる（新しいプレイの公園入口は、先頭から選ぶ）
   lastSelectedPlace.value = null;
   isCommandPointerPaused.value = false;
 
-  endingRank.value = '';
-  endingTitle.value = '';
-  endingMessage.value = '';
+  /* ゴールしたときの成績（ランク・見出し・文章・総合スコア・内訳）と、
+     うた入りBGMの「新しい曲が追加されました！」のお知らせ、
+     GAME OVER画面に出す文章を、まとめて最初に戻す
 
-  /* うた入りBGMの「新しい曲が追加されました！」のお知らせも消す（その1プレイだけの表示）
+     初期値は composables/useGameResult.ts が持っている
+     （はじめるときと同じ値になるので、ここに数字を書き写す必要がない）
 
-     ※ hasUnlockedSPlusSong（解放済みかどうか）と、localStorage の解放情報は、ここでは戻さない
-       一度解放した曲は、もう一度あそんでも、はじめの画面へ戻っても、ロックに戻さないため */
-  isSPlusSongNewlyUnlocked.value = false;
+     ※ hasUnlockedSPlusSong（解放済みかどうか）と、localStorage の解放情報は戻さない
+       一度解放した曲は、もう一度あそんでも、はじめの画面へ戻っても、ロックに戻さないため
+       （あちらの resetGameResult() でも、そこだけは戻していない） */
+  resetGameResult();
 
-  // 前回の総合スコアと内訳が残らないように、0と空の配列に戻す
-  finalScore.value = 0;
-  scoreBreakdown.value = [];
-
-  // 演出用に控えていたものも空に戻す
-  foundItemsThisAction.value = [];
-  randomEventText.value = '';
-  randomEventEffects.value = [];
-  tantrumText.value = '';
-  // ※ 「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
-
-  // 今回追加したGAME OVER用のstateも空に戻す
-  gameOverTitle.value = '';
-  gameOverMessage.value = '';
+  // ※ 演出用に控えていたもの（見つけたもの・ちょっとしたできごと）と、行動前の控えは、
+  //   上の resetActionResult() で空に戻している
+  // ※ いやいやの文章と「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
+  // ※ GAME OVER画面に出す文章は、上の resetGameResult() で空に戻している
 
   // とつぜんのできごとの予定も空に戻す
   // ※ 戻しておかないと、前回のプレイの予定が
   //   次のゲームの1回目の行動のあとに出てきてしまう
   pendingSuddenEvent.value = null;
-
-  // 行動前の控えも0に戻しておく（前回の記録が残らないようにする）
-  statusBefore.value = {
-    childEnergy: 0,
-    childMood: 0,
-    outingPoint: 0,
-    parentEnergy: 0,
-    parentCalm: 0,
-    minutes: 0,
-  };
 
   // ※ 公園入口（currentEvent）に戻すのは、上の resetGameState() でまとめて行っている
   gameStarted.value = false;
@@ -4621,9 +3508,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'slide':
       if (index === 0) {
-        playSlide();
+        runPlaceAction(placeActions.playSlide);
       } else if (index === 1) {
-        watchSlide();
+        runPlaceAction(placeActions.watchSlide);
       }
       break;
 
@@ -4632,9 +3519,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'sandbox':
       if (index === 0) {
-        playSandbox();
+        runPlaceAction(placeActions.playSandbox);
       } else if (index === 1) {
-        buildSandTunnel();
+        runPlaceAction(placeActions.buildSandTunnel);
       }
       break;
 
@@ -4643,9 +3530,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'acornArea':
       if (index === 0) {
-        collectAcorns();
+        runPlaceAction(placeActions.collectAcorns);
       } else if (index === 1) {
-        rollAcorns();
+        runPlaceAction(placeActions.rollAcorns);
       }
       break;
 
@@ -4654,9 +3541,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'pond':
       if (index === 0) {
-        watchSwansClose();
+        runPlaceAction(placeActions.watchSwansClose);
       } else if (index === 1) {
-        feedKoi();
+        runPlaceAction(placeActions.feedKoi);
       }
       break;
 
@@ -4665,9 +3552,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'grassArea':
       if (index === 0) {
-        playTagOnGrass();
+        runPlaceAction(placeActions.playTagOnGrass);
       } else if (index === 1) {
-        playWithBubbles();
+        runPlaceAction(placeActions.playWithBubbles);
       }
       break;
 
@@ -4676,9 +3563,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
-        exploreSunlight();
+        runPlaceAction(placeActions.exploreSunlight);
       } else if (index === 1) {
-        exploreClearingDepths();
+        runPlaceAction(placeActions.exploreClearingDepths);
       }
       break;
 
@@ -4839,18 +3726,15 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
   handleSecretPathKeydown,
 });
 
-/* 画面が表示されたら、秘密の小道のキー・画面幅・マウスの受付をはじめる
+/* 画面が表示されたら、画面幅・マウスの受付をはじめる
    公園入口の「列の数」は画面幅で変わるので、最初に1回調べて、
    そのあとは幅が変わるたびに調べ直す
 
    ※ ↑↓←→ などのキーボード操作の受付は、useKeyboardControls() の中で登録している
+   ※ 秘密の小道の keyup / blur / visibilitychange は、useSecretPathGame() の中で登録している
+   ※ S+ランク限定のうた入りBGMを前に解放しているかの読みこみは、useGameResult() の中で行っている
 */
 onMounted(() => {
-  // 秘密の小道：↑ をはなしたら はやく進むのをやめる／フォーカスが外れたら、はやい・押している状態を戻す
-  window.addEventListener('keyup', handleSecretPathKeyup);
-  window.addEventListener('blur', handleSecretPathWindowBlur);
-  document.addEventListener('visibilitychange', handleSecretPathVisibilityChange);
-
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
@@ -4871,11 +3755,6 @@ onMounted(() => {
        ページを開いた直後は、まだどのBGMも鳴っていないため */
   restoreSoundSettings();
 
-  /* S+ランク限定のうた入りBGMを、前に解放しているかを思い出す
-     （サーバー側では localStorage を読めないので、ブラウザで動くここで読む）
-     解放済みなら、次にS+を取っても「新しい曲が追加されました！」は出ない */
-  hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
-
   /* ※ ここではBGMを鳴らさない
 
      ページを開いた直後は、ブラウザの決まりで音を鳴らせない
@@ -4886,9 +3765,6 @@ onMounted(() => {
 
 /* 画面から離れるときは、受付をやめる（後始末） */
 onUnmounted(() => {
-  window.removeEventListener('keyup', handleSecretPathKeyup);
-  window.removeEventListener('blur', handleSecretPathWindowBlur);
-  document.removeEventListener('visibilitychange', handleSecretPathVisibilityChange);
   window.removeEventListener('resize', updateEntranceColumns);
   window.removeEventListener('pointermove', handleWindowPointer);
   window.removeEventListener('pointerdown', handleWindowPointer);
@@ -4901,10 +3777,8 @@ onUnmounted(() => {
   // いやいや発生の演出の「あとで消す」予約も取り消しておく
   hideTantrumAlert();
 
-  // 秘密の小道（ミニゲーム）の requestAnimationFrame も止めておく
-  // はやく進む・押している状態と、長押しを待つ予約も片づける
-  stopSecretPathLoop();
-  releaseSecretPathControls();
+  /* ※ 秘密の小道（ミニゲーム）の requestAnimationFrame・はやく進む／押している状態・
+     長押しを待つ予約の片づけは、useSecretPathGame() の中の onUnmounted で行っている */
 });
 </script>
 
@@ -5700,7 +4574,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [playSlide, watchSlide][index]()"
+                  @select="index => runPlaceAction([placeActions.playSlide, placeActions.watchSlide][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -5759,7 +4633,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [playSandbox, buildSandTunnel][index]()"
+                  @select="index => runPlaceAction([placeActions.playSandbox, placeActions.buildSandTunnel][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -5818,7 +4692,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [collectAcorns, rollAcorns][index]()"
+                  @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.rollAcorns][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -5877,7 +4751,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [watchSwansClose, feedKoi][index]()"
+                  @select="index => runPlaceAction([placeActions.watchSwansClose, placeActions.feedKoi][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -5936,7 +4810,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [playTagOnGrass, playWithBubbles][index]()"
+                  @select="index => runPlaceAction([placeActions.playTagOnGrass, placeActions.playWithBubbles][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -6211,7 +5085,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [exploreSunlight, exploreClearingDepths][index]()"
+                  @select="index => runPlaceAction([placeActions.exploreSunlight, placeActions.exploreClearingDepths][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
