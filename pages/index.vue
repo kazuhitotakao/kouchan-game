@@ -273,15 +273,6 @@ const foundItemsThisAction = ref<string[]>([]);
 const randomEventText = ref('');
 const randomEventEffects = ref<RandomEventEffect[]>([]);
 
-/* 今回の行動でいやいやが始まったときの文章（演出用）
-
-   結果メッセージに書き足すと、あとから画面に足した
-   「アイテム発見」「ちょっとしたできごと」の表示より前に出てしまい、
-   起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）と食いちがう
-   そこで文章だけここに持ち、画面のいちばん下に出す
-*/
-const tantrumText = ref('');
-
 /* いやいや発生の演出（画面いっぱいのオーバーレイ）を出しているかどうか
 
    true のあいだだけ「いやいや発生！」のオーバーレイが画面に重なって出る
@@ -1518,8 +1509,8 @@ function showTantrumAlert() {
    中身は composables/useTantrum.ts にある
    いま使っている ref・関数をそのまま渡して、今までと同じように動かしてもらう
 
-   ※ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応）は、
-     あちらが自分で持っている
+   ※ いやいやの中だけで使う状態（理由・激しさ・直前の対応・ナイス対応・
+     いやいやが始まったときの文章）は、あちらが自分で持っている
      こちらは、画面に出すぶんだけを下の { } で受けとって表示する
 
    ※ いやいや中かどうか（isTantrum）と、いやいやが起きた回数（tantrumCount）は、
@@ -1536,13 +1527,14 @@ const {
   waitCalmly,
 
   /* 画面に出すもの（持ち主は useTantrum。ここは読むだけ）
-     ※ niceTantrumResponseText だけは、行動をはじめるたびに
+     ※ niceTantrumResponseText と tantrumText だけは、行動をはじめるたびに
        startStatusChanges() で空へ戻している */
   tantrumLevel,
   currentTantrumLevelInfo,
   currentTantrumReasonInfo,
   currentTantrumScene,
   niceTantrumResponseText,
+  tantrumText,
 } = useTantrum({
   childEnergy,
   childMood,
@@ -1551,7 +1543,6 @@ const {
   outingPoint,
   isTantrum,
   tantrumCount,
-  tantrumText,
   niceTantrumBonusOutingPoint,
   niceTantrumBonusParentCalm,
   resultMessage,
@@ -3763,8 +3754,7 @@ function resetGame() {
   foundItemsThisAction.value = [];
   randomEventText.value = '';
   randomEventEffects.value = [];
-  tantrumText.value = '';
-  // ※ 「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
+  // ※ いやいやの文章と「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
 
   // 今回追加したGAME OVER用のstateも空に戻す
   gameOverTitle.value = '';
