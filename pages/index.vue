@@ -96,6 +96,8 @@ import type {
    プレイ中に変わる値は、このファイルの ref のほうに残してある */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { placeActions } from '~/data/placeActions';
+import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY, secretPathSunlightTotal } from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
@@ -2426,291 +2428,41 @@ function goToNextPlace() {
 /* ============================================================
    場所での行動（6か所 × 2コマンド）
 
-   親の2つのステータスは、減る理由をわけてある
-   ・親の体力 … 体をどれだけ使ったか（走る・だっこする・立ちっぱなし）
-   ・親の余裕 … どれだけヒヤッとしたか（水辺・高い所・見失いそう）
+   12個の行動は、どれもまったく同じ順番で進むので、
+   実際に動かすところは下の runPlaceAction() 1つにまとめてある
 
-   そのため、同じ「よく遊ぶ」コマンドでも場所によって中身がちがう
-   ・池を近くで見る         … 体力 -13 ／ 余裕 -14（水があるので、いちばん気が張る）
-   ・芝生広場で追いかけっこ … 体力 -15 ／ 余裕  -8（親もいっしょに走るので、体をいちばん使う）
-   ・どんぐりを拾う         … 体力 -10 ／ 余裕  -3（しゃがんで拾うだけなので穏やか）
-
-   こうすると
-   「体力は残っているけれど、余裕がないから池はやめておこう」
-   「余裕はあるから、静かなどんぐりの木で点をかせごう」
-   のように、2つの数字を見くらべて場所を選べるようになる
+   場所ごとの数値・時間・結果の文章は data/placeActions.ts のほう
+   （数字や文章を直したいときは、あちらのその場所のところだけを見ればよい）
    ============================================================ */
 
-/* ===== すべり台 ===== */
+/* 行動データを1件受け取って、その行動を実行する
 
-/* ① 一緒にすべる */
-function playSlide() {
+   進む順番は、12個の行動それぞれに書いてあったときとまったく同じ
+   ① 行動する前のステータスを控える
+   ② こうちゃんの体力・機嫌 → おでかけポイント → 親の体力・余裕
+   ③ 時間を進める
+   ④ 結果の文章を入れる
+   ⑤ アイテムが見つかるかを見る（抽選）
+   ⑥ 行動後の共通処理（遊んだ回数・探検済み・いやいや・ちょっとしたできごと・
+     今回の変化の記録・とつぜんのできごとの抽選）
+
+   ※ ⑤と⑥の中では乱数を使うので、呼ぶ順番と回数は変えないこと
+   ※ おでかけポイントは addOutingPoint() を通す（2回目の場所は半分になる） */
+function runPlaceAction(action: PlaceActionDefinition) {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  childEnergy.value -= 18;
-  childMood.value += 6;
-  addOutingPoint('slide', 6);
-  parentEnergy.value -= 14;
-  parentCalm.value -= 9;
-  addMinutes(25);
+  childEnergy.value += action.childEnergy;
+  childMood.value += action.childMood;
+  addOutingPoint(action.place, action.outingPoint);
+  parentEnergy.value += action.parentEnergy;
+  parentCalm.value += action.parentCalm;
+  addMinutes(action.minutes);
 
-  resultMessage.value = 'こうちゃんと一緒にすべりました。大喜びです！';
+  resultMessage.value = action.message;
 
-  tryCollectPlaceItem('slide');
-  finishPlayAction('slide');
-}
-
-/* ② 下で見守る
-
-   「いっしょにすべる」より軽い行動だが、親の余裕はあまり節約できない
-   こうちゃんが手の届かない高い所へひとりでのぼっていくので、
-   すぐそばで支えられる①よりも、かえって気が張る
-   （ころんだときの「見守る」も同じ考えで、親の余裕がいちばん減る）
-
-   そのぶん、親の体力と時間は①よりはっきり少なくすんでいる
-*/
-function watchSlide() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 12;
-  childMood.value += 3;
-  addOutingPoint('slide', 5);
-  parentEnergy.value -= 8;
-  parentCalm.value -= 9;
-  addMinutes(15);
-
-  resultMessage.value = '「みててー！」こうちゃんはてっぺんから手をふっています。下でハラハラしながら見守りました。';
-
-  tryCollectPlaceItem('slide');
-  finishPlayAction('slide');
-}
-
-/* ===== 砂場 ===== */
-
-/* ① 一緒に大きな山を作る */
-function playSandbox() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 13;
-  childMood.value += 5;
-  addOutingPoint('sandbox', 6);
-  parentEnergy.value -= 12;
-  parentCalm.value -= 4;
-  addMinutes(25);
-
-  resultMessage.value = '一緒に大きな山を作りました。こうちゃんは夢中です！';
-
-  tryCollectPlaceItem('sandbox');
-  finishPlayAction('sandbox');
-}
-
-/* ② 砂のトンネルを作る
-
-   山づくり（①）より軽いけれど、親子でいっしょに手を動かす「遊び」
-   休むための行動ではないので、親の体力もきちんと減る
-   （休みたいときは、別枠の「ひとやすみ」を使う）
-*/
-function buildSandTunnel() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 8;
-  childMood.value += 4;
-  addOutingPoint('sandbox', 4);
-  parentEnergy.value -= 7;
-  parentCalm.value -= 2;
-  addMinutes(15);
-
-  resultMessage.value = 'こうちゃんと一緒に砂のトンネルを作りました。向こう側から手が見えると、こうちゃんは大よろこびです！';
-
-  tryCollectPlaceItem('sandbox');
-  finishPlayAction('sandbox');
-}
-
-/* ===== どんぐりの木 ===== */
-
-/* ① 一緒にどんぐりを拾う */
-function collectAcorns() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 11;
-  childMood.value += 6;
-  addOutingPoint('acornArea', 8);
-  parentEnergy.value -= 10;
-  parentCalm.value -= 3;
-  addMinutes(20);
-
-  resultMessage.value = 'こうちゃんは夢中でどんぐりを拾っています！';
-
-  tryCollectPlaceItem('acornArea');
-  finishPlayAction('acornArea');
-}
-
-/* ② どんぐりをころがして遊ぶ
-
-   前はここに「木かげで少し休む」があったが、
-   休む行動は別枠の「ひとやすみ」にまとめたので、
-   この場所ならではの遊びに置きかえている
-*/
-function rollAcorns() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 7;
-  childMood.value += 4;
-  addOutingPoint('acornArea', 5);
-  parentEnergy.value -= 5;
-  parentCalm.value -= 2;
-  addMinutes(15);
-
-  resultMessage.value = '拾ったどんぐりを坂になった地面からころがして遊びました。こうちゃんは何度も追いかけています！';
-
-  tryCollectPlaceItem('acornArea');
-  finishPlayAction('acornArea');
-}
-
-/* ===== 池 ===== */
-
-/* ① 白鳥を近くで見る */
-function watchSwansClose() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 11;
-  childMood.value += 8;
-  addOutingPoint('pond', 9);
-  parentEnergy.value -= 13;
-  parentCalm.value -= 14;
-  addMinutes(20);
-
-  resultMessage.value = '白鳥を近くで見ました。こうちゃんは大興奮です！';
-
-  tryCollectPlaceItem('pond');
-  finishPlayAction('pond');
-}
-
-/* ② コイに餌をあげる */
-function feedKoi() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 8;
-  childMood.value += 6;
-  addOutingPoint('pond', 7);
-  parentEnergy.value -= 5;
-  parentCalm.value -= 4;
-  addMinutes(15);
-
-  resultMessage.value = 'コイに餌をあげました。たくさんのコイが集まってきて、バシャンと水しぶきをたてながら餌を食べています。こうちゃんは大喜びです。';
-
-  tryCollectPlaceItem('pond');
-  finishPlayAction('pond');
-}
-
-/* ===== 芝生広場 ===== */
-
-/* ① 追いかけっこする */
-function playTagOnGrass() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 19;
-  childMood.value += 8;
-  addOutingPoint('grassArea', 10);
-  parentEnergy.value -= 15;
-  parentCalm.value -= 8;
-  addMinutes(25);
-
-  resultMessage.value = '芝生広場で、こうちゃんと元気いっぱい追いかけっこをしました。こうちゃんは笑いながら走り回っています！';
-
-  tryCollectPlaceItem('grassArea');
-  finishPlayAction('grassArea');
-}
-
-/* ② シャボン玉で遊ぶ
-
-   軽い行動（②）の中では、いちばん機嫌が上がる遊び
-   走り回らないので体力はあまり減らないが、
-   ふわふわ飛ぶシャボン玉はこうちゃんのお気に入りなので、
-   「体力が残っていないけれど機嫌を上げたい」ときの逃げ道になる
-*/
-function playWithBubbles() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 9;
-  childMood.value += 7;
-  addOutingPoint('grassArea', 6);
-  parentEnergy.value -= 6;
-  parentCalm.value -= 3;
-  addMinutes(20);
-
-  resultMessage.value = '芝生の上でシャボン玉を飛ばしました。ふわふわ飛んでいくシャボン玉を、こうちゃんは楽しそうに追いかけています。';
-
-  tryCollectPlaceItem('grassArea');
-  finishPlayAction('grassArea');
-}
-
-/* ===== こもれびの広場 ===== */
-
-/* ① 木漏れ日の中を探検する */
-function exploreSunlight() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 16;
-  childMood.value += 10;
-  addOutingPoint('secretSpot', 15);
-  parentEnergy.value -= 14;
-  parentCalm.value -= 4;
-  addMinutes(25);
-
-  resultMessage.value = '木漏れ日の中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。';
-
-  tryCollectPlaceItem('secretSpot');
-  finishPlayAction('secretSpot');
-}
-
-/* ② 広場の奥を見てみる
-
-   広場のさらに奥を少し探してみる遊び
-   （前はここに「二人で景色をながめる」があったが、
-     体力も余裕も回復する、ほとんど休憩の行動になっていた
-     休む行動は別枠の「ひとやすみ」にまとめたので、
-     ここは広場らしい「奥を探してみる」遊びに置きかえている）
-
-   ※ 文章で「枝を見つけた」と書かないこと
-     アイテム（ふしぎな形の枝）が見つかるかどうかは
-     tryCollectPlaceItem() の抽選で決まる（はじめては60%）
-     文章のほうで先に見つけたことにしてしまうと、
-     抽選にはずれた回に
-     「枝を見つけました」→ でも「★ アイテム発見！」が出ない
-     という食いちがいが起きてしまう
-     （実際にそうなっていたので、探すところまでの文章に直した）
-
-     見つけたことを伝えるのは、結果カードの
-     「★ アイテム発見！『ふしぎな形の枝』を見つけました！」の役目
-     （ほかの5か所の文章も、アイテムには触れずに遊びの様子だけを書いている）
-*/
-function exploreClearingDepths() {
-  // 行動する前のステータスを控えておく
-  startStatusChanges();
-
-  childEnergy.value -= 10;
-  childMood.value += 5;
-  addOutingPoint('secretSpot', 9);
-  parentEnergy.value -= 8;
-  parentCalm.value -= 4;
-  addMinutes(20);
-
-  resultMessage.value = '広場の奥へ進んでみました。こうちゃんは木の根元をのぞきながら、「なにかあるかなー？」とわくわくしています。';
-
-  tryCollectPlaceItem('secretSpot');
-  finishPlayAction('secretSpot');
+  tryCollectPlaceItem(action.place);
+  finishPlayAction(action.place);
 }
 
 /* ============================================================
@@ -3756,9 +3508,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'slide':
       if (index === 0) {
-        playSlide();
+        runPlaceAction(placeActions.playSlide);
       } else if (index === 1) {
-        watchSlide();
+        runPlaceAction(placeActions.watchSlide);
       }
       break;
 
@@ -3767,9 +3519,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'sandbox':
       if (index === 0) {
-        playSandbox();
+        runPlaceAction(placeActions.playSandbox);
       } else if (index === 1) {
-        buildSandTunnel();
+        runPlaceAction(placeActions.buildSandTunnel);
       }
       break;
 
@@ -3778,9 +3530,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'acornArea':
       if (index === 0) {
-        collectAcorns();
+        runPlaceAction(placeActions.collectAcorns);
       } else if (index === 1) {
-        rollAcorns();
+        runPlaceAction(placeActions.rollAcorns);
       }
       break;
 
@@ -3789,9 +3541,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'pond':
       if (index === 0) {
-        watchSwansClose();
+        runPlaceAction(placeActions.watchSwansClose);
       } else if (index === 1) {
-        feedKoi();
+        runPlaceAction(placeActions.feedKoi);
       }
       break;
 
@@ -3800,9 +3552,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'grassArea':
       if (index === 0) {
-        playTagOnGrass();
+        runPlaceAction(placeActions.playTagOnGrass);
       } else if (index === 1) {
-        playWithBubbles();
+        runPlaceAction(placeActions.playWithBubbles);
       }
       break;
 
@@ -3811,9 +3563,9 @@ function runSelectedCommand() {
        （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
-        exploreSunlight();
+        runPlaceAction(placeActions.exploreSunlight);
       } else if (index === 1) {
-        exploreClearingDepths();
+        runPlaceAction(placeActions.exploreClearingDepths);
       }
       break;
 
@@ -4822,7 +4574,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [playSlide, watchSlide][index]()"
+                  @select="index => runPlaceAction([placeActions.playSlide, placeActions.watchSlide][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -4881,7 +4633,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [playSandbox, buildSandTunnel][index]()"
+                  @select="index => runPlaceAction([placeActions.playSandbox, placeActions.buildSandTunnel][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -4940,7 +4692,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [collectAcorns, rollAcorns][index]()"
+                  @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.rollAcorns][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -4999,7 +4751,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [watchSwansClose, feedKoi][index]()"
+                  @select="index => runPlaceAction([placeActions.watchSwansClose, placeActions.feedKoi][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -5058,7 +4810,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [playTagOnGrass, playWithBubbles][index]()"
+                  @select="index => runPlaceAction([placeActions.playTagOnGrass, placeActions.playWithBubbles][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
@@ -5333,7 +5085,7 @@ onUnmounted(() => {
                   :is-care-result-back-visible="isCareResultBackVisible"
                   :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => [exploreSunlight, exploreClearingDepths][index]()"
+                  @select="index => runPlaceAction([placeActions.exploreSunlight, placeActions.exploreClearingDepths][index])"
                   @care="toggleCareMenu"
                   @leave="goToNextPlace"
                   @back="backToPlaceFromCareResult"
