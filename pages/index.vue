@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
-import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, sPlusSongTitle } from '~/utils/sPlusSong';
+import { sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
 /* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
@@ -25,9 +25,10 @@ import { useKeyboardControls } from '~/composables/useKeyboardControls';
 /* いやいや（かんしゃく）の判定と結果（中身は composables/useTantrum.ts） */
 import { useTantrum } from '~/composables/useTantrum';
 
-/* 総合スコアとランクの計算（中身は composables/useScore.ts）
-   どちらも「渡した数から答えを返すだけ」で、ゲームの状態はさわらない */
-import { calculateScore, judgeEnding } from '~/composables/useScore';
+/* ゲームが終わったあとの結果（中身は composables/useGameResult.ts）
+   スコア・ランク・GAME OVERの文章・S+の曲の解放を持っておくところ
+   計算そのものは composables/useScore.ts、localStorage は utils/sPlusSong.ts のまま */
+import { useGameResult } from '~/composables/useGameResult';
 
 /* 秘密の小道（ミニゲーム）の計算だけを取り出したもの
    ここで使うのは、レーンの番号を画面の位置（%）にする計算だけ
@@ -77,7 +78,6 @@ import type {
   GameEvent,
   ItemPlace,
   RandomEventEffect,
-  ScoreBreakdownItem,
   Snack,
   SnackId,
   SnackUseContext,
@@ -90,7 +90,7 @@ import type {
    ここにあるのは「読むだけ」のデータで、書きかえはしない
    いま何を持っているか・いま何のいやいやか、のような
    プレイ中に変わる値は、このファイルの ref のほうに残してある */
-import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, playedALotLine, suddenEvents, totalPlaceCount } from '~/data/game';
+import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY, secretPathSunlightTotal } from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
@@ -444,48 +444,64 @@ const statusBefore = ref({
   minutes: 0,
 });
 
-/* ゴールしたときのランクと判定メッセージ */
-const endingRank = ref('');
-const endingTitle = ref('');
-const endingMessage = ref('');
+/* ============================================================
+   ゲームが終わったあとの結果（リザルト・GAME OVER・S+の曲の解放）
 
-/* S+ランク限定の「うた入りエンディングBGM」を、このブラウザで解放済みかどうか
+   中身は composables/useGameResult.ts にある
+   ・総合スコアと内訳・ランク・見出し・文章の入れもの
+   ・GAME OVER画面に出す文章の入れもの
+   ・S+ランク限定のうた入りBGMを解放したかどうか
+   ・そのぜんぶを最初に戻す resetGameResult()
 
-   一度でもS+ランクを取ると true になり、localStorage にも保存される
-   （保存のしくみは utils/sPlusSong.ts。サウンドトラックのページも同じものを使う）
+   ■ 計算はどれも、今までどおり別のところにある
+     点数・ランク・エンディングの文章 … composables/useScore.ts
+     S+の曲の解放判定と localStorage  … utils/sPlusSong.ts
 
-   ※ 体力や機嫌とちがって「ゲームのステータス」ではなく「実績・解放情報」なので、
-     resetGame（もう一度あそぶ／はじめの画面へ戻る）では false に戻さない
-     （サウンドの設定 soundEnabled と同じあつかい）
-   ※ 前に解放しているかは、onMounted で localStorage から思い出す
-*/
-const hasUnlockedSPlusSong = ref(false);
+   ■ このファイルに残してあるもの
+     ・ゴールへ向かう流れ（goToGoal()）と、judgeResult() → unlockSPlusSongIfEarned() を呼ぶ順番
+     ・GAME OVERの条件判定・BGM・画面の切りかえ（checkGameOver()）
+       gameOverTitle / gameOverMessage は、受けとった ref へ今までどおり代入する
+     ・1回の行動ごとの結果（resultMessage・statusChanges・見つけたもの・
+       ちょっとしたできごと）は、今までどおりこのファイルが持っている
 
-/* 今回のゴールで、うた入りBGMを「このブラウザではじめて」解放したかどうか
+   ※ 0〜100に収める keepInRange() は、ほかの場所でも使うのでこのファイルに残し、
+     スコア計算のときだけ渡している（今までと同じ渡しかた）
+   ============================================================ */
+const {
+  /* ゴールしたときの成績（画面に出す） */
+  finalScore,
+  scoreBreakdown,
+  endingRank,
+  endingTitle,
+  endingMessage,
 
-   true のときだけ、リザルト画面に「✨ サウンドトラックに新しい曲が追加されました！」を出す
-   2回目以降のS+では出さない（曲そのものは毎回流す）
-   こちらはその1プレイだけの表示なので、resetGame() で false に戻す
-*/
-const isSPlusSongNewlyUnlocked = ref(false);
+  /* GAME OVER画面に出す文章（入れるのは checkGameOver()） */
+  gameOverTitle,
+  gameOverMessage,
 
-/* 今回のプレイの総合スコア（0〜100点）
-   ゴールしたときに calculateFinalScore() で計算して入れる
-   まだゴールしていないときは0
-*/
-const finalScore = ref(0);
+  /* S+ランク限定のうた入りBGM */
+  hasUnlockedSPlusSong,
+  isSPlusSongNewlyUnlocked,
 
-/* スコアの内訳
-   「何で何点もらったのか」を1行ずつためておいて、結果画面に並べる
-   ゴールするたびに calculateFinalScore() の中で空に戻す
-*/
-const scoreBreakdown = ref<ScoreBreakdownItem[]>([]);
+  /* ゴールしたときに呼ぶ（順番は goToGoal() が決める） */
+  judgeResult,
+  unlockSPlusSongIfEarned,
 
-/* GAME OVERになった理由（GAME OVER画面に出す文章）
-   まだGAME OVERになっていないときは、どちらも空っぽ
-*/
-const gameOverTitle = ref('');
-const gameOverMessage = ref('');
+  /* 結果の状態を、まとめて最初に戻す（resetGame() から呼ぶ） */
+  resetGameResult,
+} = useGameResult({
+  childEnergy,
+  childMood,
+  parentEnergy,
+  parentCalm,
+  outingPoint,
+  currentMinutes,
+  tantrumCount,
+  visitedPlaces,
+  playCount,
+  collectedItems,
+  keepInRange,
+});
 
 /* お昼（12:00）を過ぎたかどうか
    currentMinutes（時間を「分」に直したもの）は useGameState() から受けとっている */
@@ -3431,96 +3447,6 @@ function walkOnFromFountain() {
 
 /* ===== ゴール ===== */
 
-/* 総合スコア（0〜100点）と、その内訳を作る
-
-   点数の計算そのものは composables/useScore.ts の calculateScore() にある
-   ここは「いまの状態を渡して、返ってきた答えを入れる」だけ
-   （配点・ボーナス・減点の数字は、ぜんぶあちらにまとめてある）
-*/
-function calculateFinalScore() {
-  const { totalScore, breakdown } = calculateScore({
-    outingPoint: outingPoint.value,
-    hasVisitedSecretSpot: isVisited('secretSpot'),
-    collectedItemCount: collectedItems.value.length,
-    currentMinutes: currentMinutes.value,
-    parentEnergy: parentEnergy.value,
-    childMood: childMood.value,
-    childEnergy: childEnergy.value,
-    parentCalm: parentCalm.value,
-    tantrumCount: tantrumCount.value,
-    keepInRange,
-  });
-
-  scoreBreakdown.value = breakdown;
-  finalScore.value = totalScore;
-}
-
-/* ゴールしたときの成績（ランク・見出し・文章）を決める
-
-   ① 総合スコアを計算する（特殊エンドでもスコアは表示するので、いちばん先に呼ぶ）
-   ② ランクと文章は composables/useScore.ts の judgeEnding() が決める
-      （いやいや3回以上の特殊エンド、S+ / S / A / B / C / D の境目や、
-        同じランクの中での文章の出しわけも、ぜんぶあちらにある）
-
-   ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
-   ※ S+の曲の解放（localStorageへの保存）は、このあとの unlockSPlusSongIfEarned() が受けもつ
-*/
-function judgeResult() {
-  calculateFinalScore();
-
-  const { rank, title, message } = judgeEnding({
-    totalScore: finalScore.value,
-    tantrumCount: tantrumCount.value,
-    childEnergy: childEnergy.value,
-    childMood: childMood.value,
-    parentEnergy: parentEnergy.value,
-    parentCalm: parentCalm.value,
-    currentMinutes: currentMinutes.value,
-    visitedPlaceCount: visitedPlaces.value.length,
-    playCount: playCount.value,
-    fussMoodLine,
-    totalPlaceCount,
-    playedALotLine,
-  });
-
-  endingRank.value = rank;
-  endingTitle.value = title;
-  endingMessage.value = message;
-}
-
-/* S+ランクになったら、うた入りエンディングBGMをサウンドトラックに解放する
-
-   ・S+ランクでなければ、何もしない（Sランク・特殊エンドなどでは解放しない）
-   ・このブラウザではじめての解放なら、リザルト画面に「新しい曲が追加されました！」を出す
-   ・すでに解放済みなら、お知らせは出さない
-     （うた入りの曲そのものは、解放済みかどうかに関係なく、S+ランクなら毎回流す → getResultBgmSrc）
-
-   ※ 解放したかどうかは、ゲームの記録とは別の「実績」として localStorage に残す
-     もう一度あそんでも、ブラウザを閉じても、ロックには戻らない
-
-   ※ judgeResult() でランクが決まったあとに呼ぶこと（→ goToGoal）
-*/
-function unlockSPlusSongIfEarned() {
-  // 前のゴールのお知らせが残らないように、まず消しておく
-  isSPlusSongNewlyUnlocked.value = false;
-
-  // 解放するかどうかの判定は utils/sPlusSong.ts の judgeSPlusSongUnlock()
-  const result = judgeSPlusSongUnlock(endingRank.value, hasUnlockedSPlusSong.value);
-
-  // S+ランクではないので、何もしない
-  if (result === 'none') {
-    return;
-  }
-
-  hasUnlockedSPlusSong.value = true;
-
-  // このブラウザで、はじめての解放（お知らせを出して、解放したことを保存する）
-  if (result === 'newlyUnlocked') {
-    isSPlusSongNewlyUnlocked.value = true;
-    saveSPlusSongUnlocked();
-  }
-}
-
 /* ゴールへ向かう（判定して結果画面へ） */
 function goToGoal() {
   // GAME OVERになったときは、S+〜Dランクの判定はしない
@@ -3736,29 +3662,24 @@ function resetGame() {
   lastSelectedPlace.value = null;
   isCommandPointerPaused.value = false;
 
-  endingRank.value = '';
-  endingTitle.value = '';
-  endingMessage.value = '';
+  /* ゴールしたときの成績（ランク・見出し・文章・総合スコア・内訳）と、
+     うた入りBGMの「新しい曲が追加されました！」のお知らせ、
+     GAME OVER画面に出す文章を、まとめて最初に戻す
 
-  /* うた入りBGMの「新しい曲が追加されました！」のお知らせも消す（その1プレイだけの表示）
+     初期値は composables/useGameResult.ts が持っている
+     （はじめるときと同じ値になるので、ここに数字を書き写す必要がない）
 
-     ※ hasUnlockedSPlusSong（解放済みかどうか）と、localStorage の解放情報は、ここでは戻さない
-       一度解放した曲は、もう一度あそんでも、はじめの画面へ戻っても、ロックに戻さないため */
-  isSPlusSongNewlyUnlocked.value = false;
-
-  // 前回の総合スコアと内訳が残らないように、0と空の配列に戻す
-  finalScore.value = 0;
-  scoreBreakdown.value = [];
+     ※ hasUnlockedSPlusSong（解放済みかどうか）と、localStorage の解放情報は戻さない
+       一度解放した曲は、もう一度あそんでも、はじめの画面へ戻っても、ロックに戻さないため
+       （あちらの resetGameResult() でも、そこだけは戻していない） */
+  resetGameResult();
 
   // 演出用に控えていたものも空に戻す
   foundItemsThisAction.value = [];
   randomEventText.value = '';
   randomEventEffects.value = [];
   // ※ いやいやの文章と「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
-
-  // 今回追加したGAME OVER用のstateも空に戻す
-  gameOverTitle.value = '';
-  gameOverMessage.value = '';
+  // ※ GAME OVER画面に出す文章は、上の resetGameResult() で空に戻している
 
   // とつぜんのできごとの予定も空に戻す
   // ※ 戻しておかないと、前回のプレイの予定が
@@ -4193,6 +4114,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
 
    ※ ↑↓←→ などのキーボード操作の受付は、useKeyboardControls() の中で登録している
    ※ 秘密の小道の keyup / blur / visibilitychange は、useSecretPathGame() の中で登録している
+   ※ S+ランク限定のうた入りBGMを前に解放しているかの読みこみは、useGameResult() の中で行っている
 */
 onMounted(() => {
   updateEntranceColumns();
@@ -4214,11 +4136,6 @@ onMounted(() => {
      ※ ここではBGMを鳴らしたり止めたりしない
        ページを開いた直後は、まだどのBGMも鳴っていないため */
   restoreSoundSettings();
-
-  /* S+ランク限定のうた入りBGMを、前に解放しているかを思い出す
-     （サーバー側では localStorage を読めないので、ブラウザで動くここで読む）
-     解放済みなら、次にS+を取っても「新しい曲が追加されました！」は出ない */
-  hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
 
   /* ※ ここではBGMを鳴らさない
 
