@@ -69,7 +69,9 @@ export function useSnackBag() {
   /* 名札（'gummy' など）から、おやつの中身（snacks の中の1件）をさがす
 
      find() は、snacks の中から条件に合う最初の1件を返す
-     見つからなかったときは undefined になる */
+     見つからなかったときは undefined になる
+
+     ※ このファイルの中だけで使う（selectedSnacks と findSnackInBag から） */
   function findSnack(snackId: SnackId) {
     return snacks.find((snack) => snack.id === snackId);
   }
@@ -173,7 +175,6 @@ export function useSnackBag() {
     canStartWithSnacks,
 
     /* ===== さがす・確かめる・取り出す ===== */
-    findSnack,
     isSnackSelected,
     findSnackInBag,
     removeSnackFromBag,

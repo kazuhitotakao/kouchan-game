@@ -3,7 +3,7 @@
 
    ここにあるのは「どんなおやつがあるか」「何個持っていけるか」だけで、
    「いま何を持っているか」（selectedSnackIds）は
-   プレイ中に変わるので pages/index.vue の ref のほうに残してある
+   プレイ中に変わるので composables/useSnackBag.ts のほうが持っている
    ============================================================ */
 
 import type { Snack } from '~/types/game';

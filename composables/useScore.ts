@@ -1,8 +1,9 @@
 /* ============================================================
    総合スコアとランクの計算
 
-   ゲーム本編（pages/index.vue）にあった calculateFinalScore() と judgeResult() の
+   ゲーム本編にあった calculateFinalScore() と judgeResult() の
    「計算しているところ」だけを取り出してある
+   （その2つ自体は、いま composables/useGameResult.ts にある）
 
    ■ ここがやること
      ・ゴールしたときの状態を受けとって、スコアと内訳を返す
@@ -10,8 +11,9 @@
 
    ■ ここがやらないこと
      ゲームの状態は、いっさい書きかえない（受けとった数を見て、答えを返すだけ）
-     音・localStorage・画面の切りかえ・S+の曲の解放も、ぜんぶ pages/index.vue のまま
-     （S+かどうかは「S+ランク」という答えを返すところまで）
+     音・画面の切りかえはさわらない
+     S+の曲の解放は composables/useGameResult.ts と utils/sPlusSong.ts のほう
+     （ここは「S+ランク」という答えを返すところまで）
 
    ■ 配点・境界値・判定の順番は、いっさい変えていない
      数字も文章も、移す前とまったく同じものを使っている
@@ -164,7 +166,7 @@ export type EndingInput = {
 };
 
 export type EndingResult = {
-  /* 'S+ランク' などのランク名（S+の曲の解放は pages/index.vue が受けもつ） */
+  /* 'S+ランク' などのランク名（S+の曲の解放は composables/useGameResult.ts が受けもつ） */
   rank: string;
   title: string;
   message: string;

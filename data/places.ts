@@ -3,7 +3,9 @@
 
    「いまどこにいるか」（currentEvent）や
    「どこへ行ったか」（visitedPlaces）は
-   プレイ中に変わるので pages/index.vue の ref のほうに残してある
+   プレイ中に変わるので composables/useGameState.ts のほうが持っている
+
+   その場所で遊んだときの数値・時間・結果の文章は data/placeActions.ts
    ============================================================ */
 
 import type { GameEvent, ItemPlace } from '~/types/game';

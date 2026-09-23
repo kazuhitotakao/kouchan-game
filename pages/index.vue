@@ -89,11 +89,12 @@ import type {
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ
-   （ゲーム全体の設定・場所とアイテム・秘密の小道の設定・おやつの種類と回復量・いやいやのセリフ・相性表）
+   （ゲーム全体の設定・場所とアイテム・場所での行動・秘密の小道の設定・
+     おやつの種類と回復量・いやいやのセリフ・相性表）
 
    ここにあるのは「読むだけ」のデータで、書きかえはしない
    いま何を持っているか・いま何のいやいやか、のような
-   プレイ中に変わる値は、このファイルの ref のほうに残してある */
+   プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
@@ -343,7 +344,6 @@ const {
   canStartWithSnacks,
 
   /* さがす・確かめる・取り出す */
-  findSnack,
   isSnackSelected,
   findSnackInBag,
   removeSnackFromBag,

@@ -3,7 +3,7 @@
 
    ここにあるのは「どんな速さ・長さで遊ぶか」「何がいくつ流れてくるか」だけで、
    「いまどのレーンにいるか」（secretPathPlayerLane）などの遊んでいる最中の値は
-   プレイ中に変わるので pages/index.vue の ref のほうに残してある
+   プレイ中に変わるので composables/useSecretPathGame.ts のほうが持っている
    ============================================================ */
 
 import type { SecretPathLane } from '~/types/game';
