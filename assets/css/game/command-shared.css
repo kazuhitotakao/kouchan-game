@@ -347,6 +347,22 @@
     max-width: none;
   }
 
+  /* いやいや・とつぜんのできごとの「どうする？」を、中央エリアの下のはしに貼りつける
+
+     スマホ幅のゲーム画面は、中央エリア（.stage）だけがスクロールする作りになっている
+     （→ assets/css/game/responsive.css の「1画面で完結する作り」）
+     この2つの場面では、コマンドの枠が中央エリアの中に直接ならぶので、
+     position: sticky で下のはしに貼りつけて、説明や結果が長くてもいつも押せるようにする
+     （通常の場所の .command-area の貼りつけは responsive.css のほう）
+
+     枠そのものに紺色の背景があるので、うしろの文字がすけることはない
+     ※ 秘密の小道は、ページ全体がスクロールする作りのままなので対象にしない */
+  .game-screen:not(.game-screen--secret-path) .stage > .command-box {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+  }
+
   /* 横ならびの選択肢（3つ）は、スマホ幅では2列に折り返す（3つ目は下の行へ）
      たて1列には戻さない（← → で選ぶ向きと、見た目の向きをそろえるため） */
   .command-box--choices-3 {

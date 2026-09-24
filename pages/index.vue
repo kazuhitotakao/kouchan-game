@@ -4370,8 +4370,16 @@ onUnmounted(() => {
            ゲーム画面（上部ステータス／中央イベント／下部コマンド）
            ============================================================ -->
       <!-- game-screen--secret-path … 秘密の小道のあいだだけ付ける
-           スマホ幅で、上部ステータスを画面の上に固定しないようにするため（CSSの max-width: 700px を参照） -->
-      <div v-else key="game" ref="gameScreenRef" class="game-screen" :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' }">
+           スマホ幅で、上部ステータスを画面の上に固定しないようにするため（CSSの max-width: 700px を参照）
+           スマホ幅の「1画面で完結する作り」も、秘密の小道だけは使わない（→ assets/css/game/responsive.css）
+           game-screen--has-result … 結果カードが出ているあいだだけ付ける
+           スマホ幅で、上の場所の説明をたたんで、結果を読む場所を広くするため（→ assets/css/game/responsive.css） -->
+      <div
+        v-else
+        key="game"
+        ref="gameScreenRef"
+        class="game-screen"
+        :class="{ 'game-screen--secret-path': currentEvent === 'secretPath', 'game-screen--has-result': !!resultMessage }">
         <!-- ==========================================================
              【上部】常時表示のステータスエリア
              ========================================================== -->
