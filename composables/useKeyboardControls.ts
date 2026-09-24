@@ -274,8 +274,10 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* 公園入口のコマンドが、いま何列で並んでいるか
      CSSと同じ幅で切り替える
      ・901px以上   … 3列
-     ・900px以下   … 2列
-     ・700px以下   … 1列
+     ・900px以下   … 2列（スマホ幅の700px以下も2列のまま）
+
+     ※ スマホ幅も前は1列だったが、6段たてにならぶと1画面に収まらないので、
+       2列にした（assets/css/game/command.css の .command--entrance）
   */
   const entranceColumns = ref(3);
 
@@ -286,7 +288,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
      ほかのコマンドのような「列」を持っていない
      そのため覚えておかないと、↑で戻るときに行き先の
      いちばんうしろへ帰ってしまい、
-     「池へ行く」で↓→↑としたのに「芝生広場へ行く」に移動してしまう
+     「池」で↓→↑としたのに「芝生広場」に移動してしまう
 
      ※ 見た目には出てこない、キーボード操作のためだけのメモ
   */
@@ -296,11 +298,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
      画面が表示されたときと、幅が変わったときに呼ぶ
   */
   function updateEntranceColumns() {
-    if (window.matchMedia('(max-width: 700px)').matches) {
-      entranceColumns.value = 1;
-      return;
-    }
-
     if (window.matchMedia('(max-width: 900px)').matches) {
       entranceColumns.value = 2;
       return;
@@ -365,7 +362,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
      行き先のいちばん下の行から↓を押すと、その下にあるゴールへ進む
 
      ゴール（いちばん下の行）で↓を押しても、動かない
-     いちばん上の「すべり台へ行く」へは回りこまない
+     いちばん上の「すべり台」へは回りこまない
      （↑でゴールへ回りこまないのと同じく、上下のはしで止まるようにそろえている）
   */
   function moveEntranceDown() {
@@ -410,7 +407,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
   /* ←：公園入口では1つ前のコマンドへ動かす
 
-     いちばん最初の「すべり台へ行く」で←を押しても、動かない
+     いちばん最初の「すべり台」で←を押しても、動かない
      いちばん後ろの「公園の出口へ向かう」へは回りこまない
      （↑と同じく、うっかりゴールを選んでしまわないようにするため）
 
@@ -427,7 +424,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* →：公園入口では1つ次のコマンドへ動かす
 
      いちばん後ろの「公園の出口へ向かう」で→を押しても、動かない
-     いちばん最初の「すべり台へ行く」へは回りこまない
+     いちばん最初の「すべり台」へは回りこまない
      （↓と同じく、端で止まるようにそろえている
        スマホの1列表示では → と ↓ が同じ向きになるので、動きがちがうと迷うため）
 
