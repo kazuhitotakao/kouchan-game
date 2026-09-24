@@ -3839,7 +3839,13 @@ onUnmounted(() => {
                ※ この画面は、見た目の順番とHTMLの順番が同じ
                  Tabは「← ひとつ前の画面へ戻る → サウンド → いちばん下の ← ひとつ前の画面へ戻る」と上から順に進む -->
           <div class="title-card__tools">
-            <button ref="howToBackButtonRef" type="button" class="title-card__back" @click="closeHowToPlay">← ひとつ前の画面へ戻る</button>
+            <!-- スマホ幅では「← ひとつ前の画面へ戻る」を「← 戻る」の短い表示に入れかえる
+                 （B画面・おやつ選択画面の戻るボタンと同じ出しかた・同じクラス。→ base.css の .title-card__backText--〜）
+                 どちらの表示でも、読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
+            <button ref="howToBackButtonRef" type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
+              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
+              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+            </button>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
 
@@ -4040,9 +4046,13 @@ onUnmounted(() => {
           </section>
 
           <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるようにする
-               （押したときの処理は、上の「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()） -->
+               （押したときの処理は、上の「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()）
+               スマホ幅の「← 戻る」の出しかたも、上のボタンと同じ -->
           <div class="howto-footer">
-            <button type="button" class="title-card__back" @click="closeHowToPlay">← ひとつ前の画面へ戻る</button>
+            <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
+              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
+              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+            </button>
           </div>
         </div>
       </div>
