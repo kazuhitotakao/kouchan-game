@@ -491,18 +491,36 @@
   list-style: none;
 }
 
+/* li はチップ（button）を包むだけ
+   ふつうの行のままだと、button の下に文字の行ぶんのすき間ができて、チップの並びの高さが変わってしまう */
+.status-found__list > li {
+  display: flex;
+}
+
+/* チップは <button>（900px以下で、タップすると名前の吹き出しを出すため → StatusBar.vue の toggleFoundTooltip）
+   ボタンの枠線や文字の設定は消して、今までの丸いチップと同じ見た目にしている
+   PC（901px以上）では名前がはじめから出ていて、押しても何も変わらないので、カーソルは矢印のまま */
 .status-found__item {
   padding: 3px 12px;
+  border: none;
   border-radius: 999px;
   background: #fff3cf;
   color: #7a5410;
+  font: inherit;
   font-size: clamp(13px, 1.05vw, 15px);
   line-height: 1.6;
+  cursor: default;
 }
 
 /* 見つけたものの絵文字は、900px以下（スマホ・タブレットくらいの幅）のときだけ出す（→ @media (max-width: 900px)）
    PCでは今までどおり名前だけ */
 .status-found__icon {
+  display: none;
+}
+
+/* タップした絵文字の名前の吹き出しも、900px以下のときだけ出す（→ @media (max-width: 900px)）
+   PCでは名前がはじめから出ているので要らない */
+.status-found__tooltip {
   display: none;
 }
 
@@ -752,6 +770,51 @@
     overflow: hidden;
     clip-path: inset(50%);
     white-space: nowrap;
+  }
+
+  /* 絵文字をタップすると、すぐ下に名前の吹き出しを出す（🌰 → 「大きなどんぐり」）
+     何を見つけたのか、絵文字だけでは分かりにくいため
+     開け閉め・置き場所の計算は StatusBar.vue の toggleFoundTooltip
+     吹き出しが出ているチップには、ふちどりを付けて「どれの名前か」が分かるようにする */
+  .status-found__item {
+    cursor: pointer;
+  }
+
+  .status-found__item--open {
+    box-shadow: inset 0 0 0 1.5px #d9a53a;
+  }
+
+  /* 見た目は、サウンドのコントロールの吹き出し（sound-control.css の .sound-control__tooltip）とそろえる
+     position: fixed なのは、「見つけたもの」の箱の overflow で切れないようにするため
+     （left・top は StatusBar.vue が、チップの画面上の位置から計算して入れる） */
+  .status-found__tooltip {
+    position: fixed;
+    z-index: 6;
+    display: block;
+    padding: 5px 11px;
+    border: 1px solid rgb(238 249 255 / 55%);
+    border-radius: 8px;
+    background: #14384a;
+    box-shadow: 0 4px 12px rgb(16 29 44 / 45%);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    line-height: 1.5;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    pointer-events: none;
+    animation: found-tooltip-in 0.12s ease;
+  }
+}
+
+/* 名前の吹き出しがふっと出る（音の吹き出しの opacity 0.12秒 と同じ速さ） */
+@keyframes found-tooltip-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
   }
 }
 
