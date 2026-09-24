@@ -500,7 +500,7 @@
   line-height: 1.6;
 }
 
-/* 見つけたものの絵文字は、スマホ幅のときだけ出す（→ @media (max-width: 700px)）
+/* 見つけたものの絵文字は、900px以下（スマホ・タブレットくらいの幅）のときだけ出す（→ @media (max-width: 900px)）
    PCでは今までどおり名前だけ */
 .status-found__icon {
   display: none;
@@ -660,6 +660,98 @@
   .status-area {
     gap: 8px 18px;
     padding: 10px 18px 12px;
+  }
+
+  /* ===== タブレットくらいの幅（701〜900px）の並べかた =====
+
+     ■ 何が起きていたか
+       PCと同じ横3列（時計・サウンド｜こうちゃん・親｜おでかけポイント・おやつ残り）のままだと、
+       左と右の列は幅をゆずらないので、せまくなったぶんが まんなかの「こうちゃん・親」に集まり、
+       701px では1つの枠が 43px しかなくなっていた
+       「こうちゃん」がたて書きのように折り返し、「体力」と「機嫌」、数字と増減が重なっていた
+       （iPad のたて向き 768px や、スマホの横向き 740〜844px がこの幅に入る）
+
+     ■ どう直したか
+       右の列（おでかけポイント・おやつ残り）を、下の「見つけたもの」の段へ移して横にならべる
+         1段目 … 時計・サウンド｜こうちゃん・親（右の列がなくなったぶん、ひろくなる）
+         下の段 … おでかけポイント・おやつ残り｜見つけたもの
+       「見つけたもの」の段はもともとあるので、段は増えず、ステータスの高さは同じか低くなる
+       （ゲージを1段下に独立させる方法もあるが、ステータスが 60〜90px 高くなり、
+         高さの低いスマホの横向きでは、まんなかのエリアが狭くなりすぎるので選ばなかった）
+
+     ※ 700px以下（スマホ）は、下の @media (max-width: 700px) で並べかたをまるごと上書きしている */
+  .status-area {
+    grid-template-areas:
+      'clock gauges'
+      'legend legend'
+      'pills found'
+      'warning warning'
+      'notice notice';
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  /* ポイントの2つは横にならべる（右の列ではなくなったので、左の区切り線もいらない） */
+  .status-pills {
+    flex-direction: row;
+    padding-left: 0;
+    border-left: none;
+  }
+
+  /* 見つけたものは、名前のかわりに絵文字だけを出す（🌲 🪨 🌰 …）
+
+     名前のままだと「ちいさな松ぼっくり」「水色のガラス玉」のように長く、
+     スマホでは3個目あたりから1行に入りきらず、横スクロールになっていた
+     タブレットくらいの幅でも、「見つけたもの」は画面の右半分しか使えないので、同じ出しかたにしている
+     絵文字の一覧は data/places.ts の itemIcons
+
+     ・左右の余白は 5px につめて、丸いチップにする
+     ・名前は見た目からは消して、読み上げ用に残す
+       （display: none にすると、読み上げでも読まれなくなってしまうため）
+
+     ■ 絵文字をチップの上下まんなかに置く
+       文字の行（line-height）のまま置くと、絵文字は行の上のほうに寄ってしまい、
+       チップの上のふちにくっついて見える
+       そこで、チップを flex にして高さを決め、絵文字の箱（line-height: 1）を
+       align-items: center で上下まんなかにそろえている */
+  .status-found__item {
+    display: inline-flex;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    padding: 0 5px;
+    font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  /* 絵文字どうしのすき間も、スマホと同じ 3px にする
+     ※ タブレットくらいの幅では、入りきらないときは横スクロールではなく2行に折り返す
+       （折り返さない指定は、スマホ幅の @media (max-width: 700px) だけ） */
+  .status-found__list {
+    gap: 3px;
+  }
+
+  /* font-family は、絵文字のフォントをいちばん先に書いておく
+
+     書かないと、行の高さや文字の基準線（baseline）は本文のフォント（ヒラギノなど）で決まり、
+     絵文字だけが別のフォントから借りてきて描かれる
+     2つのフォントは上下の寸法がちがうので、Mac・iPhone では
+     箱は上下まんなかでも、絵文字の絵だけが上にずれて、チップの上のふちにくっついて見えた
+     絵文字のフォントを先に書くと、寸法も絵文字のフォントのものになるので、絵がまんなかに来る */
+  .status-found__icon {
+    display: block;
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .status-found__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 
@@ -916,58 +1008,10 @@
     font-size: 12.5px;
   }
 
+  /* 見つけたものを絵文字だけで出す指定は、この上の @media (max-width: 900px) にある
+     （タブレットくらいの幅でも同じ出しかたにするため） */
   .status-found__list {
     flex-wrap: nowrap;
-    gap: 3px;
-  }
-
-  /* 見つけたものは、名前のかわりに絵文字だけを出す（🌲 🪨 🌰 …）
-
-     名前のままだと「ちいさな松ぼっくり」「水色のガラス玉」のように長く、
-     375px の画面で3個目から1行に入りきらず、横スクロールになっていた
-     絵文字の一覧は data/places.ts の itemIcons
-
-     ・左右の余白は 10px → 5px につめて、丸いチップにする
-     ・名前は見た目からは消して、読み上げ用に残す
-       （display: none にすると、読み上げでも読まれなくなってしまうため） */
-  /* 絵文字をチップの上下まんなかに置く
-
-     文字の行（line-height）のまま置くと、絵文字は行の上のほうに寄ってしまい、
-     チップの上のふちにくっついて見える
-     そこで、チップを flex にして高さを決め、絵文字の箱（line-height: 1）を
-     align-items: center で上下まんなかにそろえている */
-  .status-found__item {
-    display: inline-flex;
-    box-sizing: border-box;
-    align-items: center;
-    justify-content: center;
-    height: 20px;
-    padding: 0 5px;
-    font-size: 12.5px;
-    white-space: nowrap;
-  }
-
-  /* font-family は、絵文字のフォントをいちばん先に書いておく
-
-     書かないと、行の高さや文字の基準線（baseline）は本文のフォント（ヒラギノなど）で決まり、
-     絵文字だけが別のフォントから借りてきて描かれる
-     2つのフォントは上下の寸法がちがうので、Mac・iPhone では
-     箱は上下まんなかでも、絵文字の絵だけが上にずれて、チップの上のふちにくっついて見えた
-     絵文字のフォントを先に書くと、寸法も絵文字のフォントのものになるので、絵がまんなかに来る */
-  .status-found__icon {
-    display: block;
-    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-    font-size: 14px;
-    line-height: 1;
-  }
-
-  .status-found__name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   /* 上部ステータスも、こうちゃん と 親 を上下に積む（間もつめる） */
