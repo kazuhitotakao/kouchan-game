@@ -9,6 +9,29 @@
      Nuxtがページの外側から付けるものなので、
      どれか1つのページの中だけに書いても効かないため -->
 <style>
+/* ページ全体で共通に使う @keyframes（danger-pulse／found-in）
+
+   scoped が付かない、この <style> から読みこむことで、
+   @keyframes の名前が付けかえられないようにしている
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある）
+
+   ※ @import は、CSSの決まりで <style> のいちばん先頭に置く必要がある */
+@import '~/assets/css/game/keyframes.css';
+
+/* ちょっとしたできごと／ナイス対応の枠（.event-flash 〜）
+
+   ResultCard.vue と pages/index.vue の両方で使うので、
+   どちらか片方の scoped CSS に入れると、もう片方に届かない
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+@import '~/assets/css/game/event-flash.css';
+
+/* 「どうする？」のコマンド欄（.command-box 〜）
+
+   CommandBox.vue と pages/index.vue（秘密の小道）の両方で使うので、
+   どちらか片方の scoped CSS に入れると、もう片方に届かない
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+@import '~/assets/css/game/command-shared.css';
+
 /* ============================================================
    スクロールバーの場所を、いつも空けておく
 

@@ -2,6 +2,13 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
+/* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
+   タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
+import SoundControl from '~/components/game/SoundControl.vue';
+
+/* ゲームの題名（pages/index.vue と同じものを data/game.ts から読む） */
+import { gameTitle } from '~/data/game';
+
 /* ============================================================
    サウンドトラックページ（/soundtrack）
 
@@ -15,8 +22,6 @@ import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/
    そのため、本編のBGMの関数（playParkBgm など）はいっさい使わない
    このページの中だけで完結する、シンプルな作りにしている
    ============================================================ */
-
-const gameTitle: string = 'こうちゃんの大冒険';
 
 /* 1曲ぶんの情報のかたち
 
@@ -321,7 +326,11 @@ const duration = ref(0);
      聴きかたで切りかわるのは、押したときの中身（どの曲順で前後するか）と、停止の文字だけ
      （→ playPreviousTrack / playNextTrack / stopButtonLabel） */
 const backButtonRef = ref<HTMLButtonElement | null>(null);
-const soundToggleButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* サウンドのミュートボタンは、SoundControl.vue の中にあるので、コンポーネントごしに借りてくる
+   （pages/index.vue のタイトル画面と同じやりかた。SoundControl.vue が defineExpose で見せている） */
+const soundControlRef = ref<InstanceType<typeof SoundControl> | null>(null);
+const soundToggleButtonRef = computed<HTMLButtonElement | null>(() => soundControlRef.value?.toggleButton ?? null);
 const playAllButtonRef = ref<HTMLButtonElement | null>(null);
 const shuffleButtonRef = ref<HTMLButtonElement | null>(null);
 const previousTrackButtonRef = ref<HTMLButtonElement | null>(null);
@@ -2432,7 +2441,9 @@ function handleToolbarKeydown(event: KeyboardEvent) {
 
   // いま左（戻る）と右（サウンド）のどちらにいるか
   const onBack = Boolean(target.closest('.st-back'));
-  const onSound = Boolean(target.closest('.st-soundToggle'));
+  // SoundControl.vue のミュートボタン（.sound-toggle）
+  // となりの音量バーは対象にしない（← → は、バー本来の「音量を変える」操作に使う）
+  const onSound = Boolean(target.closest('.sound-toggle'));
 
   if (!onBack && !onSound) {
     return;
@@ -2730,7 +2741,7 @@ onUnmounted(() => {
          ============================================================ -->
     <div class="st-fixedArea">
       <!-- ============================================================
-           上部ツールバー（← はじめの画面へ戻る ／ 🔊 サウンド ON/OFF）
+           上部ツールバー（← はじめの画面へ戻る ／ 🔊 ミュートボタン ＋ 音量バー）
 
            ■ なぜ戻るボタンを、いちばん上へ移したのか
              前は「← はじめの画面へ戻る」が、曲の一覧のいちばん下にあった
@@ -2778,36 +2789,37 @@ onUnmounted(() => {
       <div class="st-toolbar" @keydown="handleToolbarKeydown">
         <!-- 押したときの処理は、前に一覧の下にあったボタンと同じ goToTitle()
              （決定音「ポン♪」 → 曲の音だけ止める → はじめの画面へ。連打しても移動は1回だけ）
-             ref … 矢印キーで「▶ 全曲再生」から↑で戻る先、サウンドから←で移る先 -->
-        <button ref="backButtonRef" type="button" class="st-back" @click="goToTitle">← はじめの画面へ戻る</button>
+             ref … 矢印キーで「▶ 全曲再生」から↑で戻る先、サウンドから←で移る先
 
-        <!-- ゲーム本編（pages/index.vue）のサウンドボタンと同じ形にしてある
-
-             aria-pressed … 読み上げソフトへ「いま押されている（＝ON）」を伝える
-                            見た目（色・🔊 / 🔊✕）も、この値をもとにCSSで切り替えている
-             ON と OFF の文字は同じ場所に重ねて置き、使わないほうを見えなくする
-             （ボタンの幅がいつも同じになるので、押してもツールバーの並びがずれない）
-             ref … 矢印キーで「🔀 シャッフル再生」から↑で戻る先、戻るから→で移る先 -->
-        <button
-          ref="soundToggleButtonRef"
-          type="button"
-          class="st-soundToggle"
-          :aria-pressed="soundEnabled"
-          :aria-label="soundEnabled ? 'サウンドをミュート' : 'サウンドをオン'"
-          @click="toggleSound">
-          <span class="st-soundToggle__icon">
-            <!-- スピーカーは、ONでもOFFでも同じ 🔊 のまま
-                 OFFのときだけ右に「✕」を足して（🔊✕）、音が出ない状態だと一目で分かるようにする
-                 ✕ の場所はONのときも残るので、押してもボタンの幅は変わらない -->
-            <span class="st-soundToggle__iconSpeaker">🔊</span>
-            <span class="st-soundToggle__iconCross">✕</span>
-          </span>
-          <span class="st-soundToggle__text">サウンド</span>
-          <span class="st-soundToggle__state">
-            <span class="st-soundToggle__stateText st-soundToggle__stateText--on">ON</span>
-            <span class="st-soundToggle__stateText st-soundToggle__stateText--off">OFF</span>
-          </span>
+             スマホ幅では「← はじめの画面へ戻る」を「← 戻る」の短い表示に入れかえる
+             （タイトル画面（B画面）の戻るボタンと同じ出しかた。→ style の @media (max-width: 600px)）
+             どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
+        <button ref="backButtonRef" type="button" class="st-back" aria-label="はじめの画面へ戻る" @click="goToTitle">
+          <span class="st-back__textFull" aria-hidden="true">← はじめの画面へ戻る</span>
+          <span class="st-back__textShort" aria-hidden="true">← 戻る</span>
         </button>
+
+        <!-- サウンドのコントロール（🔊 ミュートボタン ＋ 音量バー）
+
+             タイトル画面（B画面）の右上と同じ部品（components/game/SoundControl.vue）をそのまま使う
+             ・🔊 ミュートボタン … サウンドON/OFF（OFFのときは 🔊✕）→ toggleSound
+             ・音量バー         … このページの音量（0〜100％）→ changeMasterVolume
+             何のボタンかは、読み上げ用の aria-label と、hover / focus のときの吹き出しで伝わる
+
+             ※ ゲーム本編とちがい、このページのサウンドON/OFFと音量は、別々の設定のまま
+               （OFFは「鳴っている曲を一時停止する」、音量は「大きさだけ変える」。
+                 音量を0%にしても、ミュート（OFF）にはならない）
+             ※ 前は「🔊 サウンド ON」のボタンがここにあり、音量は下の「再生の設定」の中にあったが、
+               B画面と同じ見た目にそろえるため、ここに1つにまとめた
+
+             ref … 中のミュートボタン（toggleButton）を、矢印キーの行き先として借りるための目印
+                   （「🔀 シャッフル再生」から↑で戻る先、戻るから→で移る先 → soundToggleButtonRef） -->
+        <SoundControl
+          ref="soundControlRef"
+          :sound-enabled="soundEnabled"
+          :sound-volume-percent="masterVolumePercent"
+          @toggle="toggleSound"
+          @volume-change="changeMasterVolume" />
       </div>
 
       <!-- ============================================================
@@ -2840,7 +2852,7 @@ onUnmounted(() => {
            ・個別再生         … 画面の一覧の順番（tracks）。はしでは回りこむ。全曲再生にはならない
            ・全曲／シャッフル … 今回の1周の曲順（playlistTracks）。シャッフルの「前」も、作った順番を戻るだけ
            ============================================================ -->
-      <section class="st-playall">
+      <section class="st-playall" :class="{ 'st-playall--active': hasPlaybackControls }">
         <!-- 全曲を続けて鳴らす、2つの始めかた
 
              ・▶ 全曲再生     … 開始曲から、一覧に出ている登録順のまま
@@ -2956,44 +2968,44 @@ onUnmounted(() => {
                ・↓   … 曲の一覧の01「▶ 再生」へ（↑で戻るときは、入ったボタンへ帰る）
                （下のリピート・音量スライダーへは、矢印キーでは移らない）
              ============================================================ -->
+        <!-- 3つのボタンの文字は、長い文字（__labelLong）と短い文字（__labelShort）の2つを入れてある
+             ・PC       … 長い文字（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 全曲再生を停止 など）
+             ・スマホ幅 … 短い文字（⏮ 前へ ／ ⏭ 次へ ／ ■ 停止）にして、3つを1段にならべる
+                          （操作エリアを低くして、曲の一覧を広く見せるため → style の @media (max-width: 600px)）
+             読み上げソフトには、どちらの幅でも aria-label の長い名前を伝える -->
         <div v-if="hasPlaybackControls" class="st-playall__actions" @keydown="handlePlayallButtonsKeydown">
           <!-- ref … 「⏭ 次のトラックへ」から←で移ってくる先 -->
           <button ref="previousTrackButtonRef" type="button" class="st-playall__button st-playall__button--previous" aria-label="1つ前のトラックを先頭から再生する" @click="playPreviousTrack">
-            ⏮ 前のトラックへ
+            <span class="st-playall__labelLong">⏮ 前のトラックへ</span>
+            <span class="st-playall__labelShort">⏮ 前へ</span>
           </button>
 
           <!-- ref … 上段の「▶ 全曲再生」から↓で降りてくる先 -->
           <button ref="nextTrackButtonRef" type="button" class="st-playall__button st-playall__button--next" aria-label="現在の曲を飛ばして次のトラックを再生する" @click="playNextTrack">
-            ⏭ 次のトラックへ
+            <span class="st-playall__labelLong">⏭ 次のトラックへ</span>
+            <span class="st-playall__labelShort">⏭ 次へ</span>
           </button>
 
           <!-- ref … 上段の「🔀 シャッフル再生」から↓で降りてくる先
-               文字は、いまの聴きかたに合わせて変わる（→ stopButtonLabel） -->
-          <button ref="stopPlaybackButtonRef" type="button" class="st-playall__button st-playall__button--stop" @click="stopSoundtrack">{{ stopButtonLabel }}</button>
+               文字は、いまの聴きかたに合わせて変わる（→ stopButtonLabel）
+               スマホ幅の短い文字は、どの聴きかたでも「■ 停止」 -->
+          <button ref="stopPlaybackButtonRef" type="button" class="st-playall__button st-playall__button--stop" :aria-label="stopButtonLabel" @click="stopSoundtrack">
+            <span class="st-playall__labelLong">{{ stopButtonLabel }}</span>
+            <span class="st-playall__labelShort">■ 停止</span>
+          </button>
         </div>
 
-        <!-- 再生の設定（リピート ＋ 音量）
+        <!-- 再生の設定（リピート）
 
              「どの曲を・どこから鳴らすか」を決めるこの箱の中に、
              「どんなふうに鳴らすか」もまとめて置いてある
 
              ・リピート … 鳴らし終えたあと、くりかえすかどうか
-             ・音量     … 出すときの大きさ（0〜100％）
 
-             ※ 前はここに「🔊 サウンド ON/OFF」もあったが、
-               ページ全体の設定なので、いつも画面に残る上部ツールバー（st-toolbar）へ移した
-               サウンドOFFのときの案内（この箱のすぐ下）と、音量を薄くする表示は、
-               今までどおり soundEnabled を見て、ここに出る
-
-             曲カードの中にある再生バーとは役わりがちがうので、
-             見まちがえないように「音量」の文字と、
-             いまの大きさ（％）をかならずそえておく
-             ・再生バー … 曲の「どこ」を鳴らすか（時間）
-             ・音量バー … 「どのくらいの大きさ」で鳴らすか
-
-             ※ 🔊 の絵文字は、上部ツールバーのサウンドボタンだけに付けている
-               音量のほうにも付けると、OFF（🔊✕）のときも ✕ のない 🔊 が見えてしまい、
-               いまONなのかOFFなのかが分かりにくくなるため -->
+             ※ 前はここに「🔊 サウンド ON/OFF」と「音量」もあったが、
+               どちらも上部ツールバー（st-toolbar）の SoundControl にまとめた
+               （タイトル画面（B画面）と同じ、🔊 ミュートボタン ＋ 音量バー の形）
+               サウンドOFFのときの案内（この箱のすぐ下）は、今までどおり soundEnabled を見て、ここに出る -->
         <div class="st-settings">
           <!-- 🔁 リピート（押すたびに OFF → 全曲 → 1曲 → OFF と回る）
 
@@ -3012,26 +3024,6 @@ onUnmounted(() => {
               <span class="st-repeat__stateText st-repeat__stateText--one">1曲</span>
             </span>
           </button>
-
-          <!-- サウンドOFFのあいだは、音量を変えても音が出ないので少し薄くする
-               （さわれなくはしない。OFFのうちに、次に鳴らす大きさを決めておける） -->
-          <div class="st-volume" :class="{ 'st-volume--off': !soundEnabled }">
-            <p class="st-volume__label">音量</p>
-
-            <input
-              type="range"
-              class="st-volume__slider"
-              min="0"
-              max="100"
-              step="1"
-              :value="masterVolumePercent"
-              :style="{ '--volume-progress': masterVolumePercent + '%' }"
-              aria-label="サウンドトラックの音量"
-              :aria-valuetext="masterVolumePercent + 'パーセント'"
-              @input="changeMasterVolume" />
-
-            <span class="st-volume__value">{{ masterVolumePercent }}%</span>
-          </div>
         </div>
 
         <!-- サウンドOFFのあいだだけ出す案内
@@ -3245,6 +3237,8 @@ onUnmounted(() => {
   /* 色はゲーム画面と同じものを使う */
   --navy: #2a768f;
   --navy-deep: #226981;
+  /* うすい水色の線（上部ツールバーの SoundControl.vue の枠に使われる。ゲーム画面の .game と同じ値） */
+  --navy-line: #86c6dd;
   --paper: #fffdf9;
   --ink: #4e5860;
   --ink-soft: #8d949b;
@@ -3362,7 +3356,7 @@ onUnmounted(() => {
 }
 
 /* ============================================================
-   上部ツールバー（← はじめの画面へ戻る ／ 🔊 サウンド ON/OFF）
+   上部ツールバー（← はじめの画面へ戻る ／ 🔊 ミュートボタン ＋ 音量バー）
 
    画面に残る操作エリア（.st-fixedArea）の、いちばん上に置いている
    操作エリアはスクロールしないので、曲の一覧をどこまで見ていても、
@@ -3394,15 +3388,22 @@ onUnmounted(() => {
   box-shadow: 0 4px 12px rgb(35 57 94 / 14%);
 }
 
-/* 右のサウンドボタンは、いつも右はしに置く
+/* 右のサウンド（🔊 ミュートボタン ＋ 音量バー。components/game/SoundControl.vue）は、いつも右はしに置く
 
-   margin-left: auto … 左がわの余りを、ぜんぶこのボタンの左に入れる
+   margin-left: auto … 左がわの余りを、ぜんぶこのまとまりの左に入れる
    1行に収まっているときは、justify-content: space-between と同じ見た目
-   （スマホでは、2つのボタンが幅を分け合って広がるので、余りが無く、ここは効かない
-     → スマホ用の指定（@media (max-width: 600px)）の .st-back を参照）
 
-   ※ ボタンの形そのものは、下の「.st-repeat, .st-soundToggle」をそのまま使っている */
-.st-toolbar .st-soundToggle {
+   大きさは、タイトル画面（B画面）の右上と同じ値にそろえる（assets/css/game/sound.css の .title-card__tools）
+   SoundControl.vue は、この3つの値だけで ボタン・アイコン・音量バーの大きさが決まる作りになっている
+   ・--sound-button-size … 枠の高さ（左の戻るボタンと高さをそろえる）
+   ・--sound-icon-size   … 🔊 の大きさ
+   ・--sound-slider-width … 音量バーの長さ
+   スマホでは、下の @media (max-width: 600px) で、B画面のスマホと同じ値に小さくする */
+.st-toolbar .sound-control {
+  --sound-button-size: 38px;
+  --sound-icon-size: 20px;
+  --sound-slider-width: 110px;
+
   margin-left: auto;
 }
 
@@ -3412,12 +3413,12 @@ onUnmounted(() => {
    （紺色の枠・白い背景・丸いボタン・hover / active / focus-visible）
 
    ツールバーに入れたので、変えたのは次の3つだけ
-   ・高さ     … となりのサウンドボタンとそろえる
-                 （上下の余白 7px と 行の高さ 1.4 は、サウンドボタンと同じ値）
+   ・高さ     … となりのサウンド（SoundControl.vue の枠 38px）と、だいたいそろえる
+                 （上下の余白 7px ＋ 行の高さ 1.4 ＋ 枠）
    ・折り返し … 「← はじめの画面へ戻る」がボタンの中で2行に割れないようにする
                  （入りきらないときは、ボタンの中ではなく、ツールバーごと2段になる）
    ・hover   … 紙の色のツールバーの上では、白に変えても見分けがつかないので、
-                 サウンドボタンと同じ うすい水色にする */
+                 リピートボタンと同じ うすい水色にする */
 .st-back {
   padding: 7px 16px;
   border: 2px solid var(--navy);
@@ -3433,6 +3434,13 @@ onUnmounted(() => {
   transition:
     background-color 0.15s ease,
     transform 0.1s ease;
+}
+
+/* 戻るボタンの短い表示（「← 戻る」）
+   ふだんは長いほう（← はじめの画面へ戻る）だけを出して、スマホ幅のときだけ入れかえる
+   （→ @media (max-width: 600px)） */
+.st-back__textShort {
+  display: none;
 }
 
 .st-back:hover {
@@ -3501,9 +3509,8 @@ onUnmounted(() => {
    設定だけのために箱をもう1つ増やすとページが長くなるので、
    同じ「再生まわりの操作」として、この箱の中へ入れてある
    上の行とは、全曲再生中の案内と同じ点線で区切る
-   PCでは「🔁 リピート OFF ／ 音量 ／ スライダー ／ 70%」が1行に並ぶ
-   せまい画面では、音量のまとまりが次の行へ折り返す
-   （🔊 サウンド ON/OFF は、上部ツールバー（.st-toolbar）へ移した）
+   いまは「🔁 リピート OFF」の1つだけ
+   （🔊 サウンド ON/OFF と音量は、上部ツールバー（.st-toolbar）の SoundControl.vue へ移した）
    ============================================================ */
 .st-settings {
   display: flex;
@@ -3515,22 +3522,14 @@ onUnmounted(() => {
   border-top: 2px dashed #c8d4e6;
 }
 
-/* 「🔁 リピート」と「🔊 サウンド」の2つのボタン
+/* 「🔁 リピート」のボタン
 
-   どちらも「押すたびに状態が変わる、設定のボタン」なので、
-   同じ形（丸い枠のボタン）にして、まとめて指定している
+   「押すたびに状態が変わる、設定のボタン」なので、丸い枠のボタンにしている
    ・🔁 リピート … OFF → 全曲 → 1曲 → OFF と順ぐりに回る（再生の設定の中）
-   ・🔊 サウンド … ON ⇄ OFF が入れかわる（上部ツールバーの右）
 
-   サウンドは上部ツールバーへ移したが、見た目は前と同じものを使うので、
-   置き場所が分かれても、ここでまとめて指定したままにしてある
-   （ツールバーの中での並べかたは、.st-toolbar のところに書いてある）
-
-   考えかたはゲーム本編（pages/index.vue）の .sound-toggle と同じで、
-   ちがうのは、このページの大きさ・色に合わせてあることだけ
-   本編の上部バーのボタンは小さめだが、こちらは指でも押しやすい大きさにしている */
-.st-repeat,
-.st-soundToggle {
+   ※ 前は「🔊 サウンド」のボタンも同じ形でここにあったが、
+     いまは上部ツールバーの SoundControl.vue（タイトル画面と同じ部品）に置きかえた */
+.st-repeat {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -3553,97 +3552,47 @@ onUnmounted(() => {
 
 /* はたらいていないとき（リピートなし・サウンドOFF）は、色をぬく
    絵文字や文字だけでなく色でも、「いまは何も起きない設定」だと分かるようにする */
-.st-repeat[data-repeat='off'],
-.st-soundToggle[aria-pressed='false'] {
+.st-repeat[data-repeat='off'] {
   border-color: #b9c6d6;
   background: #eef2f7;
   color: var(--ink-soft);
 }
 
-.st-repeat:hover,
-.st-soundToggle:hover {
+.st-repeat:hover {
   background: #e8f4fb;
 }
 
 /* 押した瞬間：ほんの少しだけ沈む */
-.st-repeat:active,
-.st-soundToggle:active {
+.st-repeat:active {
   transform: translateY(1px);
 }
 
 /* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
-.st-repeat:focus-visible,
-.st-soundToggle:focus-visible {
+.st-repeat:focus-visible {
   outline: 3px solid var(--navy);
   outline-offset: 3px;
 }
 
-.st-repeat__icon,
-.st-soundToggle__icon {
+.st-repeat__icon {
   font-size: 16px;
   line-height: 1;
 }
 
-/* スピーカーのアイコン（🔊 と、OFFのときだけ出る ✕）
-
-   ミュートの絵文字 🔇 は「斜めの線」だけなので、小さく出すと
-   音が出ない状態なのかどうかが、ぱっと見では分かりにくい
-   そこで、スピーカーはONでもOFFでも同じ 🔊 のままにしておいて、
-   OFFのときだけ、右に「✕」を足す（🔊✕）
-
-   ✕ は、ONのときも visibility で場所を残しておく（display: none にしない）
-   下の「ON」「OFF」の文字と同じ考えかたで、押してもボタンの幅が変わらない
-   （本編の pages/index.vue の .sound-toggle__icon と同じ考えかた） */
-.st-soundToggle__icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-}
-
-/* 「✕」の大きさは em（スピーカーとの比）で指定している
-   スマホでアイコンを小さくしても、つりあいは同じになる */
-.st-soundToggle__iconCross {
-  font-size: 0.95em;
-  font-weight: 700;
-}
-
-/* サウンドOFFのときは、ボタン全体の色をぬいている（上の指定）が、
-   「✕」だけは、いちばん伝えたい印なので、うすくせずに読みやすい濃さのままにする */
-.st-soundToggle[aria-pressed='false'] .st-soundToggle__iconCross {
-  color: var(--ink);
-}
-
-/* サウンドONのときは「✕」を見えなくする（場所はそのまま残る）
-   aria-pressed は true＝サウンドON、false＝サウンドOFF */
-.st-soundToggle[aria-pressed='true'] .st-soundToggle__iconCross {
-  visibility: hidden;
-}
-
-/* 状態の文字（OFF / 全曲 / 1曲、ON / OFF）が変わっても、
-   ボタンの幅を変えないための工夫（本編と同じ）
+/* 状態の文字（OFF / 全曲 / 1曲）が変わっても、ボタンの幅を変えないための工夫
 
    文字をぜんぶ同じマスに重ねて置き、いま使わないものを visibility で見えなくする
    display: none とちがい visibility は「場所は残したまま消す」ので、
-   幅はいつもいちばん長い文字のままになり、押しても右の音量がずれない */
-.st-repeat__state,
-.st-soundToggle__state {
+   幅はいつもいちばん長い文字のままになる */
+.st-repeat__state {
   display: grid;
 }
 
-.st-repeat__stateText,
-.st-soundToggle__stateText {
+.st-repeat__stateText {
   grid-area: 1 / 1; /* ぜんぶ同じマスに置いて重ねる */
   text-align: center;
 }
 
-/* サウンドは2つのうち、いま使わないほうを見えなくする
-   aria-pressed は true＝サウンドON、false＝サウンドOFF */
-.st-soundToggle[aria-pressed='true'] .st-soundToggle__stateText--off,
-.st-soundToggle[aria-pressed='false'] .st-soundToggle__stateText--on {
-  visibility: hidden;
-}
-
-/* リピートは3つあるので、逆に「いまの1つだけ」を見せるようにする
+/* リピートは3つあるので、「いまの1つだけ」を見せるようにする
    data-repeat には、いまの状態（off / all / one）が入っている */
 .st-repeat__stateText {
   visibility: hidden;
@@ -3664,117 +3613,6 @@ onUnmounted(() => {
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.6;
-}
-
-/* 音量のまとまり（「音量 ／ スライダー ／ 70%」）
-
-   flex: 1 … リピートボタンの右に残った幅を、まるごと使う
-   min-width … これより狭くなるくらいなら、1行まるごと使いたいので、
-               次の行へ折り返させる（リピートボタンと肩を並べない） */
-.st-volume {
-  display: flex;
-  flex: 1;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px 14px;
-  min-width: 260px;
-}
-
-/* サウンドOFFのあいだは、音量を変えても音が出ないので少し薄くする */
-.st-volume--off {
-  opacity: 0.55;
-}
-
-.st-volume__label {
-  margin: 0;
-  color: var(--navy-deep);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.6;
-  white-space: nowrap;
-}
-
-/* いまの大きさ（％）
-   数字が変わっても場所が動かないように、
-   min-width で場所を取り、tabular-nums で数字の幅をそろえる */
-.st-volume__value {
-  min-width: 52px;
-  color: var(--navy-deep);
-  font-size: 15px;
-  font-weight: 700;
-  line-height: 1.6;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-/* スライダー本体
-
-   作りかたは曲の再生バー（.track__seek）と同じで、
-   ・レールとつまみを、ブラウザごとに別々に指定する
-   ・左（小さい側）だけ色を変えるために、下地のグラデーションを使う
-     境目の位置は、画面から --volume-progress で渡している
-   指でもつまみやすいように、細くしすぎない */
-.st-volume__slider {
-  flex: 1;
-  min-width: 180px;
-  height: 24px;
-  margin: 0;
-  padding: 0;
-  background: none;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* レール（Chrome / Safari / Edge） */
-.st-volume__slider::-webkit-slider-runnable-track {
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--navy) var(--volume-progress, 100%), #d7e4f0 var(--volume-progress, 100%));
-}
-
-/* つまみ（Chrome / Safari / Edge）
-   （つまみ18px − レール6px）÷ 2 = 6px ぶん、上へずらして真ん中にそろえる */
-.st-volume__slider::-webkit-slider-thumb {
-  width: 18px;
-  height: 18px;
-  margin-top: -6px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--navy);
-  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
-  -webkit-appearance: none;
-  appearance: none;
-}
-
-/* レール（Firefox） */
-.st-volume__slider::-moz-range-track {
-  height: 6px;
-  border-radius: 999px;
-  background: #d7e4f0;
-}
-
-/* 小さい側（Firefox は、はじめから塗り分ける機能がある） */
-.st-volume__slider::-moz-range-progress {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--navy);
-}
-
-/* つまみ（Firefox） */
-.st-volume__slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  border: 2px solid #fff;
-  border-radius: 50%;
-  background: var(--navy);
-  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
-}
-
-/* Tabキーで移動してきたとき、どこにいるかが分かるようにする */
-.st-volume__slider:focus-visible {
-  outline: 3px solid var(--navy);
-  outline-offset: 4px;
 }
 
 /* ============================================================
@@ -4025,6 +3863,12 @@ onUnmounted(() => {
   max-width: 210px;
   padding: 9px 16px;
   font-size: 15px;
+}
+
+/* 操作行の短い文字（⏮ 前へ ／ ⏭ 次へ ／ ■ 停止）は、スマホ幅のときだけ出す
+   （→ @media (max-width: 600px)。PCでは長い文字のまま） */
+.st-playall__labelShort {
+  display: none;
 }
 
 /* ============================================================
@@ -4337,7 +4181,15 @@ onUnmounted(() => {
    押せないことが分かるよう、ふちは点線、色はうすくしている
    （ボタンが無いので、:hover や :focus-visible の見た目も付けない）
    ============================================================ */
+/* position: relative が大事
+   中の読み上げ用の文字（.st-lockedTrack__srText）は position: absolute で、
+   いちばん近い position 付きの箱を基準に置かれる
+   これが無いと、基準がページ全体（body）になり、曲の一覧の箱の外へ飛び出して、
+   ページそのものが曲の一覧の長さぶん（375×667 で約860px）スクロールできるようになっていた
+   （スマホで指を動かすと、曲の一覧ではなくページごと動いて、上の操作エリアが画面の外へ消えてしまう）
+   このカードを基準にすると、文字はカードの中（＝曲の一覧の箱の中）に収まる */
 .st-lockedTrack {
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
@@ -4541,48 +4393,43 @@ onUnmounted(() => {
 
   /* 上部ツールバー（スマホ）
 
-     「← はじめの画面へ戻る」「🔊 サウンド ON」を、なるべく1行に並べる
+     タイトル画面（B画面）の右上と同じ並べかたにする
+       左 … 「← 戻る」（文字の長さぶんの、小さな丸いボタン）
+       右 … 🔊 ミュートボタン ＋ 音量バー（SoundControl.vue。B画面と同じ部品）
 
-     戻るボタンの文字は「← 戻る」に短くしない
-     PCとスマホで、ボタンの意味がちがって見えないようにするため
-     そのかわり、文字・余白・すき間を少しずつ小さくして横に収める
-     （幅360pxくらいの画面までは、1行に収まる大きさを目安にしてある）
+     戻るボタンの文字は、スマホでは「← 戻る」に短くする
+     タイトル画面（B画面）の戻るボタンも、スマホでは「← 戻る」なので、それに合わせている
+     （前は「PCとスマホでボタンの意味がちがって見えないように、短くしない」としていたが、
+       B画面と同じ出しかたにそろえるほうを選んだ。読み上げ用の名前は aria-label の「はじめの画面へ戻る」）
 
-     それでも入りきらない、とても狭い画面では、
-     ボタンを押しにくいほど小さくするより、ツールバーごと2段に折り返す
-     （.st-toolbar の flex-wrap: wrap。2段のときは、それぞれのボタンが1段まるごとの幅になる）
-
-     min-height: 36px … 小さくしても、指で押せる高さは残す
-     ツールバーのカードの上下の余白と、見出しとのすき間は、少しつめる（操作エリアを低くするため） */
+     ・min-height: 36px … 小さくしても、指で押せる高さは残す（右のサウンドの枠の高さともそろう）
+     ・ツールバーのカードの上下の余白と、見出しとのすき間は、少しつめる（操作エリアを低くするため） */
   .st-toolbar {
     gap: 6px 8px;
     margin-bottom: 8px;
     padding: 4px 6px;
   }
 
-  /* flex: 1 1 auto … 2つのボタンで、ツールバーの横幅を分け合って広がる
-     ・1行に収まるとき           … 2つが横にならび、どちらも指で押しやすい幅になる
-     ・とても狭い画面で2段のとき … それぞれが1段まるごとの幅になり、
-                                   左上と右下に分かれた「階段」のような見た目にならない
-     （全曲再生・曲ごとの ▶ 再生 も、スマホでは横いっぱいなので、見た目もそろう）
-
-     justify-content: center … 広がったボタンの中で、アイコンと文字を真ん中に置く
-     （サウンドボタンは inline-flex なので、この指定が要る。戻るボタンは、もともと真ん中） */
-  .st-back,
-  .st-toolbar .st-soundToggle {
-    flex: 1 1 auto;
-    justify-content: center;
+  .st-back {
     min-height: 36px;
-    padding: 7px 10px;
-    font-size: 13px;
+    padding: 7px 14px;
+    font-size: 13.5px;
   }
 
-  .st-toolbar .st-soundToggle {
-    gap: 5px;
+  /* 戻るボタンは「← 戻る」の短い表示にする（タイトル画面（B画面）と同じ） */
+  .st-back__textFull {
+    display: none;
   }
 
-  .st-toolbar .st-soundToggle__icon {
-    font-size: 14px;
+  .st-back__textShort {
+    display: inline;
+  }
+
+  /* 右のサウンドは、B画面のスマホと同じ大きさにする（assets/css/game/sound.css の .title-card__tools） */
+  .st-toolbar .sound-control {
+    --sound-button-size: 36px;
+    --sound-icon-size: 19px;
+    --sound-slider-width: 84px;
   }
 
   .st-playall {
@@ -4617,12 +4464,8 @@ onUnmounted(() => {
 
   /* 操作行（⏮ 前のトラックへ／⏭ 次のトラックへ／■ 停止）は、文字を1段小さくして、左右の余白もつめる
 
-     3つを横に押しこむと文字が入りきらないので、むりに1段にはしない
-     ・幅 360px くらい   … 「前」「次」が1段目、「停止」が2段目（横いっぱい）
-     ・もう少し広いスマホ … 入れば3つが1段にならぶ
-     ・とてもせまい画面   … 1つずつ縦に積む
-     どれも flex-wrap の自動の折り返しなので、横にはみ出すことはない
-     （PC用の min-width: max-content が効いているので、文字もボタンからはみ出さない）
+     ※ 前は「長い文字のまま、入りきらなければ2段・3段に折り返す」作りだった
+       いまは、スマホ幅では文字を短くして、かならず1段にならべている（→ すぐ下の指定）
 
      ※ PC用の上限（max-width: 210px）は外して、段の中では横いっぱいまで広げる（指で押しやすくする）
      ※ 高さは約45pxあるので、指での押しやすさはそのまま */
@@ -4632,6 +4475,39 @@ onUnmounted(() => {
     font-size: 14px;
   }
 
+  /* 操作行の3つを、短い文字（⏮ 前へ ／ ⏭ 次へ ／ ■ 停止）にして1段にならべる
+
+     上の説明のとおり、長い文字のままだと3つは1段に入りきらず、2段（約98px）になっていた
+     再生を始めるたびに操作エリアがそのぶん高くなり、375×667 では曲の一覧が約30pxまで小さくなっていた
+     文字を短くすれば、320px の画面でも3つが1段に収まる
+     ・min-width: 0 … PC用の min-width: max-content（長い文字の幅）をやめる
+     ・flex-wrap: nowrap … 3つをかならず1段にする
+     ・何のボタンかは、読み上げソフトには aria-label の長い名前で伝わる */
+  .st-playall__actions {
+    flex-wrap: nowrap;
+  }
+
+  .st-playall__actions .st-playall__button {
+    min-width: 0;
+  }
+
+  .st-playall__labelLong {
+    display: none;
+  }
+
+  .st-playall__labelShort {
+    display: inline;
+  }
+
+  /* 曲を選んでいるあいだ（再生中・一時停止中）は、「下の一覧で番号を押すと…」の説明を隠す
+
+     この説明は、止まっているときに「どの曲から全曲再生を始めるか」を知らせるためのもの
+     再生中まで出していると、そのぶん（約42px）操作エリアが高くなり、曲の一覧がせまくなる
+     止めれば、また出る（.st-playall--active は hasPlaybackControls のあいだだけ付く） */
+  .st-playall--active .st-playall__hint {
+    display: none;
+  }
+
   /* 説明文（番号を押すと…／サウンドOFF中です…）は、上のすき間と文字を少しつめる */
   .st-playall__hint,
   .st-settings__hint {
@@ -4639,62 +4515,88 @@ onUnmounted(() => {
     font-size: 13px;
   }
 
-  /* 全曲再生中の案内も、上のすき間を少しつめる */
+  /* いま鳴っている曲の案内も、上のすき間を少しつめて、2行にまとめる
+
+       1行目 … ♪ 全曲再生中　［再生中の曲を見る］
+       2行目 … 6 / 7　06 きょうの大冒険、おしまい！
+
+     前は「目印と N / 曲数」「曲名」「再生中の曲を見る」がそれぞれ1行ずつの3行（約98px）で、
+     再生を始めるたびに、そのぶん曲の一覧がせまくなっていた
+     「再生中の曲を見る」を1行目の目印のとなりへ上げて、2行（約65px）にする
+     （「🔀 シャッフル再生中」は長いので、「6 / 7」まで1行目に入れると入りきらず、3行になってしまう
+       そこで「6 / 7」は2行目の曲名の前へ回す）
+
+     ・::after … 高さ0の「改行」の役わり
+                 flex-basis: 100% で1行まるごと使うので、この前と後ろで、かならず行が分かれる
+     ・order     … HTMLでは「目印・N/曲数・曲名・見るボタン」の順だが、
+                   目印と見るボタン（0）→ 改行（1）→ N/曲数と曲名（2）の順にならべかえる
+     ・align-items: center … 1行目の目印とボタンの上下をそろえる */
   .st-playall__status {
-    gap: 2px 10px;
+    align-items: center;
+    gap: 2px 8px;
     margin-top: 8px;
     padding-top: 8px;
   }
 
-  /* 再生の設定（リピートと音量）
+  .st-playall__status::after {
+    content: '';
+    order: 1;
+    flex-basis: 100%;
+    height: 0;
+  }
 
-     前は「🔁 リピート」「音量　70%」「スライダー」の3行に分けていたが、
-     操作エリアを低くするため、音量の文字とスライダーと％を1行にまとめて、2行にする
-       1行目 … 🔁 リピート OFF
-       2行目 … 音量 ━━━━━━━━ 70%（スライダーは、残りの幅をぜんぶ使う）
+  .st-playall__count,
+  .st-playall__track {
+    order: 2;
+  }
 
-     flex-basis: 100% … 音量のまとまりは、いつも1行まるごと使う
-     min-width: 0     … PC用の min-width（音量 260px・スライダー 180px）が残っていると、
-                        とても狭い画面ではみ出してしまうので外しておく */
+  .st-playall__track {
+    line-height: 1.4;
+    text-align: center;
+  }
+
+  /* 1行目の目印とボタンを、ひと回り小さくする
+     いちばん長い「🔀 シャッフル再生中」と「再生中の曲を見る」が、
+     幅 360px の画面でも1行にならぶようにするため（入りきらないと、また3行になってしまう） */
+  .st-playall__badge {
+    padding: 2px 10px;
+    font-size: 13px;
+  }
+
+  .st-playall__see {
+    padding: 3px 10px;
+    font-size: 12px;
+  }
+
+  /* 再生の設定（🔁 リピート）
+     ※ 音量は、上部ツールバーの SoundControl.vue へ移したので、ここはリピートの1行だけ */
   .st-settings {
     gap: 8px 12px;
     margin-top: 8px;
     padding-top: 8px;
   }
 
-  .st-volume {
-    flex-basis: 100%;
-    gap: 8px 12px;
-    min-width: 0;
-  }
-
-  .st-volume__slider {
-    min-width: 0;
-  }
-
-  .st-volume__value {
-    min-width: 44px;
-  }
-
   /* 見出し（ORIGINAL SOUNDTRACK ／ こうちゃんの大冒険）
 
      サウンドトラックのページの名前なので、スマホでも消さずに残す
-     そのかわり、文字・余白・下の影を ひと回り小さくして、操作エリアを低くする
-     （影を6pxにしたので、下のすき間も「影6px ＋ すき間8px」にそろえている） */
+     そのかわり、文字・余白・下の影を 小さくして、操作エリアを低くする
+     （約82px → 約60px。再生中は曲の一覧がせまくなりやすいので、見出しのぶんも少しゆずる）
+     影を4pxにしたので、下のすき間も「影4px ＋ すき間6px」にそろえている */
   .st-head {
-    margin-bottom: 14px;
-    padding: 8px 12px;
-    box-shadow: 0 6px 0 rgb(35 57 94 / 18%);
+    margin-bottom: 10px;
+    padding: 5px 12px 6px;
+    box-shadow: 0 4px 0 rgb(35 57 94 / 18%);
   }
 
   .st-head__badge {
-    margin-bottom: 4px;
-    padding: 2px 12px;
-    font-size: 11px;
+    margin-bottom: 2px;
+    padding: 1px 10px;
+    font-size: 10px;
   }
 
   .st-head__name {
-    font-size: 21px;
+    font-size: 18px;
+    line-height: 1.4;
   }
 
   .st-head__lead {
@@ -4775,31 +4677,6 @@ onUnmounted(() => {
     right: 24px;
     left: auto;
     transform: none;
-  }
-}
-
-/* ============================================================
-   小さめのスマホ（iPhone SE くらいまで）
-
-   全曲再生中の案内は
-   「♪ 全曲再生中 ／ 6 / 7 ／ 06 きょうの大冒険、おしまい！」の3つ
-
-   この幅では、曲名が短い曲は1行に収まり、長い曲だけ折り返すので、
-   曲によって見え方がそろわない
-   そこで、曲名はいつも2行目へ落として、見え方を統一する
-
-     1行目 … ♪ 全曲再生中　6 / 7
-     2行目 … 06 きょうの大冒険、おしまい！
-
-   flex-basis: 100% は「1行まるごと使う」という意味
-   前の2つとは同じ行に入れないので、かならず改行される
-   （481px 以上なら、どの曲名でも1行に収まるので、そのまま横に並べる）
-   ============================================================ */
-@media (max-width: 480px) {
-  /* 2行目に落とした曲名も、1行目と同じく真ん中にそろえる */
-  .st-playall__track {
-    flex-basis: 100%;
-    text-align: center;
   }
 }
 

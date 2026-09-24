@@ -64,3 +64,37 @@ export function saveSPlusSongUnlocked() {
     // 保存できなくても、そのリザルト画面ではうた入りBGMがふつうに流れる
   }
 }
+
+/* ゴールしたときに、うた入りBGMをどうするかの答え
+
+   none            … S+ランクではないので、何もしない
+                     （Sランク・特殊エンドなどでは解放しない）
+   alreadyUnlocked … S+ランクだが、もう解放済み（お知らせは出さない）
+   newlyUnlocked   … このブラウザで、はじめての解放
+                     （お知らせを出して、解放したことを保存する）
+*/
+export type SPlusSongUnlockResult = 'none' | 'alreadyUnlocked' | 'newlyUnlocked';
+
+/* ゴールしたときに、うた入りBGMを解放するかどうかを決める
+
+   endingRank           … judgeEnding() が決めたランク名
+   hasUnlockedSPlusSong … いま画面が覚えている「解放済みかどうか」
+
+   ここでは答えを返すだけで、保存（saveSPlusSongUnlocked）はしない
+   保存とお知らせは、呼んだ側（pages/index.vue の unlockSPlusSongIfEarned）が受けもつ
+
+   ※ 保存場所（localStorage）も読みなおしているのは、
+     このページを開いたあとに、別のタブでS+を取っていることもあるため
+     画面が覚えているほうが true なら、そこで決まるので読みにいかない（|| の短絡）
+*/
+export function judgeSPlusSongUnlock(endingRank: string, hasUnlockedSPlusSong: boolean): SPlusSongUnlockResult {
+  if (endingRank !== 'S+ランク') {
+    return 'none';
+  }
+
+  if (hasUnlockedSPlusSong || loadHasUnlockedSPlusSong()) {
+    return 'alreadyUnlocked';
+  }
+
+  return 'newlyUnlocked';
+}

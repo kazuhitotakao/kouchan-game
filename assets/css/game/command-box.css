@@ -1,0 +1,167 @@
+/* ============================================================
+   「どうする？」の中で CommandBox.vue でしか出さないものの見た目（CommandBox.vue 専用）
+
+   assets/css/game/command.css から、
+   components/game/CommandBox.vue の中だけで使うところを
+   そのまま移してきたファイル
+
+   ・「どうする？」の中で CommandBox でしか出さないもの
+     （.command-box__badge／__note／__divider）
+   ・おやつバッグ（.snack-menu 〜）
+   ・上のそれぞれに対する、画面の幅・高さごとの上書き（@media）
+
+   ※ 前は「ひとやすみ」のサブメニュー（.care-menu 〜）の見た目もここにあったが、
+     休憩・おやつを公園入口の「ひとやすみ」（ベンチ）へまとめたので、使わなくなって消した
+     （ベンチでは、休憩・おやつも ふつうの「どうする？」の枠（command-box）の中に出す）
+
+   ■ 読みこんでいるのは CommandBox.vue の
+     <style scoped src> の1か所だけ
+     game.css からは読みこまない（二重に出力されてしまうため）
+
+   ■ ここに置いていないもの
+     ・.command-box／__label／__item／__text／--choice-grid 〜
+       pages/index.vue の「秘密の小道」のコマンド欄でも同じクラスを使うので、
+       assets/css/game/command-shared.css（グローバル）にある
+     ・.cmd 〜／.command 〜／.command-area
+       CommandBox.vue では使わないので、command.css に残してある
+     ・@keyframes command-selected-glow
+       command.css／command-shared.css からも参照するので、
+       assets/css/game/keyframes.css（グローバル）にある
+   ============================================================ */
+
+/* おやつの残り個数など、行の右はしに出す小さな文字 */
+.command-box__badge {
+  flex: none;
+  color: #ffd9a0;
+  font-size: 12.5px;
+  font-weight: 400;
+}
+
+/* おやつを食べきったときのお知らせ */
+.command-box__note {
+  margin: 0;
+  padding: 6px 10px 6px 28px;
+  color: #b8dfef;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* 「その場面ならではのコマンド」と「どこでも同じコマンド」の区切り
+
+   同じ「どうする？」の枠の中にならんでいても、
+   上のコマンド（すべる・見守る／休憩する・おやつにする など）と
+   下の「← 場所選びにもどる」は種類がちがう
+
+   そこで、あいだに細い線と「そのほか」という小さな見出しを入れて、
+   ひとめで「ここからは別のなかま」と分かるようにしている
+
+   「そのほか」の文字は左寄せにして、上下のコマンドの文字と
+   左はしをそろえてある
+   ・左の線 … 10px の短いちょこんとした線
+   ・左の余白10px ＋ 線10px ＋ すきま8px ＝ 28px
+     （コマンドの文字も、カーソル「▶」のぶんだけ左に28px空いている） */
+.command-box__divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 10px 4px 10px;
+  color: #a9d6e8;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
+
+  /* 見出しなので、コマンドとまちがえて押されないようにする
+     （もともとボタンではないが、指やマウスの反応も消しておく） */
+  pointer-events: none;
+}
+
+/* 「そのほか」の左右にのばす細い線
+
+   文字のそばを濃く、外側へいくほど薄くしている
+   見出しの下の線（command-box__label の border-bottom）より
+   目立たせないための工夫で、区切りだと分かるだけの細さにとどめる */
+.command-box__divider::before,
+.command-box__divider::after {
+  height: 1px;
+  content: '';
+}
+
+/* 左の線は、のばさずに10pxのまま
+   （flex: none なので、あまった幅は右の線だけが受け取る
+     ＝「そのほか」の文字が左に寄る） */
+.command-box__divider::before {
+  flex: none;
+  width: 10px;
+  background: linear-gradient(90deg, rgb(134 198 221 / 0%) 0%, rgb(134 198 221 / 55%) 100%);
+}
+
+/* 右の線が、残りの幅をぜんぶ使って右はしまでのびる */
+.command-box__divider::after {
+  flex: 1;
+  background: linear-gradient(90deg, rgb(134 198 221 / 55%) 0%, rgb(134 198 221 / 0%) 100%);
+}
+
+.command-box--choice-grid .command-box__note {
+  grid-column: 1 / -1;
+}
+
+/* おやつのお知らせは、DOMでは「だっこ」と「待つ」のあいだにあるが、
+   横ならびの行を分けてしまわないように、見た目だけいちばん下へ回す
+   （ボタンの順番は変わらないので、← → と Tab で動く順番もそのまま） */
+.command-box--choice-grid .command-box__note {
+  order: 1;
+  padding-left: 10px;
+}
+
+/* ============================================================
+   おやつバッグ（ゲーム中に、どのおやつを食べるか選ぶメニュー）
+
+   新しい枠は作らず、いま出ている「どうする？」（command-box）の枠の中身だけを入れかえて使う
+   ・ひとやすみ（ベンチ） … 休憩する／おやつにする のかわりに出す
+   ・いやいやタイム       … お話／だっこ／おやつ／待つ のかわりに出す
+
+   おやつ1つぶんの行には command-box__item をそのまま付けているので、
+   ▶ カーソル・水色の光・hover・focus-visible の見た目は、ほかのコマンドと同じになる
+   ここで足すのは「名前の下に、効果の数字をもう1行出す」ための形だけ
+   ============================================================ */
+
+/* おやつ1つぶんの行
+
+   ふつうのコマンドは「文字 … 右はしに残り個数」の横ならびだが、
+   おやつは「🍇 グミ」の下に「体力 +5 機嫌 +20 5分」を出したいので、たてならびにする
+
+   うすい線でかこって、ほかのコマンドより少し「カード」らしく見せる
+   （線は border ではなく内側の影で引くので、行の大きさは変わらない）
+   スマホで指で押しやすいように、カードとカードのあいだも少しあける */
+.snack-menu__item {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  margin-bottom: 6px;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
+}
+
+/* おやつの名前（「🍇 グミ」） */
+.snack-menu__name {
+  line-height: 1.5;
+}
+
+/* 効果の数字（「体力 +5」「機嫌 +20」「5分」）
+
+   色・大きさ・太さは、いっしょに付けた command-box__badge
+   （「残り2個」の文字）をそのまま使う
+   3つが入りきらないときは、はみ出さずに折り返す */
+.snack-menu__effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 10px;
+  line-height: 1.5;
+}
+
+@media (max-height: 800px) {
+
+  /* 区切りもつめる（線と文字は残したまま、上下の余白だけ減らす） */
+  .command-box__divider {
+    margin: 5px 10px 3px;
+    font-size: 11px;
+  }
+}

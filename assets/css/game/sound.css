@@ -1,0 +1,76 @@
+/* ============================================================
+   サウンドのコントロールを「どこに・どの大きさで置くか」
+
+   置き場所ごとのちがいだけを書いたファイル
+   （ボタンやスライダーそのものの見た目は sound-control.css にある）
+
+   ・タイトル画面・おやつ選択・あそびかた（.title-card__tools の中）
+     … ひとまわり大きくして、枠はのばさずコンパクトなまま
+   ・ゲーム画面の上部バー（.status-area の中）
+     … スマホでは、枠はのばさず、決めた長さのまま右はしに置く
+   どちらも、入りきらないときだけスライダーが縮んで場所をゆずる
+
+   先頭の .title-card__tools／.status-area は
+   pages/index.vue・StatusBar.vue 側の要素で、
+   指しているもの（主語）は SoundControl.vue のルート要素（.sound-control）
+   ルート要素には親（pages/index.vue）のしるしも付くので、
+   これまでどおり game.css から読みこめば当たる
+
+   ※ 置き場所ごとの指定は、同じファイルの中に、この順番のまま置いておくこと
+     （どちらが勝つかをまとめて見られるようにするため）
+
+   ※ SoundControl.vue の中の要素を指すものは sound-control.css にある
+     （理由は、そのファイルの先頭に書いてある）
+   ============================================================ */
+
+/* タイトル画面（A/B・おやつ選択・あそびかた）のサウンドコントロール
+
+   左の補助リンク（min-height: 38px）と高さをそろえて、
+   ゲーム画面の上部バーに置くときより ひとまわり大きくする
+   （指でも押しやすく、ミュートの「×」もはっきり見える大きさになる） */
+.title-card__tools .sound-control {
+  --sound-button-size: 38px;
+  --sound-icon-size: 20px;
+  --sound-slider-width: 110px;
+}
+
+@media (max-width: 700px) {
+
+  /* ゲーム中の上部バーでは、サウンド枠をのばさず、決めた長さのまま右はしに置く
+     （右へ寄せる指定は status.css の .status-area__titleRow）
+
+     ・flex: 0 1 auto … 伸びはしないが、縮みはする
+     ・min-width: 0   … 時計に「+25分」が出て入りきらないときは、
+                        枠が縮み、そのぶん中の音量スライダーが短くなる（最低48px → sound-control.css） */
+  .status-area .sound-control {
+    --sound-slider-width: 100px;
+
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  /* サウンドのコントロールも、左の補助リンク（min-height: 36px）に高さをそろえる
+     スライダーは、せまい画面で横にはみ出さないように少し短くする */
+  .title-card__tools .sound-control {
+    --sound-button-size: 36px;
+    --sound-icon-size: 19px;
+    --sound-slider-width: 84px;
+
+    /* A/B画面では、サウンド枠をのばさない（中身ぶんのコンパクトな幅のまま）
+
+       ・width: auto      … カードいっぱいに広がらない
+       ・flex: 0 1 auto   … ツールバー（display: flex）の中で、伸びはしないが縮みはする
+       ・min-width: 0     … 中身（スライダー84px）の幅より小さくなれるようにする
+       左の補助リンクと横1行に入りきらないときは、枠が縮み、
+       そのぶん中の音量スライダーが短くなる（最低48px → sound-control.css）
+       こうして、サウンドのコントロールが下の行へ落ちないようにしている
+       （ゲーム中の上部バーも、上の .status-area 配下で同じ作りにしてある）
+       ※ とても細い画面（340px以下）で下の行へ回りこんだときも、
+         margin-left: auto で右はしに寄せる（B画面の右上のまとまりと同じ） */
+    width: auto;
+    flex: 0 1 auto;
+    min-width: 0;
+    margin-left: auto;
+  }
+}

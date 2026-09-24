@@ -1,0 +1,230 @@
+/* ============================================================
+   ちょっとしたできごと／ナイス対応の枠（.event-flash 〜）
+
+   ■ なぜ、このファイルだけグローバルなのか
+
+     この枠は2か所で使われている
+     ・components/game/ResultCard.vue … 行動中に起きたできごと
+     ・pages/index.vue                 … 秘密の小道の「木漏れ日ボーナス」
+
+     この2つは別々の <style scoped> なので、
+     どちらか片方のCSSに入れると、もう片方には届かない
+     （scoped CSS は、自分のコンポーネントの要素にしか効かないため）
+
+     両方に同じCSSを書くと、ビルド結果へ二重に出力されてしまうので、
+     scoped が付かない app.vue の <style> から読みこむ形にして、
+     1つだけ出力されるようにしている
+
+   ■ @keyframes event-flash-in も、このファイルに置く
+     参照しているのは、このファイルの .event-flash:not(.event-flash--nice) だけ
+     グローバル（scoped なし）なので名前は付けかえられず、そのまま一致する
+
+   ※ assets/css/game/result.css から、中身は1つも変えずに移してきた
+   ============================================================ */
+
+/* 行動の最中に起きたちょっとしたできごと（ランダムイベント）
+
+   前は結果の文章のうしろに、そのまま文字で書き足していたので、
+   「おでかけポイント +5」が地の文にまぎれて気づきにくかった
+   ・専用の枠（左に太い線）
+   ・「ちょっとしたできごと！」の帯
+   ・ステータスの増減は、色つきのしるし
+   の3つで、ひと目で分かるようにしている
+*/
+.event-flash {
+  margin: 12px 0 0;
+  padding: 12px 16px 14px;
+  border: 1px solid #cfe3ef;
+  border-left: 5px solid var(--navy-line);
+  border-radius: 10px;
+  background: #f2f9fc;
+  /* アイテムの帯と同じ動きで、少し遅れてふわっと出す */
+  animation: found-in 0.4s ease-out 0.25s backwards;
+}
+
+/* 出てきた瞬間の「ポンッ」（ちょっとしたできごと専用）
+
+   ふわっと出てくる（found-in）だけだと、
+   アイテム発見の帯と同じ動きなので、結果カードの中で気づかずに読み飛ばされやすかった
+   そこで、少し小さい状態から通常サイズへ戻る動きと、
+   枠のまわりの淡い水色の光を、出てきた瞬間だけ重ねている
+
+   ■ やりすぎないようにしていること
+     ・左右にゆらす・大きく跳ねる動きは入れない（文章が読みにくくなるため）
+     ・小さくするのは 0.96倍まで（文字がにじんで見えない範囲）
+     ・光は 0.45秒で消えきる。出したままにすると、読んでいるあいだ気が散る
+     ・「✨」のような良いことに見えるしるしは付けない
+       このできごとには、うれしいこと（機嫌 +5）と
+       親がつかれること（体力 -5）の両方があるため、しるしは中立の「！」だけにしている
+
+   ■ .event-flash--nice には かからないようにしている
+     ナイス対応・木漏れ日ボーナスは同じ .event-flash の形を使っているが、
+     あちらは「良いことが起きた」という別の演出なので、動きは今までのまま
+     （:not() で、色が変わっていない ふつうのできごとだけに絞っている）
+
+   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
+     ページ下のまとめて止める指定で、この動きも出ないようにしている
+*/
+.event-flash:not(.event-flash--nice) {
+  animation: event-flash-in 0.45s ease-out 0.25s backwards;
+}
+
+@keyframes event-flash-in {
+  /* 出てくる前：少し下がって、少しだけ小さい。光はまだ無い */
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    box-shadow: 0 0 0 0 rgb(134 198 221 / 0%);
+  }
+
+  /* 途中：通常サイズを少し通りすぎて、まわりの光がいちばん強くなる
+     ここで「ポンッ」と出てきた感じになる
+     （1.012倍なので、跳ねるというより、ふくらんで止まるくらいの大きさ） */
+  55% {
+    opacity: 1;
+    transform: translateY(0) scale(1.012);
+    box-shadow: 0 0 0 6px rgb(134 198 221 / 55%);
+  }
+
+  /* 最後：通常サイズに落ちつき、光も消える（ふだんの見た目にもどる） */
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 0 rgb(134 198 221 / 0%);
+  }
+}
+
+.event-flash__label {
+  display: inline-block;
+  margin: 0 0 6px;
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.event-flash__text {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+/* ステータスの増減のしるし（おでかけポイント +5 など） */
+.event-flash__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.event-flash__item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 14px;
+  border: 1px solid #d8e7ef;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.event-flash__item-label {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+/* 増減の数字（色は結果カードの「今回の変化」と同じ考えかた）
+   ※ 良い・悪いの判定は changeClass() にまかせている
+*/
+.event-flash__item-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.event-flash__item-value.change--good {
+  color: var(--good);
+}
+
+.event-flash__item-value.change--bad {
+  color: var(--bad);
+}
+
+.event-flash__item-value.change--neutral {
+  color: var(--ink-soft);
+}
+
+/* ナイス対応の枠（いやいやの理由に合った対応をしたとき）
+
+   形は「ちょっとしたできごと」（.event-flash）をそのまま使い、色だけ緑に変える
+   ・緑 … 「今回の変化」のプラスと同じ系統の色で、良いことが起きたと分かる
+   ・アイテム発見（黄色）・ちょっとしたできごと（水色）・いやいや（さんご）と色がかぶらない
+   ※ 帯の背景は --good より少しだけ濃くして、白い文字を読みやすくしている
+*/
+.event-flash--nice {
+  border-color: #cde9d7;
+  border-left-color: var(--good);
+  background: #f1faf4;
+}
+
+.event-flash--nice .event-flash__label {
+  background: #26844f;
+}
+
+.event-flash--nice .event-flash__item {
+  border-color: #d3eadb;
+}
+
+@media (max-height: 800px) {
+  /* ちょっとしたできごとの枠も、背の低い画面では少しつめる */
+  .event-flash {
+    margin-top: 10px;
+    padding: 10px 14px 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* ちょっとしたできごとの「ポンッ」は、完全に止める
+     上の指定でも一瞬で終わるが、大きさと光が途中で止まって見えないように、
+     動きそのものを出さないようにしておく
+     （水色の枠・「ちょっとしたできごと！」の帯は残るので、
+       動きが無くても、できごとが起きたことは分かる） */
+  .event-flash:not(.event-flash--nice) {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   本文の文字サイズ（もとは base.css のまとめ書き）
+
+   もともと base.css に
+     .place-card__text, .result-card__text, .found-line,
+     .event-flash__text, .tantrum-line { ... }
+   と1つにまとめて書かれていた指定。
+
+   この枠がグローバルCSSへ移ったことで、
+   base.css 側のスコープでは届かなくなるため、
+   ここにも同じ値で置いている（値は base.css 側と同じ）
+   ============================================================ */
+
+@media (max-height: 800px) {
+
+  /* 本文は 17px → 16px までにとどめる */
+  .event-flash__text {
+    font-size: 16px;
+    line-height: 1.75;
+  }
+}
+
+@media (max-width: 700px) {
+
+  /* 本文はスマホでも16pxを下まわらないようにする */
+  .event-flash__text {
+    font-size: 16px;
+    line-height: 1.8;
+  }
+}
