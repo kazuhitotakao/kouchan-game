@@ -701,9 +701,9 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
   }
 
-  /* ↑ キーをはなしたとき（window の keyup。遊んでいる最中かどうかに関係なく、はやく進むのをやめる） */
+  /* ↑ / Space キーをはなしたとき（window の keyup。遊んでいる最中かどうかに関係なく、はやく進むのをやめる） */
   function handleSecretPathKeyup(event: KeyboardEvent) {
-    if (event.key === 'ArrowUp') {
+    if (event.key === 'ArrowUp' || event.key === ' ') {
       isSecretPathKeyBoosting.value = false;
     }
   }
@@ -724,12 +724,15 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
      ・← / A … 左へ1レーン
      ・→ / D … 右へ1レーン
-     ・↑       … 押しているあいだだけ、はやく進む（はなすと handleSecretPathKeyup() で元の速さに戻る）
-     ・↓ / Enter / Space … 何もしない（ページのスクロールや、ボタンの押しまちがいを止めるだけ）
+     ・↑ / Space … 押しているあいだだけ、はやく進む（はなすと handleSecretPathKeyup() で元の速さに戻る）
+     ・↓ / Enter … 何もしない（ページのスクロールや、ボタンの押しまちがいを止めるだけ）
      ・それ以外（Tab など）… ブラウザのふつうの動きにまかせる
 
      ※ ← → は押しっぱなし（event.repeat）では続けて動かさない（1回押すと1レーン）
      ※ ↑ は押しっぱなしで何度届いても、はやいままでよい
+     ※ Space は押しっぱなし（event.repeat）では、はやく進みはじめない
+       「小道へ進む」を Space で押したまま離さないと、はじまった瞬間から
+       はやく進んでしまうため。押しなおせば、はやく進む
      ※ はじまる前・終わったあとは、ここへは来ない（ふつうのコマンド操作に戻る） */
   function handleSecretPathKeydown(event: KeyboardEvent) {
     // Ctrl + A（ぜんぶ選択）などのショートカットは、じゃましない
@@ -768,12 +771,16 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       }
 
       event.preventDefault();
+
+      if (event.key === ' ' && !event.repeat) {
+        isSecretPathKeyBoosting.value = true;
+      }
     }
   }
 
   /* 小道の外でも受け取らないと困るできごとを、ここで登録する（片づけも同じ場所で）
 
-     ・keyup            … ↑ をはなしたら、はやく進むのをやめる
+     ・keyup            … ↑ / Space をはなしたら、はやく進むのをやめる
      ・blur             … ウィンドウからフォーカスが外れたら、はやい・押している状態を戻す
      ・visibilitychange … タブが見えなくなったら、同じように戻す
 
