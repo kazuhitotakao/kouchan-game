@@ -17,6 +17,7 @@
 
 import { computed } from 'vue';
 
+import { itemIcons } from '~/data/places';
 import type { StatusChanges } from '~/types/game';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
@@ -225,8 +226,16 @@ const showNotice = computed(() => props.isAlmostNoon && !props.isResultScene);
 
       <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
 
+      <!-- 1つのアイテムの中に、絵文字（__icon）と名前（__name）の両方を入れてある
+           ・PC       … 名前だけを出す（今までどおり）
+           ・スマホ幅 … 絵文字だけを出して、名前は読み上げ用に残す
+                        名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
+           （切りかえは assets/css/game/status.css、絵文字の一覧は data/places.ts の itemIcons） -->
       <ul v-else class="status-found__list">
-        <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
+        <li v-for="item in collectedItems" :key="item" class="status-found__item" :title="item">
+          <span class="status-found__icon" aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span>
+          <span class="status-found__name">{{ item }}</span>
+        </li>
       </ul>
     </div>
 

@@ -500,6 +500,12 @@
   line-height: 1.6;
 }
 
+/* 見つけたものの絵文字は、スマホ幅のときだけ出す（→ @media (max-width: 700px)）
+   PCでは今までどおり名前だけ */
+.status-found__icon {
+  display: none;
+}
+
 /* 危険な状態の警告（親の体力・親の余裕・こうちゃんの体力） */
 .status-warnings {
   display: flex;
@@ -884,7 +890,10 @@
   }
 
   /* 5段目：見つけたもの は1行のコンパクト表示
-     多いときは、この箱の中だけ横スクロール（ページ全体は横スクロールさせない） */
+     名前のかわりに絵文字だけを並べるので、6個ぜんぶ見つけても320pxの画面で1行に収まる
+     （下の .status-found__icon／__name）
+     overflow-x: auto は、万一入りきらなかったときの保険
+     （そのときも、ページ全体ではなく、この箱の中だけが横スクロールする） */
   .status-found {
     gap: 8px;
     max-height: none;
@@ -904,11 +913,55 @@
 
   .status-found__list {
     flex-wrap: nowrap;
+    gap: 3px;
   }
 
+  /* 見つけたものは、名前のかわりに絵文字だけを出す（🌲 🪨 🌰 …）
+
+     名前のままだと「ちいさな松ぼっくり」「水色のガラス玉」のように長く、
+     375px の画面で3個目から1行に入りきらず、横スクロールになっていた
+     絵文字の一覧は data/places.ts の itemIcons
+
+     ・左右の余白は 10px → 5px につめて、丸いチップにする
+     ・名前は見た目からは消して、読み上げ用に残す
+       （display: none にすると、読み上げでも読まれなくなってしまうため） */
+  /* 絵文字をチップの上下まんなかに置く
+
+     文字の行（line-height）のまま置くと、絵文字は行の上のほうに寄ってしまい、
+     チップの上のふちにくっついて見える
+     そこで、チップを flex にして高さを決め、絵文字の箱（line-height: 1）を
+     align-items: center で上下まんなかにそろえている */
   .status-found__item {
-    padding: 2px 10px;
+    display: inline-flex;
+    box-sizing: border-box;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    padding: 0 5px;
     font-size: 12.5px;
+    white-space: nowrap;
+  }
+
+  /* font-family は、絵文字のフォントをいちばん先に書いておく
+
+     書かないと、行の高さや文字の基準線（baseline）は本文のフォント（ヒラギノなど）で決まり、
+     絵文字だけが別のフォントから借りてきて描かれる
+     2つのフォントは上下の寸法がちがうので、Mac・iPhone では
+     箱は上下まんなかでも、絵文字の絵だけが上にずれて、チップの上のふちにくっついて見えた
+     絵文字のフォントを先に書くと、寸法も絵文字のフォントのものになるので、絵がまんなかに来る */
+  .status-found__icon {
+    display: block;
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  .status-found__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
     white-space: nowrap;
   }
 

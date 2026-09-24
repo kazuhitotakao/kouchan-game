@@ -48,5 +48,23 @@ export const placeItems: Record<ItemPlace, string> = {
   secretSpot: 'ふしぎな形の枝',
 };
 
+/* 見つけたものの絵文字（名前 → 絵文字）
+
+   スマホ幅の上部ステータス「見つけたもの」では、名前のかわりにこの絵文字だけを並べる
+   名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
+   （名前は読み上げ用に残してある → components/game/StatusBar.vue・assets/css/game/status.css）
+   PCでは今までどおり名前を出す
+
+   ※ 松ぼっくりには専用の絵文字が無いので、松の木（🌲）で代わりにしている
+   ※ 見つかるものを増やしたときは、ここにも1行足すこと（無いときは 🔍 を出す） */
+export const itemIcons: Record<string, string> = {
+  [placeItems.slide]: '🌲',
+  [placeItems.sandbox]: '🪨',
+  [placeItems.acornArea]: '🌰',
+  [placeItems.pond]: '🔵',
+  [placeItems.grassArea]: '🌼',
+  [placeItems.secretSpot]: '🪵',
+};
+
 /* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */
 export const firstVisitItemFindChance = 0.6;
