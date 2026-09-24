@@ -12,7 +12,7 @@
    これまでどおり game.css から読みこむ
 
    ■ ここから出ていったもの
-     ・サブメニュー（.care-menu／.snack-menu 〜）
+     ・おやつバッグ（.snack-menu 〜）
        → assets/css/game/command-box.css（CommandBox.vue が読みこむ）
      ・「どうする？」のコマンド欄（.command-box 〜）
        → assets/css/game/command-shared.css（app.vue がグローバルに読みこむ）
@@ -109,14 +109,12 @@
 }
 
 /* ============================================================
-   コマンド欄（サブメニュー ＋ メインコマンド）
+   コマンド欄の入れもの（通常の場所6か所と、ひとやすみ（ベンチ））
 
-   通常の場所6か所だけ、コマンドの枠を2つならべる
-   ・どうする？（command-box） … その場所ならではの遊び／紺色
-   ・ひとやすみ（care-menu）   … 親子の状態を整える行動／やさしい緑
-
-   PCでは [care-menu][command-box] の横ならび
-   スマホでは横幅が足りないので、たてにならぶ（いちばん下の媒体クエリ）
+   中身は「どうする？」（command-box）の枠1つ
+   ※ 前は、横に「ひとやすみ」のサブメニュー（care-menu）の枠もならべていたが、
+     休憩・おやつを公園入口の「ひとやすみ」（ベンチ）へまとめたので、いまは1つだけ
+   ※ スマホ幅では、この入れものごと中央エリアの下のはしに貼りつく（→ responsive.css）
 
    ※ いやいやタイムととつぜんのできごとでは command-box が1枚だけで、
      この .command-area を通らない
@@ -131,9 +129,7 @@
 
   display: flex;
 
-  /* 右はしにそろえる
-     こうしておくと、サブメニューが出ても command-box は動かず、
-     新しい枠が その左がわ に増えるだけになる */
+  /* 右はしにそろえる（command-box が1枚だけのときと同じ位置） */
   justify-content: flex-end;
 
   /* 2つの枠の上をそろえる（下ではなく上でそろえると、見出しの行が横に並ぶ） */
@@ -244,6 +240,7 @@
    ・紫のボタン（秘密の場所）                  … 白       ← .cmd--secret::before
    ・緑のボタン（ゴール）                      … 白       ← .cmd--goal::before
    ・金色のボタン（きょうのおやつを選ぶ など） … 濃い茶色 ← .cmd--start / --next::before
+   ・クリーム色のボタン（ひとやすみ）          … 濃い茶色 ← .cmd--rest::before
    ・うすい青のボタン（はじめの画面へ戻る）    … 白       ← .cmd--back::before
 
    ※ 以前は全部このgold（金色）だったが、白い下地では 1.6:1 しかなく、
@@ -475,6 +472,25 @@
   color: #fff;
 }
 
+/* ひとやすみ（公園入口から入る、休憩・おやつを選ぶベンチ）
+
+   遊びに行く場所（白）ではなく「休む場所」なので、ボタンの色で分けて見せる
+   アイコン（☕）は付けず、あたたかいクリーム色（ベンチでおやつ、のイメージ）の下地にする
+   ・ゴール（緑）・細い道の先（紫）とは、ひと目で見分けられる色にしてある
+   ・文字は濃い茶色にして、クリーム色の上でもはっきり読めるようにする（コントラスト約7:1）
+   ・選択中の水色の重ね（.cmd--selected）は、白いボタンと同じまま（濃い文字なので読みにくくならない）
+   ・ベンチの画面のカードの左の線も、同じ系統の色にそろえてある（base.css の .place-card--rest） */
+.cmd--rest {
+  border-color: #e0b56e;
+  background: linear-gradient(180deg, #fff8ea 0%, #ffecc8 100%);
+  color: #6f4a12;
+}
+
+/* 選択カーソル「▶」も、文字と同じ濃い茶色にする */
+.cmd--rest::before {
+  color: #6f4a12;
+}
+
 /* ゴールへ向かう（1行使って目立たせる） */
 .cmd--goal {
   grid-column: 1 / -1;
@@ -613,8 +629,7 @@
 
 @media (max-width: 700px) {
 
-  /* スマホでは横にならべると幅が足りないので、たてにならべる
-     （上に「☕ ひとやすみ」、下に「どうする？」） */
+  /* スマホでは、中の「どうする？」を横いっぱいに広げる */
   .command-area {
     flex-direction: column;
     align-items: stretch;
@@ -658,6 +673,33 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* 公園入口のボタンは、スマホではどの高さの画面でも 44px にする（ほかの画面の .cmd は 52px のまま）
+
+     行き先・ひとやすみ・（細い道の先）・ゴールで4〜5段ならぶので、1段ぶんの高さが画面全体に効いてくる
+     44px は、指で押しやすい大きさの目安とされる高さなので、ここより小さくはしない
+     （前は背の低い画面（高さ620px以下）だけ44pxにしていたが、
+       ひとやすみ が加わったので、ふつうの高さのスマホでも余裕を持たせるために、ここへまとめた） */
+  .command--entrance .cmd {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  /* 「細い道の先」が出ているときは、ボタンが1段ふえる（行き先6つ＋ひとやすみ で4段 ＋ ゴール）
+     そのぶん、ボタンを 44px → 40px に少し低くして、1画面に収める
+     （まん中の「細い道を見つけた！」のカードを出さないのは responsive.css の .stage--entrance）
+     .command--entrance-withSecret は pages/index.vue が、canEnterSecretSpot のときだけ付ける
+     段と段のすき間も 5px にする（右上の角に重ねた ✓・★ の印は、上の段にほとんどかからない）
+     ※ セレクタをクラス2つ（.command.command--entrance-withSecret）にしてあるのが大事
+       あとに書いてある @media (max-width: 700px) and (max-height: 700px) の .command { gap: 7px }（クラス1つ）に負けないようにするため */
+  .command.command--entrance-withSecret {
+    gap: 5px;
+  }
+
+  .command--entrance-withSecret .cmd {
+    padding-top: 5px;
+    padding-bottom: 5px;
+  }
+
   /* バッジの箱を、ボタンの右上の角に重ねる（ボタンの高さを使わない）
      .cmd は position: relative なので、そこを基準にする
      上へ少しはみ出させているのは、ボタンの文字と重ならないようにするため
@@ -683,6 +725,19 @@
     font-size: 11px;
     font-weight: 700;
     line-height: 1;
+  }
+
+  /* 「細い道の先」が出てボタンを低くしたとき（.command--entrance-withSecret）は、印も小さくして少し上へずらす
+     20px のままだと、低くなったボタンの文字（「どんぐりの木」の「木」など）に印がかかってしまうため */
+  .command--entrance-withSecret .cmd__badges {
+    top: -8px;
+    gap: 2px;
+  }
+
+  .command--entrance-withSecret .cmd__badge {
+    width: 16px;
+    height: 16px;
+    font-size: 9.5px;
   }
 
   .command--entrance .cmd__badgeIcon--compactOnly {
@@ -764,17 +819,23 @@
      公園入口の「どこへ行く？」を1画面に収める
      （上部ステータスのほうの調整は status.css、中央エリアは responsive.css の同じ @media）
 
-     ・ボタンの高さを 52px → 44px にする（4段で約32px）
-       44px は、指で押しやすい大きさの目安とされる高さなので、ここより小さくはしない
-     ・「どこへ行く？」の文字を少し小さくして、行の高さをつめる（約8px） */
-  .command--entrance .cmd {
-    padding-top: 7px;
-    padding-bottom: 7px;
-  }
-
+     ・「どこへ行く？」の文字を少し小さくして、行の高さをつめる（約8px）
+     ※ ボタンの高さ（44px）は、上の @media (max-width: 700px) でどの高さでもそろえてある */
   .command--entrance .command__label {
     font-size: 12.5px;
     line-height: 1.2;
+  }
+
+  /* 「細い道の先」が出て1段ふえたときは、この高さの画面では 40px でも入りきらないので、
+     ボタンを 36px、段と段のすき間を 4px までつめる
+     （右上の角に重ねた ✓・★ の印は、上の段に2pxほどかかるが、ボタンの文字にはかからない） */
+  .command.command--entrance-withSecret {
+    gap: 4px;
+  }
+
+  .command--entrance-withSecret .cmd {
+    padding-top: 3px;
+    padding-bottom: 3px;
   }
 }
 
