@@ -26,6 +26,8 @@ export const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 
      0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先
    ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
      どちらも「細い道の先」から入るので、同じ5番にしている
+   ※ そのあとの「ひとやすみ」（restArea）は、細い道の先が出ているかどうかで番号が変わるので、
+     ここには書かず pages/index.vue の restCommandIndex で決めている
    ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
 */
 export const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {

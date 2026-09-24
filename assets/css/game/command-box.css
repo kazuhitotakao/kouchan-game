@@ -1,16 +1,18 @@
 /* ============================================================
-   サブメニューまわりの見た目（CommandBox.vue 専用）
+   「どうする？」の中で CommandBox.vue でしか出さないものの見た目（CommandBox.vue 専用）
 
    assets/css/game/command.css から、
    components/game/CommandBox.vue の中だけで使うところを
-   そのまま移してきたファイル（中身は1つも変えていない）
+   そのまま移してきたファイル
 
-   ・「☕ ひとやすみ」のサブメニュー（.care-menu 〜）
-   ・おやつバッグ（.snack-menu 〜）
-   ・サブメニューの出入り（.care-menu-enter-active 〜）
    ・「どうする？」の中で CommandBox でしか出さないもの
      （.command-box__badge／__note／__divider）
+   ・おやつバッグ（.snack-menu 〜）
    ・上のそれぞれに対する、画面の幅・高さごとの上書き（@media）
+
+   ※ 前は「ひとやすみ」のサブメニュー（.care-menu 〜）の見た目もここにあったが、
+     休憩・おやつを公園入口の「ひとやすみ」（ベンチ）へまとめたので、使わなくなって消した
+     （ベンチでは、休憩・おやつも ふつうの「どうする？」の枠（command-box）の中に出す）
 
    ■ 読みこんでいるのは CommandBox.vue の
      <style scoped src> の1か所だけ
@@ -26,33 +28,6 @@
        command.css／command-shared.css からも参照するので、
        assets/css/game/keyframes.css（グローバル）にある
    ============================================================ */
-
-.care-menu__item--selected::after {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  content: '';
-
-  /* クリックのじゃまをしない、透明な板にする */
-  pointer-events: none;
-
-  /* アニメーションが止まっているときに残る「水色の枠」
-     （動きを減らす設定のときは、光の強弱が無くなり、この枠だけが表示される） */
-  box-shadow:
-    inset 0 0 0 2px rgb(var(--command-selected) / 85%),
-    0 0 0 2px rgb(var(--command-selected) / 75%);
-
-  /* 1.4秒かけてゆっくり。点滅ではなく「ふわっと光っている」速さ */
-  animation: command-selected-glow 1.4s ease-in-out infinite;
-}
-
-.care-menu__item:active::after {
-  animation: none;
-}
-
-.care-menu__item:disabled::after {
-  display: none;
-}
 
 /* おやつの残り個数など、行の右はしに出す小さな文字 */
 .command-box__badge {
@@ -71,11 +46,11 @@
   line-height: 1.7;
 }
 
-/* 「その場所ならではの遊び」と「どこでも同じコマンド」の区切り
+/* 「その場面ならではのコマンド」と「どこでも同じコマンド」の区切り
 
    同じ「どうする？」の枠の中にならんでいても、
-   上の2つ（すべる・見守る など）と
-   下の2つ（休憩・おやつ／← 場所選びにもどる）は種類がちがう
+   上のコマンド（すべる・見守る／休憩する・おやつにする など）と
+   下の「← 場所選びにもどる」は種類がちがう
 
    そこで、あいだに細い線と「そのほか」という小さな見出しを入れて、
    ひとめで「ここからは別のなかま」と分かるようにしている
@@ -137,136 +112,14 @@
   padding-left: 10px;
 }
 
-/* サブメニュー「☕ ひとやすみ」の枠
-
-   「ならべても浮かない」ことを大事にしているので、
-   形・角のまるさ・文字の大きさ・選択中の見せかたは command-box とそろえ、
-   ちがうのは色（紺色 → やさしい緑）と幅だけにしている
-*/
-.care-menu {
-  /* command-box（380px）より少しせまくして、
-     2つならべても1280×720の画面に収まるようにする */
-  flex: 0 1 240px;
-  min-width: 0;
-
-  /* 見出し1行＋コマンド2行だけなので、command-box より少しだけ浅くする */
-  padding: 10px 14px 12px;
-  border: 3px solid #fff;
-  border-radius: 10px;
-  background: linear-gradient(180deg, var(--care) 0%, var(--care-deep) 100%);
-  box-shadow: 0 6px 18px rgb(16 29 44 / 40%);
-}
-
-/* 「☕ ひとやすみ」の見出し（command-box の「どうする？」と同じ形） */
-.care-menu__label {
-  margin: 0 0 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgb(255 255 255 / 38%);
-  color: #e6f6ed;
-  font-size: 13.5px;
-  letter-spacing: 0.1em;
-}
-
-/* 選択肢1つぶん
-   command-box__item とまったく同じ形にして、
-   となりの枠と続いて見えるようにしている
-   左の28pxは、選ばれたときに出る「▶」の場所 */
-.care-menu__item {
-  position: relative;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  width: 100%;
-  padding: 6px 10px 6px 28px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #fff;
-  font-family: inherit;
-  font-size: 17px;
-  line-height: 1.6;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    transform 0.15s ease,
-    background-color 0.15s ease,
-    color 0.15s ease;
-}
-
-/* クリックしたとき、一瞬押しこまれたように見せる */
-.care-menu__item:active {
-  transform: translateX(4px) scale(0.98);
-}
-
-/* 選択カーソル「▶」（選ばれていない行では見えない）
-   たての中央に置く考えかたは command-box__item::before と同じ */
-.care-menu__item::before {
-  position: absolute;
-  top: 50%;
-  left: 9px;
-  transform: translateY(-50%);
-  color: var(--gold);
-  content: '▶';
-  font-size: 11px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-/* 選んでいる項目の見た目
-
-   ・マウスを乗せた行（:hover）
-   ・キーボードの↑↓で選んでいる行（--selected）
-   のどちらも、まったく同じ見た目になるようにまとめて指定する
-*/
-.care-menu__item:hover,
-.care-menu__item:focus-visible,
-.care-menu__item--selected {
-  background: rgb(255 255 255 / 14%);
-  font-weight: 700;
-  transform: translateX(3px);
-}
-
-.care-menu__item:hover::before,
-.care-menu__item:focus-visible::before,
-.care-menu__item--selected::before {
-  opacity: 1;
-}
-
-.care-menu__item:focus-visible {
-  outline: 2px solid var(--gold);
-  outline-offset: -2px;
-}
-
-.care-menu__text {
-  flex: 1;
-}
-
-/* おやつの残り個数（行の右はしに出す小さな文字） */
-.care-menu__badge {
-  flex: none;
-  color: #ffe2ac;
-  font-size: 12.5px;
-  font-weight: 400;
-}
-
-/* おやつを食べきったときのお知らせ */
-.care-menu__note {
-  margin: 0;
-  padding: 6px 10px 6px 28px;
-  color: #cfeadd;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
 /* ============================================================
    おやつバッグ（ゲーム中に、どのおやつを食べるか選ぶメニュー）
 
-   新しい枠は作らず、いま出ている枠の中身だけを入れかえて使う
-   ・休憩中               … ☕ ひとやすみ（care-menu）の枠の中
-   ・いやいやタイム       … どうする？（command-box）の枠の中
+   新しい枠は作らず、いま出ている「どうする？」（command-box）の枠の中身だけを入れかえて使う
+   ・ひとやすみ（ベンチ） … 休憩する／おやつにする のかわりに出す
+   ・いやいやタイム       … お話／だっこ／おやつ／待つ のかわりに出す
 
-   おやつ1つぶんの行には care-menu__item / command-box__item をそのまま付けているので、
+   おやつ1つぶんの行には command-box__item をそのまま付けているので、
    ▶ カーソル・水色の光・hover・focus-visible の見た目は、ほかのコマンドと同じになる
    ここで足すのは「名前の下に、効果の数字をもう1行出す」ための形だけ
    ============================================================ */
@@ -294,48 +147,14 @@
 
 /* 効果の数字（「体力 +5」「機嫌 +20」「5分」）
 
-   色・大きさ・太さは、いっしょに付けた care-menu__badge / command-box__badge
+   色・大きさ・太さは、いっしょに付けた command-box__badge
    （「残り2個」の文字）をそのまま使う
-   ☕ ひとやすみ の枠はせまいので、3つが入りきらないときは はみ出さずに折り返す */
+   3つが入りきらないときは、はみ出さずに折り返す */
 .snack-menu__effects {
   display: flex;
   flex-wrap: wrap;
   gap: 0 10px;
   line-height: 1.5;
-}
-
-/* --- サブメニューの開け閉め（Transition name="care-menu"） ---
-
-   PCでは command-box の左がわに出るので、
-   「少し左からすべって出てくる」動きにしている
-
-   場面の切り替え（name="scene"）と同じくらいの軽さ（0.2秒ほど）にして、
-   opacity と translateX だけを動かす
-   位置やはばは変えていないので、メインコマンドはぴくりとも動かない
-
-   ※ 動きを減らす設定（prefers-reduced-motion）のときは、
-     ページ下のまとめて止める指定でここも自動的に止まる
-     （transition-duration が 0.01ms になり、ぱっと出てぱっと消える）
-
-   ※ 休憩する・おやつ・遊びを選んで結果カードが出るときは、閉じるアニメーションをしない
-     （テンプレート側の <Transition name="care-menu" :css="!resultMessage"> を参照）
-*/
-.care-menu-enter-active {
-  transition:
-    opacity 0.2s ease-out,
-    transform 0.2s ease-out;
-}
-
-.care-menu-leave-active {
-  transition:
-    opacity 0.15s ease-in,
-    transform 0.15s ease-in;
-}
-
-.care-menu-enter-from,
-.care-menu-leave-to {
-  opacity: 0;
-  transform: translateX(-10px);
 }
 
 @media (max-height: 800px) {
@@ -344,51 +163,5 @@
   .command-box__divider {
     margin: 5px 10px 3px;
     font-size: 11px;
-  }
-
-  /* サブメニューも同じだけつめる
-     ※ PCでは command-box の「横」に出るので、
-       サブメニューを開いてもコマンド欄の高さは変わらない
-       （高さは、背の高いほうの command-box で決まる） */
-  .care-menu {
-    padding: 7px 12px 9px;
-  }
-
-  .care-menu__label {
-    margin-bottom: 6px;
-    padding-bottom: 6px;
-  }
-
-  .care-menu__item {
-    padding: 4px 10px 4px 28px;
-    font-size: 16px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-
-  .care-menu__item--selected::after {
-    animation: none !important;
-  }
-}
-
-@media (max-width: 700px) {
-
-  .command-area .care-menu {
-    flex: none;
-    align-self: stretch;
-    width: auto;
-    max-width: none;
-  }
-
-  .care-menu__item {
-    font-size: 16px;
-  }
-}
-
-@media (max-width: 700px) and (max-height: 700px) {
-
-  .care-menu {
-    padding: 9px 12px 10px;
   }
 }

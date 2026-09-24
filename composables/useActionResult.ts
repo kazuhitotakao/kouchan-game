@@ -56,7 +56,6 @@ import type { RandomEventEffect, StatusChanges } from '~/types/game';
    ============================================================ */
 const initialResultMessage: string = ''; // 結果の文章
 const initialStatusChanges: StatusChanges | null = null; // 今回の変化（null = まだ結果がない）
-const initialIsCareActionResult: boolean = false; // いま出ている結果が、休憩・おやつのものか
 const initialRandomEventText: string = ''; // ちょっとしたできごとの文章
 
 /* 行動する前のステータスの控え（最初はぜんぶ0）
@@ -133,10 +132,6 @@ export function useActionResult(options: UseActionResultOptions) {
   */
   const statusBefore = ref(createInitialStatusBefore());
 
-  /* いま出ている結果カードが、休憩・おやつの結果かどうか
-     finishCareAction() で true、次の行動をはじめたとき（startStatusChanges()）や場所を出たときに false */
-  const isCareActionResult = ref(initialIsCareActionResult);
-
   /* 行動の中身がぜんぶ終わったあとに呼ぶ
      「今の値 － 行動前の値」で、今回の変化量を作る
 
@@ -198,7 +193,6 @@ export function useActionResult(options: UseActionResultOptions) {
     resultMessage.value = initialResultMessage;
     statusChanges.value = initialStatusChanges;
     statusBefore.value = createInitialStatusBefore();
-    isCareActionResult.value = initialIsCareActionResult;
 
     foundItemsThisAction.value = [];
     randomEventText.value = initialRandomEventText;
@@ -211,7 +205,6 @@ export function useActionResult(options: UseActionResultOptions) {
     foundItemsThisAction,
     randomEventText,
     randomEventEffects,
-    isCareActionResult,
 
     /* ===== 今回の変化（上部ステータスと結果カードに出す） ===== */
     statusChanges,

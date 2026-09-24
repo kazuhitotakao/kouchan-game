@@ -42,14 +42,12 @@ export type UseKeyboardControlsOptions = {
 
   /* ===== いま選んでいる番号（親の ref をそのまま動かす） ===== */
   selectedCommandIndex: Ref<number>;
-  selectedCareCommandIndex: Ref<number>;
   selectedSnackMenuIndex: Ref<number>;
   selectedGoalConfirmIndex: Ref<number>;
 
   /* ===== 画面の状態（見るだけ） ===== */
-  isNormalPlace: ComputedRef<boolean>;
-  isCareMenuVisible: ComputedRef<boolean>;
-  careCommandCount: ComputedRef<number>;
+  /* 「どうする？」が たて1列にならんで ↑↓ で選ぶ画面か（通常の場所6か所と、ひとやすみ） */
+  isPlaceMenuScene: ComputedRef<boolean>;
   isSnackMenuVisible: ComputedRef<boolean>;
   snackMenuBackIndex: ComputedRef<number>;
   commandCount: ComputedRef<number>;
@@ -81,7 +79,6 @@ export type UseKeyboardControlsOptions = {
   openSnackSelection: () => void;
   closeSnackSelection: () => void;
   closeHowToPlay: () => void;
-  closeCareMenu: () => void;
   closeSnackMenu: () => void;
   closeGoalConfirm: () => void;
   confirmGoToGoal: () => void;
@@ -104,12 +101,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     currentEvent,
     resultMessage,
     selectedCommandIndex,
-    selectedCareCommandIndex,
     selectedSnackMenuIndex,
     selectedGoalConfirmIndex,
-    isNormalPlace,
-    isCareMenuVisible,
-    careCommandCount,
+    isPlaceMenuScene,
     isSnackMenuVisible,
     snackMenuBackIndex,
     commandCount,
@@ -130,7 +124,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     openSnackSelection,
     closeSnackSelection,
     closeHowToPlay,
-    closeCareMenu,
     closeSnackMenu,
     closeGoalConfirm,
     confirmGoToGoal,
@@ -206,41 +199,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectedCommandIndex.value = Math.min(commandCount.value - 1, selectedCommandIndex.value + 1);
   }
 
-  /* ===== ここから下は、サブメニュー「☕ ひとやすみ」の中の↑↓ =====
-
-     上の2つ（moveCommandUp / moveCommandDown）とまったく同じ考えかたで、
-     見ている数が selectedCommandIndex → selectedCareCommandIndex、
-     commandCount → careCommandCount に変わるだけ
-
-     おやつが残っていれば2つ（休憩 → おやつ → 休憩 …）でループし、
-     食べきっていれば「休憩する」1つだけなので、押しても動かない
-  */
-
-  /* ↑：サブメニューの1つ上のコマンドへ */
-  function moveCareCommandUp() {
-    // すでに一番上にいるなら、一番下（コマンド数 - 1）へ回りこむ
-    if (selectedCareCommandIndex.value <= 0) {
-      selectedCareCommandIndex.value = careCommandCount.value - 1;
-      return;
-    }
-
-    selectedCareCommandIndex.value -= 1;
-  }
-
-  /* ↓：サブメニューの1つ下のコマンドへ */
-  function moveCareCommandDown() {
-    // すでに一番下にいるなら、一番上（0）へ戻る
-    if (selectedCareCommandIndex.value >= careCommandCount.value - 1) {
-      selectedCareCommandIndex.value = 0;
-      return;
-    }
-
-    selectedCareCommandIndex.value += 1;
-  }
-
   /* ===== ここから下は、おやつバッグの中の↑↓ =====
 
-     ひとやすみの↑↓と同じ考えかたで、
+     メインコマンドの↑↓（moveCommandUp / moveCommandDown）と同じ考えかたで、
      見ている数が selectedSnackMenuIndex、いちばん下が「← もどる」（snackMenuBackIndex）に変わるだけ
 
      例）バッグにグミ・せんべいがあるとき
@@ -1153,14 +1114,15 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
      ※ いやいや発生の結果は、まだ currentEvent が 'tantrum' ではなく、通常の場所の結果として出る
        そのため currentEvent ではなく「結果が出ているか」で見分けている
-     ※ おやつバッグ・「☕ ひとやすみ」は handleKeydown() でこれより先に受け取るので、
+     ※ 通常の場所6か所と ひとやすみ（ベンチ）は、「どうする？」がたて1列なので、↑↓ はコマンドを選ぶのに使う
+     ※ おやつバッグは handleKeydown() でこれより先に受け取るので、
        開いているあいだの ↑↓ はスクロールに取られない */
   const isReadingScene = computed(() => {
     if (currentEvent.value === 'parkEntrance' || isSecretPathPlaying.value) {
       return false;
     }
 
-    return !isNormalPlace.value || !!resultMessage.value;
+    return !isPlaceMenuScene.value || !!resultMessage.value;
   });
 
   /* いま画面に出ている場面（.scene）
@@ -1468,19 +1430,18 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
     /* ⓪-1 おやつバッグが開いているとき
 
-       いちばん内側のメニューなので、サブメニュー「☕ ひとやすみ」より先に見る
-       （ひとやすみの中でバッグを開いているときは、どちらも「開いている」状態のため）
+       いちばん内側のメニューなので、メインコマンドより先に見る
 
        ・↑↓           バッグの中で選ぶ（いちばん下は「← もどる」）
        ・Enter / Space 選んでいるおやつを食べる（「← もどる」なら戻る）
-       ・Escape        1つ前のメニューへ戻る（☕ ひとやすみ／いやいやのコマンド など）
+       ・Escape        1つ前のメニューへ戻る（ひとやすみ の休憩・おやつ／いやいやのコマンド）
                        ゲームを終えたり、タイトルへ戻ったりはしない
 
        ※ Enter / Space で preventDefault() を呼ぶのが大事
          フォーカスが当たっているボタンの「本来のクリック」が止まるので、
          1回押しただけで「ここでの実行」と「ボタンのクリック」の2回ぶん
          おやつを食べてしまう、ということが起きない
-         （メインコマンド・ひとやすみと同じやりかた）
+         （メインコマンドと同じやりかた）
     */
     if (isSnackMenuVisible.value) {
       if (event.key === 'Escape') {
@@ -1516,60 +1477,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       }
 
       // ここまでに当てはまらないキー（←→など）は、何もしないでブラウザにまかせる
-      return;
-    }
-
-    /* ⓪-2 サブメニュー「☕ ひとやすみ」が開いているとき
-
-       開いているあいだは、キー操作をぜんぶサブメニュー側で受け取る
-       （メインコマンドは画面に残っているが、↑↓で動くのはサブメニューの中だけ）
-
-       ・↑↓           サブメニューの中で選ぶ
-       ・Enter / Space 選んでいる行を実行する
-       ・Escape        サブメニューを閉じる
-       ・→             サブメニューはPCでは左側に出るので、右を押すとメインへ戻る
-
-       閉じたあとは、メイン側の「休憩・おやつ」が選ばれたままになる
-       （closeCareMenu() は selectedCommandIndex をさわらないため）
-
-       ※ メインコマンドの↑↓（この下の ①②）より前に置くのが大事
-         あとに置くと、↑↓がメイン側に取られてしまう
-    */
-    if (isCareMenuVisible.value) {
-      // Escape と → で閉じる
-      if (event.key === 'Escape' || event.key === 'ArrowRight') {
-        event.preventDefault();
-        closeCareMenu();
-        return;
-      }
-
-      if (event.key === 'ArrowUp') {
-        // 矢印キーでページが上下にスクロールしてしまわないようにする
-        event.preventDefault();
-        moveCareCommandUp();
-        return;
-      }
-
-      if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        moveCareCommandDown();
-        return;
-      }
-
-      if (isDecideKey) {
-        // Spaceでページが下にスクロールするのを防ぐ
-        event.preventDefault();
-
-        // 押しっぱなし（長押し）で同じ行動が何度も走らないようにする
-        if (event.repeat) {
-          return;
-        }
-
-        runSelectedCommand();
-        return;
-      }
-
-      // ここまでに当てはまらないキー（←など）は、何もしないでブラウザにまかせる
       return;
     }
 

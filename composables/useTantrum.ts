@@ -758,7 +758,7 @@ export function useTantrum(options: UseTantrumOptions) {
 
   /* ② おやつをあげる
 
-     「おやつをあげる ＞」→ おやつバッグ で選んだときに呼ばれる
+     「おやつをあげる」→ おやつバッグ で選んだときに呼ばれる
      （引数の snackId が、選んだおやつの名札）
 
      効果は3つに分けて考える

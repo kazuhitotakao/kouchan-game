@@ -25,6 +25,7 @@
    grassArea    = 芝生広場
    secretSpot   = こもれびの広場
    secretPath   = 秘密の小道（こもれびの広場へ続くミニゲーム。そのプレイではじめて広場へ行くときだけ通る）
+   restArea     = ひとやすみ（公園入口から入る、休憩・おやつを選ぶベンチ。遊ぶ場所ではない）
    tantrum      = いやいや中（なだめる場面）
    goal         = ゴール（公園の出口）
    gameOver     = ゲームオーバー（限界をむかえて途中で終わった）
@@ -46,6 +47,7 @@ export type GameEvent =
   | 'grassArea'
   | 'secretSpot'
   | 'secretPath'
+  | 'restArea'
   | 'tantrum'
   | 'goal'
   | 'gameOver'
@@ -57,12 +59,13 @@ export type GameEvent =
 
 /* 結果カード・コマンド欄が、どの場面のものか
    place       … 通常の場所6か所（すべり台・砂場など）
+   rest        … ひとやすみ（休憩する・おやつをあげる。CommandBox.vue だけで使う）
    tantrum     … いやいやタイム
    suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
 
    CommandBox.vue と ResultCard.vue の variant で、同じものを見ている
 */
-export type SceneVariant = 'place' | 'tantrum' | 'suddenEvent';
+export type SceneVariant = 'place' | 'rest' | 'tantrum' | 'suddenEvent';
 
 /* ランダムイベントで動いたステータス1つぶんの型
    label     … 「おでかけポイント」などの項目名
@@ -110,8 +113,8 @@ export type Snack = {
 };
 
 /* どの場面からおやつバッグを開いたか
-   exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
-   tantrum   … いやいやタイムの「おやつをあげる ＞」
+   exploring … 公園入口の「ひとやすみ」（ベンチ）→「おやつにする」
+   tantrum   … いやいやタイムの「おやつをあげる」
 */
 export type SnackUseContext = 'exploring' | 'tantrum';
 

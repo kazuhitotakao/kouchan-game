@@ -272,7 +272,7 @@ const {
        入れものへ入れるのは今までどおりこのファイルで、
        resultMessage.value = ... のように、受けとった ref へ直接書きかえる
      ・行動をはじめる共通の入口 startStatusChanges()
-       （決定音・サブメニューを閉じる・前の行動の表示を消す・行動前の控えを取る）
+       （決定音・おやつバッグを閉じる・前の行動の表示を消す・行動前の控えを取る）
      ・ゲームの途中で表示を消すところ（goToPlace()・goToNextPlace() など）
 
    ※ ゲームが終わったあとの結果（スコア・ランク・GAME OVER）は composables/useGameResult.ts
@@ -283,7 +283,6 @@ const {
   foundItemsThisAction,
   randomEventText,
   randomEventEffects,
-  isCareActionResult,
 
   /* 今回の変化（上部ステータスと結果カードに出す） */
   statusChanges,
@@ -331,7 +330,7 @@ const tantrumAlertVisible = ref(false);
        findSnackInBag / removeSnackFromBag をそのまま渡している
 
    ■ ゲーム中にどのおやつを食べるか選ぶメニュー（おやつバッグ）は、
-     もう少し下の「サブメニュー ☕ ひとやすみ」のあとにまとめてある
+     もう少し下の「ひとやすみ（ベンチ）のコマンドの番号」のあとにまとめてある
    ============================================================ */
 const {
   /* バッグの中身（おやつ選択画面から直接 出し入れする） */
@@ -480,164 +479,61 @@ const isTantrumUnsolved = computed(() => currentEvent.value === 'tantrum' && isT
 /* いま「通常の場所」にいるかどうか
 
    includes() は「この配列の中にあるか？」を調べる書きかた
-   true なら、その場所ならではの遊びがならんでいて、
-   「休憩・おやつ」からサブメニューを開ける画面だという意味
+   true なら、その場所ならではの遊びがならんでいる画面だという意味
 */
 const isNormalPlace = computed(() => normalPlaceEvents.includes(currentEvent.value));
 
+/* いま「ひとやすみ」（ベンチ）にいるかどうか
+
+   公園入口の「ひとやすみ」から入る、休憩・おやつを選ぶ画面
+   遊ぶ場所ではないので normalPlaceEvents には入れていない
+   （探検済み・アイテム・ちょっとしたできごと・いやいや・とつぜんのできごとは、ここでは起きない）
+*/
+const isRestArea = computed(() => currentEvent.value === 'restArea');
+
+/* 「どうする？」が たて1列にならんで、↑↓ で選ぶ画面かどうか（キーボード操作で使う）
+   通常の場所6か所と、ひとやすみ（ベンチ）
+   （ほかの画面は、選択肢が横にならんでいて ← → で選び、↑↓ は文章のスクロールに使う） */
+const isPlaceMenuScene = computed(() => isNormalPlace.value || isRestArea.value);
+
 /* ===== 通常の場所のメインコマンドの番号 =====
 
-   通常の場所6か所は、どこでも同じ4つにそろえてある
+   通常の場所6か所は、どこでも同じ3つにそろえてある
 
    0 その場所の行動①
    1 その場所の行動②
-   2 休憩・おやつ          ← 押すとサブメニューが開く
-   3 ← 場所選びにもどる    ← よく使うので、サブメニューには入れない
-                              （この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る）
+   2 ← 場所選びにもどる    （この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る）
 
-   ※ 2・3 という数字を直接書かず、名前を付けておく
+   ※ 数字を直接書かず、名前を付けておく
      画面とキーボード操作の両方で同じ番号を使うので、
      名前にしておけば、あとから順番を変えてもずれない
+   ※ 前は 2 に「休憩・おやつ」があり、押すと「ひとやすみ」のサブメニューが開いていた
+     休憩・おやつはどの場所でも同じ効果なので、公園入口の「ひとやすみ」（ベンチ）へまとめた
 */
-const careMenuCommandIndex = 2;
-const leavePlaceCommandIndex = 3;
+const leavePlaceCommandIndex = 2;
 
-/* ===== サブメニュー「☕ ひとやすみ」 =====
+/* ===== ひとやすみ（ベンチ）のコマンドの番号 =====
 
-   休憩とおやつは、その場所ならではの遊びではなく
-   「どこでも同じ、親子の状態を整える行動」なので、
-   メインコマンドの中にまぜず、別のメニューにまとめている
+   0 休憩する
+   1 おやつにする（バッグにおやつが残っているときだけ。押すとおやつバッグが開く）
+   最後 ← 場所選びにもどる
 
-   ふだんは閉じていて、「休憩・おやつ」を選んだときだけ開く
+   おやつを食べきると「おやつをあげる」の行が画面から消えるので、
+   「← 場所選びにもどる」は 1つくり上がる（おやつあり 2／なし 1）
 */
+const restBreakCommandIndex = 0;
+const restSnackCommandIndex = 1;
+const restLeaveCommandIndex = computed(() => (snackLeft.value > 0 ? 2 : 1));
 
-/* サブメニューが開いているかどうか（true = 開いている） */
-const isCareMenuOpen = ref(false);
+/* 公園入口へ戻ってきた直後などに、コマンド枠をマウスで押せなくしておくか
 
-/* サブメニューの中で、いま選んでいるコマンドの番号
-   0 = 休憩する、1 = おやつをあげる
-
-   メインコマンドの selectedCommandIndex とは別に持っている
-   （こうしておくと、サブメニューを閉じたときに
-     メイン側の「休憩・おやつ」が選ばれたままになる）
-*/
-const selectedCareCommandIndex = ref(0);
-
-/* サブメニューを実際に画面に出すかどうか
-
-   次の3つがそろったときだけ出す
-   ① 通常の場所6か所にいる
-   ② 結果カードが出ていない（まだ行動を選んでいる最中）
-   ③ サブメニューを開いている
-
-   画面（v-if）・キーボード操作・Enterの実行 の3か所で同じこれを見るので、
-   「画面に無いのにキーだけ効く」ということが起きない
-*/
-const isCareMenuVisible = computed(() => isNormalPlace.value && !resultMessage.value && isCareMenuOpen.value);
-
-/* サブメニューに出ているコマンドの数
-   おやつが残っていれば2つ（休憩・おやつ）、食べきっていれば1つ（休憩だけ）
-   ↑↓キーで動ける範囲を決めるのに使う
-*/
-const careCommandCount = computed(() => (snackLeft.value > 0 ? 2 : 1));
-
-/* サブメニューを開く
-
-   開くときは、いつも一番上（0 = 休憩する）が選ばれた状態からはじめる
-
-   メイン側の選択も「休憩・おやつ」にそろえておく
-   こうしておくと、Escapeで閉じたときに
-   そのまま「休憩・おやつ」が選ばれた状態に戻る
-*/
-function openCareMenu() {
-  // 決定音「ポン♪」（メニューを開いたことが分かるように）
-  playDecisionSound();
-
-  isCareMenuOpen.value = true;
-  selectedCareCommandIndex.value = 0;
-  selectedCommandIndex.value = careMenuCommandIndex;
-}
-
-/* サブメニューを閉じる
-
-   ※ selectedCommandIndex はさわらない
-     メイン側の「休憩・おやつ」が選ばれたまま残るようにするため
-
-   ※ おやつバッグ（closeSnackMenu()）もいっしょに閉じる
-     ひとやすみを閉じたのに、その中から開いたバッグだけが残る、ということが起きない
-     この関数は「行動をはじめたとき・場所を移動したとき・もう一度あそぶ」でも呼ばれるので、
-     いやいやタイムで開いたバッグも、そのときにまとめて閉じられる
-*/
-function closeCareMenu() {
-  isCareMenuOpen.value = false;
-  selectedCareCommandIndex.value = 0;
-  closeSnackMenu();
-}
-
-/* 「休憩・おやつ」を押したときの開け閉め
-   開いていなければ開く、開いていればもう一度押して閉じる
-*/
-function toggleCareMenu() {
-  if (isCareMenuOpen.value) {
-    // 閉じるときは決定音を鳴らさない（開くときだけ鳴らす）
-    closeCareMenu();
-    return;
-  }
-
-  openCareMenu();
-}
-
-/* ===== 休憩・おやつのあとの「← もどる」 =====
-
-   通常の場所の「進む／戻る」は、次の3種類に分けてある（文言が混ざらないようにする）
-
-   ① 「次の場所を選ぶ」     … 場所ならではの遊びが終わったので、公園入口の「どこへ行く？」へ進む
-   ② 「← 場所選びにもどる」 … まだ何もしていないが、この場所では遊ばずに「どこへ行く？」へ戻る
-   ③ 「← もどる」           … いまいる場所や、1つ前のメニューへ戻る
-                               （おやつバッグ → ☕ ひとやすみ、休憩・おやつの結果 → いまいる場所）
-
-   休憩・おやつは、その場所で ひと息ついただけで、場所は離れていない
-   なので結果カードには①ではなく③を出し、押したら同じ場所の「どうする？」へ戻す
-*/
-
-/* 休憩・おやつの結果カードに「← もどる」を出すかどうか
-
-   ※ 12:00を過ぎたときだけは出さず、ほかの行動のあとと同じ「次の場所を選ぶ」にする
-     休憩で12:00を過ぎたのに場所へ戻れてしまうと、「12:00までに帰る」というルールが崩れるため
-     （「次の場所を選ぶ」を押すと、goToNextPlace() が今までどおりゴールへ向かう） */
-const isCareResultBackVisible = computed(() => isNormalPlace.value && !!resultMessage.value && isCareActionResult.value && !isTimeOver.value);
-
-/* 休憩・おやつの結果カードの「← もどる」
-
-   結果カードを閉じて、いまいる場所の「どうする？」へ戻すだけ
-   ・時間・ステータス・おやつは、休憩・おやつを選んだときに変わり終わっているので、ここでは何も変えない
-   ・場所を離れていないので、BGMもさわらない（こもれびの広場なら、こもれびの広場BGMのまま）
-   ・カーソルは「休憩・おやつ」に合わせる（おやつバッグの「← もどる」と同じく、選んでいた行へ戻る）
-   ・決定音は鳴らさない（ほかの「← もどる」と同じ）
-   ・マウスを動かすまで、コマンド枠をマウスで押せないようにする（isCommandPointerPaused を参照） */
-function backToPlaceFromCareResult() {
-  if (!isCareResultBackVisible.value) {
-    return;
-  }
-
-  resultMessage.value = '';
-  statusChanges.value = null;
-  isCareActionResult.value = false;
-  selectedCommandIndex.value = careMenuCommandIndex;
-  pauseCommandPointer();
-}
-
-/* 「← もどる」（休憩・おやつの結果）のあとや、公園入口へ戻ってきた直後だけ、コマンド枠をマウスで押せなくしておくか
-
-   「← もどる」は1つだけのボタンなので枠のいちばん下にあり、押すと枠が上へ4行ぶん伸びる
-   するとマウスを動かしていなくても、カーソルの真下に「← 場所選びにもどる」が来てしまい、
-   ・選んでいる行が「休憩・おやつ」から勝手に移る（ハイライトが跳ねて見える）
-   ・すばやく2回押すと、2回目で場所を出てしまう
-   ということが起きる
+   ボタンを押して画面が切りかわると、マウスを動かしていなくても、
+   止まったままのカーソルの真下に、新しい画面のボタンが来てしまうことがある
+   ・選んでいる行が、カーソルの下のボタンへ勝手に移る（ハイライトが跳ねて見える）
+   ・すばやく2回押すと、2回目で思っていないボタンを押してしまう
 
    そこで、マウスを動かす（またはどこかを押す）までは、枠へのマウス操作を止めておく
    （止めかたは CSS の .command-box--pointer-paused）
-   キーボードで「← もどる」を選んだときも、枠の上にマウスが置いてあれば同じことが起きるので止める
    キーボード操作（↑↓・Enter / Space）そのものは、これとは関係なく使える
 
    ※ 指で操作しているとき（lastPointerType が 'touch'）は止めない
@@ -697,8 +593,8 @@ function handleWindowPointer(event: PointerEvent) {
 
    おやつを食べる場面は2つあり、どちらも同じバッグ（selectedSnackIds）から選ぶ
 
-     exploring … 通常の場所の「☕ ひとやすみ」→「おやつをあげる ＞」
-     tantrum   … いやいやタイムの「おやつをあげる ＞」
+     exploring … 公園入口の「ひとやすみ」（ベンチ）→「おやつにする」
+     tantrum   … いやいやタイムの「おやつをあげる」
 
    ※ とつぜんのできごと「こうちゃんがころんだ」では、おやつは使わない（バッグも開かない）
 
@@ -719,7 +615,7 @@ const snackUseContext = ref<SnackUseContext | null>(null);
    0 〜 おやつの数-1 … バッグの中のおやつ（selectedSnacks の順）
    おやつの数        … いちばん下の「← もどる」
 
-   selectedCommandIndex（メインコマンド）・selectedCareCommandIndex（ひとやすみ）とは別に持つ
+   selectedCommandIndex（メインコマンド）とは別に持つ
    こうしておくと、もどったときに「おやつをあげる」が選ばれたまま残る */
 const selectedSnackMenuIndex = ref(0);
 
@@ -728,15 +624,15 @@ const snackMenuBackIndex = computed(() => selectedSnacks.value.length);
 
 /* おやつバッグを実際に画面に出しているかどうか
 
-   isCareMenuVisible と同じ考えかたで、画面（v-if）・キーボード操作・Enterの実行 の
-   3か所がこれを見るので、「画面に無いのにキーだけ効く」ということが起きない
+   画面（v-if）・キーボード操作・Enterの実行 の3か所がこれを見るので、
+   「画面に無いのにキーだけ効く」ということが起きない
 
    開いた場面のコマンドが、いま画面に出ているときだけ true にする
-   ・exploring … ☕ ひとやすみ が出ているとき（バッグは その枠の中に出る）
+   ・exploring … ひとやすみ（ベンチ）で、まだ結果が出ていないとき（バッグは「どうする？」の枠の中に出る）
    ・tantrum   … いやいやが続いているとき（「少し待ってみる」に失敗した直後もふくむ） */
 const isSnackMenuVisible = computed(() => {
   if (snackUseContext.value === 'exploring') {
-    return isCareMenuVisible.value;
+    return isRestArea.value && !resultMessage.value;
   }
 
   if (snackUseContext.value === 'tantrum') {
@@ -766,7 +662,7 @@ function openSnackMenu(context: SnackUseContext) {
 
    バッグの中身（selectedSnackIds）はさわらない
    閉じると、開く前のメニューがそのまま出てくる
-   ・exploring … ☕ ひとやすみ（「おやつをあげる」が選ばれたまま）
+   ・exploring … ひとやすみ（「おやつにする」が選ばれたまま）
    ・tantrum   … お話／だっこ／おやつ／待つ（「おやつをあげる」が選ばれたまま） */
 function closeSnackMenu() {
   snackUseContext.value = null;
@@ -808,14 +704,14 @@ const commandCount = computed(() => {
     return 2;
   }
 
-  // 公園入口は「行き先6か所 ＋ ゴール」で7つ
-  // 秘密の場所がまだ見つかっていないときは、その行が画面に無いので6つ
+  // 公園入口は「行き先6か所 ＋ ひとやすみ ＋ ゴール」で8つ
+  // 秘密の場所がまだ見つかっていないときは、その行が画面に無いので7つ
   if (currentEvent.value === 'parkEntrance') {
-    return canEnterSecretSpot.value ? 7 : 6;
+    return canEnterSecretSpot.value ? 8 : 7;
   }
 
   // いやいやが続いているあいだは、おやつが残っていれば4つ、食べきっていれば3つ
-  //   おやつあり  0 お話する／1 だっこ／2 おやつ ＞／3 少し待ってみる
+  //   おやつあり  0 お話する／1 だっこ／2 おやつ／3 少し待ってみる
   //   おやつなし  0 お話する／1 だっこ／2 少し待ってみる
   // 待つ・お話・おやつが効かずに結果メッセージが出ているときも、
   // いやいやはまだ終わっていないので、この4つ（3つ）から選び直す
@@ -824,28 +720,30 @@ const commandCount = computed(() => {
     return snackLeft.value > 0 ? 4 : 3;
   }
 
-  // 結果表示中は1つだけ
-  // （ふつうは「次の場所を選ぶ」、休憩・おやつの結果なら「← もどる」）
+  // 結果表示中は1つだけ（「次の場所を選ぶ」など）
   if (resultMessage.value) {
     return 1;
   }
 
-  /* 通常の場所6か所は、どこでも同じ4つ
+  /* 通常の場所6か所は、どこでも同じ3つ
 
      0 その場所の行動①
      1 その場所の行動②
-     2 休憩・おやつ
-     3 ← 場所選びにもどる
-
-     ※ サブメニューが開いているあいだのコマンド数は、ここでは数えない
-       サブメニュー側は careCommandCount で別に管理している
+     2 ← 場所選びにもどる
 
      ※ すぐ上の「結果表示中は1つ」より後ろに置くのが大事
-       結果カードを読んでいるあいだは、メインコマンドも
-       「次の場所を選ぶ」（休憩・おやつの結果なら「← もどる」）1つだけになるため
+       結果カードを読んでいるあいだは、メインコマンドも「次の場所を選ぶ」1つだけになるため
   */
   if (isNormalPlace.value) {
-    return 4;
+    return 3;
+  }
+
+  /* ひとやすみ（ベンチ）は、おやつが残っていれば3つ、食べきっていれば2つ
+       おやつあり  0 休憩する／1 おやつにする／2 ← 場所選びにもどる
+       おやつなし  0 休憩する／1 ← 場所選びにもどる
+     ※ おやつバッグを開いているあいだは、バッグの中の数（snackMenuBackIndex + 1）を別に見ている */
+  if (isRestArea.value) {
+    return restLeaveCommandIndex.value + 1;
   }
 
   // 秘密の小道
@@ -859,7 +757,7 @@ const commandCount = computed(() => {
   // ここに来るのはとつぜんのできごと5つ（救急車・テントウムシ・犬・ころんだ・噴水）だけ
   // どれも選択肢が3つなので3を返す
   // ※ ころんだイベントも、おやつを使わないので おやつの残りに関係なく いつも3つ
-  // ※ 通常の場所は、1つ上の isNormalPlace の分岐で返している
+  // ※ 通常の場所・ひとやすみは、上の isNormalPlace／isRestArea の分岐で返している
   return 3;
 });
 
@@ -897,7 +795,7 @@ const choiceGridClass = computed(() => (isChoiceGridVisible.value ? ['command-bo
 
 /* いやいやタイムの4つ（3つ）のコマンドが、それぞれ何番目になるか
 
-   おやつあり  0 お話する／1 だっこ／2 おやつ ＞／3 少し待ってみる
+   おやつあり  0 お話する／1 だっこ／2 おやつ／3 少し待ってみる
    おやつなし  0 お話する／1 だっこ／2 少し待ってみる
 
    いやいやタイムが始まったときは、いちばん上の「お話する」が選ばれた状態になる
@@ -941,11 +839,18 @@ const nextPlaceCommandLabel = computed(() => {
   return '次の場所を選ぶ';
 });
 
-/* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
+/* 公園入口の「ひとやすみ」が何番目になるか
+   行き先（すべり台〜芝生広場、見つけていれば細い道の先）のすぐあと
    秘密の場所が出ていれば7番目（＝6）
    まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
 */
-const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
+const restCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
+
+/* 公園入口の「公園の出口へ向かう（ゴール）」が何番目になるか
+   いちばん最後（ひとやすみ のすぐあと）
+   秘密の場所が出ていれば8番目（＝7）、まだ出ていないときは7番目（＝6）
+*/
+const goalCommandIndex = computed(() => restCommandIndex.value + 1);
 
 /* 公園入口へ戻ってきたとき、どのコマンドにカーソルを合わせるか（restoreEntranceCursor() で使う）
 
@@ -957,6 +862,11 @@ const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
      おでかけポイントもアイテムも減らないので、広場や小道にいるあいだに消えることは無いはずだが、
      出ていないときに5番を返すと、1つくり上がったゴールを選んでしまうので、念のため確かめる */
 function getPlaceSelectionIndex(place: GameEvent): number | null {
+  // ひとやすみ（ベンチ）は、細い道の先が出ているかどうかで番号が変わるので、ここで決める
+  if (place === 'restArea') {
+    return restCommandIndex.value;
+  }
+
   const index = placeSelectionIndexes[place];
 
   if (index === undefined) {
@@ -972,7 +882,7 @@ function getPlaceSelectionIndex(place: GameEvent): number | null {
 
 /* このプレイで、公園入口から最後に入った場所（公園入口へ戻ったときのカーソル位置に使う）
 
-   goToPlace() で、公園入口に行がある場所（placeSelectionIndexes にある場所）へ入るときに書きかえる
+   goToPlace() で、公園入口に行がある場所（placeSelectionIndexes にある場所と、ひとやすみ）へ入るときに書きかえる
    ・とつぜんのできごと・いやいやタイムは goToPlace() を通らない（goToNextPlace() が直接切りかえる）ので、
      途中に入っても上書きされず、そのあと公園入口へ戻ったときに「遊んでいた場所」を選べる
    ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「細い道の先」なので同じ
@@ -1022,7 +932,7 @@ const selectedGoalConfirmIndex = ref(0);
 
    開いている印に加えて「ゲーム中で、公園入口にいる」ことも見る
    画面（v-if）・キーボード操作・「出口へ向かう」の実行 の3か所で同じこれを見るので、
-   「画面に無いのにキーだけ効く」ということが起きない（isCareMenuVisible と同じ考えかた） */
+   「画面に無いのにキーだけ効く」ということが起きない（isSnackMenuVisible と同じ考えかた） */
 const isGoalConfirmVisible = computed(() => isGoalConfirmOpen.value && gameStarted.value && currentEvent.value === 'parkEntrance');
 
 /* ダイアログに出す「お昼まで、あとどれくらいか」の文
@@ -1174,20 +1084,12 @@ function startStatusChanges() {
   // 決定音「ポン♪」
   playDecisionSound();
 
-  /* サブメニュー「☕ ひとやすみ」を閉じる
+  /* おやつバッグを閉じる
 
      どの行動を選んでも、ここを通れば必ず閉じるので、
-     行動のあとにサブメニューが出しっぱなしになることがない
-     （休憩・おやつだけでなく、「一緒にすべる」のような
-       場所の行動を選んだときにも閉じる）
-
-     ※ closeCareMenu() の中で、おやつバッグもいっしょに閉じる
-       おやつを食べたあとに、バッグが出しっぱなしになることもない
+     おやつを食べたあとに、バッグが出しっぱなしになることがない
   */
-  closeCareMenu();
-
-  // 前の結果が休憩・おやつだったかの印も消す（このあとの行動が休憩・おやつなら、finishCareAction() でまた付く）
-  isCareActionResult.value = false;
+  closeSnackMenu();
 
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
@@ -2143,8 +2045,8 @@ function goToPlace(place: GameEvent) {
   // 決定音「ポン♪」（公園入口から各場所へ移動するとき）
   playDecisionSound();
 
-  // 前の場所で開いたままのサブメニューが残らないように閉じる
-  closeCareMenu();
+  // 前の画面で開いたままのおやつバッグが残らないように閉じる
+  closeSnackMenu();
 
   // 前の画面で止めていたマウス操作も戻す（止めるのは「← もどる」のあとや、公園入口へ戻ってきた直後の画面だけ）
   isCommandPointerPaused.value = false;
@@ -2154,7 +2056,8 @@ function goToPlace(place: GameEvent) {
   currentEvent.value = place;
 
   // 公園入口に行がある場所なら、「最後に入った場所」として覚える（公園入口へ戻ったときのカーソル位置に使う）
-  if (placeSelectionIndexes[place] !== undefined) {
+  // ひとやすみ（ベンチ）も公園入口に行があるので覚える（番号は getPlaceSelectionIndex() で決める）
+  if (placeSelectionIndexes[place] !== undefined || place === 'restArea') {
     lastSelectedPlace.value = place;
   }
 
@@ -2217,8 +2120,7 @@ function goToNextPlace() {
      こもれびの広場BGMを止めるのも、公園BGMへ戻すのも、この印を見て決める
 
      ※ 「← 場所選びにもどる」でも「次の場所を選ぶ」でも、
-       秘密の場所から出る道はこの関数1本だけなので、ここで覚えれば足りる
-       （休憩・おやつの結果の「← もどる」は場所を出ないので、この関数を通らない） */
+       秘密の場所から出る道はこの関数1本だけなので、ここで覚えれば足りる */
   const leavingSecretSpot = currentEvent.value === 'secretSpot';
 
   /* 決定音「ポン♪」（次の場所を選ぶ／← 場所選びにもどる／次へ）
@@ -2233,14 +2135,13 @@ function goToNextPlace() {
 
   resultMessage.value = '';
   statusChanges.value = null;
-  isCareActionResult.value = false;
 
   // 前の画面で止めていたマウス操作も戻す（止めるのは「← もどる」のあとや、公園入口へ戻ってきた直後の画面だけ）
   isCommandPointerPaused.value = false;
 
-  // サブメニュー「☕ ひとやすみ」も閉じておく
-  // （サブメニューを開いたまま「← 場所選びにもどる」を押したときのため）
-  closeCareMenu();
+  // おやつバッグも閉じておく
+  // （ひとやすみ でバッグを開いたまま「← 場所選びにもどる」の番号でEnterしたときなどのため）
+  closeSnackMenu();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -2577,11 +2478,13 @@ function goToSecretArea() {
 }
 
 /* ============================================================
-   ひとやすみ（どの場所でも使える共通のケア行動）
+   ひとやすみ（公園入口の「ひとやすみ」＝ベンチで選ぶ、共通のケア行動）
 
-   通常の場所では、コマンドを2つの枠に分けている
-   ・「どうする？」  … その場所ならではの遊び（すべる・どんぐりを拾う など）
-   ・「☕ ひとやすみ」… どの場所でも同じ、親子の状態を整える行動
+   ・通常の場所の「どうする？」 … その場所ならではの遊び（すべる・どんぐりを拾う など）
+   ・ひとやすみ（ベンチ）     … どこでも同じ、親子の状態を整える行動（休憩する・おやつにする）
+
+   ※ 前は通常の場所の「どうする？」に「休憩・おやつ」があったが、
+     どの場所でも同じ効果なので、公園入口の「ひとやすみ」へまとめた
 
    いちばん大事なのは finishPlayAction() を呼ばないこと
    あの関数は「その場所で遊んだ」ときの共通処理なので、中で
@@ -2619,10 +2522,7 @@ function finishCareAction() {
   fixAllStatus();
   checkGameOver();
 
-  // 休憩・おやつの結果だという印（結果カードに「次の場所を選ぶ」ではなく「← もどる」を出す）
-  isCareActionResult.value = true;
-
-  // 結果カードが出て「← もどる」だけの画面になるので、一番上（0）に戻す
+  // 結果カードが出て「次の場所を選ぶ」だけの画面になるので、一番上（0）に戻す
   selectedCommandIndex.value = 0;
 }
 
@@ -2653,7 +2553,7 @@ function takeCommonBreak() {
 
 /* ② おやつをあげる（通常の探検中）
 
-   「☕ ひとやすみ」→「おやつをあげる ＞」→ おやつバッグ で選んだときに呼ばれる
+   「ひとやすみ」→「おやつにする」→ おやつバッグ で選んだときに呼ばれる
    （引数の snackId が、選んだおやつの名札）
 
    いやいやタイムの giveSnack() とは別の関数にしている
@@ -2686,7 +2586,7 @@ function giveSnackWhileExploring(snackId: SnackId) {
   }
 
   // 行動する前のステータスを控えておく
-  // ※ ここで ☕ ひとやすみ とおやつバッグも閉じる
+  // ※ ここで ひとやすみ とおやつバッグも閉じる
   startStatusChanges();
 
   childEnergy.value += snack.energy;
@@ -3110,9 +3010,8 @@ function goToGoal() {
   statusChanges.value = null;
   addMinutes(10);
 
-  // サブメニュー「☕ ひとやすみ」も閉じておく
-  // （公園入口からそのままゴールへ向かうこともあるため）
-  closeCareMenu();
+  // おやつバッグも閉じておく
+  closeSnackMenu();
 
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
@@ -3260,7 +3159,7 @@ function resetGame() {
        ここでバッグを空にすれば いっしょに0になる（別に戻す必要はない）
        次のプレイでは、おやつ選択画面でまた2つ選んでから出発する
 
-     ※ ゲーム中に開いていたおやつバッグは、このあとの closeCareMenu() で閉じる
+     ※ ゲーム中に開いていたおやつバッグは、このあとの closeSnackMenu() で閉じる
 
      バッグを空にする中身は composables/useSnackBag.ts の resetSnackBag() */
   resetSnackBag();
@@ -3274,9 +3173,9 @@ function resetGame() {
   // （残っていると、タイトル画面の上に前回の「いやいや発生！」が出たままになる）
   hideTantrumAlert();
 
-  // サブメニュー「☕ ひとやすみ」も閉じておく
+  // おやつバッグも閉じておく
   // （前回のプレイで開いたままGAME OVERになっていることがあるため）
-  closeCareMenu();
+  closeSnackMenu();
 
   // 「公園の出口へ向かう？」の確認ダイアログも閉じておく（念のため）
   closeGoalConfirm();
@@ -3390,22 +3289,16 @@ function runSelectedCommand() {
   // ただし「少し待ってみる」に失敗していやいやが続いているときは、
   // 画面に出ているのは いやいや のコマンドなので、ここでは進めない
   if (resultMessage.value && !isTantrumUnsolved.value) {
-    // 休憩・おやつの結果 … 「← もどる」＝いまいる場所の「どうする？」へ戻る
-    if (isCareResultBackVisible.value) {
-      backToPlaceFromCareResult();
-      return;
-    }
-
-    // それ以外の結果 … 「次の場所を選ぶ」
+    // 「次の場所を選ぶ」（ひとやすみ の休憩・おやつの結果も同じ）
     goToNextPlace();
     return;
   }
 
   /* おやつバッグが開いているときは、いちばん先にそちらを見る
 
-     ひとやすみの中でバッグを開いているあいだは isCareMenuVisible も true のままなので、
-     下のサブメニューの処理より前に置く
-     （いやいやタイムのバッグも、ここで受け取る）
+     バッグを開いているあいだ、プレイヤーが見て選んでいるのはバッグの中なので、
+     下のメインコマンド（selectedCommandIndex）のほうは見ない
+     （ひとやすみ のバッグも、いやいやタイムのバッグも、ここで受け取る）
   */
   if (isSnackMenuVisible.value) {
     // いちばん下の「← もどる」
@@ -3424,64 +3317,30 @@ function runSelectedCommand() {
     return;
   }
 
-  /* サブメニュー「☕ ひとやすみ」が開いているときは、そちらを優先する
-
-     開いているあいだ、プレイヤーが見て選んでいるのはサブメニューなので、
-     メインコマンド（selectedCommandIndex）のほうは見ない
-
-     ※ isCareMenuVisible を使うのがポイント
-       「画面に出ているか」まで見てくれるので、
-       結果カードが出ているときなど、見えていないサブメニューが
-       うっかり実行されることがない
-  */
-  if (isCareMenuVisible.value) {
-    // 0 休憩する
-    if (selectedCareCommandIndex.value === 0) {
-      takeCommonBreak();
-      return;
-    }
-
-    // 1 おやつをあげる ＞（おやつバッグを開くだけで、ここではまだ食べない）
-    // バッグが空のときは画面にこのコマンドが無いので、念のため残りも確かめる
-    if (selectedCareCommandIndex.value === 1 && snackLeft.value > 0) {
-      openSnackMenu('exploring');
-      return;
-    }
-
-    return;
-  }
-
   // 毎回 .value と書かなくてよいように、番号を取り出しておく
   const index = selectedCommandIndex.value;
 
-  /* 通常の場所6か所で共通の、下2つのコマンドをまとめて受け取る
+  /* 通常の場所6か所で共通の、いちばん下のコマンドをまとめて受け取る
 
-     2 休憩・おやつ         → サブメニューを開く
-     3 ← 場所選びにもどる   → 公園入口の「どこへ行く？」へ（この場所のコマンドを選んだ状態で）
+     2 ← 場所選びにもどる   → 公園入口の「どこへ行く？」へ（この場所のコマンドを選んだ状態で）
 
      場所ごとの switch より前に書いておくと、
-     下の6か所に同じ2行を書き足さなくてよい
+     下の6か所に同じ行を書き足さなくてよい
   */
-  if (isNormalPlace.value) {
-    if (index === careMenuCommandIndex) {
-      openCareMenu();
-      return;
-    }
-
-    if (index === leavePlaceCommandIndex) {
-      goToNextPlace();
-      return;
-    }
+  if (isNormalPlace.value && index === leavePlaceCommandIndex) {
+    goToNextPlace();
+    return;
   }
 
   switch (currentEvent.value) {
     /* 公園入口
        0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場
        5 秘密の場所（見つけているときだけ画面に出る）
+       そのつぎ ひとやすみ（→ ベンチ。休憩・おやつを選ぶ画面）
        最後 公園の出口へ向かう（ゴール）
 
        ※ 秘密の場所がまだ出ていないときは、その行が画面に無いので
-         ゴールが1つくり上がって5番目になる（goalCommandIndex で見る）
+         ひとやすみ とゴールが1つくり上がる（restCommandIndex／goalCommandIndex で見る）
        ※ ゴールは、すぐには向かわず確認ダイアログを開く（クリックしたときと同じ）
     */
     case 'parkEntrance':
@@ -3498,6 +3357,8 @@ function runSelectedCommand() {
       } else if (index === 5 && canEnterSecretSpot.value) {
         // はじめてのときは秘密の小道へ、見つけたあとは そのまま こもれびの広場へ
         goToSecretArea();
+      } else if (index === restCommandIndex.value) {
+        goToPlace('restArea');
       } else if (index === goalCommandIndex.value) {
         openGoalConfirm();
       }
@@ -3505,7 +3366,7 @@ function runSelectedCommand() {
 
     /* すべり台
        0 一緒にすべる／1 下で見守る
-       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
+       （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'slide':
       if (index === 0) {
         runPlaceAction(placeActions.playSlide);
@@ -3516,7 +3377,7 @@ function runSelectedCommand() {
 
     /* 砂場
        0 一緒に大きな山を作る／1 砂のトンネルを作る
-       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
+       （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'sandbox':
       if (index === 0) {
         runPlaceAction(placeActions.playSandbox);
@@ -3527,7 +3388,7 @@ function runSelectedCommand() {
 
     /* どんぐりの木
        0 一緒にどんぐりを拾う／1 どんぐりをころがして遊ぶ
-       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
+       （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'acornArea':
       if (index === 0) {
         runPlaceAction(placeActions.collectAcorns);
@@ -3538,7 +3399,7 @@ function runSelectedCommand() {
 
     /* 池
        0 白鳥を近くで見る／1 コイに餌をあげる
-       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
+       （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'pond':
       if (index === 0) {
         runPlaceAction(placeActions.watchSwansClose);
@@ -3549,7 +3410,7 @@ function runSelectedCommand() {
 
     /* 芝生広場
        0 追いかけっこする／1 シャボン玉で遊ぶ
-       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
+       （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'grassArea':
       if (index === 0) {
         runPlaceAction(placeActions.playTagOnGrass);
@@ -3560,12 +3421,29 @@ function runSelectedCommand() {
 
     /* こもれびの広場
        0 木漏れ日の中を探検する／1 広場の奥を見てみる
-       （2 休憩・おやつ／3 ← 場所選びにもどる は、この switch の前で受け取っている） */
+       （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
         runPlaceAction(placeActions.exploreSunlight);
       } else if (index === 1) {
         runPlaceAction(placeActions.exploreClearingDepths);
+      }
+      break;
+
+    /* ひとやすみ（ベンチ）
+       おやつあり  0 休憩する／1 おやつにする／2 ← 場所選びにもどる
+       おやつなし  0 休憩する／1 ← 場所選びにもどる（おやつの行は画面に無い）
+
+       「おやつにする」はおやつバッグを開くだけ
+       食べるのは、バッグの中でおやつを選んだとき（上の isSnackMenuVisible の分岐）
+       ※ おやつの分岐は snackLeft も見ているので、食べきったあとに 1 を押しても、まちがってバッグを開くことはない */
+    case 'restArea':
+      if (index === restBreakCommandIndex) {
+        takeCommonBreak();
+      } else if (index === restSnackCommandIndex && snackLeft.value > 0) {
+        openSnackMenu('exploring');
+      } else if (index === restLeaveCommandIndex.value) {
+        goToNextPlace();
       }
       break;
 
@@ -3584,10 +3462,10 @@ function runSelectedCommand() {
       break;
 
     /* いやいやタイム
-       おやつが残っているとき   0 お話する／1 だっこ／2 おやつをあげる ＞／3 少し待ってみる
+       おやつが残っているとき   0 お話する／1 だっこ／2 おやつをあげる／3 少し待ってみる
        おやつが0個のとき       0 お話する／1 だっこ／2 少し待ってみる（おやつの行は画面に無い）
 
-       「おやつをあげる ＞」はおやつバッグを開くだけ
+       「おやつをあげる」はおやつバッグを開くだけ
        食べるのは、バッグの中でおやつを選んだとき（上の isSnackMenuVisible の分岐）
 
        ※ バッグが空のときにバッグを開いてしまわないように、
@@ -3691,12 +3569,9 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
   currentEvent,
   resultMessage,
   selectedCommandIndex,
-  selectedCareCommandIndex,
   selectedSnackMenuIndex,
   selectedGoalConfirmIndex,
-  isNormalPlace,
-  isCareMenuVisible,
-  careCommandCount,
+  isPlaceMenuScene,
   isSnackMenuVisible,
   snackMenuBackIndex,
   commandCount,
@@ -3717,7 +3592,6 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
   openSnackSelection,
   closeSnackSelection,
   closeHowToPlay,
-  closeCareMenu,
   closeSnackMenu,
   closeGoalConfirm,
   confirmGoToGoal,
@@ -3738,7 +3612,7 @@ onMounted(() => {
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
-  // 休憩・おやつの「← もどる」のあと、マウスを動かしたらコマンド枠へのマウス操作を戻す
+  // 公園入口へ戻ってきた直後などに止めたコマンド枠へのマウス操作を、マウスを動かしたら戻す（→ isCommandPointerPaused）
   window.addEventListener('pointermove', handleWindowPointer);
   window.addEventListener('pointerdown', handleWindowPointer);
 
@@ -3882,6 +3756,7 @@ onUnmounted(() => {
             <ul class="howto-list">
               <li>朝9時から12時まで、公園の場所を選んで探検します。</li>
               <li>選んだ行動によって時間が進み、こうちゃんや親の状態が変わります。</li>
+              <li>つかれたら、公園入口の「ひとやすみ」で休憩したり、おやつを食べたりできます。</li>
               <li>アイテムを見つけたり、ちょっとした出来事が起きたりすることも。公園には、少し特別な場所もあるみたい。</li>
               <li>12時になるか、公園の出口へ向かうとおしまい。結果発表があります。</li>
             </ul>
@@ -3978,7 +3853,7 @@ onUnmounted(() => {
             <ul class="howto-list">
               <li>出発前に、{{ snacks.length }}種類から{{ maxSnackCount }}つ選んで持っていきます。</li>
               <li>体力が回復しやすいもの、機嫌がよくなりやすいものなど、おやつごとに得意なことが少しちがいます。</li>
-              <li>ひとやすみやいやいやタイムで使えます。使うと残りが減ります。</li>
+              <li>公園入口の「ひとやすみ」や、いやいやタイムで使えます。使うと残りが減ります。</li>
             </ul>
           </section>
 
@@ -4493,11 +4368,17 @@ onUnmounted(() => {
 
                  ボタンの名前は「すべり台」のように行き先だけにしている（「へ行く」は付けない）
                  上に「どこへ行く？」と出ているので、名前だけで意味が通じるため
-                 （前は「すべり台」だったが、PCでもスマホでも、短いほうがすっきり見える）
+                 （前は「すべり台へ行く」だったが、PCでもスマホでも、短いほうがすっきり見える）
 
                  バッジは、文字（.cmd__badgeText）と印（.cmd__badgeIcon）に分けてある
-                 スマホ幅では、印（✓・★）だけを見せて、文字は読み上げ用に残す -->
-            <nav class="command command--entrance" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
+                 スマホ幅では、印（✓・★）だけを見せて、文字は読み上げ用に残す
+
+                 command--entrance-withSecret … 「細い道の先」が出ているときだけ付ける
+                                                 ボタンが1段ふえるので、スマホ幅ではボタンを少し低くして、1画面に収める
+                                                 （→ assets/css/game/command.css） -->
+            <nav
+              class="command command--entrance"
+              :class="{ 'command--pointer-paused': isCommandPointerPaused, 'command--entrance-withSecret': canEnterSecretSpot }">
               <p class="command__label">どこへ行く？</p>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
@@ -4556,6 +4437,23 @@ onUnmounted(() => {
                 </span>
               </button>
 
+              <!-- ひとやすみ … 押すと、休憩する／おやつにする を選ぶベンチの画面へ（goToPlace('restArea')）
+
+                   休憩・おやつは、どの場所でも同じ効果なので、
+                   前は各場所の「どうする？」の中にあった「休憩・おやつ」を、行き先と同じ階層のここへまとめた
+                   （遊んで体力が減ったあと、「次の場所を選ぶ」でここへ戻ってきて、そのまま休める）
+
+                   番号は、細い道の先が出ているかどうかで変わるので restCommandIndex を見る（出ていれば 6／なければ 5）
+                   スマホの2列では、行き先5つのとなりの空いたマス（芝生広場の右）に入る -->
+              <button
+                class="cmd cmd--rest"
+                :class="{ 'cmd--selected': selectedCommandIndex === restCommandIndex }"
+                @click="goToPlace('restArea')"
+                @mouseenter="selectedCommandIndex = restCommandIndex"
+                @focus="selectedCommandIndex = restCommandIndex">
+                <span class="cmd__text">ひとやすみ</span>
+              </button>
+
               <!-- 押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く） -->
               <button
                 class="cmd cmd--goal"
@@ -4566,6 +4464,62 @@ onUnmounted(() => {
                 <span class="cmd__text">公園の出口へ向かう（ゴール）</span>
               </button>
             </nav>
+          </div>
+
+          <!-- ひとやすみ（ベンチ）
+
+               公園入口の「ひとやすみ」から入る、休憩・おやつを選ぶ画面
+               見た目と操作は、通常の場所（すべり台など）とそろえてある
+                 どうする？ … 休憩する／おやつにする／（そのほか）← 場所選びにもどる
+                 結果のあと … 次の場所を選ぶ（公園入口の「どこへ行く？」へ戻る）
+
+               遊ぶ場所ではないので、探検済み・アイテム・ちょっとしたできごと・いやいや・とつぜんのできごとは起きない
+               （休憩・おやつは finishPlayAction() を通らず、finishCareAction() だけを通るため）
+               BGMも公園BGMのまま -->
+          <div v-else-if="currentEvent === 'restArea'" class="scene" key="restArea">
+            <section class="stage">
+              <article class="place-card place-card--rest">
+                <h2 class="place-card__title">ひとやすみ</h2>
+
+                <p class="place-card__text">ベンチに座って、親子でひと息つこう。休憩する？ それとも、おやつにする？</p>
+              </article>
+
+              <!-- 休憩・おやつの結果（通常の場所とおなじ形） -->
+              <ResultCard
+                v-if="resultMessage"
+                variant="place"
+                :result-message="resultMessage"
+                :is-tantrum="isTantrum"
+                :found-items-this-action="foundItemsThisAction"
+                :random-event-text="randomEventText"
+                :random-event-effects="randomEventEffects"
+                :tantrum-text="tantrumText"
+                :status-changes="statusChanges"
+                :change-groups="changeGroups" />
+
+              <!-- コマンド欄（休憩する／おやつにする／← 場所選びにもどる）
+                   通常の場所と同じ .command-area に入れて、置き場所・スマホで下に貼りつく動きもそろえる -->
+              <div class="command-area">
+                <CommandBox
+                  v-model:selected-index="selectedCommandIndex"
+                  v-model:snack-index="selectedSnackMenuIndex"
+                  variant="rest"
+                  :result-message="resultMessage"
+                  :next-place-command-label="nextPlaceCommandLabel"
+                  :pointer-paused="isCommandPointerPaused"
+                  :selected-snacks="selectedSnacks"
+                  :snack-left="snackLeft"
+                  :is-snack-menu-visible="isSnackMenuVisible"
+                  :snack-menu-back-index="snackMenuBackIndex"
+                  :leave-place-command-index="restLeaveCommandIndex"
+                  @take-break="takeCommonBreak"
+                  @open-snack-menu="openSnackMenu('exploring')"
+                  @close-snack-menu="closeSnackMenu"
+                  @eat-snack="eatSnackFromBag"
+                  @leave="goToNextPlace"
+                  @next="goToNextPlace" />
+              </div>
+            </section>
           </div>
 
           <!-- すべり台 -->
@@ -4594,40 +4548,20 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                   PCでは [☕ ひとやすみ][どうする？] の横ならび
-                   スマホでは横幅が足りないので、たてにならぶ
-
-                   メインコマンドはいつも右はしにあるので、
-                   サブメニューを開いても場所が動かない -->
+              <!-- コマンド欄（その場所の遊び2つ ＋ ← 場所選びにもどる）
+                   ※ 休憩・おやつは、公園入口の「ひとやすみ」（ベンチ）へまとめた -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
-                  v-model:care-index="selectedCareCommandIndex"
-                  v-model:snack-index="selectedSnackMenuIndex"
                   variant="place"
                   :commands="[{ label: '一緒にすべる' }, { label: '下で見守る' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
-                  :selected-snacks="selectedSnacks"
-                  :snack-left="snackLeft"
-                  :is-snack-menu-visible="isSnackMenuVisible"
-                  :snack-menu-back-index="snackMenuBackIndex"
-                  :is-care-menu-visible="isCareMenuVisible"
-                  :is-care-result-back-visible="isCareResultBackVisible"
-                  :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
                   @select="index => runPlaceAction([placeActions.playSlide, placeActions.watchSlide][index])"
-                  @care="toggleCareMenu"
                   @leave="goToNextPlace"
-                  @back="backToPlaceFromCareResult"
-                  @next="goToNextPlace"
-                  @take-break="takeCommonBreak"
-                  @open-snack-menu="openSnackMenu('exploring')"
-                  @close-snack-menu="closeSnackMenu"
-                  @eat-snack="eatSnackFromBag" />
+                  @next="goToNextPlace" />
               </div>
             </section>
           </div>
@@ -4653,40 +4587,20 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                   PCでは [☕ ひとやすみ][どうする？] の横ならび
-                   スマホでは横幅が足りないので、たてにならぶ
-
-                   メインコマンドはいつも右はしにあるので、
-                   サブメニューを開いても場所が動かない -->
+              <!-- コマンド欄（その場所の遊び2つ ＋ ← 場所選びにもどる）
+                   ※ 休憩・おやつは、公園入口の「ひとやすみ」（ベンチ）へまとめた -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
-                  v-model:care-index="selectedCareCommandIndex"
-                  v-model:snack-index="selectedSnackMenuIndex"
                   variant="place"
                   :commands="[{ label: '一緒に大きな山を作る' }, { label: '砂のトンネルを作る' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
-                  :selected-snacks="selectedSnacks"
-                  :snack-left="snackLeft"
-                  :is-snack-menu-visible="isSnackMenuVisible"
-                  :snack-menu-back-index="snackMenuBackIndex"
-                  :is-care-menu-visible="isCareMenuVisible"
-                  :is-care-result-back-visible="isCareResultBackVisible"
-                  :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
                   @select="index => runPlaceAction([placeActions.playSandbox, placeActions.buildSandTunnel][index])"
-                  @care="toggleCareMenu"
                   @leave="goToNextPlace"
-                  @back="backToPlaceFromCareResult"
-                  @next="goToNextPlace"
-                  @take-break="takeCommonBreak"
-                  @open-snack-menu="openSnackMenu('exploring')"
-                  @close-snack-menu="closeSnackMenu"
-                  @eat-snack="eatSnackFromBag" />
+                  @next="goToNextPlace" />
               </div>
             </section>
           </div>
@@ -4712,40 +4626,20 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                   PCでは [☕ ひとやすみ][どうする？] の横ならび
-                   スマホでは横幅が足りないので、たてにならぶ
-
-                   メインコマンドはいつも右はしにあるので、
-                   サブメニューを開いても場所が動かない -->
+              <!-- コマンド欄（その場所の遊び2つ ＋ ← 場所選びにもどる）
+                   ※ 休憩・おやつは、公園入口の「ひとやすみ」（ベンチ）へまとめた -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
-                  v-model:care-index="selectedCareCommandIndex"
-                  v-model:snack-index="selectedSnackMenuIndex"
                   variant="place"
                   :commands="[{ label: '一緒にどんぐりを拾う' }, { label: 'どんぐりをころがして遊ぶ' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
-                  :selected-snacks="selectedSnacks"
-                  :snack-left="snackLeft"
-                  :is-snack-menu-visible="isSnackMenuVisible"
-                  :snack-menu-back-index="snackMenuBackIndex"
-                  :is-care-menu-visible="isCareMenuVisible"
-                  :is-care-result-back-visible="isCareResultBackVisible"
-                  :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
                   @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.rollAcorns][index])"
-                  @care="toggleCareMenu"
                   @leave="goToNextPlace"
-                  @back="backToPlaceFromCareResult"
-                  @next="goToNextPlace"
-                  @take-break="takeCommonBreak"
-                  @open-snack-menu="openSnackMenu('exploring')"
-                  @close-snack-menu="closeSnackMenu"
-                  @eat-snack="eatSnackFromBag" />
+                  @next="goToNextPlace" />
               </div>
             </section>
           </div>
@@ -4771,40 +4665,20 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                   PCでは [☕ ひとやすみ][どうする？] の横ならび
-                   スマホでは横幅が足りないので、たてにならぶ
-
-                   メインコマンドはいつも右はしにあるので、
-                   サブメニューを開いても場所が動かない -->
+              <!-- コマンド欄（その場所の遊び2つ ＋ ← 場所選びにもどる）
+                   ※ 休憩・おやつは、公園入口の「ひとやすみ」（ベンチ）へまとめた -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
-                  v-model:care-index="selectedCareCommandIndex"
-                  v-model:snack-index="selectedSnackMenuIndex"
                   variant="place"
                   :commands="[{ label: '白鳥を近くで見る' }, { label: 'コイに餌をあげる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
-                  :selected-snacks="selectedSnacks"
-                  :snack-left="snackLeft"
-                  :is-snack-menu-visible="isSnackMenuVisible"
-                  :snack-menu-back-index="snackMenuBackIndex"
-                  :is-care-menu-visible="isCareMenuVisible"
-                  :is-care-result-back-visible="isCareResultBackVisible"
-                  :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
                   @select="index => runPlaceAction([placeActions.watchSwansClose, placeActions.feedKoi][index])"
-                  @care="toggleCareMenu"
                   @leave="goToNextPlace"
-                  @back="backToPlaceFromCareResult"
-                  @next="goToNextPlace"
-                  @take-break="takeCommonBreak"
-                  @open-snack-menu="openSnackMenu('exploring')"
-                  @close-snack-menu="closeSnackMenu"
-                  @eat-snack="eatSnackFromBag" />
+                  @next="goToNextPlace" />
               </div>
             </section>
           </div>
@@ -4830,40 +4704,20 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                   PCでは [☕ ひとやすみ][どうする？] の横ならび
-                   スマホでは横幅が足りないので、たてにならぶ
-
-                   メインコマンドはいつも右はしにあるので、
-                   サブメニューを開いても場所が動かない -->
+              <!-- コマンド欄（その場所の遊び2つ ＋ ← 場所選びにもどる）
+                   ※ 休憩・おやつは、公園入口の「ひとやすみ」（ベンチ）へまとめた -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
-                  v-model:care-index="selectedCareCommandIndex"
-                  v-model:snack-index="selectedSnackMenuIndex"
                   variant="place"
                   :commands="[{ label: '追いかけっこする' }, { label: 'シャボン玉で遊ぶ' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
-                  :selected-snacks="selectedSnacks"
-                  :snack-left="snackLeft"
-                  :is-snack-menu-visible="isSnackMenuVisible"
-                  :snack-menu-back-index="snackMenuBackIndex"
-                  :is-care-menu-visible="isCareMenuVisible"
-                  :is-care-result-back-visible="isCareResultBackVisible"
-                  :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
                   @select="index => runPlaceAction([placeActions.playTagOnGrass, placeActions.playWithBubbles][index])"
-                  @care="toggleCareMenu"
                   @leave="goToNextPlace"
-                  @back="backToPlaceFromCareResult"
-                  @next="goToNextPlace"
-                  @take-break="takeCommonBreak"
-                  @open-snack-menu="openSnackMenu('exploring')"
-                  @close-snack-menu="closeSnackMenu"
-                  @eat-snack="eatSnackFromBag" />
+                  @next="goToNextPlace" />
               </div>
             </section>
           </div>
@@ -5105,40 +4959,20 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（サブメニュー ＋ メインコマンド）
-
-                   PCでは [☕ ひとやすみ][どうする？] の横ならび
-                   スマホでは横幅が足りないので、たてにならぶ
-
-                   メインコマンドはいつも右はしにあるので、
-                   サブメニューを開いても場所が動かない -->
+              <!-- コマンド欄（その場所の遊び2つ ＋ ← 場所選びにもどる）
+                   ※ 休憩・おやつは、公園入口の「ひとやすみ」（ベンチ）へまとめた -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
-                  v-model:care-index="selectedCareCommandIndex"
-                  v-model:snack-index="selectedSnackMenuIndex"
                   variant="place"
                   :commands="[{ label: '木漏れ日の中を探検する' }, { label: '広場の奥を見てみる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
-                  :selected-snacks="selectedSnacks"
-                  :snack-left="snackLeft"
-                  :is-snack-menu-visible="isSnackMenuVisible"
-                  :snack-menu-back-index="snackMenuBackIndex"
-                  :is-care-menu-visible="isCareMenuVisible"
-                  :is-care-result-back-visible="isCareResultBackVisible"
-                  :care-menu-command-index="careMenuCommandIndex"
                   :leave-place-command-index="leavePlaceCommandIndex"
                   @select="index => runPlaceAction([placeActions.exploreSunlight, placeActions.exploreClearingDepths][index])"
-                  @care="toggleCareMenu"
                   @leave="goToNextPlace"
-                  @back="backToPlaceFromCareResult"
-                  @next="goToNextPlace"
-                  @take-break="takeCommonBreak"
-                  @open-snack-menu="openSnackMenu('exploring')"
-                  @close-snack-menu="closeSnackMenu"
-                  @eat-snack="eatSnackFromBag" />
+                  @next="goToNextPlace" />
               </div>
             </section>
           </div>
