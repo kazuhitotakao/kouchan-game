@@ -4261,9 +4261,12 @@ onUnmounted(() => {
       <!-- ============================================================
            ゲーム画面（上部ステータス／中央イベント／下部コマンド）
            ============================================================ -->
-      <!-- game-screen--secret-path … 秘密の小道のあいだだけ付ける
+      <!-- game-screen--secret-path … 秘密の小道で「遊んでいる最中」だけ付ける
            スマホ幅で、上部ステータスを画面の上に固定しないようにするため（CSSの max-width: 700px を参照）
-           スマホ幅の「1画面で完結する作り」も、秘密の小道だけは使わない（→ assets/css/game/responsive.css）
+           スマホ幅の「1画面で完結する作り」も、遊んでいる最中だけは使わない（→ assets/css/game/responsive.css）
+           ・遊んでいる最中 … ページ全体をスクロールして、フィールドと案内を大きく見せる（scrollSecretPathIntoView()）
+           ・はじまる前／小道をぬけたあと … ほかの場面と同じ1画面の作りにして、「どうする？」をいつも画面の下に出す
+             （前は小道のあいだずっと付けていたので、はじまる前の「小道へ進む」が、背の低いスマホで画面の下へはみ出していた）
            game-screen--has-result … 結果カードが出ているあいだだけ付ける
            スマホ幅で、上の場所の説明をたたんで、結果を読む場所を広くするため（→ assets/css/game/responsive.css） -->
       <div
@@ -4271,7 +4274,7 @@ onUnmounted(() => {
         key="game"
         ref="gameScreenRef"
         class="game-screen"
-        :class="{ 'game-screen--secret-path': currentEvent === 'secretPath', 'game-screen--has-result': !!resultMessage }">
+        :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' && secretPathPhase === 'playing', 'game-screen--has-result': !!resultMessage }">
         <!-- ==========================================================
              【上部】常時表示のステータスエリア
              ========================================================== -->
@@ -4736,7 +4739,8 @@ onUnmounted(() => {
               <article v-if="secretPathPhase === 'ready'" class="place-card place-card--secret">
                 <h2 class="place-card__title">🌿 秘密の小道</h2>
 
-                <p class="place-card__text">木々のあいだの細い道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
+                <!-- secret-path-intro … スマホ幅では出さない（→ assets/css/game/responsive.css） -->
+                <p class="place-card__text secret-path-intro">木々のあいだの細い道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
 
                 <p class="secret-path-lead">
                   えだをよけながら
