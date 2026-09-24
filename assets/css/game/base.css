@@ -1492,6 +1492,28 @@
   letter-spacing: 0.06em;
 }
 
+/* スマホ幅では、「いやいや発生！」を1行に収める
+
+   40px のままだと、文字（約300px）＋カードの左右の余白とふち（約100px）で 400px ほどになり、
+   375px の画面では「いやいや発生」と「！」のように2行に折り返してしまっていた
+   文字を 30px、カードとまわりの余白を少し小さくして、320px の画面でも1行に収まるようにしている
+   white-space: nowrap … 念のため、どんな幅でも途中で折り返さないようにする */
+@media (max-width: 700px) {
+
+  .tantrum-alert {
+    padding: 16px;
+  }
+
+  .tantrum-alert__content {
+    padding: 22px 26px;
+  }
+
+  .tantrum-alert__title {
+    font-size: 30px;
+    white-space: nowrap;
+  }
+}
+
 /* --- いやいや発生の演出：背景はふわっと出すだけ --- */
 @keyframes tantrum-alert-in {
   from {
