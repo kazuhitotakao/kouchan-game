@@ -261,4 +261,16 @@
   .place-card {
     padding: 11px 12px;
   }
+
+  /* 公園入口は、中央エリアとカードの上下の余白をもう少しつめる（約13px）
+     「どこへ行く？」まで1画面に収めるための調整
+     （上部ステータス・コマンド欄のほうは status.css・command.css の同じ @media）
+     文字の大きさは変えない */
+  .stage--entrance {
+    padding: 6px 10px 8px;
+  }
+
+  .stage--entrance .place-card {
+    padding: 8px 12px;
+  }
 }

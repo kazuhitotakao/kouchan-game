@@ -15,10 +15,13 @@
      タイトルの横（#sound）へ差しこんでもらう
    ============================================================ */
 
+import { computed } from 'vue';
+
+import { itemIcons } from '~/data/places';
 import type { StatusChanges } from '~/types/game';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
-defineProps<{
+const props = defineProps<{
   /* タイトルの行に出すゲームの名前 */
   gameTitle: string;
 
@@ -56,10 +59,18 @@ defineProps<{
   isAlmostNoon: boolean;
   isResultScene: boolean;
 }>();
+
+/* 危険の警告・「そろそろお昼」のお知らせを、いま出すかどうか
+
+   どちらも出ていないときは、上部ステータスに .status-area--noAlerts を付ける
+   背の低いスマホでは、そのとき警告・お知らせの2行を grid から外して、
+   空の行に付いてしまう すき間 をなくしている（→ assets/css/game/status.css） */
+const showWarnings = computed(() => props.dangerWarnings.length > 0 && !props.isResultScene);
+const showNotice = computed(() => props.isAlmostNoon && !props.isResultScene);
 </script>
 
 <template>
-  <header class="status-area">
+  <header class="status-area" :class="{ 'status-area--noAlerts': !showWarnings && !showNotice }">
     <div class="status-area__head">
       <!-- タイトルと音ボタンを同じ行に並べる
            新しい行を作らないので、上部ステータスの高さは変わらない -->
@@ -215,19 +226,27 @@ defineProps<{
 
       <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
 
+      <!-- 1つのアイテムの中に、絵文字（__icon）と名前（__name）の両方を入れてある
+           ・PC       … 名前だけを出す（今までどおり）
+           ・スマホ幅 … 絵文字だけを出して、名前は読み上げ用に残す
+                        名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
+           （切りかえは assets/css/game/status.css、絵文字の一覧は data/places.ts の itemIcons） -->
       <ul v-else class="status-found__list">
-        <li v-for="item in collectedItems" :key="item" class="status-found__item">{{ item }}</li>
+        <li v-for="item in collectedItems" :key="item" class="status-found__item" :title="item">
+          <span class="status-found__icon" aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span>
+          <span class="status-found__name">{{ item }}</span>
+        </li>
       </ul>
     </div>
 
     <!-- 危険な状態の警告（GAME OVERになる前の合図）
          リザルト画面では、もう気をつけようがないので出さない -->
-    <ul v-if="dangerWarnings.length > 0 && !isResultScene" class="status-warnings">
+    <ul v-if="showWarnings" class="status-warnings">
       <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
     </ul>
 
     <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
-    <p v-if="isAlmostNoon && !isResultScene" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
+    <p v-if="showNotice" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
   </header>
 </template>
 
