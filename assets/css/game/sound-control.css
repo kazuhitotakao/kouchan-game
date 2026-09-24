@@ -78,6 +78,12 @@
      （タイトル画面のほうは場所に余裕があるので、下の .title-card__tools で長いまま） */
   --sound-slider-width: 80px;
 
+  /* 音量バーのレールの太さと、つまみの大きさ
+     ふつうはこの値のまま。指で動かしやすくしたい置き場所だけ、書きかえて大きくする
+     （いまはサウンドトラックページのスマホだけ → pages/soundtrack.vue） */
+  --sound-slider-track: 5px;
+  --sound-slider-thumb: 14px;
+
   display: inline-flex;
   box-sizing: border-box;
   flex: none;
@@ -232,7 +238,7 @@
 
 .sound-control__slider {
   width: var(--sound-slider-width);
-  height: 18px;
+  height: max(18px, calc(var(--sound-slider-thumb) + 4px));
   margin: 0;
   padding: 0;
   background: none;
@@ -243,17 +249,17 @@
 
 /* レール（Chrome / Safari / Edge） */
 .sound-control__slider::-webkit-slider-runnable-track {
-  height: 5px;
+  height: var(--sound-slider-track);
   border-radius: 999px;
   background: linear-gradient(to right, var(--navy) var(--volume-progress, 100%), #d7e4f0 var(--volume-progress, 100%));
 }
 
 /* つまみ（Chrome / Safari / Edge）
-   （つまみ14px − レール5px）÷ 2 ≒ 4.5px ぶん、上へずらして真ん中にそろえる */
+   （つまみ − レール）÷ 2 ぶん、上へずらして真ん中にそろえる（ふつうは (14px − 5px) ÷ 2 ＝ 4.5px） */
 .sound-control__slider::-webkit-slider-thumb {
-  width: 14px;
-  height: 14px;
-  margin-top: -4.5px;
+  width: var(--sound-slider-thumb);
+  height: var(--sound-slider-thumb);
+  margin-top: calc((var(--sound-slider-track) - var(--sound-slider-thumb)) / 2);
   border: 2px solid #fff;
   border-radius: 50%;
   background: var(--navy);
@@ -264,22 +270,22 @@
 
 /* レール（Firefox） */
 .sound-control__slider::-moz-range-track {
-  height: 5px;
+  height: var(--sound-slider-track);
   border-radius: 999px;
   background: #d7e4f0;
 }
 
 /* 小さい側（Firefox は、はじめから塗り分ける機能がある） */
 .sound-control__slider::-moz-range-progress {
-  height: 5px;
+  height: var(--sound-slider-track);
   border-radius: 999px;
   background: var(--navy);
 }
 
-/* つまみ（Firefox） */
+/* つまみ（Firefox。枠線の 2px×2 が外がわに足されるので、Chrome などより 2px 小さく書く） */
 .sound-control__slider::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: calc(var(--sound-slider-thumb) - 2px);
+  height: calc(var(--sound-slider-thumb) - 2px);
   border: 2px solid #fff;
   border-radius: 50%;
   background: var(--navy);
