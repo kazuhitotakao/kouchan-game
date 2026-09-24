@@ -15,7 +15,7 @@
      タイトルの横（#sound）へ差しこんでもらう
    ============================================================ */
 
-import { computed } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 
 import { itemIcons } from '~/data/places';
 import type { StatusChanges } from '~/types/game';
@@ -67,6 +67,91 @@ const props = defineProps<{
    空の行に付いてしまう すき間 をなくしている（→ assets/css/game/status.css） */
 const showWarnings = computed(() => props.dangerWarnings.length > 0 && !props.isResultScene);
 const showNotice = computed(() => props.isAlmostNoon && !props.isResultScene);
+
+/* 見つけたもの：吹き出しで名前を出しているアイテム（null ＝ 出していない）
+
+   900px以下（スマホ・タブレットくらいの幅）では絵文字だけを並べているので、
+   絵文字をタップすると、そのすぐ下に名前の吹き出しを出す
+   （見た目は、サウンドのコントロールの吹き出し .sound-control__tooltip とそろえてある）
+   ・同じ絵文字をもう一度タップすると閉じる
+   ・別の絵文字をタップすると、そちらに切りかわる（出すのはいつも1つだけ）
+   ・ほかの場所をタップしたとき・スクロールしたとき・少したったとき（foundTooltipShowMs）にも閉じる
+   PC（901px以上）では名前がはじめから出ているので、吹き出しは出さない（→ status.css）
+
+   ■ 吹き出しを position: fixed にしている理由
+     「見つけたもの」の箱（.status-found）は、あふれたときに中だけスクロールするよう overflow を付けている
+     箱の中に position: absolute で置くと、箱のふちで吹き出しが切れてしまう
+     そこで、タップしたチップの画面上の位置（getBoundingClientRect）から、画面を基準に置いている */
+const foundTooltipShowMs = 3000;
+const foundTooltipGap = 7;
+const foundTooltipMargin = 8;
+
+const openFoundItem = ref<string | null>(null);
+const foundTooltipPos = ref({ left: 0, top: 0 });
+const foundTooltip = ref<HTMLElement | null>(null);
+let foundTooltipTimer: ReturnType<typeof setTimeout> | null = null;
+
+async function openFoundTooltip(item: string, chip: HTMLElement) {
+  openFoundItem.value = item;
+
+  const rect = chip.getBoundingClientRect();
+  const center = rect.left + rect.width / 2;
+  foundTooltipPos.value = { left: center, top: rect.bottom + foundTooltipGap };
+
+  /* 吹き出しの幅は、名前が入ってからでないと分からない
+     描画の前（nextTick）に幅をはかって、チップのまんなかに置きなおす
+     画面の左右のはしでは、はみ出さないように内がわへ寄せる */
+  await nextTick();
+
+  /* 待っているあいだに閉じられた・別のアイテムに切りかわったときは、何もしない */
+  if (openFoundItem.value !== item) {
+    return;
+  }
+
+  const width = foundTooltip.value?.offsetWidth ?? 0;
+  const maxLeft = window.innerWidth - foundTooltipMargin - width;
+  foundTooltipPos.value = {
+    left: Math.max(foundTooltipMargin, Math.min(center - width / 2, maxLeft)),
+    top: rect.bottom + foundTooltipGap,
+  };
+
+  foundTooltipTimer = setTimeout(closeFoundTooltip, foundTooltipShowMs);
+  document.addEventListener('pointerdown', closeFoundTooltipOutside, true);
+  window.addEventListener('scroll', closeFoundTooltip, { capture: true, passive: true });
+  window.addEventListener('resize', closeFoundTooltip);
+}
+
+function closeFoundTooltip() {
+  openFoundItem.value = null;
+
+  if (foundTooltipTimer !== null) {
+    clearTimeout(foundTooltipTimer);
+    foundTooltipTimer = null;
+  }
+
+  document.removeEventListener('pointerdown', closeFoundTooltipOutside, true);
+  window.removeEventListener('scroll', closeFoundTooltip, { capture: true });
+  window.removeEventListener('resize', closeFoundTooltip);
+}
+
+/* チップ以外の場所をタップしたら閉じる
+   チップのタップは、開け閉め・切りかえを toggleFoundTooltip() のほうでするので、ここでは何もしない */
+function closeFoundTooltipOutside(event: PointerEvent) {
+  if (!(event.target instanceof Element) || !event.target.closest('.status-found__item')) {
+    closeFoundTooltip();
+  }
+}
+
+function toggleFoundTooltip(item: string, event: MouseEvent) {
+  const isSameItem = openFoundItem.value === item;
+  closeFoundTooltip();
+
+  if (!isSameItem) {
+    openFoundTooltip(item, event.currentTarget as HTMLElement);
+  }
+}
+
+onBeforeUnmount(closeFoundTooltip);
 </script>
 
 <template>
@@ -230,13 +315,30 @@ const showNotice = computed(() => props.isAlmostNoon && !props.isResultScene);
            ・PC（901px以上）                 … 名前だけを出す（今までどおり）
            ・900px以下（スマホ・タブレット） … 絵文字だけを出して、名前は読み上げ用に残す
              名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
+             絵文字だけだと何か分からないので、タップすると下に名前の吹き出しが出る（→ toggleFoundTooltip）
            （切りかえは assets/css/game/status.css、絵文字の一覧は data/places.ts の itemIcons） -->
       <ul v-else class="status-found__list">
-        <li v-for="item in collectedItems" :key="item" class="status-found__item" :title="item">
-          <span class="status-found__icon" aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span>
-          <span class="status-found__name">{{ item }}</span>
+        <li v-for="item in collectedItems" :key="item">
+          <button
+            type="button"
+            class="status-found__item"
+            :class="{ 'status-found__item--open': openFoundItem === item }"
+            :title="item"
+            @click="toggleFoundTooltip(item, $event)">
+            <span class="status-found__icon" aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span>
+            <span class="status-found__name">{{ item }}</span>
+          </button>
         </li>
       </ul>
+
+      <!-- タップした絵文字の名前の吹き出し（900px以下だけ）
+           名前はチップの中（__name）にも読み上げ用で入っているので、こちらは aria-hidden にして二重に読ませない -->
+      <span
+        v-if="openFoundItem"
+        ref="foundTooltip"
+        class="status-found__tooltip"
+        :style="{ left: foundTooltipPos.left + 'px', top: foundTooltipPos.top + 'px' }"
+        aria-hidden="true">{{ openFoundItem }}</span>
     </div>
 
     <!-- 危険な状態の警告（GAME OVERになる前の合図）
