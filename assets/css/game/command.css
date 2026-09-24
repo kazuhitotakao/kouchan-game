@@ -759,6 +759,23 @@
     max-height: 46vh;
     padding: 8px 10px calc(9px + env(safe-area-inset-bottom));
   }
+
+  /* とても背の低いスマホ（375×548 の Safari・320×568 など）でも、
+     公園入口の「どこへ行く？」を1画面に収める
+     （上部ステータスのほうの調整は status.css、中央エリアは responsive.css の同じ @media）
+
+     ・ボタンの高さを 52px → 44px にする（4段で約32px）
+       44px は、指で押しやすい大きさの目安とされる高さなので、ここより小さくはしない
+     ・「どこへ行く？」の文字を少し小さくして、行の高さをつめる（約8px） */
+  .command--entrance .cmd {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  .command--entrance .command__label {
+    font-size: 12.5px;
+    line-height: 1.2;
+  }
 }
 
 /* とても細い画面（340px以下）の公園入口

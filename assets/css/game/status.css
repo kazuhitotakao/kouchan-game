@@ -968,6 +968,33 @@
   .status-found {
     max-height: 34px;
   }
+
+  /* ===== とても背の低いスマホ（375×548 の Safari・320×568 など）=====
+
+     公園入口の「どこへ行く？」を1画面に収めるために、上部ステータスを約25px低くする
+     （コマンド欄・中央エリアのほうの調整は command.css・responsive.css の同じ @media）
+
+     ■ 目もりの説明（.gauge-legend）を隠す
+       上の (max-height: 800px) では「隠さずに小さくして残す」ようにしてあり、
+       ふつうのスマホ・PCでは今までどおり出している
+       ただ、この高さでは説明の1行（約19px）を残すと、公園入口がどうしても1画面に収まらない
+       ゲージの目もり自体は残るので、ここでは「1画面で遊べる」ほうを選んで、説明だけ隠している
+
+     ■ 警告・お知らせが出ていないときは、その2行を grid から外す
+       grid の空の行にも、行と行のすき間（row-gap）が付いてしまい、
+       何も出ていないのに、ステータスの下に8pxほどの空白ができていた
+       （.status-area--noAlerts は StatusBar.vue が付ける。出ているときは今までどおり） */
+  .gauge-legend {
+    display: none;
+  }
+
+  .status-area.status-area--noAlerts {
+    grid-template-areas:
+      'clock clock'
+      'gauges gauges'
+      'pills pills'
+      'found found';
+  }
 }
 
 @media (max-width: 700px) {

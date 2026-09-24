@@ -15,10 +15,12 @@
      タイトルの横（#sound）へ差しこんでもらう
    ============================================================ */
 
+import { computed } from 'vue';
+
 import type { StatusChanges } from '~/types/game';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
-defineProps<{
+const props = defineProps<{
   /* タイトルの行に出すゲームの名前 */
   gameTitle: string;
 
@@ -56,10 +58,18 @@ defineProps<{
   isAlmostNoon: boolean;
   isResultScene: boolean;
 }>();
+
+/* 危険の警告・「そろそろお昼」のお知らせを、いま出すかどうか
+
+   どちらも出ていないときは、上部ステータスに .status-area--noAlerts を付ける
+   背の低いスマホでは、そのとき警告・お知らせの2行を grid から外して、
+   空の行に付いてしまう すき間 をなくしている（→ assets/css/game/status.css） */
+const showWarnings = computed(() => props.dangerWarnings.length > 0 && !props.isResultScene);
+const showNotice = computed(() => props.isAlmostNoon && !props.isResultScene);
 </script>
 
 <template>
-  <header class="status-area">
+  <header class="status-area" :class="{ 'status-area--noAlerts': !showWarnings && !showNotice }">
     <div class="status-area__head">
       <!-- タイトルと音ボタンを同じ行に並べる
            新しい行を作らないので、上部ステータスの高さは変わらない -->
@@ -222,12 +232,12 @@ defineProps<{
 
     <!-- 危険な状態の警告（GAME OVERになる前の合図）
          リザルト画面では、もう気をつけようがないので出さない -->
-    <ul v-if="dangerWarnings.length > 0 && !isResultScene" class="status-warnings">
+    <ul v-if="showWarnings" class="status-warnings">
       <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
     </ul>
 
     <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
-    <p v-if="isAlmostNoon && !isResultScene" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
+    <p v-if="showNotice" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
   </header>
 </template>
 
