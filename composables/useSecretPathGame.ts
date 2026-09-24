@@ -22,7 +22,7 @@
          ここでは options で受けとった ref をそのまま読み書きする）
      ・場所の移動そのもの（goToPlace()）・公園入口のカーソル合わせ（restoreEntranceCursor()）・
        音を鳴らす中身（composables/useAudio.ts）は、どれも options でもらった関数を呼ぶだけ
-     ・公園入口の「細い道の先へ行く」（goToSecretArea()）は、
+     ・公園入口の「細い道の先」（goToSecretArea()）は、
        小道へ入るか広場へ入るかを決めるゲーム全体の分かれ道なので pages/index.vue のまま
 
    ■ ゲームの中身は、いっさい変えていない
@@ -455,10 +455,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      小道に入らずに引き返すだけなので、何も変えない
      ・時間・親子のステータス・おでかけポイント・アイテム・visitedPlaces は、そのまま
      ・hasDiscoveredSecretSpot も false のまま
-       → あとでもう一度「細い道の先へ行く」を選ぶと、また ready 画面から始まる
+       → あとでもう一度「細い道の先」を選ぶと、また ready 画面から始まる
      ・BGMは公園BGMのまま（goToPlace() がBGMを入れかえるのは secretSpot のときだけ）
      ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ）
-     ・カーソルは「細い道の先へ行く」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
+     ・カーソルは「細い道の先」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
   function leaveSecretPathToEntrance() {
     if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
       return;

@@ -240,7 +240,7 @@
 
    ▶ の色は「そのボタンの文字と同じ色」にそろえる
    こうすると、どの色のボタンでも文字と同じ濃さで読めるようになる
-   ・白いボタン（すべり台へ行く など）         … 紺色     ← ここで指定
+   ・白いボタン（すべり台 など）               … 紺色     ← ここで指定
    ・紫のボタン（秘密の場所）                  … 白       ← .cmd--secret::before
    ・緑のボタン（ゴール）                      … 白       ← .cmd--goal::before
    ・金色のボタン（きょうのおやつを選ぶ など） … 濃い茶色 ← .cmd--start / --next::before
@@ -370,6 +370,13 @@
   color: #8a6512;
 }
 
+/* 「探検済み」の印（✓）は、スマホ幅で文字を隠したときだけ出す
+   ふつうの幅では、今までどおり「探検済み」の文字だけのバッジ
+   （「★ 発見済み」の★は、どの幅でも出す） */
+.cmd__badgeIcon--compactOnly {
+  display: none;
+}
+
 /* 控えめなコマンドボタン（紺色の下地になじむ、うすい色）
 
    主役のボタン（金色・緑・紫）より一段うしろに見えるようにしたいときに使う
@@ -486,7 +493,7 @@
          (34 − 18) ÷ 2 ＝ 8px
        だけ右へずれてしまう
 
-       行き先のボタン（すべり台へ行く など）は左ぞろえで、
+       行き先のボタン（すべり台 など）は左ぞろえで、
        右には「探検済み」のバッジが入るので、これで問題ない
        中央ぞろえのこのボタンだけが、左が広く・右がせまく見えていた
 
@@ -630,6 +637,69 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  /* ===== 公園入口の「どこへ行く？」を、1画面に収める =====
+
+     1列のままだと、行き先5つ＋ゴールで6段になり（1段およそ52px）、
+     上部ステータス・場所の説明とあわせると、画面の下へはみ出してしまう
+     （375×667 で、およそ160pxはみ出していた）
+
+     そこで、次の2つで高さをへらしている
+     ① 行き先を2列にならべる（ゴールは今までどおり横1行をまるごと使う）
+     ② バッジ（探検済み・★ 発見済み）を、ボタンの右上の角に重ねた小さな印（✓・★）にする
+        2列のせまいボタンに文字のバッジを入れると、ボタンの高さが2〜3倍になってしまうため
+        文字は見えなくするだけで残してあるので、読み上げでは今までどおり「探検済み」と読まれる
+
+     ※ ボタンの名前は、どの幅でも「すべり台」のように行き先だけにしてある（「へ行く」は付けない）
+       上に「どこへ行く？」と出ているので、行き先の名前だけで意味が通じるうえ、
+       2列でも「どんぐりの木」が2行に折り返さずに収まる
+     ※ 矢印キーでの移動も2列に合わせてある（useKeyboardControls.ts の updateEntranceColumns）
+     ※ 中央エリアのほうの調整（高さの下限を外す）は responsive.css の .stage--entrance */
+  .command--entrance {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* バッジの箱を、ボタンの右上の角に重ねる（ボタンの高さを使わない）
+     .cmd は position: relative なので、そこを基準にする
+     上へ少しはみ出させているのは、ボタンの文字と重ならないようにするため
+     （上の行とのすき間・コマンド欄の余白の中に収まるので、切れない） */
+  .command--entrance .cmd__badges {
+    position: absolute;
+    top: -6px;
+    right: -4px;
+    flex-wrap: nowrap;
+    gap: 3px;
+    pointer-events: none;
+  }
+
+  /* 印だけの、小さな丸いバッジにする（色は、ふつうの幅のバッジと同じ） */
+  .command--entrance .cmd__badge {
+    display: inline-grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid #c8d4e6;
+    box-sizing: border-box;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .command--entrance .cmd__badgeIcon--compactOnly {
+    display: inline;
+  }
+
+  /* 文字（探検済み・発見済み）は、見た目からは消して、読み上げ用に残す
+     display: none にすると、読み上げでも読まれなくなってしまうため */
+  .command--entrance .cmd__badgeText {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
   .cmd {
     padding: 11px 14px 11px 30px;
     font-size: 16px;
@@ -688,5 +758,24 @@
   .command {
     max-height: 46vh;
     padding: 8px 10px calc(9px + env(safe-area-inset-bottom));
+  }
+}
+
+/* とても細い画面（340px以下）の公園入口
+
+   2列にすると、1つのボタンの幅は140px台しかない
+   左の余白（選択カーソル「▶」の場所）と右の余白が今のままだと、
+   いちばん長い「どんぐりの木」が2行に折り返して、ボタンが高くなってしまう
+   「▶」を少し左へ寄せて、左右の余白を少しだけつめる
+   （ゴールのボタンは横1行をまるごと使うので、左右そろえた余白のまま） */
+@media (max-width: 340px) {
+
+  .command--entrance .cmd:not(.cmd--goal) {
+    padding-right: 8px;
+    padding-left: 25px;
+  }
+
+  .command--entrance .cmd::before {
+    left: 10px;
   }
 }

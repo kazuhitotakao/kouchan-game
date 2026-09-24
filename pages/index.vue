@@ -950,10 +950,10 @@ const goalCommandIndex = computed(() => (canEnterSecretSpot.value ? 6 : 5));
 /* 公園入口へ戻ってきたとき、どのコマンドにカーソルを合わせるか（restoreEntranceCursor() で使う）
 
    その場所へ入るためのコマンドの番号を返す
-   公園入口にその行が出ていないとき（場所選びから入る場所ではない・「細い道の先へ行く」が出ていない）は null
+   公園入口にその行が出ていないとき（場所選びから入る場所ではない・「細い道の先」が出ていない）は null
    → 呼ぶ側は何もせず、今までどおり先頭（0）のままにする
 
-   ※ 「細い道の先へ行く」は canEnterSecretSpot のときだけ画面に出る
+   ※ 「細い道の先」は canEnterSecretSpot のときだけ画面に出る
      おでかけポイントもアイテムも減らないので、広場や小道にいるあいだに消えることは無いはずだが、
      出ていないときに5番を返すと、1つくり上がったゴールを選んでしまうので、念のため確かめる */
 function getPlaceSelectionIndex(place: GameEvent): number | null {
@@ -975,7 +975,7 @@ function getPlaceSelectionIndex(place: GameEvent): number | null {
    goToPlace() で、公園入口に行がある場所（placeSelectionIndexes にある場所）へ入るときに書きかえる
    ・とつぜんのできごと・いやいやタイムは goToPlace() を通らない（goToNextPlace() が直接切りかえる）ので、
      途中に入っても上書きされず、そのあと公園入口へ戻ったときに「遊んでいた場所」を選べる
-   ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「細い道の先へ行く」なので同じ
+   ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「細い道の先」なので同じ
    null … このプレイでまだ場所を選んでいない（ゲーム開始直後）。startGame() / resetGame() で null に戻す */
 const lastSelectedPlace = ref<GameEvent | null>(null);
 
@@ -2468,7 +2468,7 @@ function runPlaceAction(action: PlaceActionDefinition) {
 /* ============================================================
    秘密の小道（こもれびの広場へ続くミニゲーム）
 
-   公園入口の「細い道の先へ行く」を、そのプレイではじめて選んだときだけ通る
+   公園入口の「細い道の先」を、そのプレイではじめて選んだときだけ通る
    左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、木漏れ日を集める
 
    ■ 中身は composables/useSecretPathGame.ts にある
@@ -2483,7 +2483,7 @@ function runPlaceAction(action: PlaceActionDefinition) {
        statusChanges・selectedCommandIndex）を、ref のまま渡す
      ・場所の移動 goToPlace()・公園入口のカーソル合わせ restoreEntranceCursor()・
        音を鳴らす4つを、関数のまま渡す
-     ・公園入口の「細い道の先へ行く」goToSecretArea()
+     ・公園入口の「細い道の先」goToSecretArea()
        （小道へ入るか、そのまま広場へ入るかを決めるところなので、ゲーム全体の側）
 
    ■ 流れ（secretPathPhase）
@@ -2559,7 +2559,7 @@ const {
   playBranchBumpSound,
 });
 
-/* 公園入口の「細い道の先へ行く」
+/* 公園入口の「細い道の先」
 
    ・このプレイで、まだ広場を見つけていない … 秘密の小道（ミニゲーム）へ
    ・もう見つけている                     … 今までどおり、そのまま こもれびの広場へ
@@ -4428,7 +4428,9 @@ onUnmounted(() => {
         <Transition name="scene" mode="out-in">
           <!-- 公園入口 -->
           <div v-if="currentEvent === 'parkEntrance'" class="scene" key="parkEntrance">
-            <section class="stage">
+            <!-- stage--entrance … スマホ幅で、公園入口を1画面に収めるための目印
+                                   （中央エリアの高さの下限を外す → assets/css/game/responsive.css） -->
+            <section class="stage stage--entrance">
               <article class="place-card">
                 <h2 class="place-card__title">公園入口</h2>
 
@@ -4459,49 +4461,59 @@ onUnmounted(() => {
             </section>
 
             <!-- command--pointer-paused … 公園入口へ戻ってきた直後、マウスを動かすまでマウスで選べなくする
-                                           （最後にいた場所に合わせたカーソルが、@mouseenter で上書きされないようにする） -->
-            <nav class="command" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
+                                           （最後にいた場所に合わせたカーソルが、@mouseenter で上書きされないようにする）
+                 command--entrance      … スマホ幅で、公園入口を1画面に収めるための目印
+                                           （2列にならべる・バッジを角の小さな印にする
+                                             → assets/css/game/command.css）
+
+                 ボタンの名前は「すべり台」のように行き先だけにしている（「へ行く」は付けない）
+                 上に「どこへ行く？」と出ているので、名前だけで意味が通じるため
+                 （前は「すべり台」だったが、PCでもスマホでも、短いほうがすっきり見える）
+
+                 バッジは、文字（.cmd__badgeText）と印（.cmd__badgeIcon）に分けてある
+                 スマホ幅では、印（✓・★）だけを見せて、文字は読み上げ用に残す -->
+            <nav class="command command--entrance" :class="{ 'command--pointer-paused': isCommandPointerPaused }">
               <p class="command__label">どこへ行く？</p>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
-                <span class="cmd__text">すべり台へ行く</span>
+                <span class="cmd__text">すべり台</span>
                 <!-- 探検済みバッジのとなりに、その場所のアイテムを見つけたかどうかも出す
                      （まだ行っていない場所では、アイテムのバッジは出さない） -->
                 <span v-if="isVisited('slide')" class="cmd__badges">
-                  <span class="cmd__badge">探検済み</span>
-                  <span v-if="hasFoundPlaceItem('slide')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                  <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
+                  <span v-if="hasFoundPlaceItem('slide')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
                 </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
-                <span class="cmd__text">砂場へ行く</span>
+                <span class="cmd__text">砂場</span>
                 <span v-if="isVisited('sandbox')" class="cmd__badges">
-                  <span class="cmd__badge">探検済み</span>
-                  <span v-if="hasFoundPlaceItem('sandbox')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                  <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
+                  <span v-if="hasFoundPlaceItem('sandbox')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
                 </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
-                <span class="cmd__text">どんぐりの木へ行く</span>
+                <span class="cmd__text">どんぐりの木</span>
                 <span v-if="isVisited('acornArea')" class="cmd__badges">
-                  <span class="cmd__badge">探検済み</span>
-                  <span v-if="hasFoundPlaceItem('acornArea')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                  <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
+                  <span v-if="hasFoundPlaceItem('acornArea')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
                 </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3" @focus="selectedCommandIndex = 3">
-                <span class="cmd__text">池へ行く</span>
+                <span class="cmd__text">池</span>
                 <span v-if="isVisited('pond')" class="cmd__badges">
-                  <span class="cmd__badge">探検済み</span>
-                  <span v-if="hasFoundPlaceItem('pond')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                  <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
+                  <span v-if="hasFoundPlaceItem('pond')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
                 </span>
               </button>
 
               <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('grassArea')" @mouseenter="selectedCommandIndex = 4" @focus="selectedCommandIndex = 4">
-                <span class="cmd__text">芝生広場へ行く</span>
+                <span class="cmd__text">芝生広場</span>
                 <span v-if="isVisited('grassArea')" class="cmd__badges">
-                  <span class="cmd__badge">探検済み</span>
-                  <span v-if="hasFoundPlaceItem('grassArea')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                  <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
+                  <span v-if="hasFoundPlaceItem('grassArea')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
                 </span>
               </button>
 
@@ -4512,10 +4524,10 @@ onUnmounted(() => {
                 @click="goToSecretArea"
                 @mouseenter="selectedCommandIndex = 5"
                 @focus="selectedCommandIndex = 5">
-                <span class="cmd__text">細い道の先へ行く</span>
+                <span class="cmd__text">細い道の先</span>
                 <span v-if="isVisited('secretSpot')" class="cmd__badges">
-                  <span class="cmd__badge">探検済み</span>
-                  <span v-if="hasFoundPlaceItem('secretSpot')" class="cmd__badge cmd__badge--item-found">★ 発見済み</span>
+                  <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
+                  <span v-if="hasFoundPlaceItem('secretSpot')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
                 </span>
               </button>
 
@@ -4833,7 +4845,7 @@ onUnmounted(() => {
 
           <!-- 秘密の小道（こもれびの広場へ続くミニゲーム）
 
-               そのプレイではじめて「細い道の先へ行く」を選んだときだけ、ここを通る
+               そのプレイではじめて「細い道の先」を選んだときだけ、ここを通る
                secretPathPhase で、中身を3つに切りかえる
                ・ready    … 説明と「小道へ進む」「← 場所選びにもどる」（まだ何も動かない）
                ・playing  … 3レーンのフィールドと「道をクリック・タップして動こう」の案内

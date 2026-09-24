@@ -23,9 +23,9 @@ export const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 
 /* 公園入口の「どこへ行く？」で、それぞれの場所へ入るコマンドが何番目か
 
    画面（template の parkEntrance）と runSelectedCommand() の parkEntrance の並びと同じ
-     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先へ行く
+     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先
    ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
-     どちらも「細い道の先へ行く」から入るので、同じ5番にしている
+     どちらも「細い道の先」から入るので、同じ5番にしている
    ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
 */
 export const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
