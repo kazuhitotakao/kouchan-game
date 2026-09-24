@@ -4336,8 +4336,15 @@ onUnmounted(() => {
           <div class="title-card__tools">
             <!-- B画面の「はじめの画面へ戻る」と、同じ場所・同じ大きさで出る
                  押しても選んだおやつは消さない（B画面 → もう一度おやつ選択で、
-                 さっき選んだおやつがそのまま入っている） -->
-            <button type="button" class="title-card__back" @click="closeSnackSelection">← ひとつ前の画面へ戻る</button>
+                 さっき選んだおやつがそのまま入っている）
+
+                 スマホ幅では「← ひとつ前の画面へ戻る」を「← 戻る」の短い表示に入れかえる
+                 （B画面の戻るボタンと同じ出しかた・同じクラス。→ base.css の .title-card__backText--〜）
+                 どちらの表示でも、読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
+            <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeSnackSelection">
+              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
+              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+            </button>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
 
