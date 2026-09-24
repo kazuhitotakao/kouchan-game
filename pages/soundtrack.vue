@@ -3398,11 +3398,14 @@ onUnmounted(() => {
    ・--sound-button-size … 枠の高さ（左の戻るボタンと高さをそろえる）
    ・--sound-icon-size   … 🔊 の大きさ
    ・--sound-slider-width … 音量バーの長さ
-   スマホでは、下の @media (max-width: 600px) で、B画面のスマホと同じ値に小さくする */
+   スマホでは、下の @media (max-width: 600px) で、B画面のスマホと同じ値に小さくする
+
+   ※ 音量バーの長さだけは、B画面（110px）より長い 180px にしている
+     このページは曲を聴くページなので、音量を細かく合わせやすいほうがよい */
 .st-toolbar .sound-control {
   --sound-button-size: 38px;
   --sound-icon-size: 20px;
-  --sound-slider-width: 110px;
+  --sound-slider-width: 180px;
 
   margin-left: auto;
 }
@@ -4429,7 +4432,26 @@ onUnmounted(() => {
   .st-toolbar .sound-control {
     --sound-button-size: 36px;
     --sound-icon-size: 19px;
-    --sound-slider-width: 84px;
+
+    /* 音量バーだけは、B画面のスマホより大きくする
+       このページは曲を聴くページなので、音量を指で細かく合わせやすいほうがよい
+       ・長さ … 「← 戻る」の右に空いている幅を、ぜんぶ使う（→ すぐ下の flex）
+                 100px は「いちばん短いときの長さ」（幅 320px の画面でも1行に収まる長さ）
+       ・レール … 5px → 7px、つまみ … 14px → 22px（指でつかみやすくする）
+       枠の高さ（36px）は変えないので、ツールバーの高さも変わらない */
+    --sound-slider-width: 100px;
+    --sound-slider-track: 7px;
+    --sound-slider-thumb: 22px;
+
+    /* 「← 戻る」の右の空きを、サウンドの枠が受け取ってのびる */
+    flex: 1 1 auto;
+  }
+
+  /* のびた枠の中で、音量バー（とそのかこい）が、あまった幅をぜんぶ使う
+     中の要素は SoundControl.vue の部品なので、:deep() で指す */
+  .st-toolbar :deep(.sound-control__sliderWrap),
+  .st-toolbar :deep(.sound-control__slider) {
+    flex: 1 1 auto;
   }
 
   .st-playall {
@@ -4690,6 +4712,41 @@ onUnmounted(() => {
   .track__tooltip {
     padding: 7px 10px;
     font-size: 12px;
+  }
+}
+
+/* ============================================================
+   スマホで、画面全体が指のフリックで上下に動かないようにする
+
+   このページは、上の操作エリアは動かさず、下の曲の一覧（.st-trackScroll）だけをスクロールする作り
+   ところがスマホでは、次のようなときに「ページ全体」が上下にぐにゃっと動いてしまう
+   ・上の操作エリア（ツールバー・見出し・全曲再生）を指で上下にフリックしたとき
+   ・曲の一覧をいちばん上／下までスクロールして、さらにフリックしたとき
+     （一覧の中でスクロールしきれなかった勢いが、うしろのページに伝わる）
+
+   ・html / body … ページそのものはスクロールさせず、引っぱったときの「ばね」の動きも止める
+                   :has(.soundtrack) … このページを出しているあいだだけ効かせる
+                   （ゲーム本編（/）の html / body には、何も変えない）
+   ・.st-fixedArea … 上の操作エリアでは、指の上下の動きをブラウザに使わせない
+                     （ボタンを押す・音量バーを横に動かす・2本指で拡大する、はそのままできる）
+   ・.st-trackScroll … 曲の一覧のはしまで来ても、その勢いをうしろのページへ伝えない
+
+   ※ 縦にとても低い画面（高さ 580px 以下）と、とても幅のせまい画面（幅 360px 未満）は、
+     下の @media でページ全体をスクロールする作りに戻しているので、ここは効かせない
+   ============================================================ */
+@media (max-width: 600px) and (min-width: 360px) and (min-height: 581px) {
+  :global(html:has(.soundtrack)),
+  :global(body:has(.soundtrack)) {
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  .st-fixedArea {
+    touch-action: pan-x pinch-zoom;
+  }
+
+  .st-trackScroll {
+    overscroll-behavior-y: contain;
   }
 }
 
