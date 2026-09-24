@@ -180,6 +180,93 @@
     align-self: stretch;
     width: auto;
   }
+
+  /* ===== ゲーム画面は、スマホでもPCと同じ「1画面で完結する作り」にする =====
+
+     ■ 何が起きていたか
+       スマホ幅では、ゲーム画面もページ全体がスクロールする作りだった
+       「どうする？」のコマンドは、場所の説明と結果カードのあとに並ぶので、
+       結果が長いと「次の場所を選ぶ」が画面の下へ押し出され、
+       スクロールしないと押せなかった
+       （375×667 のすべり台で136px、375×548 では最大183px 下にはみ出していた）
+
+     ■ どう直したか（PCと同じ考えかた）
+       ・ゲーム画面の高さを、画面の高さぴったりに固定する（ページはスクロールしない）
+       ・上部ステータスは上、コマンドは下にいつも見えていて、
+         まんなかの中央エリア（.stage）だけがスクロールする
+       ・「どうする？」のコマンド（.command-area／.command-box）は、中央エリアの中にあるので、
+         position: sticky で中央エリアの下のはしに貼りつける
+         （場所の説明や結果が長くても、コマンドはいつも見えている）
+       ・公園入口の「どこへ行く？」と、ゴール／GAME OVER のボタンは、
+         もともと中央エリアの外（下）にあるので、そのまま下に残る
+
+     ■ ゲーム画面以外は、今までどおり
+       タイトル・おやつ選択・あそびかたは、ページ全体のスクロールのまま（.game は height: auto のまま）
+       秘密の小道も、フィールドと案内を画面いっぱいに見せたいので、
+       今までどおりページ全体がスクロールする作りのまま（.game-screen--secret-path は外している） */
+  /* flex: none が大事
+     .game-screen は、もともと .game（たてに積む flex）の中で flex: 1（基準の高さ 0%）になっている
+     スマホ幅の .game は height: auto なので、その「0%」は中身の高さとして扱われ、
+     height: 100dvh を書いても無視されて、中身の高さまでのびてしまう
+     flex: none にすると、height: 100dvh がそのまま高さになる */
+  .game-screen:not(.game-screen--secret-path) {
+    flex: none;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* overscroll-behavior: contain … 中央エリアをいちばん下までスクロールしたとき、
+     その勢いでページ（うしろ）までいっしょに動かないようにする */
+  .game-screen:not(.game-screen--secret-path) .stage {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* 結果カードは縮ませない（中央エリアごとスクロールさせる）
+
+     PCでは、結果カードが縮んで、カードの中身だけがスクロールする（result.css の .stage > .result-card）
+     スマホでそれをすると、中央エリアの中にさらに小さなスクロールの窓ができ、
+     本文が1〜2行しか見えなくなるので、スマホでは中央エリアのスクロール1つにまとめる */
+  .game-screen:not(.game-screen--secret-path) .stage > .result-card {
+    flex: none;
+  }
+
+  /* 「どうする？」のコマンドを、中央エリアの下のはしに貼りつける（通常の場所の .command-area）
+
+     中身は「ひとやすみ」と「どうする？」の2つの枠
+     枠と枠のすき間から、うしろをスクロールする文字が見えないように、
+     入れもの自体にも背景を付ける（上のはしだけ、ふわっと透明にして境目をなじませる）
+
+     ※ いやいや・とつぜんのできごとでは、CommandBox.vue の枠（.command-box）が
+       .command-area を通らずに、中央エリアの中に直接ならぶ
+       そちらの貼りつけは command-shared.css に書いてある
+       （CommandBox.vue は外側の要素が2つある作りなので、
+         このファイル（pages/index.vue の scoped）からは .command-box に届かないため） */
+  .game-screen:not(.game-screen--secret-path) .stage > .command-area {
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+    padding-top: 10px;
+    background: linear-gradient(180deg, rgb(255 253 242 / 0%) 0, #fffdf2 10px);
+  }
+
+  /* 結果が出ているあいだは、上の場所の説明をたたんで、名前だけにする
+
+     結果カードのうえに場所の説明（375px幅で約180px）が残っていると、
+     中央エリアの大半を説明が使ってしまい、結果を読むためにスクロールが要る
+     結果が出たあとは、説明はもう読みおわっているので、名前だけ残して場所をゆずる
+     （結果の「← もどる」などで結果が消えると、説明もまた出る）
+
+     .game-screen--has-result は pages/index.vue が、結果が出ているあいだだけ付ける
+     ※ 秘密の小道は、中の作りがちがうので対象にしない */
+  .game-screen--has-result .stage:not(.stage--secret-path) > .place-card .place-card__text {
+    display: none;
+  }
+
+  .game-screen--has-result .stage:not(.stage--secret-path) > .place-card .place-card__title {
+    margin-bottom: 0;
+  }
 }
 
 /* ============================================================
@@ -187,6 +274,11 @@
 
    対象：320×568 / 360×640 / 375×667 あたり
    （390×844 のような「せまいが背は高い」画面には、ここは効かない）
+
+   ※ 下の説明は、ゲーム画面もページ全体がスクロールしていたころのもの
+     いまはゲーム画面の高さを画面ぴったりに固定して、中央エリアだけがスクロールする作りにしてある
+     （→ この上の @media (max-width: 700px) の「1画面で完結する作り」）
+     余白をつめる指定は、そのまま高さの節約として効いている
 
    ■ 何が起きていたか
 
