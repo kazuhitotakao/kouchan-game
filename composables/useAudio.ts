@@ -35,6 +35,11 @@ import type { GameEvent } from '~/types/game';
    曲名のほうは結果画面の表示に使うので、pages/index.vue 側で読みこんでいる */
 import { sPlusSongSrc } from '~/utils/sPlusSong';
 
+/* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
+   audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+import { setElementVolume } from '~/utils/elementVolume';
+
 /* 音のほうから「いま画面はどうなっているか」を見るための値
 
    どれも読むだけで、このファイルからは1つも書きかえない
@@ -943,7 +948,7 @@ export function useAudio(options: UseAudioOptions) {
         }
 
         try {
-          sound.volume = delayedVolume;
+          setElementVolume(sound, delayedVolume, getAudioContext);
 
           /* 必ず音の先頭から鳴らす
 
@@ -1106,7 +1111,7 @@ export function useAudio(options: UseAudioOptions) {
         parkBgm.loop = true;
 
         // volume … 音の大きさ（上の parkBgmVolume で決めている）
-        parkBgm.volume = getSoundVolume(parkBgmVolume);
+        setElementVolume(parkBgm, getSoundVolume(parkBgmVolume), getAudioContext);
       }
 
       return parkBgm;
@@ -1145,7 +1150,7 @@ export function useAudio(options: UseAudioOptions) {
         parkBgm2.loop = true;
 
         // volume … 音の大きさ（上の parkBgm2Volume で決めている）
-        parkBgm2.volume = getSoundVolume(parkBgm2Volume);
+        setElementVolume(parkBgm2, getSoundVolume(parkBgm2Volume), getAudioContext);
       }
 
       return parkBgm2;
@@ -1254,7 +1259,7 @@ export function useAudio(options: UseAudioOptions) {
     const totalSteps = Math.ceil(bgmFadeInDuration / stepMs);
     let doneSteps = 0;
 
-    bgm.volume = 0; // まずは無音から
+    setElementVolume(bgm, 0, getAudioContext); // まずは無音から
     fadingBgm = bgm;
     fadingBgmBaseVolume = targetVolume;
 
@@ -1272,7 +1277,7 @@ export function useAudio(options: UseAudioOptions) {
       const goalVolume = getSoundVolume(fadingBgmBaseVolume);
 
       try {
-        bgm.volume = ratio >= 1 ? goalVolume : goalVolume * ratio;
+        setElementVolume(bgm, ratio >= 1 ? goalVolume : goalVolume * ratio, getAudioContext);
       } catch {
         // 何もしない
       }
@@ -1299,7 +1304,7 @@ export function useAudio(options: UseAudioOptions) {
 
     if (fadingBgm) {
       try {
-        fadingBgm.volume = getSoundVolume(fadingBgmBaseVolume);
+        setElementVolume(fadingBgm, getSoundVolume(fadingBgmBaseVolume), getAudioContext);
       } catch {
         // 何もしない
       }
@@ -1622,7 +1627,7 @@ export function useAudio(options: UseAudioOptions) {
         titleBgm.loop = true;
 
         // volume … 音の大きさ（上の titleBgmVolume で決めている）
-        titleBgm.volume = getSoundVolume(titleBgmVolume);
+        setElementVolume(titleBgm, getSoundVolume(titleBgmVolume), getAudioContext);
       }
 
       return titleBgm;
@@ -1653,7 +1658,7 @@ export function useAudio(options: UseAudioOptions) {
 
       // タイトルBGMはフェードインさせず、そのまま鳴らす
       // （フェードインするのは公園BGMだけ）
-      bgm.volume = getSoundVolume(titleBgmVolume);
+      setElementVolume(bgm, getSoundVolume(titleBgmVolume), getAudioContext);
 
       bgm.play().catch(() => {});
     } catch {
@@ -1816,7 +1821,7 @@ export function useAudio(options: UseAudioOptions) {
         tantrumBgm.loop = true;
 
         // volume … 音の大きさ（上の tantrumBgmVolume で決めている）
-        tantrumBgm.volume = getSoundVolume(tantrumBgmVolume);
+        setElementVolume(tantrumBgm, getSoundVolume(tantrumBgmVolume), getAudioContext);
       }
 
       return tantrumBgm;
@@ -1999,7 +2004,7 @@ export function useAudio(options: UseAudioOptions) {
         resultBgm.loop = true;
 
         // volume … 音の大きさ（上の resultBgmVolume で決めている）
-        resultBgm.volume = getSoundVolume(resultBgmVolume);
+        setElementVolume(resultBgm, getSoundVolume(resultBgmVolume), getAudioContext);
       } else if (resultBgm.getAttribute('src') !== src) {
         /* 前のゴールとランクがちがって、鳴らす曲が変わるときだけ差しかえる
 
@@ -2240,7 +2245,7 @@ export function useAudio(options: UseAudioOptions) {
         gameOverBgm.loop = true;
 
         // volume … 音の大きさ（上の gameOverBgmVolume で決めている）
-        gameOverBgm.volume = getSoundVolume(gameOverBgmVolume);
+        setElementVolume(gameOverBgm, getSoundVolume(gameOverBgmVolume), getAudioContext);
       }
 
       return gameOverBgm;
@@ -2430,7 +2435,7 @@ export function useAudio(options: UseAudioOptions) {
 
       // 音量も、決めてある大きさへ戻しておく
       // （フェードインの途中で止めると、小さい音量のまま残ることがあるため）
-      gameOverBgm.volume = getSoundVolume(gameOverBgmVolume);
+      setElementVolume(gameOverBgm, getSoundVolume(gameOverBgmVolume), getAudioContext);
     } catch {
       // 何もしない
     }
@@ -2485,7 +2490,7 @@ export function useAudio(options: UseAudioOptions) {
         secretBgm.loop = true;
 
         // volume … 音の大きさ（上の secretBgmVolume で決めている）
-        secretBgm.volume = getSoundVolume(secretBgmVolume);
+        setElementVolume(secretBgm, getSoundVolume(secretBgmVolume), getAudioContext);
       }
 
       return secretBgm;
@@ -2716,7 +2721,7 @@ export function useAudio(options: UseAudioOptions) {
       }
 
       try {
-        bgm.volume = getSoundVolume(baseVolume);
+        setElementVolume(bgm, getSoundVolume(baseVolume), getAudioContext);
       } catch {
         // 何もしない
       }
