@@ -28,18 +28,42 @@
    ■ ゲームの中身は、いっさい変えていない
      区切りの数字・当たり判定の幅・演出の長さ・キーとポインターの受けつけかた・
      乱数を使う順番・音を鳴らすタイミングは、移す前とまったく同じ
+     （あとから変えたのは、カウントダウンの前に「間」を足したところだけ → data/secretPath.ts の secretPathCountdownLeadIn）
 
-   ■ 設定の数字は data/secretPath.ts、型は types/game.ts のものをそのまま使う
+   ■ 2つの遊びかた（options.mode）
+     ・story   … ゲーム本編の小道（pages/index.vue）。上に書いたとおりで、何も変えていない
+     ・endless … ミニゲームのページの「どこまで行ける？」（pages/minigame/secret-path.vue）
+                 フィールド・操作・カウントダウン・当たり判定は story と同じで、ちがうのは次のところだけ
+                 ・時間では終わらず、枝に secretPathEndlessLives 回当たったら終わる（木漏れ日は減らない）
+                 ・行の予定を、遊びながら1行ずつ作る
+                 ・進んだ距離でレベルが上がり、速さ・行の間隔・枝2本の割合がきびしくなる（上限なし。速いときは1コマを細かく分けて当たりを見る）
+                 ・進んだ距離（メートル）を数える
+                 ・加速コンボ：はやく進むのを枝に当たらずに続けると、進んだ距離を多めに数える（×1.5 → ×2 → ×3）
+                 ・終わっても、おでかけポイント・こもれびの広場など、本編の状態にはさわらない
+     story だけで使う options（outingPoint・goToPlace など）は、endless では読み書きしない
+
+   ■ 設定の数字は data/secretPath.ts（endless だけの数字は data/secretPathEndless.ts）、
+     型は types/game.ts のものをそのまま使う
    ============================================================ */
 
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import type { Ref } from 'vue';
 
-import { buildSecretPathSpawnQueue, getSecretPathBonusPoint, getSecretPathResultText, getSecretPathSwipeThreshold } from '~/composables/useSecretPath';
+import {
+  buildSecretPathEndlessRow,
+  buildSecretPathSpawnQueue,
+  getSecretPathBonusPoint,
+  getSecretPathEndlessLevel,
+  getSecretPathEndlessNextRowAt,
+  getSecretPathEndlessSpeed,
+  getSecretPathResultText,
+  getSecretPathSwipeThreshold,
+} from '~/composables/useSecretPath';
 import {
   secretPathBoostMultiplier,
   secretPathBumpEffectDuration,
   secretPathCountdownDuration,
+  secretPathCountdownLeadIn,
   secretPathDuration,
   secretPathHoldBoostDelay,
   secretPathLeaveGuard,
@@ -51,9 +75,19 @@ import {
   secretPathStartCueDuration,
   secretPathTapFlashDuration,
 } from '~/data/secretPath';
-import type { GameEvent, SecretPathItem, SecretPathLane, SecretPathPhase, SecretPathSpawn, StatusChanges } from '~/types/game';
+import {
+  secretPathEndlessBoostComboTiers,
+  secretPathEndlessFirstRowAt,
+  secretPathEndlessLives,
+  secretPathEndlessMetersPerField,
+  secretPathEndlessStepMs,
+} from '~/data/secretPathEndless';
+import type { GameEvent, SecretPathItem, SecretPathLane, SecretPathMode, SecretPathPhase, SecretPathSpawn, StatusChanges } from '~/types/game';
 
 export type UseSecretPathGameOptions = {
+  /* 遊びかた（書かなければ story ＝ ゲーム本編の小道） */
+  mode?: SecretPathMode;
+
   /* ===== ゲーム全体の状態（持ち主は composables/useGameState.ts と pages/index.vue） ===== */
   gameStarted: Ref<boolean>;
   currentEvent: Ref<GameEvent>;
@@ -95,6 +129,9 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     playCountdownStartSound,
   } = options;
 
+  /* 「どこまで行ける？」（ミニゲームのページ）として遊ぶか（false ＝ ゲーム本編の小道） */
+  const isEndless = options.mode === 'endless';
+
   /* いまの進み具合（小道へ入るたびに ready から始める） */
   const secretPathPhase = ref<SecretPathPhase>('ready');
 
@@ -116,7 +153,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      （戻ってきたときに、いきなり何秒も進んでしまわない）
 
      はじまる前のカウントダウンも、この時計で数える
-     「小道へ進む」を押したら -secretPathCountdownDuration から始めて、0 になったらスタート
+     「小道へ進む」を押したら -(secretPathCountdownLeadIn + secretPathCountdownDuration) から始めて、0 になったらスタート
+     （はじめの secretPathCountdownLeadIn のあいだは、まだ数字を出さない「間」）
      （枝と木漏れ日の予定はどれも 0 より後なので、マイナスのあいだは何も出てこない） */
   const secretPathElapsed = ref(0);
 
@@ -149,8 +187,34 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      続けて木漏れ日を取ったときに、ふわっと上がる動きを最初からやりなおすための key */
   const secretPathSparkleId = ref(0);
 
-  /* 遊んでいる最中のカード（スマホ幅で、遊びはじめに画面の上へスクロールするための目印） */
-  const secretPathPlayRef = ref<HTMLElement | null>(null);
+  /* 「どこまで行ける？」だけで使う、のこりの ❤（枝に当たるたびに1つ減り、0 になったら おしまい） */
+  const secretPathLives = ref(secretPathEndlessLives);
+
+  /* 「どこまで行ける？」だけで使う、進んだ距離（メートル。小数のまま持ち、画面に出すときに切り捨てる） */
+  const secretPathDistance = ref(0);
+
+  /* 「どこまで行ける？」だけで使う、加速コンボ
+     はやく進むのを、枝に当たらずに続けている長さ（実際の時間のミリ秒）と、
+     そこから決まる「進んだ距離を何倍に数えるか」（data/secretPathEndless.ts の secretPathEndlessBoostComboTiers） */
+  const secretPathBoostComboTime = ref(0);
+  const secretPathComboMultiplier = computed(() => {
+    if (!isEndless) {
+      return 1;
+    }
+
+    let multiplier = 1;
+
+    for (const tier of secretPathEndlessBoostComboTiers) {
+      if (secretPathBoostComboTime.value >= tier.seconds * 1000) {
+        multiplier = tier.multiplier;
+      }
+    }
+
+    return multiplier;
+  });
+
+  /* 「どこまで行ける？」だけで使う、いまのレベル（進んだ距離から決まる。1 ＝ Lv.1） */
+  const secretPathLevel = computed(() => (isEndless ? getSecretPathEndlessLevel(secretPathDistance.value) : 1));
 
   /* ここから下は画面に出さない入れもの（ref にしなくてよい） */
   let secretPathFrameId: number | null = null; // requestAnimationFrame の予約番号
@@ -158,6 +222,11 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   let secretPathSpawnQueue: SecretPathSpawn[] = []; // まだ出していない予定（時間の早い順）
   let secretPathNextItemId = 0;
   let secretPathFinishedAt = 0; // 結果が出た時刻（performance.now()）
+
+  /* 「どこまで行ける？」の行の予定を、遊びながら1行ずつ作るための入れもの
+     （本編の小道は、はじめに buildSecretPathSpawnQueue() で全部作るので使わない） */
+  let secretPathEndlessNextRowAt = 0; // 次の行を出す時刻（ゲームの時計）
+  let secretPathEndlessOpenLanes: SecretPathLane[] = [1]; // 前の行で空いていたレーン（はじめは、こうちゃんのスタート位置）
 
   /* フィールドを押しているポインター（マウス・指・ペン）の一時的な状態
      はなしたとき・キャンセルされたとき・リセットや終了のときに、releaseSecretPathPointer() でまとめて戻す */
@@ -233,8 +302,16 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   const secretPathResultText = computed(() => getSecretPathResultText(secretPathSunlightCount.value));
 
   /* カウントダウン中の時計（マイナス）から、出す数字（3 → 2 → 1）を決める
-     secretPathCountdownDuration を3つに分けて、残りが多いほど大きい数字にする */
+     secretPathCountdownDuration を3つに分けて、残りが多いほど大きい数字にする
+
+     押した直後の「間」（secretPathCountdownLeadIn）のあいだは、まだ数字を出さない（null）
+     間がおわって null → 3 に変わったところで、advanceSecretPath() の ⓪ が「3」の「ピッ」を鳴らす
+     （2・1 と同じしくみで鳴るので、3・2・1 の音と数字は、いつもそろって出る） */
   function getSecretPathCountdownNumber(elapsed: number) {
+    if (-elapsed > secretPathCountdownDuration) {
+      return null;
+    }
+
     return Math.min(3, Math.ceil((-elapsed / secretPathCountdownDuration) * 3));
   }
 
@@ -270,12 +347,20 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathHoverLane.value = null;
     secretPathSpawnQueue = [];
     secretPathFinishedAt = 0;
+    secretPathLives.value = secretPathEndlessLives;
+    secretPathDistance.value = 0;
+    secretPathBoostComboTime.value = 0;
+    secretPathEndlessNextRowAt = secretPathEndlessFirstRowAt;
+    secretPathEndlessOpenLanes = [1];
   }
 
   /* 「小道へ進む」（ミニゲームを始める）
 
      押すまでは何も動かないので、プレイヤーは説明を読んでから始められる
-     押したあとも、遊ぶ画面で「3」「2」「1」とカウントダウンしてから、枝が流れはじめる */
+     押したあとも、遊ぶ画面で「3」「2」「1」とカウントダウンしてから、枝が流れはじめる
+
+     ※ スマホ幅で、遊ぶカードを画面の上へスクロールするのは、
+       カードの部品（components/game/SecretPathField.vue）が画面に出たときに自分で行う */
   function startSecretPathGame() {
     if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
       return;
@@ -285,32 +370,33 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     playDecisionSound();
 
     resetSecretPathGame();
-    secretPathSpawnQueue = buildSecretPathSpawnQueue();
+
+    // 「どこまで行ける？」は、行の予定を遊びながら1行ずつ作る（→ advanceSecretPath() の ①）
+    secretPathSpawnQueue = isEndless ? [] : buildSecretPathSpawnQueue();
     secretPathPhase.value = 'playing';
 
-    // カウントダウンから始める（「3」の音は、決定音と重ならないよう少しうしろへずらす）
-    secretPathElapsed.value = -secretPathCountdownDuration;
-    playCountdownSound(0.12);
+    // カウントダウンから始める
+    // 決定音と「3」の音が続けて鳴らないよう、少し間をあけてから「3」を出す（「3」の音は advanceSecretPath() の ⓪ で鳴る）
+    secretPathElapsed.value = -(secretPathCountdownLeadIn + secretPathCountdownDuration);
 
     secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
-
-    scrollSecretPathIntoView();
   }
 
-  /* スマホ幅のときだけ、遊ぶカードを画面のいちばん上へスクロールする
+  /* 「もう一回」（「どこまで行ける？」の結果の画面から、すぐに次を始める）
 
-     スマホ幅ではページ全体がスクロールするので、
-     フィールドと下の案内がいっしょに見える位置へ合わせておく
-     （パソコンでは中央エリアの中に収まるので、何もしない） */
-  async function scrollSecretPathIntoView() {
-    if (!import.meta.client || !window.matchMedia('(max-width: 700px)').matches) {
+     時間切れ・❤ が0になったしゅんかんに押していた指やキーで、
+     結果を読む前に次が始まってしまわないよう、本編の「先へ進む」と同じ待ち時間をはさむ */
+  function restartSecretPathGame() {
+    if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'finished') {
       return;
     }
 
-    // カードが画面に出るのを待ってから
-    await nextTick();
+    if (performance.now() - secretPathFinishedAt < secretPathLeaveGuard) {
+      return;
+    }
 
-    secretPathPlayRef.value?.scrollIntoView({ block: 'start' });
+    resetSecretPathGame();
+    startSecretPathGame();
   }
 
   /* 1コマぶんの処理（requestAnimationFrame から呼ばれる） */
@@ -335,7 +421,24 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     /* はやく進んでいるあいだは、ゲームの時計そのものを2倍で進める
        出てくるタイミング・流れる速さ・残り時間・「いたっ！」などの長さが、ぜんぶ同じ時計でそろって速くなる
        （1コマで進むのは最大 50 × 2 = 100ミリ秒。枝が進むのは7%で、当たり判定の幅10%より小さいので すり抜けない） */
-    advanceSecretPath(isSecretPathBoosting.value ? delta * secretPathBoostMultiplier : delta);
+    const gameDelta = isSecretPathBoosting.value ? delta * secretPathBoostMultiplier : delta;
+
+    if (!isEndless) {
+      advanceSecretPath(gameDelta);
+    } else {
+      /* 「どこまで行ける？」は、レベルが上がると速さが 180 まで上がる
+         1コマで一気に進めると、枝が当たり判定の幅（10%）を「すり抜けて」しまうので、
+         ゲームの時計を secretPathEndlessStepMs（20ミリ秒）ずつに分けて、少しずつ進めながら当たりを見る
+         途中で ❤ が 0 になって終わったら、そこでやめる */
+      let remaining = gameDelta;
+
+      while (remaining > 0 && isSecretPathPlaying.value) {
+        const step = Math.min(remaining, secretPathEndlessStepMs);
+
+        advanceSecretPath(step);
+        remaining -= step;
+      }
+    }
 
     // 時間切れで終わっていなければ、次のコマを予約する
     if (isSecretPathPlaying.value) {
@@ -346,11 +449,13 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* ゲームの時計を delta ミリ秒進めて、出す・動かす・当たりを見る・片づける */
   function advanceSecretPath(delta: number) {
     const previousElapsed = secretPathElapsed.value;
-    const elapsed = Math.min(previousElapsed + delta, secretPathDuration);
+
+    // 「どこまで行ける？」は時間では終わらないので、15秒で止めない
+    const elapsed = isEndless ? previousElapsed + delta : Math.min(previousElapsed + delta, secretPathDuration);
 
     secretPathElapsed.value = elapsed;
 
-    // ⓪ カウントダウン中は、数字が変わるたびに「ピッ」、0 になったら「ピーン♪」
+    // ⓪ カウントダウン中は、数字が変わるたびに「ピッ」（押した直後の間 → 「3」に変わったときも）、0 になったら「ピーン♪」
     if (previousElapsed < 0) {
       if (elapsed >= 0) {
         playCountdownStartSound();
@@ -360,6 +465,18 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     }
 
     // ① 予定の時間になったものを、フィールドのいちばん上に出す
+    //    「どこまで行ける？」は、出す時刻が来た行の予定を、ここで作ってから出す
+    //    （前の行で空いていたレーンを次の行へ引きつぐので、本編と同じく、よけられる・取れる並びになる）
+    if (isEndless) {
+      while (secretPathEndlessNextRowAt <= elapsed) {
+        const builtRow = buildSecretPathEndlessRow(secretPathEndlessNextRowAt, secretPathEndlessOpenLanes, secretPathDistance.value);
+
+        secretPathSpawnQueue.push(...builtRow.spawns);
+        secretPathEndlessOpenLanes = builtRow.openLanes;
+        secretPathEndlessNextRowAt = getSecretPathEndlessNextRowAt(secretPathEndlessNextRowAt, secretPathDistance.value);
+      }
+    }
+
     let nextSpawn = secretPathSpawnQueue[0];
 
     while (nextSpawn && nextSpawn.at <= elapsed) {
@@ -370,8 +487,21 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     }
 
     // ② ぜんぶ下へ進めて、こうちゃんに当たったかを見る
-    const distance = (secretPathSpeed * delta) / 1000;
+    //    「どこまで行ける？」は、進んだ距離のレベルで速さが決まる。進んだ距離も数える（カウントダウンのあいだは数えない）
+    const speed = isEndless ? getSecretPathEndlessSpeed(secretPathDistance.value) : secretPathSpeed;
+    const distance = (speed * delta) / 1000;
     let needsCleanup = false;
+
+    if (isEndless && elapsed > 0) {
+      const movedDelta = elapsed - Math.max(previousElapsed, 0);
+
+      /* 加速コンボ：はやく進んでいるあいだは、続けた長さ（実際の時間）を数える。やめたら 0 に戻す
+         ここへ来る delta は、はやく進んでいるときはゲームの時計の2倍ぶんなので、倍率で割って実際の時間に直す */
+      secretPathBoostComboTime.value = isSecretPathBoosting.value ? secretPathBoostComboTime.value + delta / secretPathBoostMultiplier : 0;
+
+      // 進んだ距離（加速コンボの倍率ぶん、多めに数える）
+      secretPathDistance.value += ((speed * movedDelta) / 1000 / 100) * secretPathEndlessMetersPerField * secretPathComboMultiplier.value;
+    }
 
     for (const item of secretPathItems.value) {
       item.y += distance;
@@ -410,13 +540,23 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       //    ・本編のステータス（体力・機嫌・余裕）には、いっさいさわらない（小道の中だけのペナルティ）
       //    ・枝1本につき1回だけ（item.hit）なので、同じ枝で何度も減ることはない
       //    ・当たったあとも、左右にはそのまま動ける
+      //    「どこまで行ける？」では、木漏れ日は減らさず、かわりに ❤ を1つ減らす（0 になったら、⑥ でおしまい）
       if (item.kind === 'branch' && offset >= -7 && offset <= 3) {
         item.hit = true;
 
-        const hasSunlightToLose = secretPathSunlightCount.value > 0;
+        if (isEndless) {
+          secretPathLives.value = Math.max(0, secretPathLives.value - 1);
+          secretPathBumpLost.value = true;
 
-        secretPathSunlightCount.value = Math.max(0, secretPathSunlightCount.value - 1);
-        secretPathBumpLost.value = hasSunlightToLose;
+          // 加速コンボは、枝に当たったら最初（×1）に戻る
+          secretPathBoostComboTime.value = 0;
+        } else {
+          const hasSunlightToLose = secretPathSunlightCount.value > 0;
+
+          secretPathSunlightCount.value = Math.max(0, secretPathSunlightCount.value - 1);
+          secretPathBumpLost.value = hasSunlightToLose;
+        }
+
         secretPathBumpUntil.value = elapsed + secretPathBumpEffectDuration;
         secretPathBumpId.value += 1;
 
@@ -432,8 +572,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       secretPathItems.value = secretPathItems.value.filter((item) => item.y <= secretPathRemoveY && !(item.kind === 'sunlight' && item.hit));
     }
 
-    // ⑥ 15秒たったら、おしまい
-    if (elapsed >= secretPathDuration) {
+    // ⑥ 15秒たったら、おしまい（「どこまで行ける？」は、❤ が0になったら）
+    if (isEndless ? secretPathLives.value <= 0 : elapsed >= secretPathDuration) {
       finishSecretPathGame();
     }
   }
@@ -454,6 +594,16 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathSparkleUntil.value = 0;
     secretPathFinishedAt = performance.now();
 
+    // 結果の画面は「もう一回」などのコマンドだけになるので、選択中のコマンドを一番上（0）に戻す
+    selectedCommandIndex.value = 0;
+
+    /* 「どこまで行ける？」は、ここまで
+       本編の状態（おでかけポイント・こもれびの広場など）にはさわらない
+       記録の保存と結果の音は、ミニゲームのページ（pages/minigame/secret-path.vue）が行う */
+    if (isEndless) {
+      return;
+    }
+
     /* 木漏れ日ボーナス
 
        ・addOutingPoint() ではなく、そのまま足す
@@ -472,9 +622,6 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     }
 
     hasDiscoveredSecretSpot.value = true;
-
-    // 「先へ進む」だけの画面になるので、選択中のコマンドを一番上（0）に戻す
-    selectedCommandIndex.value = 0;
 
     // 「木々のすき間から、まぶしい光が…」に合わせて、キラリン♪
     playItemSound();
@@ -600,7 +747,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
      ■ 押したまま横へ動かす（しきい値をこえるたびに1レーン）
        しきい値はマウスと指で分けてある（→ getSecretPathSwipeThreshold）
-       ・マウス             … ドラッグ。70pxこえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
+       ・マウス             … ドラッグ。100pxこえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
        ・指・ペン           … フリック。32pxで1レーン。1回押すあいだに1レーンだけ（大きくはらっても、まん中で止まる）
        ・長押しになったあと … 指・ペンでも、スライドでこえるたびに1レーンずつ動ける
        長押しになる前に横へ動いたら、長押しの判定はやめる（フリック・ドラッグとして扱う）
@@ -869,7 +1016,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathBumpLost,
     secretPathBumpId,
     secretPathSparkleId,
-    secretPathPlayRef,
+    secretPathLives, // 「どこまで行ける？」だけ
+    secretPathDistance, // 「どこまで行ける？」だけ
+    secretPathComboMultiplier, // 「どこまで行ける？」だけ（加速コンボの倍率。1 ＝ コンボなし）
+    secretPathLevel, // 「どこまで行ける？」だけ（いまのレベル。1 ＝ Lv.1）
 
     /* ===== 画面に出す、計算した状態 ===== */
     isSecretPathPlaying,
@@ -887,6 +1037,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     startSecretPathGame,
     leaveSecretPathToEntrance,
     enterSecretSpotFromPath,
+    restartSecretPathGame, // 「どこまで行ける？」だけ（もう一回）
 
     /* ===== キー操作（composables/useKeyboardControls.ts から呼ばれる） ===== */
     handleSecretPathKeydown,

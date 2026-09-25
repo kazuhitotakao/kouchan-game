@@ -428,6 +428,7 @@
    ※ サウンドのコントロールは、ボタンの中身が文字ではなくアイコンなので、
      padding ではなく、すぐ下の --sound-〜 で大きさをそろえている */
 .title-card__soundtrack,
+.title-card__minigame,
 .title-card__back,
 .title-card__howto {
   gap: 7px;
@@ -439,12 +440,13 @@
   white-space: nowrap; /* 「← はじめの画面へ戻る」を2行に折り返させない */
 }
 
-/* 左側の補助リンク（A：♪ サウンドトラック / B：← はじめの画面へ戻る）
+/* 左側の補助リンク（A：♪ サウンドトラック・🌿 ミニゲーム / B：← はじめの画面へ戻る）
 
-   2つは同じ種類の「補助ナビゲーション」なので、見た目もそろえる
+   どれも同じ種類の「補助ナビゲーション」なので、見た目もそろえる
    ふつうのテキストリンクには見せない（下線なし）、白地に紺文字のpill
 */
 .title-card__soundtrack,
+.title-card__minigame,
 .title-card__back,
 .title-card__howto {
   display: inline-flex;
@@ -467,6 +469,7 @@
 
 /* PCでカーソルを当てたときだけ、うすい水色になって少し上へ動く（派手にしない） */
 .title-card__soundtrack:hover,
+.title-card__minigame:hover,
 .title-card__back:hover,
 .title-card__howto:hover {
   border-color: var(--navy);
@@ -476,16 +479,73 @@
 }
 
 .title-card__soundtrack:active,
+.title-card__minigame:active,
 .title-card__back:active,
 .title-card__howto:active {
   transform: translateY(1px);
 }
 
 .title-card__soundtrack:focus-visible,
+.title-card__minigame:focus-visible,
 .title-card__back:focus-visible,
 .title-card__howto:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
+}
+
+/* A画面の左上のまとまり（♪ サウンドトラック ＋ 🌿 ミニゲーム）
+
+   右のサウンドON/OFFとは、.title-card__tools の space-between で左右に分かれる
+   この中の2つは、すき間をあけて左はしに並ぶ
+   （ミニゲームの入口は、まだ1つも解放していなくても、いつも出る。解放していないものは一覧で「？？？」になる） */
+.title-card__toolsLeft {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 「♪ サウンドトラック」
+
+   広い画面では、今までどおり「♪ サウンドトラック」と文字も出す
+   スマホ幅では文字をかくして「♪」だけの丸にし、何のボタンかは吹き出しで伝える
+   （→ @media (max-width: 700px) の .title-card__soundtrack〜） */
+.title-card__soundtrack {
+  position: relative; /* スマホ幅で出す吹き出しの置き場所の基準 */
+}
+
+/* 小さな吹き出し（スマホ幅で「♪」だけにしたときの、hover / focus のときだけ出る案内）
+
+   広い画面では、ボタンに「サウンドトラック」と文字が出ているので、吹き出しはいらない（display: none）
+   見た目は、サウンドのコントロールの吹き出し（sound-control.css の .sound-control__tooltip）とそろえている
+   ・left: 0 … このボタンは行のいちばん左にあるので、左はしをそろえて右へのばす（画面の外へはみ出さない）
+   ・pointer-events: none … 吹き出しが、下のボタンの操作をじゃましないようにする
+   ・読み上げには aria-label のほうが使われるので、吹き出しは aria-hidden="true" にしてある */
+.title-card__tooltip {
+  display: none;
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 6;
+  padding: 5px 11px;
+  border: 1px solid rgb(238 249 255 / 55%);
+  border-radius: 8px;
+  background: #14384a;
+  box-shadow: 0 4px 12px rgb(16 29 44 / 45%);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.title-card__soundtrack:hover .title-card__tooltip,
+.title-card__soundtrack:focus-visible .title-card__tooltip {
+  opacity: 1;
 }
 
 /* B画面の右上のまとまり（？ あそびかた ＋ サウンドON/OFF）
@@ -1836,387 +1896,6 @@
   padding: 14px 18px 18px;
 }
 
-/* 木漏れ日の数と残り時間
-   padding-top … 残り時間の右上に出す「⏩ 2x」のぶん、上を少しあけておく */
-.secret-path-hud {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px 10px;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 460px;
-  margin: 0 auto;
-  padding-top: 8px;
-}
-
-.secret-path-hud__sunlight {
-  padding: 3px 14px;
-  border-radius: 999px;
-  background: #fff6e0;
-  box-shadow: inset 0 0 0 1px #f5e2be;
-  color: #7a5410;
-  font-size: 16px;
-  font-weight: 700;
-  white-space: nowrap;
-  transition: box-shadow 0.2s ease;
-}
-
-/* 木漏れ日を取った直後だけ、金色にふわっと光る */
-.secret-path-hud__sunlight--sparkle {
-  box-shadow:
-    inset 0 0 0 2px var(--gold),
-    0 0 12px 2px rgb(255 209 102 / 70%);
-}
-
-/* 枝に当たって木漏れ日が減った直後だけ、さんご色にふわっと光る */
-.secret-path-hud__sunlight--lost {
-  box-shadow:
-    inset 0 0 0 2px var(--parent-calm),
-    0 0 12px 2px rgb(255 163 163 / 70%);
-}
-
-.secret-path-hud__count {
-  display: inline-block;
-  min-width: 1ch;
-  font-size: 20px;
-  font-variant-numeric: tabular-nums;
-  animation: status-pop 0.35s ease-out;
-}
-
-.secret-path-hud__time {
-  position: relative;
-  padding: 3px 14px;
-  border-radius: 999px;
-  background: var(--navy);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* のこり3秒からは、さんご色の濃いほうにして「もうすぐ終わり」を伝える */
-.secret-path-hud__time--soon {
-  background: #c9412f;
-}
-
-/* はやく進んでいるあいだの「⏩ 2x」（残り時間の右上に、小さく重ねて出す）
-
-   HUD の中に並べると、スマホ幅では出たときに残り時間が次の行へ折り返して、
-   フィールドががくっと下へずれてしまうので、position: absolute で並びから外している
-   「あと 12秒」の文字に重ならないよう、丸の上のふちに少しだけかかる高さに置く（そのぶん HUD の上をあけている） */
-.secret-path-hud__boost {
-  position: absolute;
-  top: -17px;
-  right: -6px;
-  padding: 0 7px;
-  border: 2px solid #fff;
-  border-radius: 999px;
-  background: #3f6b3a;
-  color: #fff;
-  font-size: 11.5px;
-  font-weight: 700;
-  line-height: 1.5;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  pointer-events: none;
-}
-
-/* フィールド（森の小道）
-
-   ・左右のはし … 濃いめの草
-   ・まん中     … 土の道（枝 🌿 の緑・木漏れ日 ✨ の黄色・こうちゃんが、色で埋もれないように茶色にする）
-   ・まるい光の模様 … 地面に落ちている木漏れ日（流れてくる ✨ とまちがえないよう、うすめにする）
-   ・box-sizing: border-box … 枠のぶんだけカードから横にはみ出さないようにする
-   ・touch-action: none … 指でフィールドをさわっても、ページがスクロールしないようにする
-   ・-webkit-touch-callout: none … iPhone で長押ししたときのメニューを出さない */
-.secret-path-field {
-  position: relative;
-  flex: 1 1 auto;
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 460px;
-  min-height: 220px;
-  margin: 0 auto;
-  overflow: hidden;
-  border: 3px solid #4f7a46;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 22% 16%, rgb(255 236 170 / 30%) 0 16px, transparent 44px), radial-gradient(circle at 80% 40%, rgb(255 236 170 / 24%) 0 12px, transparent 38px),
-    radial-gradient(circle at 36% 66%, rgb(255 236 170 / 20%) 0 14px, transparent 40px),
-    linear-gradient(90deg, #4a7a40 0%, #5a8c4c 6%, #7a5a3c 7%, #a67c52 10%, #b08a60 50%, #a67c52 90%, #7a5a3c 93%, #5a8c4c 94%, #4a7a40 100%);
-  box-shadow: inset 0 10px 18px rgb(38 58 30 / 35%);
-  touch-action: none;
-  user-select: none;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
-/* レーンの区切りの点線（左から 1/3 と 2/3 の位置。土の道の上で見えるよう、明るいクリーム色） */
-.secret-path-field::before,
-.secret-path-field::after {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 1;
-  width: 3px;
-  margin-left: -1.5px;
-  background: repeating-linear-gradient(180deg, rgb(255 244 222 / 70%) 0 16px, transparent 16px 34px);
-  content: '';
-}
-
-.secret-path-field::before {
-  left: 33.333%;
-}
-
-.secret-path-field::after {
-  left: 66.667%;
-}
-
-/* 道（レーン）の押せる場所（左・まん中・右の3つ）
-
-   重なりの順番（下から）
-   0 … この押せる場所（マウスを乗せたとき・押したときの明るさ）
-   1 … レーンの区切りの点線
-   2 … 枝・木漏れ日
-   3 … こうちゃん */
-.secret-path-lane {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  z-index: 0;
-  width: 33.334%;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.secret-path-lane--current {
-  cursor: default;
-}
-
-/* 行き先の目印（こうちゃんの高さに出す、点線の丸と矢印）
-   ふだんは出さず、1回で動ける「となりのレーン」（--next）にだけ うすく出して、
-   「ここを押すと、こっちへ動ける」ことが分かるようにする */
-.secret-path-lane__target {
-  position: absolute;
-  left: 50%;
-  display: grid;
-  place-items: center;
-  box-sizing: border-box;
-  width: 46px;
-  height: 46px;
-  border: 3px dashed rgb(255 246 228 / 85%);
-  border-radius: 50%;
-  color: #fff6e4;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-  opacity: 0;
-  transform: translate(-50%, -50%);
-  transition:
-    opacity 0.15s ease,
-    background-color 0.15s ease,
-    border-color 0.15s ease;
-  pointer-events: none;
-}
-
-/* となりのレーン（1回で動ける先）にだけ、目印をうすく出す
-   いまいるレーンと、2つ先の遠いレーンには出さない */
-.secret-path-lane--next .secret-path-lane__target {
-  opacity: 0.5;
-}
-
-/* マウスを乗せたレーン（マウスなど、乗せられる端末だけ）は、少し明るくなる */
-@media (hover: hover) {
-  .secret-path-lane:not(.secret-path-lane--current):hover {
-    background: rgb(255 255 255 / 16%);
-  }
-}
-
-/* マウスを乗せたレーンを押したときの「動く先」の目印は、紺色の丸ではっきり出す
-   遠いレーンに乗せているときは、まん中のレーン（1レーン先）の目印がはっきりする */
-.secret-path-lane--destination .secret-path-lane__target {
-  border-style: solid;
-  border-color: var(--navy);
-  background: rgb(255 255 255 / 85%);
-  color: var(--navy);
-  opacity: 1;
-}
-
-/* 押した直後のレーン（クリック・タップどちらも）は、木漏れ日の色で一瞬光る */
-.secret-path-lane--flash {
-  background: rgb(255 241 168 / 40%);
-}
-
-/* 流れてくる枝と木漏れ日（left と top は、レーンと y から JavaScript が入れる） */
-.secret-path-item {
-  position: absolute;
-  z-index: 2;
-  font-size: 34px;
-  line-height: 1;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-}
-
-/* 枝：うすいクリーム色のふちどりと、下に濃い影をつけて、草や土の色に埋もれないようにする */
-.secret-path-item--branch {
-  filter: drop-shadow(0 0 1.5px rgb(255 250 232)) drop-shadow(0 0 1px rgb(255 250 232)) drop-shadow(0 2px 2px rgb(40 28 12 / 60%));
-}
-
-/* 木漏れ日：こげ茶の細いふちどり ＋ 金色の光で、明るい所でも暗い所でも消えないようにする */
-.secret-path-item--sunlight {
-  filter: drop-shadow(0 0 1px rgb(110 64 0 / 95%)) drop-shadow(0 0 6px rgb(255 226 110));
-}
-
-/* 当たった枝は、うすくして「もう当たらない」ことが分かるようにする */
-.secret-path-item--hit {
-  opacity: 0.35;
-}
-
-/* こうちゃん（レーンを動くときだけ、すっと横へすべる） */
-.secret-path-player {
-  position: absolute;
-  z-index: 3;
-  transform: translate(-50%, -50%);
-  transition: left 0.1s ease-out;
-  pointer-events: none;
-}
-
-/* こうちゃん：白いふちどりで、土の道の上でもくっきり見えるようにする */
-.secret-path-player__face {
-  display: block;
-  font-size: 42px;
-  line-height: 1;
-  filter: drop-shadow(0 0 2px rgb(255 255 255)) drop-shadow(0 3px 1px rgb(40 28 12 / 45%));
-}
-
-/* 枝に当たったとき：小さく2回ゆれる（いやいや発生の結果カードと同じ shake） */
-.secret-path-player__face--bumped {
-  animation: shake 0.25s ease-in-out 2;
-}
-
-/* 木漏れ日を取ったとき：金色に光る */
-.secret-path-player__face--sparkle {
-  filter: drop-shadow(0 0 10px rgb(255 214 90));
-}
-
-/* 「いたっ！」のふきだし（木漏れ日が減ったときは、その下に「✨ -1」も並ぶ）
-
-   2行になっても右のレーンでフィールドからはみ出さないように、横ではなくたてに積む */
-.secret-path-player__bump {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  margin-bottom: 4px;
-  padding: 1px 10px;
-  border: 2px solid var(--parent-calm);
-  border-radius: 12px;
-  background: #fff;
-  color: #c9412f;
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.4;
-  white-space: nowrap;
-  transform: translateX(-50%);
-  animation: secret-path-pop 0.2s ease-out;
-}
-
-/* 「✨ -1」（「いたっ！」の下に出す） */
-.secret-path-player__minus {
-  color: #c9412f;
-  font-size: 13px;
-  line-height: 1.2;
-}
-
-/* 「✨ +1」（ふわっと上へ上がりながら消える） */
-.secret-path-player__plus {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  color: #8a5a00;
-  font-size: 16px;
-  font-weight: 700;
-  white-space: nowrap;
-  text-shadow:
-    0 0 6px #fff,
-    0 0 2px #fff;
-  transform: translateX(-50%);
-  animation: secret-path-plus 0.6s ease-out forwards;
-}
-
-@keyframes secret-path-pop {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 6px) scale(0.8);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0) scale(1);
-  }
-}
-
-@keyframes secret-path-plus {
-  from {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-
-  to {
-    opacity: 0;
-    transform: translate(-50%, -26px);
-  }
-}
-
-/* はじまる前のカウントダウン「3」「2」「1」と「スタート！」
-
-   フィールドのまん中より少し上（こうちゃんに重ならない高さ）に、大きく重ねて出す
-   ・文字の色とふちどりは「✨ +1」と同じ考えかた（土の道の上でも、草の上でも読める）
-   ・pointer-events: none … 数字の上からでも、道をクリック・タップして動ける
-   ・数字が変わるたびに、ぽんっと大きくなって出る（動きを減らす設定のときは、すぐその大きさで出る） */
-.secret-path-countdown {
-  position: absolute;
-  top: 42%;
-  left: 50%;
-  z-index: 4;
-  color: #8a5a00;
-  font-size: 72px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-  text-shadow:
-    0 0 10px #fff,
-    0 0 4px #fff,
-    0 0 2px #fff;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  animation: secret-path-countdown-pop 0.3s ease-out;
-}
-
-/* 「スタート！」は文字数が多いので、数字より小さくして、せまい画面でもはみ出さないようにする */
-.secret-path-countdown--start {
-  color: #6b4fb0;
-  font-size: 44px;
-}
-
-@keyframes secret-path-countdown-pop {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(1.6);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-
 /* 遊んでいる最中の操作の案内（「← → / A D：左右に移動」「↑ 長押し：はやく進む」など）
    動かす操作はフィールドとキーだけなので、ここには押すものを置かず、短い案内だけにする */
 .secret-path-guide {
@@ -2375,13 +2054,6 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
-
-  /* 秘密の小道の「✨ +1」は、消える動きをやめて、出ているあいだはその場に見せておく
-     （forwards のまま一瞬で終わると、出たとたんに見えなくなってしまうため）
-     ※ 枝と木漏れ日そのものは JavaScript で動かしているので、この設定でも止まらずに遊べる */
-  .secret-path-player__plus {
-    animation: none !important;
-  }
 }
 
 /* スマホ幅：上下に積み直して1列に戻す */
@@ -2458,12 +2130,32 @@
   /* スマホでは左右が1行に収まるよう、文字と余白を少しだけ下げる
      （それでも以前の11.5pxよりは大きいままにして、押しやすさを残す） */
   .title-card__soundtrack,
+  .title-card__minigame,
   .title-card__back,
   .title-card__howto {
     gap: 6px;
     min-height: 36px;
     padding: 7px 11px;
     font-size: 13.5px;
+  }
+
+  /* A画面の「♪ サウンドトラック」は、スマホでは「♪」だけの丸にする
+     （ミニゲームの入口とサウンドのコントロールが、1行に収まるように）
+     ・文字はかくし、かわりに hover / focus のときだけ吹き出しを出す（読み上げは aria-label）
+     ・すぐ上の padding で横長にならないよう、高さと同じ幅にする */
+  .title-card__soundtrack {
+    width: 36px;
+    padding: 0;
+    font-size: 17px;
+    letter-spacing: 0;
+  }
+
+  .title-card__soundtrackText {
+    display: none;
+  }
+
+  .title-card__tooltip {
+    display: block;
   }
 
   /* B画面の「？ あそびかた」も、スマホでは「?」だけの短い表示にする
@@ -2632,21 +2324,6 @@
     max-height: none;
     padding: 12px 12px 14px;
     scroll-margin-top: 8px;
-  }
-
-  .secret-path-field {
-    flex: none;
-    height: clamp(240px, calc(100vh - 280px), 400px);
-    height: clamp(240px, calc(100dvh - 280px), 400px);
-    min-height: 0;
-  }
-
-  .secret-path-item {
-    font-size: 30px;
-  }
-
-  .secret-path-player__face {
-    font-size: 38px;
   }
 
   .secret-path-lead {
