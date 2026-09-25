@@ -5461,16 +5461,25 @@ onUnmounted(() => {
                    … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
                      同じキーが window の handleKeydown にも伝わって、
                      「選んでいるコマンド」まで実行されてしまうのを止める
-                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる -->
+                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
+
+                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
+                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
+                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
+                   （B画面の「← 戻る」と同じ考えかた） -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+                aria-label="はじめの画面へ戻る"
                 @click="goBackToBootFromResult"
                 @mouseenter="selectedCommandIndex = 1"
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">はじめの画面へ戻る</span>
+                <span class="cmd__text">
+                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
+                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
+                </span>
               </button>
             </nav>
           </div>
@@ -5573,16 +5582,25 @@ onUnmounted(() => {
                    … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
                      同じキーが window の handleKeydown にも伝わって、
                      「選んでいるコマンド」まで実行されてしまうのを止める
-                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる -->
+                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
+
+                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
+                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
+                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
+                   （B画面の「← 戻る」と同じ考えかた） -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+                aria-label="はじめの画面へ戻る"
                 @click="goBackToBootFromResult"
                 @mouseenter="selectedCommandIndex = 1"
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">はじめの画面へ戻る</span>
+                <span class="cmd__text">
+                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
+                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
+                </span>
               </button>
             </nav>
           </div>
