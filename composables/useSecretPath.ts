@@ -33,6 +33,7 @@ import {
   secretPathRowInterval,
   secretPathRowJitter,
   secretPathSunlightBranchChance,
+  secretPathSunlightDoubleBranchChance,
   secretPathSunlightRows,
   secretPathTouchSwipeThreshold,
 } from '~/data/secretPath';
@@ -124,8 +125,12 @@ export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
       queue.push({ at, kind: 'sunlight', lane: sunlightLane });
 
       // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
+      // ときどき枝を2本にして、木漏れ日のレーンしか空いていない行にする
+      // （木漏れ日は前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
       if (Math.random() < secretPathSunlightBranchChance) {
-        branchLanes.push(pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== sunlightLane)));
+        const otherLanes = secretPathLanes.filter((lane) => lane !== sunlightLane);
+
+        branchLanes.push(...(Math.random() < secretPathSunlightDoubleBranchChance ? otherLanes : [pickRandomSecretPathLane(otherLanes)]));
       }
     } else if (Math.random() < secretPathDoubleBranchChance) {
       // ときどき枝を2本にして、空いているレーンを1つだけにする（3本にはしない）

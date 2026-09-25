@@ -168,8 +168,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      キー操作・道のクリック／タップ・1コマごとの処理は、どれもこれを見てから動く */
   const isSecretPathPlaying = computed(() => currentEvent.value === 'secretPath' && secretPathPhase.value === 'playing');
 
-  /* いま はやく進んでいるか（HUDの「⏩ 1.5x」と、1コマごとの時計の進め方に使う）
-     遊んでいる最中でなければ、かならず false（結果の画面に「⏩ 1.5x」が残らない） */
+  /* いま はやく進んでいるか（HUDの「⏩ 2x」と、1コマごとの時計の進め方に使う）
+     遊んでいる最中でなければ、かならず false（結果の画面に「⏩ 2x」が残らない） */
   const isSecretPathBoosting = computed(() => isSecretPathPlaying.value && (isSecretPathKeyBoosting.value || isSecretPathPointerBoosting.value));
 
   /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない） */
@@ -291,9 +291,9 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
     secretPathLastTimestamp = timestamp;
 
-    /* はやく進んでいるあいだは、ゲームの時計そのものを1.5倍で進める
+    /* はやく進んでいるあいだは、ゲームの時計そのものを2倍で進める
        出てくるタイミング・流れる速さ・残り時間・「いたっ！」などの長さが、ぜんぶ同じ時計でそろって速くなる
-       （1コマで進むのは最大 50 × 1.5 = 75ミリ秒。枝が進むのは4.5%で、当たり判定の幅10%より小さいので すり抜けない） */
+       （1コマで進むのは最大 50 × 2 = 100ミリ秒。枝が進むのは7%で、当たり判定の幅10%より小さいので すり抜けない） */
     advanceSecretPath(isSecretPathBoosting.value ? delta * secretPathBoostMultiplier : delta);
 
     // 時間切れで終わっていなければ、次のコマを予約する
@@ -555,7 +555,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
        長押しになる前に横へ動いたら、長押しの判定はやめる（フリック・ドラッグとして扱う）
 
      ■ 長押し（secretPathHoldBoostDelay だけ押しつづける）
-       はなすまで、はやく進む（ゲームの時計が1.5倍）
+       はなすまで、はやく進む（ゲームの時計が2倍）
 
      ※ setPointerCapture … 押したままフィールドの外へ出ても、pointerup / pointercancel を受け取るため
      ※ 最初に押したポインターだけで操作する（2本目の指は使わない） */
