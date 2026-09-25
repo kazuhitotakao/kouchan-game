@@ -38,7 +38,7 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
 /* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { setElementVolume } from '~/utils/elementVolume';
+import { keepAudioContextAwake, setElementVolume } from '~/utils/elementVolume';
 
 /* 音のほうから「いま画面はどうなっているか」を見るための値
 
@@ -2802,7 +2802,16 @@ export function useAudio(options: UseAudioOptions) {
      ※ localStorage はブラウザにしか無いので、必ず onMounted から呼ぶこと
      ※ ここではBGMを鳴らさない（理由は、いちばん下のコメントを参照）
      ============================================================ */
+  /* さわるたびに作業台を起こす受付を、やめるための関数（受付していないときは null）
+     （iPhone でBGMが無音にならないようにするため。くわしくは utils/elementVolume.ts） */
+  let stopWakingAudioContext: (() => void) | null = null;
+
   function restoreSoundSettings() {
+    /* さわるたびに作業台（AudioContext）を起こす受付を始める
+       この関数は onMounted から1回だけ呼ばれるので、ここで始めて、cleanupAudio() でやめる */
+    stopWakingAudioContext?.();
+    stopWakingAudioContext = keepAudioContextAwake(getAudioContext);
+
     /* 前回のサウンドの設定を思い出す
 
        localStorage には文字しか入らないので、'true' / 'false' という
@@ -2884,6 +2893,10 @@ export function useAudio(options: UseAudioOptions) {
        前後の順番がずれないようにするため
      ============================================================ */
   function cleanupAudio() {
+    // さわるたびに作業台を起こす受付をやめる（→ restoreSoundSettings()）
+    stopWakingAudioContext?.();
+    stopWakingAudioContext = null;
+
     // 別のページへ移ったあともBGMが鳴り続けないように、ぜんぶの曲を止めておく
     // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
     pauseTitleBgm();
