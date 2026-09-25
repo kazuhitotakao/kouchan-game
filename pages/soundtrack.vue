@@ -2,6 +2,11 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
+/* 曲の音量を入れる関数
+   audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+import { setElementVolume } from '~/utils/elementVolume';
+
 /* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
    タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
 import SoundControl from '~/components/game/SoundControl.vue';
@@ -528,7 +533,7 @@ function resumeAfterSoundOn() {
   /* OFFのあいだに音量スライダーを動かしていることもあるので、
      鳴らす前に、いまの音量を入れなおしておく */
   try {
-    audio.volume = getTrackVolume(track);
+    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
   } catch {
     // 何もしない
   }
@@ -1386,7 +1391,7 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
   // 1周の1曲目を設定する
   try {
     audio.src = firstTrack.src;
-    audio.volume = getTrackVolume(firstTrack);
+    setElementVolume(audio, getTrackVolume(firstTrack), getEffectAudioContext);
     audio.currentTime = 0;
   } catch {
     // 何もしない
@@ -1626,7 +1631,7 @@ function playPlaylistTrackAt(index: number) {
      2曲が同時に鳴ることは仕組みのうえで起こらない（連打しても同じ） */
   try {
     audio.src = track.src;
-    audio.volume = getTrackVolume(track);
+    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
     audio.currentTime = 0; // 行き先の曲も先頭から
   } catch {
     // 何もしない
@@ -1745,7 +1750,7 @@ function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrac
   // ④ 新しい曲を設定する
   try {
     audio.src = track.src;
-    audio.volume = getTrackVolume(track);
+    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
     audio.currentTime = 0; // 新しい曲を先頭から鳴らす
   } catch {
     // 何もしない
@@ -1940,7 +1945,7 @@ function changeMasterVolume(event: Event) {
 
   if (soundtrackAudio && playingTrack) {
     try {
-      soundtrackAudio.volume = getTrackVolume(playingTrack);
+      setElementVolume(soundtrackAudio, getTrackVolume(playingTrack), getEffectAudioContext);
     } catch {
       // 何もしない（次に曲を鳴らすときに、あらためて設定される）
     }
