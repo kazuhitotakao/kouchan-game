@@ -5,7 +5,7 @@ import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/
 /* 曲の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { setElementVolume } from '~/utils/elementVolume';
+import { keepAudioContextAwake, setElementVolume } from '~/utils/elementVolume';
 
 /* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
    タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
@@ -2630,8 +2630,15 @@ async function goToTitle() {
    ページ全体（document）で「押された」を見張ってもらう
    ※ onMounted はブラウザでだけ動くので、document を安心して使える
 */
+/* さわるたびに作業台を起こす受付を、やめるための関数（受付していないときは null）
+   （iPhone で、画面を消して戻ったあとの曲が無音にならないようにするため。くわしくは utils/elementVolume.ts） */
+let stopWakingAudioContext: (() => void) | null = null;
+
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideCreditPointerDown);
+
+  // さわるたびに作業台（AudioContext）を起こす受付を始める（onUnmounted でやめる）
+  stopWakingAudioContext = keepAudioContextAwake(getEffectAudioContext);
 
   /* このページでいちばん使う「▶ 全曲再生」にフォーカスを当てておく
      キーボードだけでも、開いてすぐ Enter で全曲再生を始められる */
@@ -2717,6 +2724,10 @@ onMounted(() => {
 onUnmounted(() => {
   // ページ全体の見張りをやめる（付けっぱなしにしない）
   document.removeEventListener('pointerdown', handleOutsideCreditPointerDown);
+
+  // さわるたびに作業台を起こす受付をやめる
+  stopWakingAudioContext?.();
+  stopWakingAudioContext = null;
 
   stopSoundtrack();
 
