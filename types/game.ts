@@ -265,3 +265,9 @@ export type SecretPathSpawn = {
   kind: SecretPathItemKind;
   lane: SecretPathLane;
 };
+
+/* 秘密の小道の遊びかた
+   story   … ゲーム本編の小道（15秒でぬける。木漏れ日の数でボーナス）
+   endless … ミニゲーム（/minigame/secret-path）の「どこまで行ける？」
+             （枝に3回当たるまで続き、進むほど速くなる） */
+export type SecretPathMode = 'story' | 'endless';

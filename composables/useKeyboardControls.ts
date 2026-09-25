@@ -58,6 +58,7 @@ export type UseKeyboardControlsOptions = {
   /* ===== フォーカスを当てるためのボタン・入力欄 ===== */
   startButtonRef: Ref<HTMLButtonElement | null>;
   soundtrackButtonRef: Ref<HTMLButtonElement | null>;
+  minigameButtonRef: Ref<HTMLButtonElement | null>;
   selectSnacksButtonRef: Ref<HTMLButtonElement | null>;
   howToPlayButtonRef: Ref<HTMLButtonElement | null>;
   backToBootButtonRef: Ref<HTMLButtonElement | null>;
@@ -112,6 +113,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     isSecretPathPlaying,
     startButtonRef,
     soundtrackButtonRef,
+    minigameButtonRef,
     selectSnacksButtonRef,
     howToPlayButtonRef,
     backToBootButtonRef,
@@ -412,8 +414,8 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* ============================================================
      起動画面（A）・タイトル画面（B）のキーボード操作
 
-     この2つの画面で操作するものは、A画面が3つ、B画面が4つ
-       A … ① はじめる             ② ♪ サウンドトラック ③ サウンドON/OFF
+     この2つの画面で操作するものは、A画面もB画面も4つ
+       A … ① はじめる             ② ♪（サウンドトラック）   ③ 🌿 ミニゲーム ④ サウンドON/OFF
        B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
 
      ①がその画面のメインのボタン
@@ -470,23 +472,18 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
        Tabキーで回る順番（HTMLに書いた順番）と同じにしてある */
     const items = titleEntered.value
       ? [selectSnacksButtonRef.value, backToBootButtonRef.value, howToPlayButtonRef.value, soundToggleButtonRef.value] // B画面
-      : [startButtonRef.value, soundtrackButtonRef.value, soundToggleButtonRef.value]; // A画面
+      : [startButtonRef.value, soundtrackButtonRef.value, minigameButtonRef.value, soundToggleButtonRef.value]; // A画面
 
     return items.filter((item): item is HTMLButtonElement => item !== null);
   }
 
   /* ↑↓←→ でフォーカスを動かす
 
-     ■ A画面（ボタン3つ）
+     ■ A画面（ボタン4つ）
 
-       [ ♪ サウンドトラック ]        [ サウンドON/OFF ]
+       [ ♪ ][ 🌿 ミニゲーム ]        [ サウンドON/OFF ]
 
                     [ はじめる ]
-
-       ・↑ ↓ … メインのボタンと、上の行を行き来する
-                （メインで↑を押したら、真上にある左のボタンへ）
-       ・← → … 上の行の2つを行き来する
-                （メインにいるときは、←で左上・→で右上へ）
 
      ■ B画面（ボタン4つ）
 
@@ -494,95 +491,72 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
                    [ きょうのおやつを選ぶ ]
 
-       ・↑ ↓ … メインのボタンと、上の行を行き来する（A画面と同じ）
-                （メインからは、左上の「はじめの画面へ戻る」へ）
-       ・← → … 上の行の3つを、となりへ1つずつ動く
+     どちらの画面も「下にメインのボタンが1つ、上の行にいくつか」の形なので、同じ動きにしている
+       ・↑ ↓ … メインのボタンと、上の行を行き来する
+                （メインからは、さっき上の行でいたボタンへ戻る。覚えていないときは左上のボタン（♪／はじめの画面へ戻る）へ）
+       ・← → … 上の行を、となりへ1つずつ動く
                 （はしまで来たら反対のはしへ回りこむ。メインにいるときは、←で左上・→で右上のサウンドへ）
 
-     どちらの画面でも、どのキーもかならずどこかへ動くので、
-     ボタンを矢印キーだけで選べる */
+     どのキーもかならずどこかへ動くので、ボタンを矢印キーだけで選べる
+
+     ※ 前はA画面だけ「上の行は2つ」と決めて書いていたが、
+       ミニゲームの入口が増えて上の行が3つになったので、B画面と同じ書きかたにそろえた */
+  /* 上の行から ↓ でメインのボタンへ下りたとき、上の行のどのボタンにいたか
+
+     ↑ で上の行へ戻るときに、同じボタンへ戻すために覚えておく
+     （サウンドから↓で「はじめる」へ下りたら、↑でサウンドへ戻る。A画面の 🌿 ミニゲーム・B画面の ？ あそびかた も同じ）
+     ボタンそのものを覚えているので、A画面⇄B画面で画面が入れかわると、もう画面に無いボタンになる
+     そのときは覚えていないのと同じにして、左上のボタンへ戻す */
+  let lastTitleTopItem: HTMLButtonElement | null = null;
+
   function moveTitleFocusByArrow(key: string) {
     const items = getTitleFocusItems();
     const active = document.activeElement;
 
-    // B画面（タイトル画面）
-    if (titleEntered.value) {
-      // 4つそろっていないときは何もしない（画面の切りかわり中など）
-      if (items.length < 4) {
-        return;
-      }
-
-      // getTitleFocusItems() の並びは「メイン → 上の行を左から（戻る → あそびかた → サウンド）」
-      const [mainButton, ...topRow] = items;
-
-      // 上の行の何番目にいるか（上の行にいないときは -1）
-      const topIndex = topRow.findIndex((button) => button === active);
-
-      // ↑ ↓：メインのボタン ⇔ 上の行
-      if (key === 'ArrowUp' || key === 'ArrowDown') {
-        if (active === mainButton) {
-          // 左上の「はじめの画面へ戻る」へ（A画面で ♪ サウンドトラック へ行くのと同じ）
-          topRow[0].focus();
-        } else {
-          mainButton.focus();
-        }
-
-        return;
-      }
-
-      // ←：上の行を1つ左へ（左はしでは右はしへ回りこむ。上の行にいないときは左上へ）
-      if (key === 'ArrowLeft') {
-        const leftIndex = topIndex === -1 ? 0 : (topIndex - 1 + topRow.length) % topRow.length;
-        topRow[leftIndex].focus();
-        return;
-      }
-
-      // →：上の行を1つ右へ（右はしでは左はしへ回りこむ。上の行にいないときは右上のサウンドへ）
-      const rightIndex = topIndex === -1 ? topRow.length - 1 : (topIndex + 1) % topRow.length;
-      topRow[rightIndex].focus();
+    // そろっていないときは何もしない（画面の切りかわり中など）
+    // どちらの画面も4つ
+    if (items.length < 4) {
       return;
     }
 
-    // ここから下はA画面（起動画面）
+    // getTitleFocusItems() の並びは「メイン → 上の行を左から」
+    const [mainButton, ...topRow] = items;
 
-    // 3つそろっていないときは何もしない（画面の切りかわり中など）
-    if (items.length < 3) {
-      return;
-    }
-
-    // getTitleFocusItems() の並びは「メイン → 左上 → 右上」
-    const [mainButton, leftButton, soundButton] = items;
+    // 上の行の何番目にいるか（上の行にいないときは -1）
+    const topIndex = topRow.findIndex((button) => button === active);
 
     // ↑ ↓：メインのボタン ⇔ 上の行
     if (key === 'ArrowUp' || key === 'ArrowDown') {
       if (active === mainButton) {
-        // 真上にある左のボタンへ（A画面なら ♪ サウンドトラック）
-        leftButton.focus();
+        /* 上の行へ戻るときは、さっき上の行でいた場所へ戻る（→ lastTitleTopItem）
+           （サウンドから↓で「はじめる」へ来たなら、↑でサウンドへ戻る）
+           覚えている場所が無い・この画面には無い（A→Bで画面が変わった など）ときは、
+           真上の左上のボタンへ（A画面なら ♪ サウンドトラック、B画面なら はじめの画面へ戻る） */
+        const lastTopItem = lastTitleTopItem && topRow.includes(lastTitleTopItem) ? lastTitleTopItem : topRow[0];
+
+        lastTopItem.focus();
       } else {
-        // 上の行にいるときは、下のメインのボタンへ戻る
+        // 上の行からメインのボタンへ下りるときに、いまいた場所を覚えておく
+        if (topIndex !== -1) {
+          lastTitleTopItem = topRow[topIndex];
+        }
+
         mainButton.focus();
       }
 
       return;
     }
 
-    // ←：左上のボタンへ（すでに左上にいるときは、反対がわの右上へ回りこむ）
+    // ←：上の行を1つ左へ（左はしでは右はしへ回りこむ。上の行にいないときは左上へ）
     if (key === 'ArrowLeft') {
-      if (active === leftButton) {
-        soundButton.focus();
-      } else {
-        leftButton.focus();
-      }
-
+      const leftIndex = topIndex === -1 ? 0 : (topIndex - 1 + topRow.length) % topRow.length;
+      topRow[leftIndex].focus();
       return;
     }
 
-    // →：右上のサウンドON/OFFへ（すでに右上にいるときは、左上へ回りこむ）
-    if (active === soundButton) {
-      leftButton.focus();
-    } else {
-      soundButton.focus();
-    }
+    // →：上の行を1つ右へ（右はしでは左はしへ回りこむ。上の行にいないときは右上のサウンドへ）
+    const rightIndex = topIndex === -1 ? topRow.length - 1 : (topIndex + 1) % topRow.length;
+    topRow[rightIndex].focus();
   }
 
   /* その画面のメインのボタン（はじめる／きょうのおやつを選ぶ）へフォーカスを当てる
