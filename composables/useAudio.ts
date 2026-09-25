@@ -2076,6 +2076,33 @@ export function useAudio(options: UseAudioOptions) {
   */
   let resultBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /* Audio を「あとから鳴らせる」状態にしておく（ボタンを押した瞬間に呼ぶこと）
+
+     iPhone のブラウザでは、1つ1つの Audio について
+     「さわった瞬間に一度 play() されたか」を覚えていて、
+     一度でもそうされた Audio は、そのあと いつ play() しても鳴らせる
+     そこで、さわった瞬間に、音を消したまま（muted）一度 play() して、すぐ止めておく
+     ・muted のまま、すぐ pause() するので、音は出ない
+     ・すぐ止めるので play() の約束（Promise）は取り消しで終わるが、それは無視してよい
+     ・すでに鳴っている Audio は止めてしまわないように、さわらない */
+  function unlockAudioElement(audio: HTMLAudioElement) {
+    if (!audio.paused) {
+      return;
+    }
+
+    const wasMuted = audio.muted;
+
+    try {
+      audio.muted = true;
+      audio.play().catch(() => {});
+      audio.pause();
+    } catch {
+      // 何もしない（鳴らせないときは、今までどおり鳴らないだけ）
+    }
+
+    audio.muted = wasMuted;
+  }
+
   /* リザルトBGMを「少し待ってから」最初から鳴らす
 
      ※ 待たせるのは「音を鳴らすこと」だけ
@@ -2088,6 +2115,21 @@ export function useAudio(options: UseAudioOptions) {
     // サーバー側では音を鳴らさないので、予約もしない
     if (!import.meta.client) {
       return;
+    }
+
+    /* 待つ前に、リザルトBGMを「あとから鳴らせる」状態にしておく（→ unlockAudioElement）
+
+       iPhone のブラウザ（Safari・Chrome）では、ボタンを押してから1秒以上たったあとに
+       新しい Audio を play() しても、止められて鳴らない
+       待ち時間（1.5秒）は、ほかのBGM（0.7秒）とちがって1秒をこえるので、
+       ここでしておかないと、ブラウザで遊んだときだけエンディングの曲が鳴らなかった
+       ※ この関数は、ゴールのボタンを押した流れ（goToGoal()）の中から、待たずに呼ばれている */
+    if (soundEnabled.value) {
+      const bgm = getResultBgm();
+
+      if (bgm) {
+        unlockAudioElement(bgm);
+      }
     }
 
     resultBgmTimer = setTimeout(() => {
