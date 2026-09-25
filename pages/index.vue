@@ -1000,6 +1000,8 @@ const {
   playGoalSound,
   playSunlightSound,
   playBranchBumpSound,
+  playCountdownSound,
+  playCountdownStartSound,
   playSuddenEventSound,
 
   /* 公園のBGM（shouldUseParkBgm2 は、公園入口の文章の出しわけにも使う） */
@@ -2421,6 +2423,8 @@ const {
   /* 画面に出す、計算した状態 */
   isSecretPathPlaying,
   isSecretPathBoosting,
+  secretPathCountdownNumber,
+  isSecretPathStartCueVisible,
   isSecretPathBumped,
   isSecretPathSparkling,
   secretPathFlashLane,
@@ -2458,6 +2462,8 @@ const {
   playItemSound,
   playSunlightSound,
   playBranchBumpSound,
+  playCountdownSound,
+  playCountdownStartSound,
 });
 
 /* 公園入口の「細い道の先」
@@ -4848,6 +4854,14 @@ onUnmounted(() => {
                     <span v-if="isSecretPathSparkling" :key="secretPathSparkleId" class="secret-path-player__plus">✨ +1</span>
                     <span class="secret-path-player__face" :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">👦</span>
                   </div>
+
+                  <!-- はじまる前のカウントダウン「3」「2」「1」と、そのあとの「スタート！」
+                       フィールドのまん中に大きく重ねて出す（pointer-events: none なので、下の道はそのまま押せる）
+                       key を数字にしておくと、数字が変わるたびに、ぽんっと出なおす -->
+                  <span v-if="secretPathCountdownNumber !== null" :key="`countdown-${secretPathCountdownNumber}`" class="secret-path-countdown">
+                    {{ secretPathCountdownNumber }}
+                  </span>
+                  <span v-else-if="isSecretPathStartCueVisible" key="countdown-start" class="secret-path-countdown secret-path-countdown--start">スタート！</span>
                 </div>
               </article>
 

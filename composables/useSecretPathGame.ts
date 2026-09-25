@@ -39,6 +39,7 @@ import { buildSecretPathSpawnQueue, getSecretPathBonusPoint, getSecretPathResult
 import {
   secretPathBoostMultiplier,
   secretPathBumpEffectDuration,
+  secretPathCountdownDuration,
   secretPathDuration,
   secretPathHoldBoostDelay,
   secretPathLeaveGuard,
@@ -47,6 +48,7 @@ import {
   secretPathSparkleDuration,
   secretPathSpawnY,
   secretPathSpeed,
+  secretPathStartCueDuration,
   secretPathTapFlashDuration,
 } from '~/data/secretPath';
 import type { GameEvent, SecretPathItem, SecretPathLane, SecretPathPhase, SecretPathSpawn, StatusChanges } from '~/types/game';
@@ -69,6 +71,8 @@ export type UseSecretPathGameOptions = {
   playItemSound: () => void;
   playSunlightSound: () => void;
   playBranchBumpSound: () => void;
+  playCountdownSound: (delay?: number) => void;
+  playCountdownStartSound: () => void;
 };
 
 export function useSecretPathGame(options: UseSecretPathGameOptions) {
@@ -87,6 +91,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     playItemSound,
     playSunlightSound,
     playBranchBumpSound,
+    playCountdownSound,
+    playCountdownStartSound,
   } = options;
 
   /* いまの進み具合（小道へ入るたびに ready から始める） */
@@ -107,7 +113,11 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* 始まってから何ミリ秒たったか（ゲームの時計）
 
      タブを切りかえているあいだは requestAnimationFrame が止まるので、この時計も止まる
-     （戻ってきたときに、いきなり何秒も進んでしまわない） */
+     （戻ってきたときに、いきなり何秒も進んでしまわない）
+
+     はじまる前のカウントダウンも、この時計で数える
+     「小道へ進む」を押したら -secretPathCountdownDuration から始めて、0 になったらスタート
+     （枝と木漏れ日の予定はどれも 0 より後なので、マイナスのあいだは何も出てこない） */
   const secretPathElapsed = ref(0);
 
   /* 「いたっ！」を出しておくのは、ゲームの時計が何ミリ秒になるまでか（0 = 出していない） */
@@ -168,15 +178,35 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      キー操作・道のクリック／タップ・1コマごとの処理は、どれもこれを見てから動く */
   const isSecretPathPlaying = computed(() => currentEvent.value === 'secretPath' && secretPathPhase.value === 'playing');
 
+  /* はじまる前のカウントダウン中かどうか（ゲームの時計がまだマイナスのあいだ） */
+  const isSecretPathCountingDown = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < 0);
+
+  /* カウントダウンに出す数字（3 → 2 → 1。カウントダウン中でなければ null） */
+  const secretPathCountdownNumber = computed(() => (isSecretPathCountingDown.value ? getSecretPathCountdownNumber(secretPathElapsed.value) : null));
+
+  /* 「スタート！」を出しているか（カウントダウンが終わってから secretPathStartCueDuration のあいだ） */
+  const isSecretPathStartCueVisible = computed(
+    () => isSecretPathPlaying.value && secretPathElapsed.value >= 0 && secretPathElapsed.value < secretPathStartCueDuration,
+  );
+
   /* いま はやく進んでいるか（HUDの「⏩ 2x」と、1コマごとの時計の進め方に使う）
-     遊んでいる最中でなければ、かならず false（結果の画面に「⏩ 2x」が残らない） */
-  const isSecretPathBoosting = computed(() => isSecretPathPlaying.value && (isSecretPathKeyBoosting.value || isSecretPathPointerBoosting.value));
+     遊んでいる最中でなければ、かならず false（結果の画面に「⏩ 2x」が残らない）
+     カウントダウン中も false（押していても、スタートしてから はやくなる） */
+  const isSecretPathBoosting = computed(
+    () => isSecretPathPlaying.value && !isSecretPathCountingDown.value && (isSecretPathKeyBoosting.value || isSecretPathPointerBoosting.value),
+  );
 
-  /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない） */
-  const isSecretPathBumped = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathBumpUntil.value);
+  /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない）
 
-  /* 木漏れ日を取った直後かどうか（「✨ +1」と光を出しているあいだ） */
-  const isSecretPathSparkling = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < secretPathSparkleUntil.value);
+     ※ カウントダウン中は、かならず false
+       「出していない」ことを 0 で表しているので、時計がマイナスのあいだは
+       「まだ出しているあいだ」に見えてしまうため（カウントダウン中は、枝も木漏れ日も来ない） */
+  const isSecretPathBumped = computed(() => isSecretPathPlaying.value && !isSecretPathCountingDown.value && secretPathElapsed.value < secretPathBumpUntil.value);
+
+  /* 木漏れ日を取った直後かどうか（「✨ +1」と光を出しているあいだ。カウントダウン中は、上と同じ理由で false） */
+  const isSecretPathSparkling = computed(
+    () => isSecretPathPlaying.value && !isSecretPathCountingDown.value && secretPathElapsed.value < secretPathSparkleUntil.value,
+  );
 
   /* いま光らせているレーン（道をクリック・タップした直後だけ。それ以外は null） */
   const secretPathFlashLane = computed(() => (isSecretPathPlaying.value && secretPathElapsed.value < secretPathTapUntil.value ? secretPathTapLane.value : null));
@@ -196,11 +226,17 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     return hoverLane < currentLane ? currentLane - 1 : currentLane + 1;
   });
 
-  /* 残り時間（秒）。「あと 12秒」のように出す */
-  const secretPathTimeLeft = computed(() => Math.max(0, Math.ceil((secretPathDuration - secretPathElapsed.value) / 1000)));
+  /* 残り時間（秒）。「あと 12秒」のように出す（カウントダウン中は 15秒のまま） */
+  const secretPathTimeLeft = computed(() => Math.max(0, Math.ceil((secretPathDuration - Math.max(secretPathElapsed.value, 0)) / 1000)));
 
   /* 集めた木漏れ日の数に合わせた、結果の文章 */
   const secretPathResultText = computed(() => getSecretPathResultText(secretPathSunlightCount.value));
+
+  /* カウントダウン中の時計（マイナス）から、出す数字（3 → 2 → 1）を決める
+     secretPathCountdownDuration を3つに分けて、残りが多いほど大きい数字にする */
+  function getSecretPathCountdownNumber(elapsed: number) {
+    return Math.min(3, Math.ceil((-elapsed / secretPathCountdownDuration) * 3));
+  }
 
   /* requestAnimationFrame のループを止める（予約が無ければ何もしない） */
   function stopSecretPathLoop() {
@@ -238,7 +274,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
   /* 「小道へ進む」（ミニゲームを始める）
 
-     押すまでは何も動かないので、プレイヤーは説明を読んでから始められる */
+     押すまでは何も動かないので、プレイヤーは説明を読んでから始められる
+     押したあとも、遊ぶ画面で「3」「2」「1」とカウントダウンしてから、枝が流れはじめる */
   function startSecretPathGame() {
     if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
       return;
@@ -250,6 +287,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     resetSecretPathGame();
     secretPathSpawnQueue = buildSecretPathSpawnQueue();
     secretPathPhase.value = 'playing';
+
+    // カウントダウンから始める（「3」の音は、決定音と重ならないよう少しうしろへずらす）
+    secretPathElapsed.value = -secretPathCountdownDuration;
+    playCountdownSound(0.12);
 
     secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
 
@@ -304,9 +345,19 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
   /* ゲームの時計を delta ミリ秒進めて、出す・動かす・当たりを見る・片づける */
   function advanceSecretPath(delta: number) {
-    const elapsed = Math.min(secretPathElapsed.value + delta, secretPathDuration);
+    const previousElapsed = secretPathElapsed.value;
+    const elapsed = Math.min(previousElapsed + delta, secretPathDuration);
 
     secretPathElapsed.value = elapsed;
+
+    // ⓪ カウントダウン中は、数字が変わるたびに「ピッ」、0 になったら「ピーン♪」
+    if (previousElapsed < 0) {
+      if (elapsed >= 0) {
+        playCountdownStartSound();
+      } else if (getSecretPathCountdownNumber(elapsed) !== getSecretPathCountdownNumber(previousElapsed)) {
+        playCountdownSound();
+      }
+    }
 
     // ① 予定の時間になったものを、フィールドのいちばん上に出す
     let nextSpawn = secretPathSpawnQueue[0];
@@ -823,6 +874,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     /* ===== 画面に出す、計算した状態 ===== */
     isSecretPathPlaying,
     isSecretPathBoosting,
+    secretPathCountdownNumber,
+    isSecretPathStartCueVisible,
     isSecretPathBumped,
     isSecretPathSparkling,
     secretPathFlashLane,

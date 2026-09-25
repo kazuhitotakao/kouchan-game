@@ -13,6 +13,19 @@ export const secretPathLanes: SecretPathLane[] = [0, 1, 2];
 /* ミニゲームの長さ（ミリ秒）。15000 で15秒 */
 export const secretPathDuration = 15000;
 
+/* はじまる前のカウントダウン（「3」「2」「1」）の長さ（ミリ秒）
+
+   「小道へ進む」を押して遊ぶ画面に切りかわってから、この長さだけ待ってから始める
+   （画面が切りかわってすぐ枝が流れてくると、こうちゃんの位置をたしかめる間もないため）
+   ・3つの数字を同じ長さずつ出す（3000 なら、ひとつ1秒。2000・約0.67秒ずつでは速く感じたので、ゆっくりにした）
+   ・このあいだは枝も木漏れ日も出てこない。残り時間も減らない。はやく進むのも効かない
+   ・左右の移動だけはできる（始める前に、動かしかたをたしかめられる） */
+export const secretPathCountdownDuration = 3000;
+
+/* カウントダウンのあと「スタート！」を出しておく長さ（ミリ秒）
+   このあいだは、もうゲームは動いている（最初の行が こうちゃんの所へ来るより前に消える） */
+export const secretPathStartCueDuration = 600;
+
 /* 1プレイで流れてくる木漏れ日の数（「✨ 木漏れ日 3 / 5」の 5）
    下の secretPathSunlightRows の数とそろえること */
 export const secretPathSunlightTotal = 5;

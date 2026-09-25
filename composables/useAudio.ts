@@ -513,6 +513,35 @@ export function useAudio(options: UseAudioOptions) {
     playTone(300, context.currentTime, 0.12, 0.05, 'triangle', 190);
   }
 
+  /* ⑥-2 カウントダウンの音「ピッ」（ミニゲーム「秘密の小道」の「3」「2」「1」用）
+
+     決定音「ポン♪」より少し高くて短い音を1つ
+     「3」は「小道へ進む」の決定音と同時に出るので、delay で少しうしろへずらして鳴らす
+     （アイテム音0.06秒・いやいや発生音0.12秒と同じ考えかた） */
+  function playCountdownSound(delay = 0) {
+    const context = getAudioContext();
+
+    if (!context) {
+      return;
+    }
+
+    playTone(880, context.currentTime + delay, 0.08, 0.05, 'triangle'); // ラ
+  }
+
+  /* ⑥-3 スタートの音「ピーン♪」（ミニゲーム「秘密の小道」の「スタート！」用）
+
+     カウントダウンの「ピッ」の1オクターブ上を、少し長めに伸ばす
+     （時報の「ピッ、ピッ、ピッ、ポーン」と同じ形なので、始まったことが耳だけでも分かる） */
+  function playCountdownStartSound() {
+    const context = getAudioContext();
+
+    if (!context) {
+      return;
+    }
+
+    playTone(1760, context.currentTime, 0.3, 0.05, 'triangle'); // 高いラ
+  }
+
   /* ⑦ 転倒音「ヒュッ、ポテッ」（とつぜんのできごと「こうちゃんがころんだ」用）
 
      短い音を2つ、すきまなく続けて鳴らして「つまずいて、地面にすわりこむ」を表す
@@ -2886,6 +2915,8 @@ export function useAudio(options: UseAudioOptions) {
     playGoalSound,
     playSunlightSound,
     playBranchBumpSound,
+    playCountdownSound,
+    playCountdownStartSound,
     playSuddenEventSound,
 
     /* ===== 公園のBGM ===== */

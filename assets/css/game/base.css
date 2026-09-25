@@ -2111,6 +2111,49 @@
   }
 }
 
+/* はじまる前のカウントダウン「3」「2」「1」と「スタート！」
+
+   フィールドのまん中より少し上（こうちゃんに重ならない高さ）に、大きく重ねて出す
+   ・文字の色とふちどりは「✨ +1」と同じ考えかた（土の道の上でも、草の上でも読める）
+   ・pointer-events: none … 数字の上からでも、道をクリック・タップして動ける
+   ・数字が変わるたびに、ぽんっと大きくなって出る（動きを減らす設定のときは、すぐその大きさで出る） */
+.secret-path-countdown {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  z-index: 4;
+  color: #8a5a00;
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow:
+    0 0 10px #fff,
+    0 0 4px #fff,
+    0 0 2px #fff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: secret-path-countdown-pop 0.3s ease-out;
+}
+
+/* 「スタート！」は文字数が多いので、数字より小さくして、せまい画面でもはみ出さないようにする */
+.secret-path-countdown--start {
+  color: #6b4fb0;
+  font-size: 44px;
+}
+
+@keyframes secret-path-countdown-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
 /* 遊んでいる最中の操作の案内（「← → / A D：左右に移動」「↑ 長押し：はやく進む」など）
    動かす操作はフィールドとキーだけなので、ここには押すものを置かず、短い案内だけにする */
 .secret-path-guide {
