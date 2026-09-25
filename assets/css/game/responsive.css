@@ -232,10 +232,13 @@
      スマホ幅の .game は height: auto なので、その「0%」は中身の高さとして扱われ、
      height: 100dvh を書いても無視されて、中身の高さまでのびてしまう
      flex: none にすると、height: 100dvh がそのまま高さになる */
+  /* 高さからは、ノッチ・ホームインジケーターをよける余白（.game の padding）のぶんを引く
+     引かないと、そのぶんだけページが縦にスクロールしてしまう
+     （よける場所が無い画面では env() が 0 なので、今までどおり 100dvh ぴったり） */
   .game-screen:not(.game-screen--secret-path) {
     flex: none;
-    height: 100vh;
-    height: 100dvh;
+    height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     overflow: hidden;
   }
 

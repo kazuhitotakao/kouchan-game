@@ -153,6 +153,20 @@ const isSnackSelectionOpen = ref(false);
      必要な人が、必要なときに開くためのページ */
 const isHowToPlayOpen = ref(false);
 
+/* ホーム画面のアイコンから（アプリのように）起動しているかどうか
+
+   ・true  … ホーム画面から起動している（standalone 表示。URLバーなどが無い）
+   ・false … ふつうの Safari / Chrome で開いている
+   ・null  … まだ調べていない（サーバー側で作っているとき・ページを開いた直後）
+
+   window / navigator はブラウザにしか無いので、調べるのは onMounted の中
+   （→ checkStandalone()）
+   null のあいだは「ホーム画面に追加」の案内を出さない
+   （ホーム画面から起動したときに、案内が一瞬だけ見えてしまわないようにするため）
+
+   A画面の「ホーム画面に追加」の案内は、false のときだけ出す */
+const isStandalone = ref<boolean | null>(null);
+
 /* ============================================================
    A画面・B画面のボタンを覚えておく箱（キーボード操作用）
 
@@ -3614,7 +3628,22 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
    ※ 秘密の小道の keyup / blur / visibilitychange は、useSecretPathGame() の中で登録している
    ※ S+ランク限定のうた入りBGMを前に解放しているかの読みこみは、useGameResult() の中で行っている
 */
+/* ホーム画面から起動しているか（standalone 表示か）を調べて、isStandalone に入れる
+
+   ・display-mode: standalone … manifest の display: 'standalone' で起動していると当てはまる
+     （Android の Chrome・新しい iPhone の Safari）
+   ・navigator.standalone      … 古い iPhone の Safari だけにある目印（ホーム画面から起動すると true）
+     ほかのブラウザには無い（undefined）ので、「=== true」のときだけ standalone とみなす
+
+   ※ window / navigator はブラウザにしか無いので、必ず onMounted から呼ぶこと */
+function checkStandalone() {
+  const isIosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  isStandalone.value = window.matchMedia('(display-mode: standalone)').matches || isIosStandalone;
+}
+
 onMounted(() => {
+  checkStandalone();
+
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
@@ -3989,6 +4018,21 @@ onUnmounted(() => {
           </div>
 
           <h1 class="title-card__name">{{ gameTitle }}</h1>
+
+          <!-- 「ホーム画面に追加」の案内（ふつうの Safari / Chrome で開いているときだけ）
+
+               ・ホーム画面から起動しているとき（isStandalone が true）は出さない
+               ・調べおわる前（null）も出さない（→ isStandalone）
+               ・パソコンでは、CSS でかくしている（指でさわる画面のときだけ出す → base.css の .install-hint）
+
+               見た目の位置は、カードのいちばん下（「はじめる」の下）
+               A画面のカードは中身が少なく、下に余白があるので、
+               案内を足してもカードの高さは変わらない（B画面と高さがそろったまま） -->
+          <p v-if="isStandalone === false" class="install-hint">
+            <span class="install-hint__lead">📱 ホーム画面に追加すると、アプリみたいに遊べるよ！</span>
+            <span>iPhone：共有 → ホーム画面に追加</span>
+            <span>Android：メニュー → ホーム画面に追加</span>
+          </p>
         </div>
       </div>
 

@@ -3247,6 +3247,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+
+  /* iPhone のノッチ・Dynamic Island・ホームインジケーターをよける余白
+     ゲーム画面の .game と同じ考えかた（→ assets/css/game/base.css の .game）
+     border-box なので、この余白も height: 100dvh の中にふくまれる
+     よける場所が無い画面では、どれも 0 になるので何も変わらない */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   width: 100%;
   max-width: 1180px;
   height: 100vh;

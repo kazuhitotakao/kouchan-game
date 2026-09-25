@@ -101,6 +101,20 @@
   --stage-min: 240px;
   --result-body-min: 8.5em;
 
+  /* ===== iPhone のノッチ・Dynamic Island・ホームインジケーターをよける =====
+
+     nuxt.config.ts の viewport に viewport-fit=cover を入れてあるので、
+     画面のはし（ホームインジケーターの下・横向きのときのノッチの横）まで描かれる
+     そこで、ゲームの枠の内がわに env(safe-area-inset-〜) ぶんの余白をとり、
+     ボタンや文字がそこへ入らないようにしている（余白には枠の背景がそのまま見える）
+
+     ・よける場所が無い画面（パソコン・Android の多く）では、どれも 0 になるので何も変わらない
+     ・box-sizing: border-box にして、height: 100dvh の中に余白をふくめる
+       （もともと padding も border も無いので、ほかの見た目は変わらない）
+     ・スマホ幅のゲーム画面の高さは、この余白のぶんを引いてある（→ responsive.css の .game-screen） */
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -301,6 +315,55 @@
    （A→B で切り替えたときに、カードの外枠サイズがそろうようにする） */
 .title-card--boot .title-card__name {
   margin: auto 0 28px;
+}
+
+/* ============================================================
+   A画面の「ホーム画面に追加」の案内（pages/index.vue の .install-hint）
+
+   ふつうの Safari / Chrome で開いているときだけ出る
+   （ホーム画面から起動したときは、pages/index.vue の v-if で出さない）
+
+   ■ パソコンではかくす
+     ホーム画面に追加するのはスマホ・タブレットの話なので、
+     「指でさわる画面」（hover: none かつ pointer: coarse）のときだけ出す
+     User-Agent は見ずに、画面の性質だけで分けている
+
+   ■ 置き場所と大きさ
+     「はじめる」の下（order: 5）
+     「はじめる」には margin-bottom: auto があるので、案内はカードのいちばん下へ寄る
+     A画面のカードは中身が少なく余白があるので、案内を足してもカードの高さは変わらない
+     「はじめる」より目立たないよう、小さめの文字と、説明文（.title-card__rule）と同じ うすい下地にしてある
+   ============================================================ */
+.install-hint {
+  display: none;
+  order: 5;
+  flex-direction: column;
+  gap: 2px;
+  margin: 18px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #f2f6fb;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+
+  /* 細い画面（320px）で「追／加」「アプ／リ」のように言葉のとちゅうで折り返さないよう、
+     読点（、）とスペースのところで折り返す
+     それでも入りきらないときだけ、どこででも折り返す（overflow-wrap: anywhere） */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .install-hint {
+    display: flex;
+  }
+}
+
+.install-hint__lead {
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .title-card__lead {
