@@ -643,7 +643,9 @@
     z-index: 1;
     grid-template-columns: 1fr;
     max-height: 62vh;
-    padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+    /* ホームインジケーターをよける余白（env(safe-area-inset-bottom)）は、ここでは足さない
+       ゲームの枠（.game）がまとめてよけているので、ここでも足すと二重になる（→ base.css の .game） */
+    padding: 12px 12px 14px;
   }
 
   /* ゴール／GAME OVER の2つのボタンは、スマホ幅でも横にならべる
@@ -800,7 +802,7 @@
   .command {
     max-height: 50vh;
     gap: 7px;
-    padding: 9px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 9px 12px 10px;
   }
 
   .command-area {
@@ -812,7 +814,7 @@
 
   .command {
     max-height: 46vh;
-    padding: 8px 10px calc(9px + env(safe-area-inset-bottom));
+    padding: 8px 10px 9px;
   }
 
   /* とても背の低いスマホ（375×548 の Safari・320×568 など）でも、
