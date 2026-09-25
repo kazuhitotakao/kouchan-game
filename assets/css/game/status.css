@@ -563,7 +563,7 @@
 /* @keyframes status-pop は assets/css/game/keyframes.css へ移動した
    このファイルの .status-change のほかに、
    result-card.css の .change-item__value と
-   base.css の .secret-path-hud__count からも参照するため
+   secret-path-field.css の .secret-path-hud__count からも参照するため
    （それぞれ別の <style scoped> なので、グローバルに置かないと名前が合わない） */
 
 /* 危険の警告メッセージも、出るときだけふわっと出す */
@@ -1088,7 +1088,7 @@
      ・上部ステータスを、小道で遊んでいる最中だけ固定しない（ページといっしょに流れる）
        固定したままだと、画面の半分近くを上部ステータスが使ってしまい、
        フィールドと下の案内が同時に見えなくなるため
-     ・遊びはじめたら、カードが画面のいちばん上に来るようにスクロールする（scrollSecretPathIntoView()）
+     ・遊びはじめたら、カードが画面のいちばん上に来るようにスクロールする（components/game/SecretPathField.vue が出たとき）
      ・フィールドは、カードと案内がいっしょに画面に収まる高さにする
        （iPhone SE ほどの背の低い画面でも、案内まで見える） */
   .game-screen--secret-path .status-area {

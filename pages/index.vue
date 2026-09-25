@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
+
+/* ミニゲームの解放を保存する（本編で解放したとき） */
+import { unlockMinigame } from '~/utils/minigameStorage';
 
 /* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
 import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
@@ -14,6 +17,7 @@ import { addMinutesToTime } from '~/utils/gameTime';
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
 import CommandBox from '~/components/game/CommandBox.vue';
 import ResultCard from '~/components/game/ResultCard.vue';
+import SecretPathField from '~/components/game/SecretPathField.vue';
 import SoundControl from '~/components/game/SoundControl.vue';
 
 /* キーボード操作（中身は composables/useKeyboardControls.ts） */
@@ -36,11 +40,6 @@ import { useActionResult } from '~/composables/useActionResult';
    バッグの中身と、そこから決まる表示用の値・出し入れを持っておくところ
    おやつ選択画面の操作と、おやつを食べる行動は、このファイルに残してある */
 import { useSnackBag } from '~/composables/useSnackBag';
-
-/* 秘密の小道（ミニゲーム）の計算だけを取り出したもの
-   ここで使うのは、レーンの番号を画面の位置（%）にする計算だけ
-   （予定表づくり・結果の文章・ボーナス・しきい値は composables/useSecretPathGame.ts から使う） */
-import { getSecretPathLaneLeft } from '~/composables/useSecretPath';
 
 /* 秘密の小道（ミニゲーム）の「状態を持つ側」（中身は composables/useSecretPathGame.ts）
    ミニゲームの中の状態・1コマごとの処理・キー操作・ポインター操作・小道専用のイベントは、ぜんぶあちら
@@ -99,7 +98,7 @@ import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTit
 import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
-import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY, secretPathSunlightTotal } from '~/data/secretPath';
+import { secretPathSunlightTotal } from '~/data/secretPath';
 import { maxSnackCount, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
@@ -177,7 +176,7 @@ const isStandalone = ref<boolean | null>(null);
    ・画面が切りかわったとき、メインのボタンへフォーカスを当てる
    ・↑↓←→ で、ボタンをぐるぐる選べるようにする
 
-   A画面  … はじめる／♪ サウンドトラック／サウンドON・OFF
+   A画面  … はじめる／♪ サウンドトラック／🌿 ミニゲーム／サウンドON・OFF
    B画面  … きょうのおやつを選ぶ／はじめの画面へ戻る／？ あそびかた／サウンドON・OFF
    あそびかた画面 … ← ひとつ前の画面へ戻る／サウンドON・OFF
    ※ サウンドON/OFFは、どの画面でも一度に1つしか画面に出ないので、
@@ -185,6 +184,7 @@ const isStandalone = ref<boolean | null>(null);
    ============================================================ */
 const startButtonRef = ref<HTMLButtonElement | null>(null);
 const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
+const minigameButtonRef = ref<HTMLButtonElement | null>(null); // A画面の「🌿 ミニゲーム」（ミニゲームの一覧への入口）
 const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
 const howToPlayButtonRef = ref<HTMLButtonElement | null>(null); // B画面の「？ あそびかた」
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
@@ -2011,7 +2011,7 @@ async function focusSnackGoButton() {
   snackGoButton?.focus();
 }
 
-/* もうサウンドトラックのページへ移動しはじめたかどうか（連打よけ） */
+/* もうサウンドトラック・ミニゲームのページへ移動しはじめたかどうか（連打よけ） */
 let isLeavingPage = false;
 
 /* サウンドトラックのページ（/soundtrack）へ移動する
@@ -2048,6 +2048,44 @@ function goToSoundtrack() {
      （タイトルやボタンを先に消さないので、A画面は中身がそろったままフェードアウトする）
      表示の後片づけは、ページが消えたあとにNuxtがやってくれる */
   navigateTo('/soundtrack');
+}
+
+/* ミニゲーム「どこまで行ける？」（/minigame/secret-path）の解放
+
+   秘密の小道をぬけたら（hasDiscoveredSecretSpot が true になったら）解放して、このブラウザに保存する
+   （小道をぬけた時点で、もう小道のことは分かっているので、広場へ入るのを待たない）
+   ミニゲームを増やすときも、本編で解放したいところで unlockMinigame('<id>') を呼ぶ
+
+   ※ A画面の「🌿 ミニゲーム」（一覧への入口）は、解放していなくてもいつも出している
+     まだ解放していないミニゲームは、一覧で「？？？」とヒントだけを出すので、中身は先に分からない
+   ※ resetGame（もう一度あそぶ）でも、解放は戻さない（S+ランクのうた入りBGMの解放と同じ） */
+watch(hasDiscoveredSecretSpot, (discovered) => {
+  if (!discovered) {
+    return;
+  }
+
+  unlockMinigame('secret-path');
+});
+
+/* ミニゲームの一覧（/minigame）へ移動する
+
+   サウンドトラックへの入口と同じく、起動画面（A画面）にある
+   まだタイトルBGMは鳴っていないので、goToSoundtrack() と同じ手順で移るだけ
+   （連打よけの isLeavingPage も同じものを使う。どちらか一方へ動きはじめたら、もう片方も押せない） */
+function goToMinigame() {
+  if (isLeavingPage) {
+    return;
+  }
+
+  isLeavingPage = true;
+
+  // 決定音「ポン♪」（ほかのボタンと同じ）
+  playDecisionSound();
+
+  cancelTitleBgmStart();
+  stopTitleBgm();
+
+  navigateTo('/minigame');
 }
 
 /* 場所を移動する
@@ -2432,7 +2470,6 @@ const {
   secretPathBumpLost,
   secretPathBumpId,
   secretPathSparkleId,
-  secretPathPlayRef,
 
   /* 画面に出す、計算した状態 */
   isSecretPathPlaying,
@@ -3600,6 +3637,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
   isSecretPathPlaying,
   startButtonRef,
   soundtrackButtonRef,
+  minigameButtonRef,
   selectSnacksButtonRef,
   howToPlayButtonRef,
   backToBootButtonRef,
@@ -3981,24 +4019,43 @@ onUnmounted(() => {
                （「きょうのおやつを選ぶ」「もう一度あそぶ」と同じ書き方）
 
                ※ この画面のメインのボタンなので、HTMLではいちばん先に書いてある
-                 Tabキーを押したときに「はじめる → サウンドトラック → サウンド」の
+                 Tabキーを押したときに「はじめる → サウンドトラック →（ミニゲーム →）サウンド」の
                  順で回れるようにするため（見た目の位置はCSSの order でいちばん下のまま）
                ref … キーボード操作でフォーカスを当てるための目印 -->
           <button ref="startButtonRef" class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
 
           <!-- 上のツールバー（B画面と同じ .title-card__tools を使う）
-               左：サウンドトラック（/soundtrack）への入口
+               左：サウンドトラック（/soundtrack）と、ミニゲームの一覧（/minigame）への入口
                右：サウンドON/OFF（「はじめる」を押すとタイトルBGMが鳴りだすので、その前に消せるようにしておく） -->
           <div class="title-card__tools">
-            <!-- サウンドトラックへの入口（左上）
-                 右のサウンドON/OFFと同じ高さ・同じ文字サイズのpillにそろえている
+            <!-- 左上のまとまり（サウンドトラック ＋ ミニゲーム）
+
+                 どちらも押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに、それぞれのページへ移る
+                 右のサウンドON/OFFと同じ高さのpillにそろえている
                  （見た目のCSSは .title-card__tools のところにまとめてある）
-                 押しても enterTitle() は呼ばず、タイトルBGMも鳴らさずに /soundtrack へ移る
 
                  ※ Enter/Space を押したときに「はじめる」まで動いてしまわないのは、
                    handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
                    ようにしているため（ボタン側で止める必要はない） -->
-            <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" @click="goToSoundtrack">♪ サウンドトラック</button>
+            <div class="title-card__toolsLeft">
+              <!-- サウンドトラックへの入口
+                   ・広い画面   … 「♪ サウンドトラック」（文字も出す）
+                   ・スマホ幅   … 「♪」のアイコンだけにして、ミニゲームの入口と1行に並ぶようにする
+                                   何のボタンかは、hover / focus のときだけ出る吹き出しで伝える
+                                   （右のサウンドのコントロールと同じやりかた）
+                   文字と吹き出しの出しわけは CSS（.title-card__soundtrackText / .title-card__tooltip）
+                   読み上げは、どちらの画面でも aria-label の「サウンドトラック」だけにする（二重に読まれない） -->
+              <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" aria-label="サウンドトラック" @click="goToSoundtrack">
+                <span aria-hidden="true">♪</span>
+                <span class="title-card__soundtrackText" aria-hidden="true">サウンドトラック</span>
+                <span class="title-card__tooltip" aria-hidden="true">サウンドトラック</span>
+              </button>
+
+              <!-- ミニゲームの一覧への入口（押すとミニゲームの一覧へ）
+                   まだ1つも解放していなくても、いつも出す
+                   一覧では、まだ解放していないミニゲームを「？？？」とヒントだけで出すので、中身は先に分からない -->
+              <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">🌿 ミニゲーム</button>
+            </div>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
 
@@ -4061,8 +4118,8 @@ onUnmounted(() => {
                右：？ あそびかた ＋ サウンドON/OFF（「きょうのおやつを選ぶ」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
           <div class="title-card__tools">
             <!-- はじめの画面へ戻る（左上の補助操作）
-                 A画面の「♪ サウンドトラック」と同じ場所・同じ大きさで出るので、
-                 A→B で切り替えても、左側は文字だけが入れかわって見える
+                 A画面の左上（♪・🌿 ミニゲーム）と同じ場所・同じ高さで出るので、
+                 A→B で切り替えても、左上のボタンが入れかわるだけに見える
 
                  ※ Enter/Space で「きょうのおやつを選ぶ」まで動いてしまわないのは、
                    handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
@@ -4314,7 +4371,7 @@ onUnmounted(() => {
       <!-- game-screen--secret-path … 秘密の小道で「遊んでいる最中」だけ付ける
            スマホ幅で、上部ステータスを画面の上に固定しないようにするため（CSSの max-width: 700px を参照）
            スマホ幅の「1画面で完結する作り」も、遊んでいる最中だけは使わない（→ assets/css/game/responsive.css）
-           ・遊んでいる最中 … ページ全体をスクロールして、フィールドと案内を大きく見せる（scrollSecretPathIntoView()）
+           ・遊んでいる最中 … ページ全体をスクロールして、フィールドと案内を大きく見せる（SecretPathField.vue が出たときにスクロールする）
            ・はじまる前／小道をぬけたあと … ほかの場面と同じ1画面の作りにして、「どうする？」をいつも画面の下に出す
              （前は小道のあいだずっと付けていたので、はじまる前の「小道へ進む」が、背の低いスマホで画面の下へはみ出していた）
            game-screen--has-result … 結果カードが出ているあいだだけ付ける
@@ -4822,92 +4879,33 @@ onUnmounted(() => {
                 </ul>
               </article>
 
-              <!-- 遊んでいる最中 -->
-              <article v-else-if="secretPathPhase === 'playing'" ref="secretPathPlayRef" class="place-card place-card--secret secret-path">
-                <div class="secret-path-hud">
-                  <span
-                    class="secret-path-hud__sunlight"
-                    :class="{ 'secret-path-hud__sunlight--sparkle': isSecretPathSparkling, 'secret-path-hud__sunlight--lost': isSecretPathBumped && secretPathBumpLost }"
-                    aria-live="polite">
-                    ✨ 木漏れ日
-                    <!-- key を数にしておくと、取るたびに数字がぽんっと出なおす -->
-                    <b :key="secretPathSunlightCount" class="secret-path-hud__count">{{ secretPathSunlightCount }}</b>
-                    / {{ secretPathSunlightTotal }}
-                  </span>
-
-                  <span class="secret-path-hud__time" :class="{ 'secret-path-hud__time--soon': secretPathTimeLeft <= 3 }">
-                    あと {{ secretPathTimeLeft }}秒
-                    <!-- はやく進んでいるあいだだけ出す（↑ / Space キー・フィールドの長押し）
-                         残り時間の右上に重ねて出すので、出たり消えたりしても HUD の並びは変わらない -->
-                    <span v-if="isSecretPathBoosting" class="secret-path-hud__boost">⏩ {{ secretPathBoostMultiplier }}x</span>
-                  </span>
-                </div>
-
-                <!-- フィールド（左・まん中・右の3レーン）
-                     枝と木漏れ日の位置は、JavaScript が1コマごとに top を書きかえて動かしている
-                     aria-hidden … 流れてくる絵文字を、ひとつずつ読み上げないようにする -->
-                <!-- ポインター操作（クリック・タップ・ドラッグ・フリック・長押し）は、フィールド1か所でまとめて受け取る
-                     （handleSecretPathPointerDown() を参照）
-                     contextmenu … スマホで長押ししたときのメニューを出さない -->
-                <div
-                  class="secret-path-field"
-                  aria-hidden="true"
-                  @pointerdown="handleSecretPathPointerDown"
-                  @pointermove="handleSecretPathPointerMove"
-                  @pointerup="handleSecretPathPointerUp"
-                  @pointercancel="handleSecretPathPointerCancel"
-                  @pointerleave="handleSecretPathPointerLeave"
-                  @contextmenu.prevent>
-                  <!-- 道（レーン）の見た目
-                       短くクリック・タップすると、こうちゃんが押したレーンの方向へ1レーン動く
-                       ・--next        … 1回で動ける「となりのレーン」。こうちゃんの高さに、うすい点線の丸と矢印（行き先の目印）を出す
-                       ・--destination … マウスを乗せたレーンを押したときの動く先。目印がはっきりする
-                                         （遠いレーンに乗せたときは、まん中の目印がはっきりする）
-                       ・--flash       … 押したレーン・動いた先のレーンが一瞬光る
-                       ※ 枝・木漏れ日・こうちゃんは pointer-events: none なので、上に重なっていても押せる -->
-                  <div
-                    v-for="lane in secretPathLanes"
-                    :key="`lane-${lane}`"
-                    class="secret-path-lane"
-                    :class="{
-                      'secret-path-lane--current': lane === secretPathPlayerLane,
-                      'secret-path-lane--next': Math.abs(lane - secretPathPlayerLane) === 1,
-                      'secret-path-lane--destination': lane === secretPathHoverDestination,
-                      'secret-path-lane--flash': lane === secretPathFlashLane,
-                    }"
-                    :style="{ left: `${(lane / 3) * 100}%` }">
-                    <span class="secret-path-lane__target" :style="{ top: `${secretPathPlayerY}%` }">{{ secretPathPlayerLane > lane ? '←' : '→' }}</span>
-                  </div>
-
-                  <span
-                    v-for="item in secretPathItems"
-                    :key="item.id"
-                    class="secret-path-item"
-                    :class="[`secret-path-item--${item.kind}`, { 'secret-path-item--hit': item.hit }]"
-                    :style="{ left: getSecretPathLaneLeft(item.lane), top: `${item.y}%` }">
-                    {{ item.kind === 'branch' ? '🌿' : '✨' }}
-                  </span>
-
-                  <div class="secret-path-player" :style="{ left: getSecretPathLaneLeft(secretPathPlayerLane), top: `${secretPathPlayerY}%` }">
-                    <!-- 枝に当たったとき：「いたっ！」と、木漏れ日が減ったときだけ「✨ -1」
-                         key を当たった回数にしておくと、続けて当たったときも出なおす -->
-                    <span v-if="isSecretPathBumped" :key="secretPathBumpId" class="secret-path-player__bump">
-                      いたっ！
-                      <span v-if="secretPathBumpLost" class="secret-path-player__minus">✨ -1</span>
-                    </span>
-                    <span v-if="isSecretPathSparkling" :key="secretPathSparkleId" class="secret-path-player__plus">✨ +1</span>
-                    <span class="secret-path-player__face" :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">👦</span>
-                  </div>
-
-                  <!-- はじまる前のカウントダウン「3」「2」「1」と、そのあとの「スタート！」
-                       フィールドのまん中に大きく重ねて出す（pointer-events: none なので、下の道はそのまま押せる）
-                       key を数字にしておくと、数字が変わるたびに、ぽんっと出なおす -->
-                  <span v-if="secretPathCountdownNumber !== null" :key="`countdown-${secretPathCountdownNumber}`" class="secret-path-countdown">
-                    {{ secretPathCountdownNumber }}
-                  </span>
-                  <span v-else-if="isSecretPathStartCueVisible" key="countdown-start" class="secret-path-countdown secret-path-countdown--start">スタート！</span>
-                </div>
-              </article>
+              <!-- 遊んでいる最中（HUD ＋ 3レーンのフィールド。中身は components/game/SecretPathField.vue）
+                   ミニゲーム「どこまで行ける？」（pages/minigame/secret-path.vue）と同じ部品を使う
+                   ・bump-penalty … 枝に当たって木漏れ日が本当に減ったときだけ「✨ -1」を出す
+                   ・フィールドのポインター操作は、部品から知らせてもらって useSecretPathGame() の関数へつなぐ -->
+              <SecretPathField
+                v-else-if="secretPathPhase === 'playing'"
+                :player-lane="secretPathPlayerLane"
+                :items="secretPathItems"
+                :flash-lane="secretPathFlashLane"
+                :hover-destination="secretPathHoverDestination"
+                :countdown-number="secretPathCountdownNumber"
+                :is-start-cue-visible="isSecretPathStartCueVisible"
+                :is-bumped="isSecretPathBumped"
+                :bump-penalty="secretPathBumpLost ? '✨ -1' : null"
+                :bump-id="secretPathBumpId"
+                :is-sparkling="isSecretPathSparkling"
+                :sparkle-id="secretPathSparkleId"
+                :sunlight-count="secretPathSunlightCount"
+                :sunlight-total="secretPathSunlightTotal"
+                :is-sunlight-lost="isSecretPathBumped && secretPathBumpLost"
+                :time-left="secretPathTimeLeft"
+                :is-boosting="isSecretPathBoosting"
+                @field-pointerdown="handleSecretPathPointerDown"
+                @field-pointermove="handleSecretPathPointerMove"
+                @field-pointerup="handleSecretPathPointerUp"
+                @field-pointercancel="handleSecretPathPointerCancel"
+                @field-pointerleave="handleSecretPathPointerLeave" />
 
               <!-- 小道をぬけたあと -->
               <article v-else class="place-card place-card--secret">

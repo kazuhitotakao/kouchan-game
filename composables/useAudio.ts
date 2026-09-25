@@ -2510,6 +2510,22 @@ export function useAudio(options: UseAudioOptions) {
      ほかの4曲と同じく、サーバー側では作れないので null から始める */
   let secretBgm: HTMLAudioElement | null = null;
 
+  /* こもれびの広場BGMの再生の速さ（1 ＝ ふつう）
+
+     ゲーム本編では変えない（いつも 1 のまま）
+     ミニゲーム「どこまで行ける？」（pages/minigame/secret-path.vue）では、
+     レベルが上がる・はやく進む と、この曲を少しずつ速くして、きびしくなったことを耳でも伝える
+     曲がまだ作られていないときに決められても、作るときに（getSecretBgm()）この値を使う */
+  let secretBgmPlaybackRate = 1;
+
+  function setSecretBgmPlaybackRate(rate: number) {
+    secretBgmPlaybackRate = rate;
+
+    if (secretBgm) {
+      secretBgm.playbackRate = rate;
+    }
+  }
+
   /* こもれびの広場BGMを用意して返す（初めて必要になったときだけ作る）
 
      ※ ほかの4曲と同じく、ここでは soundEnabled を見ない
@@ -2533,6 +2549,11 @@ export function useAudio(options: UseAudioOptions) {
 
         // volume … 音の大きさ（上の secretBgmVolume で決めている）
         setElementVolume(secretBgm, getSoundVolume(secretBgmVolume), getAudioContext);
+
+        /* 再生の速さ（ミニゲーム「どこまで行ける？」だけが変える → setSecretBgmPlaybackRate()）
+           preservesPitch … 速くしても、音の高さは変えない（テンポだけが上がる） */
+        secretBgm.preservesPitch = true;
+        secretBgm.playbackRate = secretBgmPlaybackRate;
       }
 
       return secretBgm;
@@ -2991,6 +3012,7 @@ export function useAudio(options: UseAudioOptions) {
     playTitleBgmSoon,
     cancelTitleBgmStart,
     stopTitleBgm,
+    resumeTitleBgm, // ミニゲームの一覧で、ページを開いたときに鳴らせなかった曲を、はじめて さわったときに鳴らす
 
     /* ===== いやいやタイムのBGM ===== */
     playTantrumBgm,
@@ -3007,6 +3029,8 @@ export function useAudio(options: UseAudioOptions) {
     /* ===== こもれびの広場のBGM ===== */
     playSecretBgmSoon,
     stopSecretBgm,
+    resumeSecretBgm, // ミニゲーム「どこまで行ける？」で、ページを開いたときに鳴らせなかった曲を「はじめる」で鳴らす
+    setSecretBgmPlaybackRate, // ミニゲーム「どこまで行ける？」だけが使う（レベル・はやく進む で曲を速くする）
 
     /* ===== ページを開いたとき・離れるとき ===== */
     restoreSoundSettings,

@@ -16,11 +16,11 @@
      ・@keyframes found-in     … status.css／result-card.css／
                                  event-flash.css／base.css から参照
      ・@keyframes result-in    … result-card.css／base.css から参照
-     ・@keyframes shake        … result-card.css／base.css から参照
-     ・@keyframes status-pop   … status.css／result-card.css／base.css から参照
+     ・@keyframes shake        … result-card.css／secret-path-field.css から参照
+     ・@keyframes status-pop   … status.css／result-card.css／secret-path-field.css から参照
      ・@keyframes command-selected-glow
                                … command.css／command-shared.css／
-                                 command-box.css から参照
+                                 command-box.css／pages/minigame/secret-path.vue から参照
 
      status.css は components/game/StatusBar.vue が、
      result-card.css は components/game/ResultCard.vue が、

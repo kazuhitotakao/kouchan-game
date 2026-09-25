@@ -6,6 +6,8 @@
 
    ■ ここがやること
      ・1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
+     ・ミニゲームのページの「どこまで行ける？」の、レベル（進んだ距離から）・1行ずつの予定・速さ・行の間隔を決める
+       （設定の数字は data/secretPathEndless.ts）
      ・集めた木漏れ日の数から、結果の文章とボーナスポイントを決める
      ・レーンの番号を、画面の位置（%）にする
      ・いま操作しているものに合わせて、スワイプのしきい値を選ぶ
@@ -37,6 +39,14 @@ import {
   secretPathSunlightRows,
   secretPathTouchSwipeThreshold,
 } from '~/data/secretPath';
+import {
+  secretPathEndlessLevelLimits,
+  secretPathEndlessLevelMeters,
+  secretPathEndlessLevels,
+  secretPathEndlessLevelStep,
+  secretPathEndlessRowJitter,
+  secretPathEndlessSunlightChance,
+} from '~/data/secretPathEndless';
 import type { SecretPathLane, SecretPathSpawn } from '~/types/game';
 
 /* 集めた木漏れ日の数に合わせた、結果の文章 */
@@ -114,40 +124,113 @@ export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
 
   for (let row = 0; row < secretPathRowCount; row++) {
     const at = secretPathFirstRowAt + row * secretPathRowInterval + (Math.random() * 2 - 1) * secretPathRowJitter;
+    const builtRow = buildSecretPathRow(at, previousOpenLanes, secretPathSunlightRows.includes(row), secretPathDoubleBranchChance);
 
-    // 前の行のどの空きレーンからも、1レーン以内で行けるレーン（まん中は、いつでも入る）
-    const reachableLanes = secretPathLanes.filter((lane) => previousOpenLanes.every((openLane) => Math.abs(openLane - lane) <= 1));
-    const branchLanes: SecretPathLane[] = [];
-
-    if (secretPathSunlightRows.includes(row)) {
-      const sunlightLane = pickRandomSecretPathLane(reachableLanes);
-
-      queue.push({ at, kind: 'sunlight', lane: sunlightLane });
-
-      // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
-      // ときどき枝を2本にして、木漏れ日のレーンしか空いていない行にする
-      // （木漏れ日は前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
-      if (Math.random() < secretPathSunlightBranchChance) {
-        const otherLanes = secretPathLanes.filter((lane) => lane !== sunlightLane);
-
-        branchLanes.push(...(Math.random() < secretPathSunlightDoubleBranchChance ? otherLanes : [pickRandomSecretPathLane(otherLanes)]));
-      }
-    } else if (Math.random() < secretPathDoubleBranchChance) {
-      // ときどき枝を2本にして、空いているレーンを1つだけにする（3本にはしない）
-      const openLane = pickRandomSecretPathLane(reachableLanes);
-
-      branchLanes.push(...secretPathLanes.filter((lane) => lane !== openLane));
-    } else {
-      // ふつうの行は枝を1本
-      branchLanes.push(pickRandomSecretPathLane());
-    }
-
-    for (const lane of branchLanes) {
-      queue.push({ at, kind: 'branch', lane });
-    }
-
-    previousOpenLanes = secretPathLanes.filter((lane) => !branchLanes.includes(lane));
+    queue.push(...builtRow.spawns);
+    previousOpenLanes = builtRow.openLanes;
   }
 
   return queue.sort((a, b) => a.at - b.at);
+}
+
+/* 1行ぶんの予定（どのレーンに枝・木漏れ日を出すか）を作る
+
+   本編の小道（buildSecretPathSpawnQueue()）と、
+   ミニゲームのページの「どこまで行ける？」（composables/useSecretPathGame.ts）の両方が使う
+   「前の行とのつながりも見る」決まりは、すぐ上の buildSecretPathSpawnQueue() の説明のとおり
+
+   at                 … この行を出す時刻（ゲームの時計）
+   previousOpenLanes  … 前の行で空いていたレーン（こうちゃんがいるかもしれない所）
+   isSunlightRow      … 木漏れ日の行にするか
+   doubleBranchChance … ふつうの行を、枝2本（空きレーン1つ）にする割合
+
+   返すのは、この行の予定（spawns）と、この行で空いているレーン（次の行の previousOpenLanes になる）
+
+   ※ 乱数を使う順番は、この関数に分ける前の buildSecretPathSpawnQueue() と同じ */
+export function buildSecretPathRow(at: number, previousOpenLanes: SecretPathLane[], isSunlightRow: boolean, doubleBranchChance: number) {
+  const spawns: SecretPathSpawn[] = [];
+
+  // 前の行のどの空きレーンからも、1レーン以内で行けるレーン（まん中は、いつでも入る）
+  const reachableLanes = secretPathLanes.filter((lane) => previousOpenLanes.every((openLane) => Math.abs(openLane - lane) <= 1));
+  const branchLanes: SecretPathLane[] = [];
+
+  if (isSunlightRow) {
+    const sunlightLane = pickRandomSecretPathLane(reachableLanes);
+
+    spawns.push({ at, kind: 'sunlight', lane: sunlightLane });
+
+    // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
+    // ときどき枝を2本にして、木漏れ日のレーンしか空いていない行にする
+    // （木漏れ日は前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
+    if (Math.random() < secretPathSunlightBranchChance) {
+      const otherLanes = secretPathLanes.filter((lane) => lane !== sunlightLane);
+
+      branchLanes.push(...(Math.random() < secretPathSunlightDoubleBranchChance ? otherLanes : [pickRandomSecretPathLane(otherLanes)]));
+    }
+  } else if (Math.random() < doubleBranchChance) {
+    // ときどき枝を2本にして、空いているレーンを1つだけにする（3本にはしない）
+    const openLane = pickRandomSecretPathLane(reachableLanes);
+
+    branchLanes.push(...secretPathLanes.filter((lane) => lane !== openLane));
+  } else {
+    // ふつうの行は枝を1本
+    branchLanes.push(pickRandomSecretPathLane());
+  }
+
+  for (const lane of branchLanes) {
+    spawns.push({ at, kind: 'branch', lane });
+  }
+
+  const openLanes = secretPathLanes.filter((lane) => !branchLanes.includes(lane));
+
+  return { spawns, openLanes };
+}
+
+/* 「どこまで行ける？」のレベル（進んだ距離から決める。0m〜 Lv.1、50m〜 Lv.2 …） */
+export function getSecretPathEndlessLevel(distance: number) {
+  return Math.floor(Math.max(distance, 0) / secretPathEndlessLevelMeters) + 1;
+}
+
+/* 「どこまで行ける？」の、そのレベルの きびしさ（速さ・行の間隔・枝2本の割合）
+
+   Lv.1 〜 表の最後（Lv.7）までは、data/secretPathEndless.ts の secretPathEndlessLevels のとおり
+   その先は、表の最後から1つ上がるごとに secretPathEndlessLevelStep ずつ きびしくして、
+   secretPathEndlessLevelLimits で止める（上手な人でも、いつかは続けられなくなる） */
+export function getSecretPathEndlessLevelSettings(level: number) {
+  const tableLevel = secretPathEndlessLevels[level - 1];
+
+  if (tableLevel) {
+    return tableLevel;
+  }
+
+  const last = secretPathEndlessLevels[secretPathEndlessLevels.length - 1]!;
+  const extra = level - secretPathEndlessLevels.length;
+
+  return {
+    speed: Math.min(secretPathEndlessLevelLimits.maxSpeed, last.speed + secretPathEndlessLevelStep.speed * extra),
+    rowInterval: Math.max(secretPathEndlessLevelLimits.minRowInterval, last.rowInterval + secretPathEndlessLevelStep.rowInterval * extra),
+    doubleBranchChance: Math.min(secretPathEndlessLevelLimits.maxDoubleBranchChance, last.doubleBranchChance + secretPathEndlessLevelStep.doubleBranchChance * extra),
+  };
+}
+
+/* 「どこまで行ける？」の流れてくる速さ（1秒で、フィールドの高さの何%進むか。進んだ距離のレベルで決まる） */
+export function getSecretPathEndlessSpeed(distance: number) {
+  return getSecretPathEndlessLevelSettings(getSecretPathEndlessLevel(distance)).speed;
+}
+
+/* 「どこまで行ける？」の次の行を出す時刻（いまの行を出した時刻 at から、いまのレベルの間隔だけあける） */
+export function getSecretPathEndlessNextRowAt(at: number, distance: number) {
+  const { rowInterval } = getSecretPathEndlessLevelSettings(getSecretPathEndlessLevel(distance));
+
+  return at + rowInterval + (Math.random() * 2 - 1) * secretPathEndlessRowJitter;
+}
+
+/* 「どこまで行ける？」の1行ぶんの予定を作る（at に出す行。枝2本の割合は、いまのレベルで決まる）
+
+   木漏れ日の行にするかどうかを抽選して、行の中身は本編と同じ buildSecretPathRow() で作る
+   （前の行とつなげて見ても、よけられる・取れる並びになる） */
+export function buildSecretPathEndlessRow(at: number, previousOpenLanes: SecretPathLane[], distance: number) {
+  const { doubleBranchChance } = getSecretPathEndlessLevelSettings(getSecretPathEndlessLevel(distance));
+
+  return buildSecretPathRow(at, previousOpenLanes, Math.random() < secretPathEndlessSunlightChance, doubleBranchChance);
 }
