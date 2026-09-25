@@ -39,7 +39,9 @@ export const secretPathRemoveY = 110;
    ・secretPathSunlightRows の行 … 木漏れ日を1つ。secretPathSunlightBranchChance の割合で、べつのレーンに枝もいっしょ
    ・secretPathRowJitter … 行ごとに少しだけ時間をずらして、同じリズムになりすぎないようにする
 
-   どの行も、少なくとも1つのレーンは空いている（3本とも枝の行は作らない）ので、よけられない形にはならない */
+   どの行も、少なくとも1つのレーンは空いている（3本とも枝の行は作らない）ので、よけられない形にはならない
+   前の行とのつながりも見て、行と行のあいだに2レーン動かないと よけられない・取れない並びも作らない
+   （くわしくは composables/useSecretPath.ts の buildSecretPathSpawnQueue()） */
 export const secretPathFirstRowAt = 600;
 export const secretPathRowInterval = 800;
 export const secretPathRowCount = 16;
