@@ -153,6 +153,20 @@ const isSnackSelectionOpen = ref(false);
      必要な人が、必要なときに開くためのページ */
 const isHowToPlayOpen = ref(false);
 
+/* ホーム画面のアイコンから（アプリのように）起動しているかどうか
+
+   ・true  … ホーム画面から起動している（standalone 表示。URLバーなどが無い）
+   ・false … ふつうの Safari / Chrome で開いている
+   ・null  … まだ調べていない（サーバー側で作っているとき・ページを開いた直後）
+
+   window / navigator はブラウザにしか無いので、調べるのは onMounted の中
+   （→ checkStandalone()）
+   null のあいだは「ホーム画面に追加」の案内を出さない
+   （ホーム画面から起動したときに、案内が一瞬だけ見えてしまわないようにするため）
+
+   A画面の「ホーム画面に追加」の案内は、false のときだけ出す */
+const isStandalone = ref<boolean | null>(null);
+
 /* ============================================================
    A画面・B画面のボタンを覚えておく箱（キーボード操作用）
 
@@ -1000,6 +1014,8 @@ const {
   playGoalSound,
   playSunlightSound,
   playBranchBumpSound,
+  playCountdownSound,
+  playCountdownStartSound,
   playSuddenEventSound,
 
   /* 公園のBGM（shouldUseParkBgm2 は、公園入口の文章の出しわけにも使う） */
@@ -2421,6 +2437,8 @@ const {
   /* 画面に出す、計算した状態 */
   isSecretPathPlaying,
   isSecretPathBoosting,
+  secretPathCountdownNumber,
+  isSecretPathStartCueVisible,
   isSecretPathBumped,
   isSecretPathSparkling,
   secretPathFlashLane,
@@ -2458,6 +2476,8 @@ const {
   playItemSound,
   playSunlightSound,
   playBranchBumpSound,
+  playCountdownSound,
+  playCountdownStartSound,
 });
 
 /* 公園入口の「細い道の先」
@@ -3608,7 +3628,22 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
    ※ 秘密の小道の keyup / blur / visibilitychange は、useSecretPathGame() の中で登録している
    ※ S+ランク限定のうた入りBGMを前に解放しているかの読みこみは、useGameResult() の中で行っている
 */
+/* ホーム画面から起動しているか（standalone 表示か）を調べて、isStandalone に入れる
+
+   ・display-mode: standalone … manifest の display: 'standalone' で起動していると当てはまる
+     （Android の Chrome・新しい iPhone の Safari）
+   ・navigator.standalone      … 古い iPhone の Safari だけにある目印（ホーム画面から起動すると true）
+     ほかのブラウザには無い（undefined）ので、「=== true」のときだけ standalone とみなす
+
+   ※ window / navigator はブラウザにしか無いので、必ず onMounted から呼ぶこと */
+function checkStandalone() {
+  const isIosStandalone = (window.navigator as Navigator & { standalone?: boolean }).standalone === true;
+  isStandalone.value = window.matchMedia('(display-mode: standalone)').matches || isIosStandalone;
+}
+
 onMounted(() => {
+  checkStandalone();
+
   updateEntranceColumns();
   window.addEventListener('resize', updateEntranceColumns);
 
@@ -3983,6 +4018,21 @@ onUnmounted(() => {
           </div>
 
           <h1 class="title-card__name">{{ gameTitle }}</h1>
+
+          <!-- 「ホーム画面に追加」の案内（ふつうの Safari / Chrome で開いているときだけ）
+
+               ・ホーム画面から起動しているとき（isStandalone が true）は出さない
+               ・調べおわる前（null）も出さない（→ isStandalone）
+               ・パソコンでは、CSS でかくしている（指でさわる画面のときだけ出す → base.css の .install-hint）
+
+               見た目の位置は、カードのいちばん下（「はじめる」の下）
+               A画面のカードは中身が少なく、下に余白があるので、
+               案内を足してもカードの高さは変わらない（B画面と高さがそろったまま） -->
+          <p v-if="isStandalone === false" class="install-hint">
+            <span class="install-hint__lead">📱 ホーム画面に追加すると、アプリみたいに遊べるよ！</span>
+            <span>iPhone：共有 → ホーム画面に追加</span>
+            <span>Android：メニュー → ホーム画面に追加</span>
+          </p>
         </div>
       </div>
 
@@ -4755,7 +4805,7 @@ onUnmounted(() => {
                        折り返さないよう、span で包んでいる（secret-path-rules__part） -->
                   <li class="secret-path-for-pc">
                     <span class="secret-path-rules__part">← → / A D：左右に移動</span>
-                    <span class="secret-path-rules__part">↑長押し：はやく進む</span>
+                    <span class="secret-path-rules__part">↑ / Space 長押し：はやく進む</span>
                   </li>
                   <li class="secret-path-for-pc">
                     <span class="secret-path-rules__part">🖱 クリック・ドラッグ：左右に移動</span>
@@ -4787,7 +4837,7 @@ onUnmounted(() => {
 
                   <span class="secret-path-hud__time" :class="{ 'secret-path-hud__time--soon': secretPathTimeLeft <= 3 }">
                     あと {{ secretPathTimeLeft }}秒
-                    <!-- はやく進んでいるあいだだけ出す（↑ キー・フィールドの長押し）
+                    <!-- はやく進んでいるあいだだけ出す（↑ / Space キー・フィールドの長押し）
                          残り時間の右上に重ねて出すので、出たり消えたりしても HUD の並びは変わらない -->
                     <span v-if="isSecretPathBoosting" class="secret-path-hud__boost">⏩ {{ secretPathBoostMultiplier }}x</span>
                   </span>
@@ -4848,6 +4898,14 @@ onUnmounted(() => {
                     <span v-if="isSecretPathSparkling" :key="secretPathSparkleId" class="secret-path-player__plus">✨ +1</span>
                     <span class="secret-path-player__face" :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">👦</span>
                   </div>
+
+                  <!-- はじまる前のカウントダウン「3」「2」「1」と、そのあとの「スタート！」
+                       フィールドのまん中に大きく重ねて出す（pointer-events: none なので、下の道はそのまま押せる）
+                       key を数字にしておくと、数字が変わるたびに、ぽんっと出なおす -->
+                  <span v-if="secretPathCountdownNumber !== null" :key="`countdown-${secretPathCountdownNumber}`" class="secret-path-countdown">
+                    {{ secretPathCountdownNumber }}
+                  </span>
+                  <span v-else-if="isSecretPathStartCueVisible" key="countdown-start" class="secret-path-countdown secret-path-countdown--start">スタート！</span>
                 </div>
               </article>
 
@@ -4888,7 +4946,7 @@ onUnmounted(() => {
                 <template v-if="secretPathPhase === 'playing'">
                   <p class="secret-path-guide secret-path-for-pc">
                     <span class="secret-path-guide__item">← → / A D：移動</span>
-                    <span class="secret-path-guide__item">↑長押し：加速</span>
+                    <span class="secret-path-guide__item">↑ / Space 長押し：加速</span>
                   </p>
 
                   <p class="secret-path-guide__hint secret-path-for-pc">🖱 クリック・ドラッグ：移動　長押し：加速</p>
@@ -5403,16 +5461,25 @@ onUnmounted(() => {
                    … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
                      同じキーが window の handleKeydown にも伝わって、
                      「選んでいるコマンド」まで実行されてしまうのを止める
-                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる -->
+                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
+
+                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
+                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
+                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
+                   （B画面の「← 戻る」と同じ考えかた） -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+                aria-label="はじめの画面へ戻る"
                 @click="goBackToBootFromResult"
                 @mouseenter="selectedCommandIndex = 1"
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">はじめの画面へ戻る</span>
+                <span class="cmd__text">
+                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
+                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
+                </span>
               </button>
             </nav>
           </div>
@@ -5515,16 +5582,25 @@ onUnmounted(() => {
                    … Tabキーでこのボタンへ移動して Enter（Space）を押したとき、
                      同じキーが window の handleKeydown にも伝わって、
                      「選んでいるコマンド」まで実行されてしまうのを止める
-                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる -->
+                     矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
+
+                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
+                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
+                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
+                   （B画面の「← 戻る」と同じ考えかた） -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
+                aria-label="はじめの画面へ戻る"
                 @click="goBackToBootFromResult"
                 @mouseenter="selectedCommandIndex = 1"
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">はじめの画面へ戻る</span>
+                <span class="cmd__text">
+                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
+                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
+                </span>
               </button>
             </nav>
           </div>

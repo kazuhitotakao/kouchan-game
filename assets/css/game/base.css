@@ -101,6 +101,20 @@
   --stage-min: 240px;
   --result-body-min: 8.5em;
 
+  /* ===== iPhone のノッチ・Dynamic Island・ホームインジケーターをよける =====
+
+     nuxt.config.ts の viewport に viewport-fit=cover を入れてあるので、
+     画面のはし（ホームインジケーターの下・横向きのときのノッチの横）まで描かれる
+     そこで、ゲームの枠の内がわに env(safe-area-inset-〜) ぶんの余白をとり、
+     ボタンや文字がそこへ入らないようにしている（余白には枠の背景がそのまま見える）
+
+     ・よける場所が無い画面（パソコン・Android の多く）では、どれも 0 になるので何も変わらない
+     ・box-sizing: border-box にして、height: 100dvh の中に余白をふくめる
+       （もともと padding も border も無いので、ほかの見た目は変わらない）
+     ・スマホ幅のゲーム画面の高さは、この余白のぶんを引いてある（→ responsive.css の .game-screen） */
+  box-sizing: border-box;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -301,6 +315,55 @@
    （A→B で切り替えたときに、カードの外枠サイズがそろうようにする） */
 .title-card--boot .title-card__name {
   margin: auto 0 28px;
+}
+
+/* ============================================================
+   A画面の「ホーム画面に追加」の案内（pages/index.vue の .install-hint）
+
+   ふつうの Safari / Chrome で開いているときだけ出る
+   （ホーム画面から起動したときは、pages/index.vue の v-if で出さない）
+
+   ■ パソコンではかくす
+     ホーム画面に追加するのはスマホ・タブレットの話なので、
+     「指でさわる画面」（hover: none かつ pointer: coarse）のときだけ出す
+     User-Agent は見ずに、画面の性質だけで分けている
+
+   ■ 置き場所と大きさ
+     「はじめる」の下（order: 5）
+     「はじめる」には margin-bottom: auto があるので、案内はカードのいちばん下へ寄る
+     A画面のカードは中身が少なく余白があるので、案内を足してもカードの高さは変わらない
+     「はじめる」より目立たないよう、小さめの文字と、説明文（.title-card__rule）と同じ うすい下地にしてある
+   ============================================================ */
+.install-hint {
+  display: none;
+  order: 5;
+  flex-direction: column;
+  gap: 2px;
+  margin: 18px 0 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: #f2f6fb;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+
+  /* 細い画面（320px）で「追／加」「アプ／リ」のように言葉のとちゅうで折り返さないよう、
+     読点（、）とスペースのところで折り返す
+     それでも入りきらないときだけ、どこででも折り返す（overflow-wrap: anywhere） */
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .install-hint {
+    display: flex;
+  }
+}
+
+.install-hint__lead {
+  color: var(--navy);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .title-card__lead {
@@ -1696,6 +1759,20 @@
    ・遊んでいる最中の操作の案内 … コマンドボックス（紺色の枠）の中に置く
    ============================================================ */
 
+/* スマホでダブルタップしても、画面が拡大しないようにする
+
+   左右にすばやくタップしているうちに、指がフィールドの外（HUD・カードの余白・操作の案内）へずれると、
+   iPhone ではダブルタップとして拡大してしまう（user-scalable=no は iOS では効かない）
+   ・touch-action: manipulation … ダブルタップの拡大だけを止める（2本指での拡大・スクロールはそのままできる）
+   ・.stage--secret-path    … はじまる前・遊んでいる最中・ぬけたあとの、カードとコマンドボックス
+                              （ぬけた直後も、タップが続けて届くことがあるため）
+   ・.game-screen--secret-path … 遊んでいる最中だけ付く。上部ステータスやすき間も含めた画面ぜんたい
+   ※ フィールドの touch-action: none は、親に manipulation を付けても、そのまま効く */
+.stage--secret-path,
+.game-screen--secret-path {
+  touch-action: manipulation;
+}
+
 /* はじまる前の「えだをよけながら ✨ こもれびをあつめよう！」 */
 .secret-path-lead {
   margin: 14px 0 0;
@@ -1760,7 +1837,7 @@
 }
 
 /* 木漏れ日の数と残り時間
-   padding-top … 残り時間の右上に出す「⏩ 1.5x」のぶん、上を少しあけておく */
+   padding-top … 残り時間の右上に出す「⏩ 2x」のぶん、上を少しあけておく */
 .secret-path-hud {
   display: flex;
   flex-wrap: wrap;
@@ -1825,7 +1902,7 @@
   background: #c9412f;
 }
 
-/* はやく進んでいるあいだの「⏩ 1.5x」（残り時間の右上に、小さく重ねて出す）
+/* はやく進んでいるあいだの「⏩ 2x」（残り時間の右上に、小さく重ねて出す）
 
    HUD の中に並べると、スマホ幅では出たときに残り時間が次の行へ折り返して、
    フィールドががくっと下へずれてしまうので、position: absolute で並びから外している
@@ -2094,6 +2171,49 @@
   to {
     opacity: 0;
     transform: translate(-50%, -26px);
+  }
+}
+
+/* はじまる前のカウントダウン「3」「2」「1」と「スタート！」
+
+   フィールドのまん中より少し上（こうちゃんに重ならない高さ）に、大きく重ねて出す
+   ・文字の色とふちどりは「✨ +1」と同じ考えかた（土の道の上でも、草の上でも読める）
+   ・pointer-events: none … 数字の上からでも、道をクリック・タップして動ける
+   ・数字が変わるたびに、ぽんっと大きくなって出る（動きを減らす設定のときは、すぐその大きさで出る） */
+.secret-path-countdown {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  z-index: 4;
+  color: #8a5a00;
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow:
+    0 0 10px #fff,
+    0 0 4px #fff,
+    0 0 2px #fff;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: secret-path-countdown-pop 0.3s ease-out;
+}
+
+/* 「スタート！」は文字数が多いので、数字より小さくして、せまい画面でもはみ出さないようにする */
+.secret-path-countdown--start {
+  color: #6b4fb0;
+  font-size: 44px;
+}
+
+@keyframes secret-path-countdown-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
   }
 }
 

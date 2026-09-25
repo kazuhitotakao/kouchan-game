@@ -22,6 +22,32 @@ export default defineNuxtConfig({
       name: 'page-fade',
       mode: 'out-in',
     },
+
+    head: {
+      /*
+       * viewport-fit=cover … iPhone で、画面のはし（ノッチ・ホームインジケーターのまわり）まで描く
+       *   そのうえで、ゲームの枠の内がわに env(safe-area-inset-〜) ぶんの余白をとって、
+       *   ボタンや文字がそこへ入らないようにしている（→ assets/css/game/base.css の .game）
+       *   前半の2つは、Nuxt がもともと入れている値と同じ
+       */
+      viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
+
+      meta: [
+        /*
+         * 古い iPhone（iOS 16.3 まで）は manifest の display を読まないので、
+         * ホーム画面から起動したときに standalone 表示にするための目印
+         * （新しい iPhone・Android は manifest の display: 'standalone' を使う）
+         */
+        { name: 'apple-mobile-web-app-capable', content: 'yes' },
+        { name: 'mobile-web-app-capable', content: 'yes' },
+
+        /*
+         * iPhone で「ホーム画面に追加」したときの、アイコンの下の名前
+         * （このサイトには <title> が無いので、書いておかないと名前がサイトのアドレスになってしまう）
+         */
+        { name: 'apple-mobile-web-app-title', content: 'こうちゃんの大冒険' },
+      ],
+    },
   },
 
   /*
@@ -57,9 +83,19 @@ export default defineNuxtConfig({
       description: 'こうちゃんと公園を探検するゲーム',
 
       /*
+       * アプリの言葉（書かないと 'en' になる）
+       */
+      lang: 'ja',
+
+      /*
        * アプリを起動したときに最初に開くURL
        */
       start_url: '/',
+
+      /*
+       * アプリとして開くURLの範囲（サイト全体。/soundtrack もアプリの中で開く）
+       */
+      scope: '/',
 
       /*
        * ブラウザのアドレスバーなどを表示せず、

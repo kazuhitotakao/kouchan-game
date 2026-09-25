@@ -400,6 +400,12 @@
   text-align: center;
 }
 
+/* 「はじめの画面へ戻る」の短い表示（「はじめに戻る」）
+   ふだんは長いほうだけを出して、スマホ幅のときだけ入れかえる（→ @media (max-width: 700px)） */
+.cmd__backText--short {
+  display: none;
+}
+
 /* ▶ は、そのままだと紺色なので、紺色の下地に沈んで見えなくなる
    このボタンだけ下地が暗いので、白にしてはっきり見えるようにする
    （文字の #d5e2f5 より少し明るくして、いま選んでいることが分かりやすい） */
@@ -643,7 +649,9 @@
     z-index: 1;
     grid-template-columns: 1fr;
     max-height: 62vh;
-    padding: 12px 12px calc(14px + env(safe-area-inset-bottom));
+    /* ホームインジケーターをよける余白（env(safe-area-inset-bottom)）は、ここでは足さない
+       ゲームの枠（.game）がまとめてよけているので、ここでも足すと二重になる（→ base.css の .game） */
+    padding: 12px 12px 14px;
   }
 
   /* ゴール／GAME OVER の2つのボタンは、スマホ幅でも横にならべる
@@ -791,6 +799,21 @@
   .cmd--back {
     max-width: none;
   }
+
+  /* ゴール／GAME OVER の「はじめの画面へ戻る」を、短い「はじめに戻る」に入れかえる
+
+     スマホ幅では2つのボタンを横にならべるので、1つのボタンで文字に使える幅は
+     375px の画面で約122px しかない
+     「はじめの画面へ戻る」は9文字・16pxで約144px なので、2行に折り返してしまう
+     「はじめに戻る」は6文字で約96px なので、幅 360px 以上の画面なら1行に収まる
+     （幅 320px の画面では、となりの「もう一度あそぶ」と同じく2行になる） */
+  .cmd__backText--full {
+    display: none;
+  }
+
+  .cmd__backText--short {
+    display: inline;
+  }
 }
 
 @media (max-width: 700px) and (max-height: 700px) {
@@ -800,7 +823,7 @@
   .command {
     max-height: 50vh;
     gap: 7px;
-    padding: 9px 12px calc(10px + env(safe-area-inset-bottom));
+    padding: 9px 12px 10px;
   }
 
   .command-area {
@@ -812,7 +835,7 @@
 
   .command {
     max-height: 46vh;
-    padding: 8px 10px calc(9px + env(safe-area-inset-bottom));
+    padding: 8px 10px 9px;
   }
 
   /* とても背の低いスマホ（375×548 の Safari・320×568 など）でも、

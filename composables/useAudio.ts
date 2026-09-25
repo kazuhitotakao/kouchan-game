@@ -35,6 +35,11 @@ import type { GameEvent } from '~/types/game';
    曲名のほうは結果画面の表示に使うので、pages/index.vue 側で読みこんでいる */
 import { sPlusSongSrc } from '~/utils/sPlusSong';
 
+/* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
+   audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
+   （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+import { keepAudioContextAwake, setElementVolume } from '~/utils/elementVolume';
+
 /* 音のほうから「いま画面はどうなっているか」を見るための値
 
    どれも読むだけで、このファイルからは1つも書きかえない
@@ -513,6 +518,35 @@ export function useAudio(options: UseAudioOptions) {
     playTone(300, context.currentTime, 0.12, 0.05, 'triangle', 190);
   }
 
+  /* ⑥-2 カウントダウンの音「ピッ」（ミニゲーム「秘密の小道」の「3」「2」「1」用）
+
+     決定音「ポン♪」より少し高くて短い音を1つ
+     「3」は「小道へ進む」の決定音と同時に出るので、delay で少しうしろへずらして鳴らす
+     （アイテム音0.06秒・いやいや発生音0.12秒と同じ考えかた） */
+  function playCountdownSound(delay = 0) {
+    const context = getAudioContext();
+
+    if (!context) {
+      return;
+    }
+
+    playTone(880, context.currentTime + delay, 0.08, 0.05, 'triangle'); // ラ
+  }
+
+  /* ⑥-3 スタートの音「ピーン♪」（ミニゲーム「秘密の小道」の「スタート！」用）
+
+     カウントダウンの「ピッ」の1オクターブ上を、少し長めに伸ばす
+     （時報の「ピッ、ピッ、ピッ、ポーン」と同じ形なので、始まったことが耳だけでも分かる） */
+  function playCountdownStartSound() {
+    const context = getAudioContext();
+
+    if (!context) {
+      return;
+    }
+
+    playTone(1760, context.currentTime, 0.3, 0.05, 'triangle'); // 高いラ
+  }
+
   /* ⑦ 転倒音「ヒュッ、ポテッ」（とつぜんのできごと「こうちゃんがころんだ」用）
 
      短い音を2つ、すきまなく続けて鳴らして「つまずいて、地面にすわりこむ」を表す
@@ -914,7 +948,7 @@ export function useAudio(options: UseAudioOptions) {
         }
 
         try {
-          sound.volume = delayedVolume;
+          setElementVolume(sound, delayedVolume, getAudioContext);
 
           /* 必ず音の先頭から鳴らす
 
@@ -1077,7 +1111,7 @@ export function useAudio(options: UseAudioOptions) {
         parkBgm.loop = true;
 
         // volume … 音の大きさ（上の parkBgmVolume で決めている）
-        parkBgm.volume = getSoundVolume(parkBgmVolume);
+        setElementVolume(parkBgm, getSoundVolume(parkBgmVolume), getAudioContext);
       }
 
       return parkBgm;
@@ -1116,7 +1150,7 @@ export function useAudio(options: UseAudioOptions) {
         parkBgm2.loop = true;
 
         // volume … 音の大きさ（上の parkBgm2Volume で決めている）
-        parkBgm2.volume = getSoundVolume(parkBgm2Volume);
+        setElementVolume(parkBgm2, getSoundVolume(parkBgm2Volume), getAudioContext);
       }
 
       return parkBgm2;
@@ -1225,7 +1259,7 @@ export function useAudio(options: UseAudioOptions) {
     const totalSteps = Math.ceil(bgmFadeInDuration / stepMs);
     let doneSteps = 0;
 
-    bgm.volume = 0; // まずは無音から
+    setElementVolume(bgm, 0, getAudioContext); // まずは無音から
     fadingBgm = bgm;
     fadingBgmBaseVolume = targetVolume;
 
@@ -1243,7 +1277,7 @@ export function useAudio(options: UseAudioOptions) {
       const goalVolume = getSoundVolume(fadingBgmBaseVolume);
 
       try {
-        bgm.volume = ratio >= 1 ? goalVolume : goalVolume * ratio;
+        setElementVolume(bgm, ratio >= 1 ? goalVolume : goalVolume * ratio, getAudioContext);
       } catch {
         // 何もしない
       }
@@ -1270,7 +1304,7 @@ export function useAudio(options: UseAudioOptions) {
 
     if (fadingBgm) {
       try {
-        fadingBgm.volume = getSoundVolume(fadingBgmBaseVolume);
+        setElementVolume(fadingBgm, getSoundVolume(fadingBgmBaseVolume), getAudioContext);
       } catch {
         // 何もしない
       }
@@ -1593,7 +1627,7 @@ export function useAudio(options: UseAudioOptions) {
         titleBgm.loop = true;
 
         // volume … 音の大きさ（上の titleBgmVolume で決めている）
-        titleBgm.volume = getSoundVolume(titleBgmVolume);
+        setElementVolume(titleBgm, getSoundVolume(titleBgmVolume), getAudioContext);
       }
 
       return titleBgm;
@@ -1624,7 +1658,7 @@ export function useAudio(options: UseAudioOptions) {
 
       // タイトルBGMはフェードインさせず、そのまま鳴らす
       // （フェードインするのは公園BGMだけ）
-      bgm.volume = getSoundVolume(titleBgmVolume);
+      setElementVolume(bgm, getSoundVolume(titleBgmVolume), getAudioContext);
 
       bgm.play().catch(() => {});
     } catch {
@@ -1787,7 +1821,7 @@ export function useAudio(options: UseAudioOptions) {
         tantrumBgm.loop = true;
 
         // volume … 音の大きさ（上の tantrumBgmVolume で決めている）
-        tantrumBgm.volume = getSoundVolume(tantrumBgmVolume);
+        setElementVolume(tantrumBgm, getSoundVolume(tantrumBgmVolume), getAudioContext);
       }
 
       return tantrumBgm;
@@ -1970,7 +2004,7 @@ export function useAudio(options: UseAudioOptions) {
         resultBgm.loop = true;
 
         // volume … 音の大きさ（上の resultBgmVolume で決めている）
-        resultBgm.volume = getSoundVolume(resultBgmVolume);
+        setElementVolume(resultBgm, getSoundVolume(resultBgmVolume), getAudioContext);
       } else if (resultBgm.getAttribute('src') !== src) {
         /* 前のゴールとランクがちがって、鳴らす曲が変わるときだけ差しかえる
 
@@ -2042,6 +2076,33 @@ export function useAudio(options: UseAudioOptions) {
   */
   let resultBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /* Audio を「あとから鳴らせる」状態にしておく（ボタンを押した瞬間に呼ぶこと）
+
+     iPhone のブラウザでは、1つ1つの Audio について
+     「さわった瞬間に一度 play() されたか」を覚えていて、
+     一度でもそうされた Audio は、そのあと いつ play() しても鳴らせる
+     そこで、さわった瞬間に、音を消したまま（muted）一度 play() して、すぐ止めておく
+     ・muted のまま、すぐ pause() するので、音は出ない
+     ・すぐ止めるので play() の約束（Promise）は取り消しで終わるが、それは無視してよい
+     ・すでに鳴っている Audio は止めてしまわないように、さわらない */
+  function unlockAudioElement(audio: HTMLAudioElement) {
+    if (!audio.paused) {
+      return;
+    }
+
+    const wasMuted = audio.muted;
+
+    try {
+      audio.muted = true;
+      audio.play().catch(() => {});
+      audio.pause();
+    } catch {
+      // 何もしない（鳴らせないときは、今までどおり鳴らないだけ）
+    }
+
+    audio.muted = wasMuted;
+  }
+
   /* リザルトBGMを「少し待ってから」最初から鳴らす
 
      ※ 待たせるのは「音を鳴らすこと」だけ
@@ -2054,6 +2115,21 @@ export function useAudio(options: UseAudioOptions) {
     // サーバー側では音を鳴らさないので、予約もしない
     if (!import.meta.client) {
       return;
+    }
+
+    /* 待つ前に、リザルトBGMを「あとから鳴らせる」状態にしておく（→ unlockAudioElement）
+
+       iPhone のブラウザ（Safari・Chrome）では、ボタンを押してから1秒以上たったあとに
+       新しい Audio を play() しても、止められて鳴らない
+       待ち時間（1.5秒）は、ほかのBGM（0.7秒）とちがって1秒をこえるので、
+       ここでしておかないと、ブラウザで遊んだときだけエンディングの曲が鳴らなかった
+       ※ この関数は、ゴールのボタンを押した流れ（goToGoal()）の中から、待たずに呼ばれている */
+    if (soundEnabled.value) {
+      const bgm = getResultBgm();
+
+      if (bgm) {
+        unlockAudioElement(bgm);
+      }
     }
 
     resultBgmTimer = setTimeout(() => {
@@ -2211,7 +2287,7 @@ export function useAudio(options: UseAudioOptions) {
         gameOverBgm.loop = true;
 
         // volume … 音の大きさ（上の gameOverBgmVolume で決めている）
-        gameOverBgm.volume = getSoundVolume(gameOverBgmVolume);
+        setElementVolume(gameOverBgm, getSoundVolume(gameOverBgmVolume), getAudioContext);
       }
 
       return gameOverBgm;
@@ -2401,7 +2477,7 @@ export function useAudio(options: UseAudioOptions) {
 
       // 音量も、決めてある大きさへ戻しておく
       // （フェードインの途中で止めると、小さい音量のまま残ることがあるため）
-      gameOverBgm.volume = getSoundVolume(gameOverBgmVolume);
+      setElementVolume(gameOverBgm, getSoundVolume(gameOverBgmVolume), getAudioContext);
     } catch {
       // 何もしない
     }
@@ -2456,7 +2532,7 @@ export function useAudio(options: UseAudioOptions) {
         secretBgm.loop = true;
 
         // volume … 音の大きさ（上の secretBgmVolume で決めている）
-        secretBgm.volume = getSoundVolume(secretBgmVolume);
+        setElementVolume(secretBgm, getSoundVolume(secretBgmVolume), getAudioContext);
       }
 
       return secretBgm;
@@ -2687,7 +2763,7 @@ export function useAudio(options: UseAudioOptions) {
       }
 
       try {
-        bgm.volume = getSoundVolume(baseVolume);
+        setElementVolume(bgm, getSoundVolume(baseVolume), getAudioContext);
       } catch {
         // 何もしない
       }
@@ -2768,7 +2844,16 @@ export function useAudio(options: UseAudioOptions) {
      ※ localStorage はブラウザにしか無いので、必ず onMounted から呼ぶこと
      ※ ここではBGMを鳴らさない（理由は、いちばん下のコメントを参照）
      ============================================================ */
+  /* さわるたびに作業台を起こす受付を、やめるための関数（受付していないときは null）
+     （iPhone でBGMが無音にならないようにするため。くわしくは utils/elementVolume.ts） */
+  let stopWakingAudioContext: (() => void) | null = null;
+
   function restoreSoundSettings() {
+    /* さわるたびに作業台（AudioContext）を起こす受付を始める
+       この関数は onMounted から1回だけ呼ばれるので、ここで始めて、cleanupAudio() でやめる */
+    stopWakingAudioContext?.();
+    stopWakingAudioContext = keepAudioContextAwake(getAudioContext);
+
     /* 前回のサウンドの設定を思い出す
 
        localStorage には文字しか入らないので、'true' / 'false' という
@@ -2850,6 +2935,10 @@ export function useAudio(options: UseAudioOptions) {
        前後の順番がずれないようにするため
      ============================================================ */
   function cleanupAudio() {
+    // さわるたびに作業台を起こす受付をやめる（→ restoreSoundSettings()）
+    stopWakingAudioContext?.();
+    stopWakingAudioContext = null;
+
     // 別のページへ移ったあともBGMが鳴り続けないように、ぜんぶの曲を止めておく
     // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
     pauseTitleBgm();
@@ -2886,6 +2975,8 @@ export function useAudio(options: UseAudioOptions) {
     playGoalSound,
     playSunlightSound,
     playBranchBumpSound,
+    playCountdownSound,
+    playCountdownStartSound,
     playSuddenEventSound,
 
     /* ===== 公園のBGM ===== */
