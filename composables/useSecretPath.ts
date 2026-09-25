@@ -15,9 +15,9 @@
      1コマごとの動き（advanceSecretPath）・指やキーの操作・音・画面の切りかえは、
      ぜんぶ composables/useSecretPathGame.ts のほう
 
-   ■ 区切りの数字・文章・乱数を使う順番は、いっさい変えていない
-     移す前とまったく同じ順番で Math.random() を呼んでいるので、
-     同じ遊びかたをすれば、移す前と同じ小道になる
+   ■ 区切りの数字・文章は、移す前と同じ
+     予定づくり（buildSecretPathSpawnQueue()）だけは、あとから
+     「前の行とつなげて見ても、よけられる・取れる並びにする」決まりを足している
 
    ■ 設定の数字は data/secretPath.ts、型は types/game.ts のものをそのまま使う
    ============================================================ */
@@ -33,6 +33,7 @@ import {
   secretPathRowInterval,
   secretPathRowJitter,
   secretPathSunlightBranchChance,
+  secretPathSunlightDoubleBranchChance,
   secretPathSunlightRows,
   secretPathTouchSwipeThreshold,
 } from '~/data/secretPath';
@@ -87,34 +88,65 @@ function pickRandomSecretPathLane(candidates: SecretPathLane[] = secretPathLanes
 /* 1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
 
    木漏れ日の数（5つ）は毎回同じにして、出てくるレーンだけをランダムにする
-   どの行も、少なくとも1つのレーンは空いているので、よけられない形にはならない */
+   どの行も、少なくとも1つのレーンは空いているので、よけられない形にはならない
+
+   ■ 前の行とのつながりも見る
+     行と行のあいだに動けるのは1レーンまで、と考えて並びを決める
+     （左はし → 右はしの2レーン移動は、まん中のレーンに前後の行の枝がはさまっていると、
+       すき間がとても短く、実際にはまず間に合わないため）
+
+     例：「✨ 🌿 なし」のすぐあとに「🌿 🌿 なし」
+         ✨ を取ると左はしにいるので、次の行をよけるには右はしまで2レーン動くしかない
+
+     そうならないように、次の2つを守る
+     ・枝2本の行   … 空けるレーンは、前の行のどの空きレーンからも1レーン以内で行ける所にする
+     ・木漏れ日の行 … 木漏れ日も、前の行のどの空きレーンからも1レーン以内で取れる所に出す
+     枝1本の行は、前の行のどこにいても、いまのレーンかとなりのレーンのどちらかが空いているので、そのままでよい
+     （いちばん最初の行は、こうちゃんのスタート位置（まん中）を「前の行」として見る）
+
+     前の行で空いていたどのレーンにいても、次の行をよけられて・木漏れ日も取れるので、
+     木漏れ日を取りに行ったあとや、枝をよけた先で、つみにならない */
 export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
   const queue: SecretPathSpawn[] = [];
+
+  // 前の行で空いていたレーン（こうちゃんがいるかもしれない所）
+  let previousOpenLanes: SecretPathLane[] = [1];
 
   for (let row = 0; row < secretPathRowCount; row++) {
     const at = secretPathFirstRowAt + row * secretPathRowInterval + (Math.random() * 2 - 1) * secretPathRowJitter;
 
+    // 前の行のどの空きレーンからも、1レーン以内で行けるレーン（まん中は、いつでも入る）
+    const reachableLanes = secretPathLanes.filter((lane) => previousOpenLanes.every((openLane) => Math.abs(openLane - lane) <= 1));
+    const branchLanes: SecretPathLane[] = [];
+
     if (secretPathSunlightRows.includes(row)) {
-      const sunlightLane = pickRandomSecretPathLane();
+      const sunlightLane = pickRandomSecretPathLane(reachableLanes);
 
       queue.push({ at, kind: 'sunlight', lane: sunlightLane });
 
       // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
+      // ときどき枝を2本にして、木漏れ日のレーンしか空いていない行にする
+      // （木漏れ日は前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
       if (Math.random() < secretPathSunlightBranchChance) {
-        queue.push({ at, kind: 'branch', lane: pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== sunlightLane)) });
+        const otherLanes = secretPathLanes.filter((lane) => lane !== sunlightLane);
+
+        branchLanes.push(...(Math.random() < secretPathSunlightDoubleBranchChance ? otherLanes : [pickRandomSecretPathLane(otherLanes)]));
       }
+    } else if (Math.random() < secretPathDoubleBranchChance) {
+      // ときどき枝を2本にして、空いているレーンを1つだけにする（3本にはしない）
+      const openLane = pickRandomSecretPathLane(reachableLanes);
 
-      continue;
+      branchLanes.push(...secretPathLanes.filter((lane) => lane !== openLane));
+    } else {
+      // ふつうの行は枝を1本
+      branchLanes.push(pickRandomSecretPathLane());
     }
 
-    // ふつうの行は枝を1本。ときどき2本にして、空いているレーンを1つだけにする（3本にはしない）
-    const branchLane = pickRandomSecretPathLane();
-
-    queue.push({ at, kind: 'branch', lane: branchLane });
-
-    if (Math.random() < secretPathDoubleBranchChance) {
-      queue.push({ at, kind: 'branch', lane: pickRandomSecretPathLane(secretPathLanes.filter((lane) => lane !== branchLane)) });
+    for (const lane of branchLanes) {
+      queue.push({ at, kind: 'branch', lane });
     }
+
+    previousOpenLanes = secretPathLanes.filter((lane) => !branchLanes.includes(lane));
   }
 
   return queue.sort((a, b) => a.at - b.at);

@@ -1000,6 +1000,8 @@ const {
   playGoalSound,
   playSunlightSound,
   playBranchBumpSound,
+  playCountdownSound,
+  playCountdownStartSound,
   playSuddenEventSound,
 
   /* 公園のBGM（shouldUseParkBgm2 は、公園入口の文章の出しわけにも使う） */
@@ -2421,6 +2423,8 @@ const {
   /* 画面に出す、計算した状態 */
   isSecretPathPlaying,
   isSecretPathBoosting,
+  secretPathCountdownNumber,
+  isSecretPathStartCueVisible,
   isSecretPathBumped,
   isSecretPathSparkling,
   secretPathFlashLane,
@@ -2458,6 +2462,8 @@ const {
   playItemSound,
   playSunlightSound,
   playBranchBumpSound,
+  playCountdownSound,
+  playCountdownStartSound,
 });
 
 /* 公園入口の「細い道の先」
@@ -4755,7 +4761,7 @@ onUnmounted(() => {
                        折り返さないよう、span で包んでいる（secret-path-rules__part） -->
                   <li class="secret-path-for-pc">
                     <span class="secret-path-rules__part">← → / A D：左右に移動</span>
-                    <span class="secret-path-rules__part">↑長押し：はやく進む</span>
+                    <span class="secret-path-rules__part">↑ / Space 長押し：はやく進む</span>
                   </li>
                   <li class="secret-path-for-pc">
                     <span class="secret-path-rules__part">🖱 クリック・ドラッグ：左右に移動</span>
@@ -4787,7 +4793,7 @@ onUnmounted(() => {
 
                   <span class="secret-path-hud__time" :class="{ 'secret-path-hud__time--soon': secretPathTimeLeft <= 3 }">
                     あと {{ secretPathTimeLeft }}秒
-                    <!-- はやく進んでいるあいだだけ出す（↑ キー・フィールドの長押し）
+                    <!-- はやく進んでいるあいだだけ出す（↑ / Space キー・フィールドの長押し）
                          残り時間の右上に重ねて出すので、出たり消えたりしても HUD の並びは変わらない -->
                     <span v-if="isSecretPathBoosting" class="secret-path-hud__boost">⏩ {{ secretPathBoostMultiplier }}x</span>
                   </span>
@@ -4848,6 +4854,14 @@ onUnmounted(() => {
                     <span v-if="isSecretPathSparkling" :key="secretPathSparkleId" class="secret-path-player__plus">✨ +1</span>
                     <span class="secret-path-player__face" :class="{ 'secret-path-player__face--bumped': isSecretPathBumped, 'secret-path-player__face--sparkle': isSecretPathSparkling }">👦</span>
                   </div>
+
+                  <!-- はじまる前のカウントダウン「3」「2」「1」と、そのあとの「スタート！」
+                       フィールドのまん中に大きく重ねて出す（pointer-events: none なので、下の道はそのまま押せる）
+                       key を数字にしておくと、数字が変わるたびに、ぽんっと出なおす -->
+                  <span v-if="secretPathCountdownNumber !== null" :key="`countdown-${secretPathCountdownNumber}`" class="secret-path-countdown">
+                    {{ secretPathCountdownNumber }}
+                  </span>
+                  <span v-else-if="isSecretPathStartCueVisible" key="countdown-start" class="secret-path-countdown secret-path-countdown--start">スタート！</span>
                 </div>
               </article>
 
@@ -4888,7 +4902,7 @@ onUnmounted(() => {
                 <template v-if="secretPathPhase === 'playing'">
                   <p class="secret-path-guide secret-path-for-pc">
                     <span class="secret-path-guide__item">← → / A D：移動</span>
-                    <span class="secret-path-guide__item">↑長押し：加速</span>
+                    <span class="secret-path-guide__item">↑ / Space 長押し：加速</span>
                   </p>
 
                   <p class="secret-path-guide__hint secret-path-for-pc">🖱 クリック・ドラッグ：移動　長押し：加速</p>
