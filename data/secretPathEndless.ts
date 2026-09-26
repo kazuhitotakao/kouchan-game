@@ -89,15 +89,18 @@ export const secretPathEndlessBoostComboTiers = [
 
 /* BGM（こもれびの広場の曲「こもれびの奥で」）のテンポ
 
-   レベルが上がる・はやく進む と、曲を少しずつ速くして、きびしくなったことを耳でも伝える
+   レベルが上がると、曲を少しずつ速くして、きびしくなったことを耳でも伝える
    （音の高さは変えずに、テンポだけを上げる → composables/useAudio.ts の setSecretBgmPlaybackRate()）
    ・perLevel     … レベルが1つ上がるごとに、何倍ずつ速くするか（0.03 なら、Lv.2 で 1.03倍、Lv.7 で 1.18倍）
-   ・maxLevelRate … レベルで速くするのは、ここまで（1.25倍。Lv.9 で届く）
-   ・boost        … はやく進んでいるあいだは、さらに何倍にするか
-   ・max          … いちばん速くても、ここまで（速すぎると、曲として聞きづらくなるため） */
+   ・maxLevelRate … いちばん速くても、ここまで（1.25倍。Lv.9 で届く。速すぎると、曲として聞きづらくなるため）
+
+   ※ はやく進んでいるあいだは、曲の速さを変えない
+     前は はやく進むたびに曲を速くしていたが、iPhone のホーム画面から開いたときに、
+     曲がくずれて聞こえる・アウトのときに「ぽこっ」がまとめて何回も鳴る、ということが起きていた
+     （押す・はなすのたびに曲の速さが切りかわるのが引き金とみられる）
+     かわりに、こうちゃんの後ろに風の跡を出して、はじめた瞬間に「ヒュッ」と鳴らす
+     （→ components/game/SecretPathField.vue・composables/useAudio.ts の playBoostSound()） */
 export const secretPathEndlessBgmTempo = {
   perLevel: 0.03,
   maxLevelRate: 1.25,
-  boost: 1.1,
-  max: 1.35,
 };

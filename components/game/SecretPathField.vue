@@ -13,8 +13,9 @@
    ■ HUD の右上と真ん中は、遊びかたで出すものがちがう
      ・本編の小道         … 「✨ 木漏れ日 3 / 5」と「あと 12秒」（timeLeft を渡す）
      ・どこまで行ける？   … 「✨ 木漏れ日 8」「❤❤🤍」「123m」（lives・distance を渡す）
-                             自己ベスト（bestDistance）を渡すと、HUD の下の「自己ベストまでのバー」、
-                             フィールドの「自己ベストの線」、こえた瞬間の「🎉 じこベスト更新！」も出す
+                             自己ベスト（bestDistance）を渡すと、HUD の下の「自己ベストまでのバー」と、
+                             フィールドの「自己ベストの線」も出す
+                             （こえた瞬間の「🎉 じこベスト更新！」は、使う側のページがフィールドの外に出す）
 
    ■ 見た目は assets/css/game/secret-path-field.css
    ============================================================ */
@@ -73,7 +74,9 @@ const props = defineProps<{
   bestSunlight?: number;
   metersPerField?: number;
 
-  /* はやく進んでいるか（「⏩ 2x」を出す） */
+  /* はやく進んでいるか
+     「⏩ 2x」と、こうちゃんの後ろの風の跡を出す・こうちゃんを小きざみにはずませる・
+     レーンの区切りの点線を下へ流す・フィールドのふちを光らせる */
   isBoosting: boolean;
 
   /* 加速コンボの倍率（「どこまで行ける？」だけ。1 ＝ まだ倍率が付いていない）
@@ -155,37 +158,9 @@ const bestLineTop = computed(() => {
   return top > -10 && top < 110 ? top : null;
 });
 
-/* こえた瞬間に、フィールドのまん中に大きく出す「🎉 じこベスト更新！」
-   isDistanceRecord が false → true になったときだけ、recordBannerDuration のあいだ出す */
-const recordBannerDuration = 1600;
-const isRecordBannerVisible = ref(false);
-let recordBannerTimer: ReturnType<typeof setTimeout> | null = null;
-
-watch(
-  () => props.isDistanceRecord,
-  (isRecord, wasRecord) => {
-    if (!isRecord || wasRecord) {
-      return;
-    }
-
-    isRecordBannerVisible.value = true;
-
-    if (recordBannerTimer !== null) {
-      clearTimeout(recordBannerTimer);
-    }
-
-    recordBannerTimer = setTimeout(() => {
-      isRecordBannerVisible.value = false;
-      recordBannerTimer = null;
-    }, recordBannerDuration);
-  },
-);
-
-onUnmounted(() => {
-  if (recordBannerTimer !== null) {
-    clearTimeout(recordBannerTimer);
-  }
-});
+/* こえた瞬間に知らせる「🎉 じこベスト更新！」は、フィールドの上には出さない
+   （枝が流れてくる所にかぶさると、よけるのに見づらいため。「⏫ スピードアップ！」と同じく、使う側のページの、フィールドの外に出す）
+   ここでは、HUD の距離の丸と自己ベストまでのバーを金色にするだけにしている */
 
 defineEmits<{
   fieldPointerdown: [event: PointerEvent];
@@ -304,6 +279,7 @@ onMounted(() => {
          contextmenu … スマホで長押ししたときのメニューを出さない -->
     <div
       class="secret-path-field"
+      :class="{ 'secret-path-field--boosting': isBoosting }"
       aria-hidden="true"
       @pointerdown="$emit('fieldPointerdown', $event)"
       @pointermove="$emit('fieldPointermove', $event)"
@@ -355,7 +331,19 @@ onMounted(() => {
           <span v-if="bumpPenalty" class="secret-path-player__minus">{{ bumpPenalty }}</span>
         </span>
         <span v-if="isSparkling" :key="sparkleId" class="secret-path-player__plus">✨ +1</span>
-        <span class="secret-path-player__face" :class="{ 'secret-path-player__face--bumped': isBumped, 'secret-path-player__face--sparkle': isSparkling }">👦</span>
+        <!-- はやく進んでいるあいだの、風の跡（こうちゃんのすぐ後ろ＝下に、短い線が流れる）
+             こうちゃんより後ろは、もう通りすぎた所なので、枝をよけるのに見づらくならない
+             加速コンボの倍率が付いたら（「どこまで行ける？」だけ）、HUD の札と同じ金色にする -->
+        <span v-if="isBoosting" class="secret-path-player__trail" :class="{ 'secret-path-player__trail--combo': (comboMultiplier ?? 1) > 1 }"></span>
+        <span
+          class="secret-path-player__face"
+          :class="{
+            'secret-path-player__face--boosting': isBoosting,
+            'secret-path-player__face--bumped': isBumped,
+            'secret-path-player__face--sparkle': isSparkling,
+          }">
+          👦
+        </span>
       </div>
 
       <!-- はじまる前のカウントダウン「3」「2」「1」と、そのあとの「スタート！」
@@ -365,9 +353,6 @@ onMounted(() => {
         {{ countdownNumber }}
       </span>
       <span v-else-if="isStartCueVisible" key="countdown-start" class="secret-path-countdown secret-path-countdown--start">スタート！</span>
-
-      <!-- 自己ベストをこえた瞬間に、フィールドのまん中に大きく出す（「どこまで行ける？」だけ。1.6秒で消える） -->
-      <span v-if="isRecordBannerVisible" class="secret-path-record-banner">🎉 じこベスト更新！</span>
     </div>
   </article>
 </template>

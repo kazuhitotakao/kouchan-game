@@ -83,6 +83,7 @@ const {
   playBranchBumpSound,
   playCountdownSound,
   playCountdownStartSound,
+  playBoostSound,
   playSecretBgmSoon,
   stopSecretBgm,
   resumeSecretBgm,
@@ -181,11 +182,22 @@ const distanceMeters = computed(() => Math.floor(secretPathDistance.value));
 const isBeatingDistanceBest = computed(() => best.value.distance > 0 && distanceMeters.value > best.value.distance);
 const isBeatingSunlightBest = computed(() => best.value.sunlight > 0 && secretPathSunlightCount.value > best.value.sunlight);
 
-/* 遊んでいる最中に、距離の自己ベストをこえた瞬間だけ、キラリン♪
-   （1回のプレイで1回だけ。こえたあとは、終わるまで「更新中」のまま） */
+/* 遊んでいる最中に、距離の自己ベストをこえた瞬間だけ、キラリン♪ と、下の紺色の枠に「🎉 じこベスト更新！」
+   （1回のプレイで1回だけ。こえたあとは、終わるまで「更新中」のまま）
+   文字は、フィールドの上に出すと枝が流れてくる所にかぶさって見づらいので、フィールドの外に出す（→ showCommandNotice()） */
 watch(isBeatingDistanceBest, (isBeating) => {
   if (isBeating && isSecretPathPlaying.value) {
     playItemSound();
+    showCommandNotice('record', '🎉 じこベスト更新！');
+  }
+});
+
+/* はやく進みはじめた瞬間に、風を切る「ヒュッ」を鳴らす（やめたときは鳴らさない）
+   見た目のほうの知らせ（こうちゃんの後ろの風の跡）は SecretPathField.vue が出す
+   ※ カウントダウン中から押していたときは、「スタート！」と同時に鳴る（isSecretPathBoosting はスタートしてから true になるため） */
+watch(isSecretPathBoosting, (isBoosting, wasBoosting) => {
+  if (isBoosting && !wasBoosting && isSecretPathPlaying.value) {
+    playBoostSound();
   }
 });
 
@@ -197,17 +209,44 @@ watch(secretPathComboMultiplier, (multiplier, previousMultiplier) => {
   }
 });
 
+/* 下の紺色の枠に重ねて出す、ひとことの知らせ（遊んでいる最中だけ）
+
+   ・levelup … レベルが上がった瞬間の「⏫ スピードアップ！ Lv.3」
+   ・record  … 距離の自己ベストをこえた瞬間の「🎉 じこベスト更新！」
+   どちらも、フィールドの上に出すと枝が流れてくる所にかぶさって見づらいので、フィールドの外に出す
+   commandNoticeDuration のあいだ出して消す。続けて起きたときは、あとから起きたほうだけを出す
+   id … 出しなおすための番号（変わるたびに、ぽんっと出なおす） */
+type CommandNotice = {
+  id: number;
+  kind: 'levelup' | 'record';
+  text: string;
+};
+
+const commandNoticeDuration = 1600;
+const commandNotice = ref<CommandNotice | null>(null);
+let commandNoticeId = 0;
+let commandNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+function showCommandNotice(kind: CommandNotice['kind'], text: string) {
+  commandNoticeId += 1;
+  commandNotice.value = { id: commandNoticeId, kind, text };
+
+  if (commandNoticeTimer !== null) {
+    clearTimeout(commandNoticeTimer);
+  }
+
+  commandNoticeTimer = setTimeout(() => {
+    commandNotice.value = null;
+    commandNoticeTimer = null;
+  }, commandNoticeDuration);
+}
+
 /* レベルが上がった瞬間の知らせ
 
    ・音 … カウントダウンの「ピッ」を2回つづけて鳴らす（「ピピッ」）
           加速コンボの「ピーン♪」・自己ベストの「キラリン♪」と聞き分けられるように、べつの鳴らしかたにしている
-   ・文字 … 下の紺色の枠に「⏫ スピードアップ！ Lv.3」を levelUpNoticeDuration のあいだ重ねて出す
-          フィールドの上に出すと、枝が流れてくる所にかぶさって見づらいので、フィールドの外に出す
+   ・文字 … 下の紺色の枠に「⏫ スピードアップ！ Lv.3」（→ showCommandNotice()）
           （HUD の距離の丸も、同じあいだ金色に光る → SecretPathField.vue） */
-const levelUpNoticeDuration = 1600;
-const levelUpNotice = ref<number | null>(null);
-let levelUpNoticeTimer: ReturnType<typeof setTimeout> | null = null;
-
 watch(secretPathLevel, (level, previousLevel) => {
   if (level <= previousLevel || !isSecretPathPlaying.value) {
     return;
@@ -216,16 +255,7 @@ watch(secretPathLevel, (level, previousLevel) => {
   playCountdownSound();
   playCountdownSound(0.1);
 
-  levelUpNotice.value = level;
-
-  if (levelUpNoticeTimer !== null) {
-    clearTimeout(levelUpNoticeTimer);
-  }
-
-  levelUpNoticeTimer = setTimeout(() => {
-    levelUpNotice.value = null;
-    levelUpNoticeTimer = null;
-  }, levelUpNoticeDuration);
+  showCommandNotice('levelup', `⏫ スピードアップ！ Lv.${level}`);
 });
 
 /* 結果の画面に出す、ひとこと（進んだ距離で変える） */
@@ -306,8 +336,9 @@ function play() {
    ・はじまる前・遊んでいる最中 … こもれびの広場の曲「こもれびの奥で」
                                  （秘密の小道の先の曲なので、このミニゲームの題材に合う）
    ・結果の画面                 … GAME OVER の曲（「おしまい」が分かるように）
-   ・遊んでいる最中は、レベルが上がる・はやく進む と、曲のテンポを少しずつ上げる（音の高さは変えない）
+   ・遊んでいる最中は、レベルが上がると、曲のテンポを少しずつ上げる（音の高さは変えない）
      速さの数字は data/secretPathEndless.ts の secretPathEndlessBgmTempo
+     はやく進んでいるあいだは、曲の速さを変えない（理由は data/secretPathEndless.ts）
    ============================================================ */
 
 /* 場面が変わったら、音に渡す場面を切りかえて、曲を入れかえる
@@ -322,16 +353,13 @@ watch(secretPathPhase, (phase) => {
 });
 
 /* 遊んでいる最中の、曲のテンポ（1 ＝ ふつう）
-   レベルが上がるごとに perLevel ずつ（maxLevelRate まで）、はやく進んでいるあいだは さらに boost 倍（ぜんぶで max まで） */
+   レベルが上がるごとに perLevel ずつ（maxLevelRate まで） */
 const bgmPlaybackRate = computed(() => {
   if (!isSecretPathPlaying.value) {
     return 1;
   }
 
-  const levelRate = Math.min(secretPathEndlessBgmTempo.maxLevelRate, 1 + secretPathEndlessBgmTempo.perLevel * (secretPathLevel.value - 1));
-  const boostRate = isSecretPathBoosting.value ? secretPathEndlessBgmTempo.boost : 1;
-
-  return Math.min(secretPathEndlessBgmTempo.max, levelRate * boostRate);
+  return Math.min(secretPathEndlessBgmTempo.maxLevelRate, 1 + secretPathEndlessBgmTempo.perLevel * (secretPathLevel.value - 1));
 });
 
 watch(bgmPlaybackRate, (rate) => setSecretBgmPlaybackRate(rate), { immediate: true });
@@ -456,9 +484,9 @@ onUnmounted(() => {
   // 別のページへ移ったあともBGMが鳴り続けないように、音をぜんぶ片づける
   cleanupAudio();
 
-  // 「⏫ スピードアップ！」を消す予約も取り消しておく
-  if (levelUpNoticeTimer !== null) {
-    clearTimeout(levelUpNoticeTimer);
+  // 「⏫ スピードアップ！」「🎉 じこベスト更新！」を消す予約も取り消しておく
+  if (commandNoticeTimer !== null) {
+    clearTimeout(commandNoticeTimer);
   }
 });
 </script>
@@ -469,6 +497,7 @@ onUnmounted(() => {
     back-label="← ミニゲーム一覧へ"
     back-aria-label="ミニゲーム一覧へ戻る"
     centered
+    :class="{ 'mg-fit': secretPathPhase === 'playing' }"
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
     @back="goToList"
@@ -593,9 +622,12 @@ onUnmounted(() => {
       <!-- 下の紺色の枠（遊んでいる最中だけ）。操作の案内（本編の小道と同じ）
            自己ベストは、遊ぶ画面の部品（SecretPathField.vue）の HUD の下と、フィールドの線で見せる -->
       <nav v-if="secretPathPhase === 'playing'" class="mg-command">
-        <!-- レベルが上がった瞬間の「⏫ スピードアップ！ Lv.3」（1.6秒だけ、操作の案内の上に重ねる）
+        <!-- レベルが上がった瞬間の「⏫ スピードアップ！ Lv.3」・自己ベストをこえた瞬間の「🎉 じこベスト更新！」
+             （1.6秒だけ、操作の案内の上に重ねる → showCommandNotice()）
              枠の大きさは変えないので、フィールドや枠の位置はずれない -->
-        <p v-if="levelUpNotice !== null" :key="`levelup-${levelUpNotice}`" class="mg-levelup" aria-live="polite">⏫ スピードアップ！ Lv.{{ levelUpNotice }}</p>
+        <p v-if="commandNotice !== null" :key="`notice-${commandNotice.id}`" class="mg-notice" :class="`mg-notice--${commandNotice.kind}`" aria-live="polite">
+          {{ commandNotice.text }}
+        </p>
 
         <p class="mg-guide mg-for-pc">
           <span class="mg-guide__item">← →・クリック：よける</span>
@@ -693,7 +725,7 @@ onUnmounted(() => {
    ・画面の高さ − 410px（枠の上下の余白・ツールバー・HUD・下の案内などのぶん）
      800px の画面なら 390px。枠がちょうど画面に収まって（スクロールしない）、上下まん中に置ける
    ・ただし 320px より低く・560px より高くはしない（背の低い画面でも遊べる高さ／背の高い画面で間延びしない）
-   ※ スマホ幅は、secret-path-field.css の @media (max-width: 700px) の高さのまま（画面に合わせて 240〜400px）
+   ※ スマホ幅は、ページ全体を画面の高さに収めて、入りきらないぶんフィールドを縮める（→ 下の「スマホ幅」の .mg-fit）
    ※ フィールドは SecretPathField.vue の中の要素なので、:deep() で指す */
 @media (min-width: 701px) {
   .mg-stage > .secret-path :deep(.secret-path-field) {
@@ -852,7 +884,7 @@ onUnmounted(() => {
 
 /* ===== 下の枠（本編のコマンド欄と同じ紺色の枠） ===== */
 .mg-command {
-  position: relative; /* 「⏫ スピードアップ！」（.mg-levelup）を、この枠いっぱいに重ねるための基準 */
+  position: relative; /* 「⏫ スピードアップ！」「🎉 じこベスト更新！」（.mg-notice）を、この枠いっぱいに重ねるための基準 */
   box-sizing: border-box;
   padding: 14px 16px;
   border: 3px solid #fff;
@@ -862,11 +894,11 @@ onUnmounted(() => {
   text-align: center;
 }
 
-/* レベルが上がった瞬間の「⏫ スピードアップ！ Lv.3」
-   紺色の枠の中いっぱいに、金色の板を重ねる（操作の案内は、この下にかくれる）
+/* 下の枠に重ねて出す知らせ（「⏫ スピードアップ！ Lv.3」「🎉 じこベスト更新！」）
+   紺色の枠の中いっぱいに、板を重ねる（操作の案内は、この下にかくれる）
    枠の大きさは変えないので、フィールドや全体の枠の位置はずれない
-   ぽんっと出て、1.6秒の終わりにふわっと消える（出しておく長さは、上の levelUpNoticeDuration と同じ） */
-.mg-levelup {
+   ぽんっと出て、1.6秒の終わりにふわっと消える（出しておく長さは、上の commandNoticeDuration と同じ） */
+.mg-notice {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -875,15 +907,28 @@ onUnmounted(() => {
   justify-content: center;
   margin: 0;
   border-radius: 11px;
-  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
   color: #4a3208;
   font-size: 20px;
   font-weight: 800;
   letter-spacing: 0.04em;
-  animation: mg-levelup 1.6s ease-out forwards;
+  animation: mg-notice 1.6s ease-out forwards;
 }
 
-@keyframes mg-levelup {
+/* スピードアップ … 金色の板 */
+.mg-notice--levelup {
+  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
+}
+
+/* じこベスト更新 … クリーム色の板を金色のふちでかこむ（HUD の「自己ベストまでのバー」がこえたときと同じ色の組み合わせ）
+   スピードアップの金色の板と、ひと目で見分けられるようにしている */
+.mg-notice--record {
+  background: linear-gradient(180deg, #fffaf0 0%, #fff0c4 100%);
+  box-shadow:
+    inset 0 0 0 3px var(--gold),
+    0 0 14px 2px rgb(255 209 102 / 70%);
+}
+
+@keyframes mg-notice {
   0% {
     opacity: 0;
     transform: scale(0.92);
@@ -1014,8 +1059,8 @@ onUnmounted(() => {
     font-size: 22px;
   }
 
-  /* 遊んでいる最中のカードは、中身の高さのまま（フィールドの高さは secret-path-field.css が画面に合わせる）
-     scroll-margin-top … 遊びはじめに、カードを画面の上へスクロールしたとき、上に少しすき間を残す */
+  /* scroll-margin-top … 遊びはじめに、カードを画面の上へスクロールしたとき、上に少しすき間を残す
+     （画面に収まっているときは、スクロールしないので効かない） */
   .mg-stage > .secret-path {
     padding: 12px 12px 14px;
     scroll-margin-top: 8px;
@@ -1027,6 +1072,99 @@ onUnmounted(() => {
 
   .mg-rules li {
     font-size: 15px;
+  }
+
+  /* 下の枠（操作の案内）は、1行に収まるよう、少し小さくする（とても細い画面では、まとまりの切れ目で2行になる）
+     2行になると枠が高くなって、そのぶんフィールドが低くなってしまうため */
+  .mg-command {
+    padding: 10px 12px;
+  }
+
+  .mg-guide {
+    font-size: 14.5px;
+  }
+
+  .mg-guide__item {
+    margin: 0 4px;
+  }
+
+  .mg-notice {
+    font-size: 18px;
+  }
+
+  /* ============================================================
+     遊んでいる最中は、ページ全体を画面の高さに収める（スクロールしない）
+
+     フィールドの高さを「画面の高さ − 決まった数」で決めると、
+     HUD・自己ベストのバー・案内の折り返し・iPhone のノッチやホームバーのよけ（safe-area）などで
+     まわりの高さが変わったときに、画面からはみ出してしまう
+     そこで、ページ全体（.minigame）を画面の高さぴったりにして、入りきらないぶんはフィールドを縮める
+
+     ・.mg-fit … 遊んでいる最中だけ、外枠（MinigameLayout.vue のいちばん外の .minigame）に付く
+     ・外枠 → 全体の枠 → 中身の列 → 遊ぶカード の順に、「縮んでよい」（min-height: 0）をつないでいく
+     ・縮むのはフィールドだけ（400px を目安に、200px まで）。HUD や案内は、中身の高さのまま
+     ・画面に余裕があるときは、フィールドは 400px のまま（それより伸ばさない）で、全体を上下まん中に置く
+     ※ 全体の枠は MinigameLayout.vue の中の要素・フィールドは SecretPathField.vue の中の要素なので、:deep() で指す
+     ※ 本編の小道のフィールドには効かない（このページの中だけ）
+     ============================================================ */
+  .mg-fit {
+    height: 100vh;
+    height: 100dvh;
+  }
+
+  .mg-fit :deep(.mg-frame),
+  .mg-fit .mg-stage,
+  .mg-fit .mg-stage > .secret-path {
+    min-height: 0;
+  }
+
+  .mg-fit .mg-stage > .secret-path :deep(.secret-path-field) {
+    flex: 0 1 400px;
+    height: auto;
+    min-height: 200px;
+  }
+}
+
+/* 背の低いスマホ（iPhone SE・ブラウザのバーが出ているとき など）
+   はじまる前のカード（遊びかたの説明）が画面に収まるよう、すき間と文字を少しつめる */
+@media (max-width: 700px) and (max-height: 700px) {
+  .mg-stage {
+    gap: 10px;
+    padding: 10px 10px 12px;
+  }
+
+  .place-card {
+    padding: 14px;
+  }
+
+  .place-card__title {
+    margin-bottom: 6px;
+    font-size: 20px;
+  }
+
+  .mg-lead {
+    margin-top: 8px;
+    padding: 6px 12px;
+    font-size: 15.5px;
+    line-height: 1.5;
+  }
+
+  .mg-rules {
+    margin-top: 8px;
+    gap: 2px;
+  }
+
+  .mg-rules li {
+    font-size: 14px;
+    line-height: 1.55;
+  }
+
+  .mg-best {
+    margin-top: 10px;
+  }
+
+  .mg-play {
+    padding: 11px 20px;
   }
 }
 
@@ -1040,9 +1178,9 @@ onUnmounted(() => {
     transition-duration: 0.01ms !important;
   }
 
-  /* 「⏫ スピードアップ！」は、最後に消える動き（forwards）が一瞬で終わると見えなくなるので、動かさずに出しておく
-     （1.6秒たつと、levelUpNotice が null になって消える） */
-  .mg-levelup {
+  /* 「⏫ スピードアップ！」「🎉 じこベスト更新！」は、最後に消える動き（forwards）が一瞬で終わると見えなくなるので、動かさずに出しておく
+     （1.6秒たつと、commandNotice が null になって消える） */
+  .mg-notice {
     animation: none !important;
   }
 }
