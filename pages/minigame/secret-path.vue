@@ -1102,10 +1102,10 @@ onUnmounted(() => {
 
      ・.mg-fit … 遊んでいる最中だけ、外枠（MinigameLayout.vue のいちばん外の .minigame）に付く
      ・外枠 → 全体の枠 → 中身の列 → 遊ぶカード の順に、「縮んでよい」（min-height: 0）をつないでいく
-     ・縮むのはフィールドだけ（400px を目安に、200px まで）。HUD や案内は、中身の高さのまま
+     ・縮むのはフィールドだけ（400px を目安に、200px まで → secret-path-field.css のスマホ幅。本編の小道と同じ）
+       HUD や案内は、中身の高さのまま
      ・画面に余裕があるときは、フィールドは 400px のまま（それより伸ばさない）で、全体を上下まん中に置く
-     ※ 全体の枠は MinigameLayout.vue の中の要素・フィールドは SecretPathField.vue の中の要素なので、:deep() で指す
-     ※ 本編の小道のフィールドには効かない（このページの中だけ）
+     ※ 全体の枠は MinigameLayout.vue の中の要素なので、:deep() で指す
      ============================================================ */
   .mg-fit {
     height: 100vh;
@@ -1116,12 +1116,6 @@ onUnmounted(() => {
   .mg-fit .mg-stage,
   .mg-fit .mg-stage > .secret-path {
     min-height: 0;
-  }
-
-  .mg-fit .mg-stage > .secret-path :deep(.secret-path-field) {
-    flex: 0 1 400px;
-    height: auto;
-    min-height: 200px;
   }
 }
 
