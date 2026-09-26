@@ -4970,13 +4970,21 @@ onUnmounted(() => {
                     <span class="command-box__text">小道へ進む</span>
                   </button>
 
+                  <!-- スマホ幅では「← 場所選びにもどる」を「場所選びへ」の短い表示に入れかえて、
+                       横にならんだ「小道へ進む」と同じく、1行に収まるようにしている
+                       どちらの表示でも、読み上げ用の名前は aria-label の「場所選びにもどる」
+                       （リザルト画面の「はじめの画面へ戻る」と同じ考えかた） -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    aria-label="場所選びにもどる"
                     @click="leaveSecretPathToEntrance"
                     @mouseenter="selectedCommandIndex = 1"
                     @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">← 場所選びにもどる</span>
+                    <span class="command-box__text">
+                      <span class="command-box__leaveText--full" aria-hidden="true">← 場所選びにもどる</span>
+                      <span class="command-box__leaveText--short" aria-hidden="true">場所選びへ</span>
+                    </span>
                   </button>
                 </template>
 
