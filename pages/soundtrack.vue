@@ -2,6 +2,9 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
+/* うた入りの曲の歌詞（その曲を鳴らしているあいだ、1行ずつ出す → このファイルの「歌詞」） */
+import { sPlusSongLyrics, type LyricLine } from '~/data/sPlusSongLyrics';
+
 /* 曲の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
@@ -38,6 +41,7 @@ import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession }
    description … 曲の雰囲気をひとことで説明する文
    src         … 音声ファイルの場所（public/audio/ の中のファイル）
    volume      … 音の大きさ（0＝無音、1＝そのままの大きさ）
+   lyrics      … 歌詞（うた入りの曲だけ。歌詞の無い曲は書かない）
 */
 type SoundtrackTrack = {
   id: number;
@@ -46,6 +50,7 @@ type SoundtrackTrack = {
   src: string;
   volume: number;
   credit: string;
+  lyrics?: LyricLine[];
 };
 
 /* 曲の一覧
@@ -149,6 +154,8 @@ const sPlusBonusTrack: SoundtrackTrack = {
   // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
   volume: 0.43,
   credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
+  // うた入りなので、鳴らしているあいだ歌詞を1行ずつ出す（→ data/sPlusSongLyrics.ts）
+  lyrics: sPlusSongLyrics,
 };
 
 /* ボーナストラックを解放済みかどうか（はじめは false。onMounted で思い出して入れなおす）
@@ -311,8 +318,6 @@ const duration = ref(0);
      移動先にしてしまうと「動かすつもりが移動になる」ため（Tabで移れる）
    ※ 「🔁 リピート」のボタンも、矢印キーの移動先に入れない
      音量スライダーととなり合わせの「再生の設定」のまとまりなので、Tabで移る
-   ※ 「再生中の曲を見る」（.st-playall__see）も、矢印キーの移動先に入れない
-     曲の一覧の現在曲までスクロールするだけの補助操作なので、Tab / Enter / Space で使う
    ※ Escape は「ⓘ 制作情報」の吹き出しを閉じるだけ（→ handleTrackListKeydown）
      はじめの画面へ戻るのには使わない（理由はテンプレートの st-toolbar のコメント）
    ============================================================ */
@@ -883,10 +888,8 @@ const stopButtonLabel = computed(() => {
    そこで「いま何が鳴っているか」を、いつも見えている固定エリアにも出す
    （→ テンプレートの st-playall__status。全曲再生中だけでなく、個別再生でも出す）
 
-   ※ ここは「表示するだけ」で、曲の一覧は自動でスクロールさせない
-     曲が変わるたびに勝手にスクロールすると、
-     ユーザーが見ている曲（06や07）の位置を奪ってしまうため
-     一覧を動かすのは「再生中の曲を見る」を押したときだけ（→ scrollToPlayingTrack）
+   ※ 曲の一覧は、曲が切りかわって鳴りはじめたときに1回だけ、その曲まで自動でスクロールする
+     （→ scrollToPlayingTrack。その曲を聴いているあいだは、見ている場所を動かさない）
    ============================================================ */
 
 /* いま選んでいる曲そのもの（個別再生・全曲再生・シャッフル、どれでも使える）
@@ -931,9 +934,205 @@ const playingStatusLabel = computed(() => {
   return '♪ 再生中';
 });
 
-/* 「再生中の曲を見る」ボタンの文字（一時停止中は「この曲を見る」）
-   押しても再生状態は変えず、その曲カードまで一覧をスクロールするだけ（→ scrollToPlayingTrack） */
-const scrollToTrackLabel = computed(() => (isPlaying.value ? '再生中の曲を見る' : 'この曲を見る'));
+/* ============================================================
+   歌詞（うた入りの曲だけ）
+
+   歌詞のある曲（lyrics を持つ曲）を選んでいるあいだ、現在曲の表示のすぐ下に、
+   いま歌っている1行を出す（→ テンプレートの st-lyrics）
+   ・どの行を出すかは、曲の何秒目かで決める（歌詞の time → data/sPlusSongLyrics.ts）
+   ・最初の行より前（歌が始まる前）は「♪」
+   ・一時停止中は、止めたところの行のまま。再生バーで場所を変えたら、その場所の行になる
+   ・歌詞の無い曲・曲を選んでいないときは、歌詞の行ごと出さない
+   ※ 車の画面・ロック画面には出さない（あちらは曲名のまま → このファイルの「車のステアリング・ロック画面・イヤホンの操作」）
+   ============================================================ */
+
+/* いまの曲の歌詞（歌詞の無い曲・曲を選んでいないときは null） */
+const playingLyrics = computed(() => playingTrack.value?.lyrics ?? null);
+
+/* いま出している行の番号（-1 … 最初の行より前。「♪」を出す）
+   行が変わったときだけ入れなおす（1秒に何十回も同じ値を入れて、画面を作りなおさないため） */
+const lyricIndex = ref(-1);
+
+/* 出す歌詞の1行（歌詞の無い曲のときは null） */
+const currentLyricText = computed(() => {
+  const lyrics = playingLyrics.value;
+
+  if (!lyrics) {
+    return null;
+  }
+
+  return lyrics[lyricIndex.value]?.text ?? '♪';
+});
+
+/* seconds 秒目に出す行の番号（最初の行より前なら -1）
+   歌詞は time の小さい順に並んでいるので、上から見ていって、time が seconds をこえたところで止める */
+function findLyricIndex(lyrics: LyricLine[], seconds: number) {
+  let found = -1;
+
+  for (let i = 0; i < lyrics.length; i += 1) {
+    if (lyrics[i].time > seconds) {
+      break;
+    }
+
+    found = i;
+  }
+
+  return found;
+}
+
+/* いまの曲の、いまの秒数に合わせて、出す行を決めなおす */
+function updateLyricIndex() {
+  const lyrics = playingLyrics.value;
+  const index = lyrics && soundtrackAudio ? findLyricIndex(lyrics, soundtrackAudio.currentTime) : -1;
+
+  if (index !== lyricIndex.value) {
+    lyricIndex.value = index;
+  }
+}
+
+/* 歌詞のある曲が鳴っているあいだは、画面を描くたび（requestAnimationFrame）に行を見なおす
+
+   曲が何秒目かの知らせ（timeupdate）は1秒に4回くらいなので、それだけだと行の切りかわりが最大0.25秒おくれる
+   歌い出しにぴったり合わせたいので、鳴っているあいだだけ細かく見る
+   （画面が見えていないあいだは requestAnimationFrame が止まるが、見えたらすぐ追いつく） */
+let lyricFrameId: number | null = null;
+
+function stopLyricFrame() {
+  if (lyricFrameId !== null) {
+    cancelAnimationFrame(lyricFrameId);
+    lyricFrameId = null;
+  }
+}
+
+function runLyricFrame() {
+  lyricFrameId = null;
+  updateLyricIndex();
+
+  if (isPlaying.value && playingLyrics.value) {
+    lyricFrameId = requestAnimationFrame(runLyricFrame);
+  }
+}
+
+// 曲が変わった・鳴りはじめた・止まったら、行を見なおして、細かく見るかどうかを切りかえる
+watch([isPlaying, playingLyrics], ([playing, lyrics]) => {
+  stopLyricFrame();
+  updateLyricIndex();
+
+  if (import.meta.client && playing && lyrics) {
+    lyricFrameId = requestAnimationFrame(runLyricFrame);
+  }
+});
+
+/* ============================================================
+   歌詞をぜんぶ見る（YouTube Music の「歌詞」のような画面）
+
+   上の歌詞の1行の「歌詞をぜんぶ見る」を押すと、下の広い場所（ふだんは曲の一覧）が、歌詞の画面に切りかわる
+   ・歌詞を1行ずつ、ぜんぶならべる
+     いまの行は濃い色で少し大きく、歌いおわった行はうすく出す
+   ・曲に合わせて、いまの行が画面の少し上寄り（上から35%）に来るよう、なめらかにスクロールする
+   ・手でスクロールしたあと4秒間は、自動ではスクロールしない（読んでいるところを動かさないため）
+   ・行を押すと、その行の歌い出しへとぶ
+   ・「曲の一覧にもどる」で、曲の一覧に戻る
+     曲の一覧は かくしているだけなので、戻ったときは前に見ていた場所のまま
+   ・歌詞の無い曲に変わった・停止したときは、自動で曲の一覧に戻る
+   ============================================================ */
+
+/* 歌詞の画面を出しているか（false … 曲の一覧を出している） */
+const isLyricsView = ref(false);
+
+/* 歌詞の画面のスクロールする箱（自動スクロールに使う） */
+const lyricsScrollRef = ref<HTMLElement | null>(null);
+
+/* 手でスクロールしたあと、自動スクロールを止めておく長さ（ミリ秒）と、いつまで止めるか */
+const lyricsManualScrollPause = 4000;
+let lyricsAutoScrollPausedUntil = 0;
+
+function openLyricsView() {
+  isLyricsView.value = true;
+
+  // 開いたときは、いまの行へ すぐ合わせる（なめらかに動かさない）
+  lyricsAutoScrollPausedUntil = 0;
+  nextTick(() => scrollLyricsToCurrent(false));
+}
+
+function closeLyricsView() {
+  isLyricsView.value = false;
+
+  // 曲の一覧に戻ったら、いまの曲のカードまで1回だけスクロールする（一覧が画面に出てから）
+  nextTick(scrollToPlayingTrack);
+}
+
+/* 切りかえのアイコンボタン（→ テンプレートの st-lyricsToggle）
+   押すたびに、歌詞の画面 ⇄ 曲の一覧 を切りかえる。名前は、押したときの行き先 */
+const lyricsToggleLabel = computed(() => (isLyricsView.value ? '曲の一覧にもどる' : '歌詞をぜんぶ見る'));
+
+function toggleLyricsView() {
+  if (isLyricsView.value) {
+    closeLyricsView();
+  } else {
+    openLyricsView();
+  }
+}
+
+/* いまの行が、歌詞の画面の上から35%の所に来るようにスクロールする
+   smooth … なめらかに動かすか（動きを減らす設定のときは、いつもすぐ動かす） */
+function scrollLyricsToCurrent(smooth: boolean) {
+  const box = lyricsScrollRef.value;
+
+  if (!box || Date.now() < lyricsAutoScrollPausedUntil) {
+    return;
+  }
+
+  /* 最初の行より前（-1）は、いちばん上へ
+     行の位置は、スクロールする箱の中での位置（いまのスクロール量 ＋ 箱の上のはしからの距離）で測る */
+  const line = lyricIndex.value >= 0 ? box.querySelector<HTMLElement>(`[data-lyric-index="${lyricIndex.value}"]`) : null;
+  const lineRect = line?.getBoundingClientRect();
+  const lineCenter = lineRect ? box.scrollTop + lineRect.top - box.getBoundingClientRect().top + lineRect.height / 2 : 0;
+  const top = line ? lineCenter - box.clientHeight * 0.35 : 0;
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  box.scrollTo({ top: Math.max(0, top), behavior: smooth && !prefersReducedMotion ? 'smooth' : 'auto' });
+}
+
+/* 手でスクロールしたとき（ホイール・指・スクロールバー・キー）は、しばらく自動スクロールを止める
+   ※ 自動スクロールでも scroll の知らせは来るので、scroll ではなく「手で動かした」知らせだけを見る */
+function pauseLyricsAutoScroll() {
+  lyricsAutoScrollPausedUntil = Date.now() + lyricsManualScrollPause;
+}
+
+/* 行を押したとき：その行の歌い出しへとぶ（一時停止中なら、とぶだけで鳴らしはじめない） */
+function seekToLyric(index: number) {
+  const line = playingLyrics.value?.[index];
+
+  if (!line || !soundtrackAudio) {
+    return;
+  }
+
+  try {
+    soundtrackAudio.currentTime = line.time;
+  } catch {
+    return;
+  }
+
+  currentTime.value = line.time;
+  lyricsAutoScrollPausedUntil = 0;
+  updateLyricIndex();
+}
+
+// 行が変わったら、歌詞の画面を出しているときだけ、いまの行へスクロールする
+watch(lyricIndex, () => {
+  if (isLyricsView.value) {
+    nextTick(() => scrollLyricsToCurrent(true));
+  }
+});
+
+// 歌詞の無い曲に変わった・停止したら、曲の一覧に戻す
+watch(playingLyrics, (lyrics) => {
+  if (!lyrics) {
+    closeLyricsView();
+  }
+});
+
 
 /* 制作情報（ⓘ）の吹き出しについての、2つの覚えごと
 
@@ -965,6 +1164,9 @@ function handleTimeUpdate() {
   }
 
   currentTime.value = soundtrackAudio.currentTime;
+
+  // 一時停止中に再生バーを動かしたときも、歌詞の行を合わせる（→ updateLyricIndex）
+  updateLyricIndex();
 }
 
 /* 曲の長さが分かったときに呼ばれる
@@ -1804,8 +2006,7 @@ function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrac
      このボタンがあるからといって、自動で次の曲へは進めない
 
    ※ 固定エリアの現在曲の表示は、playingTrackId が変わるので、自動で新しい曲になる（→ playingTrack）
-   ※ 曲の一覧は、自動でスクロールしない（見ている場所を勝手に動かさないため）
-     新しい曲を一覧で見たいときは「再生中の曲を見る」を押す
+   ※ 曲の一覧は、移った曲が鳴りはじめたときに1回だけ、その曲まで自動でスクロールする（→ scrollToPlayingTrack）
    ※ フォーカスも動かさない
      曲を選んでいるあいだ、操作行は出たままなので、押したボタンにそのまま残る
    ============================================================ */
@@ -2074,15 +2275,14 @@ function formatTrackNumber(id: number) {
   return String(id).padStart(2, '0');
 }
 
-/* 「再生中の曲を見る」を押したときだけ、その曲カードまで曲の一覧をスクロールする
+/* いま鳴っている曲のカードまで、曲の一覧をスクロールする
 
-   ■ なぜ「押したときだけ」なのか（自動スクロールをしない理由）
-     再生中の曲は、曲の一覧を下へスクロールしていると、見えない位置に隠れることがある
-     かといって、曲が変わるたびに自動でスクロールしてしまうと、
-     ユーザーが06や07の曲情報を読んでいる最中に、一覧が勝手に02へ戻ってしまい、
-     「自分が見ていた場所」を奪ってしまう
-     そこで、再生と「一覧を見る操作」を分け、このボタンを押したときだけ移動する
-     （playingTrackId を watch して scrollIntoView する処理は、わざと入れていない）
+   ■ いつ動かすか（→ すぐ下の watch と closeLyricsView）
+     ・曲が切りかわって鳴りはじめたとき（▶ 再生・全曲再生・シャッフル・前／次・曲が終わって次へ、のどれでも）
+     ・歌詞の画面から、曲の一覧に戻ったとき
+     どれも「その最初に1回だけ」動かす。その曲を聴いているあいだ・一時停止や再開では動かさない
+     （聴いているあいだに一覧を読んでいる人の、見ている場所を奪わないため）
+     ※ 前は、現在曲の表示のとなりの「再生中の曲を見る」を押したときだけ動かしていた
 
    ■ なぜ block: 'nearest' なのか
      'center' にすると、すでにほぼ見えている曲でも、中央まで大きく動いてしまう
@@ -2095,12 +2295,13 @@ function formatTrackNumber(id: number) {
      ページ全体（固定エリアまで）が不自然に動くことはない
 
    ※ playingTrackId が無い（どの曲も選んでいない）ときは、何もしない
+   ※ 歌詞の画面を出しているあいだは、曲の一覧がかくれているので何もしない（一覧に戻ったときに動かす）
    ※ スクロールするだけで、曲一覧の別ボタンへフォーカスは移さない
-     （スクロールのつもりで押したのに、急にキーボードの操作位置が飛ぶと分かりにくいため）
+     （急にキーボードの操作位置が飛ぶと分かりにくいため）
 */
 function scrollToPlayingTrack() {
-  // どの曲も選んでいなければ、見せる相手がいないので何もしない
-  if (playingTrackId.value === null) {
+  // どの曲も選んでいない・歌詞の画面を出しているときは、何もしない
+  if (playingTrackId.value === null || isLyricsView.value) {
     return;
   }
 
@@ -2126,6 +2327,14 @@ function scrollToPlayingTrack() {
     block: 'nearest',
   });
 }
+
+// 曲が切りかわって鳴りはじめたら、その最初に1回だけ、その曲のカードまでスクロールする
+// （一時停止・再開では playingTrackId は変わらないので、動かない）
+watch(playingTrackId, (trackId, previousTrackId) => {
+  if (trackId !== null && trackId !== previousTrackId) {
+    nextTick(scrollToPlayingTrack);
+  }
+});
 
 /* ============================================================
    曲の一覧のキーボード操作（ゲームのメニューのように動かす）
@@ -2810,6 +3019,9 @@ onUnmounted(() => {
   stopMediaSession?.();
   stopMediaSession = null;
 
+  // 歌詞の行を見なおすのもやめる
+  stopLyricFrame();
+
   stopSoundtrack();
 
   if (soundtrackAudio) {
@@ -2824,7 +3036,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <main class="soundtrack">
+  <!-- soundtrack--playing … 曲を選んでいるあいだ（再生中・一時停止中。⏮ 前へ／⏭ 次へ／■ 停止 が出ているあいだ）だけ付ける
+       ページの見出しを画面からかくして、曲の一覧・歌詞の画面を広くする（→ style の .soundtrack--playing）
+       soundtrack--lyricsView … 歌詞の画面を出しているあいだだけ付ける
+       曲の一覧のための案内をかくす（→ style の .soundtrack--lyricsView） -->
+  <main class="soundtrack" :class="{ 'soundtrack--playing': hasPlaybackControls, 'soundtrack--lyricsView': isLyricsView }">
     <!-- ============================================================
          画面に残る操作エリア（st-fixedArea）
 
@@ -3012,7 +3228,8 @@ onUnmounted(() => {
                ・目印   … playingStatusLabel（♪ 再生中／⏸ 一時停止中／♪ 全曲再生中／🔀 シャッフル再生中）
                ・N / 曲数 … 全曲再生中だけ出す（個別再生では出さない）
                ・曲名   … playingTrack（同じ曲名を上下に2回出さないよう、ここ1か所だけ）
-               ・見るボタン … 押したときだけ、その曲カードまで一覧をスクロールする（→ scrollToPlayingTrack）
+               ・歌詞 ⇄ 一覧 の切りかえ … うた入りの曲のときだけ（→ toggleLyricsView）
+               ※ 曲の一覧は、曲が鳴りはじめたときに1回だけ、その曲まで自動でスクロールする（→ scrollToPlayingTrack）
 
              aria-live … 曲が変わったこと・一時停止したことを、読み上げソフトにもその場で知らせる -->
         <p v-if="playingTrack" class="st-playall__status" aria-live="polite">
@@ -3027,12 +3244,41 @@ onUnmounted(() => {
 
           <span class="st-playall__track">{{ formatTrackNumber(playingTrack.id) }} {{ playingTrack.title }}</span>
 
-          <!-- 「再生中の曲を見る」… 押したときだけ、その曲カードまで曲の一覧をスクロールする
-               ・自動スクロールはしない（見ている場所を勝手に動かさないため）
-               ・block: 'nearest' なので、すでに見えている曲は大きく動かない
-               ・押しても再生状態は変えず、曲一覧の別ボタンへフォーカスも移さない
-               くわしくは scrollToPlayingTrack のコメント -->
-          <button type="button" class="st-playall__see" @click="scrollToPlayingTrack">{{ scrollToTrackLabel }}</button>
+          <!-- 歌詞の画面 ⇄ 曲の一覧 の切りかえ（うた入りの曲を選んでいるあいだだけ → toggleLyricsView）
+               行き先のアイコンに、2文字の名前を添えた小さなボタン（目印と同じ行に収まるので、操作エリアの行は増えない）
+               ・曲の一覧のとき … 文字の入った吹き出し ＋「歌詞」（歌詞をぜんぶ見る）
+               ・歌詞の画面のとき … リスト ＋「一覧」（曲の一覧にもどる）
+               ※ 前はマイクのアイコンだけだったが、「録音」に見えて分かりにくかったので、吹き出しと名前にした
+               読み上げ用の名前（aria-label）と、カーソルを当てたときの説明（title）は、長い名前で伝える -->
+          <button
+            v-if="playingLyrics"
+            type="button"
+            class="st-lyricsToggle"
+            :aria-label="lyricsToggleLabel"
+            :title="lyricsToggleLabel"
+            :aria-pressed="isLyricsView"
+            @click="toggleLyricsView">
+            <svg v-if="!isLyricsView" class="st-lyricsToggle__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6.5 3.5h11a2.5 2.5 0 0 1 2.5 2.5v7.5a2.5 2.5 0 0 1-2.5 2.5H11l-4.5 4v-4a2.5 2.5 0 0 1-2.5-2.5V6a2.5 2.5 0 0 1 2.5-2.5z" />
+              <path d="M8 8h8M8 11.5h5" />
+            </svg>
+            <svg v-else class="st-lyricsToggle__icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 6h11M9 12h11M9 18h11" />
+              <circle cx="4.5" cy="6" r="1.2" />
+              <circle cx="4.5" cy="12" r="1.2" />
+              <circle cx="4.5" cy="18" r="1.2" />
+            </svg>
+            <span class="st-lyricsToggle__label" aria-hidden="true">{{ isLyricsView ? '一覧' : '歌詞' }}</span>
+          </button>
+        </p>
+
+        <!-- 歌詞（うた入りの曲を選んでいるあいだだけ → currentLyricText）
+             いま歌っている1行を出して、曲に合わせて切りかえる。歌が始まる前・間奏は「♪」
+             key … 行が変わるたびに、ふわっと出なおす
+             読み上げソフトには、行が変わるたびには知らせない（数秒ごとに読み上げが割りこむと、ほかの操作のじゃまになるため） -->
+        <!-- 歌詞の画面を出しているあいだは、下に同じ歌詞が出ているので、この行ごと出さない（操作エリアを1行低くする） -->
+        <p v-if="currentLyricText !== null && !isLyricsView" class="st-lyrics">
+          <span :key="lyricIndex" class="st-lyrics__line">{{ currentLyricText }}</span>
         </p>
 
         <!-- ============================================================
@@ -3053,9 +3299,7 @@ onUnmounted(() => {
                ・■ 停止 … どの聴きかたでも stopSoundtrack（完全に止めて、表示も消す）
                    文字だけ「■ 停止」「■ 全曲再生を停止」「■ シャッフル再生を停止」と変わる（→ stopButtonLabel）
 
-             ■ 「再生中の曲を見る」とのちがい
-               ・前／次           … 鳴らす曲そのものを変える（曲の一覧はスクロールしない）
-               ・再生中の曲を見る … 曲の一覧の表示位置だけを動かす（鳴らす曲は変えない）
+             ■ 前／次 で移った曲も、鳴りはじめたときに1回だけ、曲の一覧がその曲までスクロールする（→ scrollToPlayingTrack）
 
              ■ キーボード
                3つとも ふつうの button なので、Tab / Shift+Tab で移動し、Enter / Space で押せる（click で動く）
@@ -3145,7 +3389,44 @@ onUnmounted(() => {
          ※ 曲が自動で次へ進んでも、一覧を勝手にスクロールはしない
            （いま見ている場所を、こちらから動かさない）
          ============================================================ -->
-    <div class="st-trackScroll">
+    <!-- ============================================================
+         歌詞の画面（「歌詞をぜんぶ見る」を押したときだけ。曲の一覧のかわりに出す）
+
+         ・いまの行 … st-lyricsView__line--current（濃い色で少し大きく）
+         ・歌いおわった行 … st-lyricsView__line--past（うすく）
+         ・行を押すと、その行の歌い出しへとぶ（→ seekToLyric）
+         ・曲に合わせて自動でスクロールする。手でスクロールしたら、しばらく止める（→ pauseLyricsAutoScroll）
+         ・aria-current … いま歌っている行を、読み上げソフトにも伝える
+         ============================================================ -->
+    <div
+      v-if="isLyricsView && playingLyrics"
+      ref="lyricsScrollRef"
+      class="st-lyricsView"
+      @wheel.passive="pauseLyricsAutoScroll"
+      @touchmove.passive="pauseLyricsAutoScroll"
+      @pointerdown="pauseLyricsAutoScroll"
+      @keydown="pauseLyricsAutoScroll">
+      <ol class="st-lyricsView__list" :aria-label="`${playingTrack?.title ?? ''} の歌詞`">
+        <li v-for="(line, index) in playingLyrics" :key="index" :data-lyric-index="index">
+          <button
+            type="button"
+            class="st-lyricsView__line"
+            :class="{
+              'st-lyricsView__line--current': index === lyricIndex,
+              'st-lyricsView__line--past': index < lyricIndex,
+              'st-lyricsView__line--music': line.text === '♪',
+            }"
+            :aria-current="index === lyricIndex ? 'true' : undefined"
+            :aria-label="`${line.text === '♪' ? '間奏' : line.text}（ここから聴く）`"
+            @click="seekToLyric(index)">
+            {{ line.text }}
+          </button>
+        </li>
+      </ol>
+    </div>
+
+    <!-- 曲の一覧は、歌詞の画面を出しているあいだ かくすだけ（v-show。戻ったとき、前に見ていた場所のまま） -->
+    <div v-show="!isLyricsView" class="st-trackScroll">
       <!-- ============================================================
            曲の一覧
 
@@ -3897,19 +4178,33 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-/* 「再生中の曲を見る」ボタン（現在曲の表示のとなりに置く補助ボタン）
+/* 歌詞の1行（うた入りの曲を選んでいるあいだ、曲の一覧を出しているときだけ）
 
-   これは「いま鳴っている曲まで、曲の一覧をスクロールするだけ」の補助操作
-   メインの「▶ 全曲再生」（金色）ほど目立たせず、
-   白系の背景＋紺色の枠の、軽い見た目にして、
-   「現在曲を確認するための補助」という優先度にしている
-   （上部ツールバーの「← はじめの画面へ戻る」と同じ考えかたの、丸みのある小さなボタン）
+   現在曲の表示のすぐ下に、1行だけ、曲名より少し大きく出す
+   背景は、歌詞の画面の行にカーソルを当てたときと同じ、うすい水色
+   行が変わるたびに、下から ふわっと出なおす（key が変わるため） */
+.st-lyrics {
+  margin: 8px 0 0;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: #e8f4fb;
+  color: var(--navy-deep);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+}
 
-   ※ 文字は「再生中の曲を見る」「この曲を見る」と短く決まっているので、
-     white-space: nowrap で1行のままにしてよい
-     （長くなって折り返す心配があるのは曲名のほうで、そちらは nowrap を付けていない） */
-.st-playall__see {
-  padding: 4px 12px;
+/* 歌詞の画面 ⇄ 曲の一覧 の切りかえ（アイコン ＋ 2文字の名前の、小さな丸いボタン）
+   メインの「▶ 全曲再生」（金色）ほど目立たせない、白系の背景＋紺色の枠の軽い見た目
+   歌詞の画面を出しているあいだ（aria-pressed）は、紺色でぬって「いま歌詞を出している」ことが分かるようにする */
+.st-lyricsToggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  padding: 3px 12px 3px 9px;
   border: 2px solid var(--navy);
   border-radius: 999px;
   background: rgb(255 255 255 / 80%);
@@ -3920,22 +4215,164 @@ onUnmounted(() => {
   line-height: 1.4;
   white-space: nowrap;
   cursor: pointer;
+  align-self: center;
   transition:
     background-color 0.15s ease,
     transform 0.1s ease;
 }
 
-.st-playall__see:hover {
+.st-lyricsToggle:hover {
   background: #e8f4fb;
 }
 
-.st-playall__see:active {
+.st-lyricsToggle:active {
   transform: translateY(1px);
 }
 
-.st-playall__see:focus-visible {
+.st-lyricsToggle:focus-visible {
   outline: 3px solid var(--navy);
   outline-offset: 2px;
+}
+
+.st-lyricsToggle[aria-pressed='true'] {
+  background: var(--navy);
+  color: #fff;
+}
+
+.st-lyricsToggle__icon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.st-lyricsToggle__icon circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+/* ============================================================
+   歌詞の画面（「歌詞をぜんぶ見る」を押したとき、曲の一覧のかわりに出す）
+
+   曲の一覧（.st-trackScroll）と同じく、操作エリアの下の のこりの高さをぜんぶ使い、この中だけがスクロールする
+   ・行は大きめの文字で、まんなかぞろえ
+   ・いまの行 … 紺色で少し大きく
+   ・歌いおわった行 … うすく（これから歌う行は、ふつうの色）
+   ・下に大きめの余白 … 最後のほうの行も、画面の上寄りまでスクロールして来られるように
+   ============================================================ */
+/* 曲を選んでいるあいだ（再生中・一時停止中）は、ページの見出し（ORIGINAL SOUNDTRACK／こうちゃんの大冒険）を画面からかくす
+   操作エリアが低くなったぶん、曲の一覧・歌詞の画面が広くなる
+   ・一時停止のたびに出たり消えたりしないよう、「⏮ 前へ／⏭ 次へ／■ 停止」が出ているあいだと同じ条件にしている（→ hasPlaybackControls）
+   ・見た目だけかくす（読み上げソフトには、これまでどおりページの見出しとして伝える） */
+.soundtrack--playing .st-head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  border: 0;
+  white-space: nowrap;
+}
+
+/* 歌詞の画面を出しているあいだは、曲の一覧のための案内（下の一覧で番号を押すと…）もかくす
+   （曲の一覧を出していないので、案内は要らない。歌詞の画面が そのぶん広くなる） */
+.soundtrack--lyricsView .st-playall__hint {
+  display: none;
+}
+
+.st-lyricsView {
+  flex: 1;
+  box-sizing: border-box; /* 高さ（背の低い画面の max-height）に、上下の余白もふくめる */
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 16px 24px 40vh;
+  border-top: 1px solid rgb(42 118 143 / 16%);
+}
+
+.st-lyricsView__list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+/* これから歌う行は、灰色でひかえめに（いまの行だけが、くっきり目立つように） */
+.st-lyricsView__line {
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: var(--ink-soft);
+  font-family: inherit;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.5;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    color 0.25s ease,
+    opacity 0.25s ease,
+    transform 0.25s ease,
+    background-color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.st-lyricsView__line:hover {
+  background: #e8f4fb;
+}
+
+.st-lyricsView__line:focus-visible {
+  outline: 3px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* 歌いおわった行は、さらにうすく */
+.st-lyricsView__line--past {
+  opacity: 0.45;
+}
+
+/* いま歌っている行
+   やわらかい水色（パステル）の帯に、濃い紺色の文字で出して、ひと目で分かるようにする
+   （このページの青い色あいにそろえつつ、まわりの灰色の行とは、帯と文字の濃さで見分けられるようにする）
+   ※ 前は紺色の文字だけで、これから歌う行とほとんど同じ濃さだったので、見分けにくかった
+   下のふちだけ少し濃い水色にして、ボタンと同じく少し浮いて見せる。カーソルを当てても同じ水色のまま */
+.st-lyricsView__line--current,
+.st-lyricsView__line--current:hover {
+  background: #c9e8f7;
+  box-shadow: inset 0 -3px 0 #9fd2ec;
+  color: #1b5a70;
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.st-lyrics__line {
+  display: inline-block;
+  animation: st-lyrics-in 0.3s ease-out;
+}
+
+@keyframes st-lyrics-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* 再生中の操作行（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 停止）
@@ -4468,6 +4905,11 @@ onUnmounted(() => {
   *::after {
     transition-duration: 0.01ms !important;
   }
+
+  /* 歌詞の行は、動かさずに切りかえる */
+  .st-lyrics__line {
+    animation: none;
+  }
 }
 
 /* ============================================================
@@ -4495,6 +4937,16 @@ onUnmounted(() => {
 
   .st-trackScroll {
     padding: 8px 16px 24px;
+  }
+
+  /* 歌詞の画面も、曲の一覧と同じ左右の余白にして、文字を少し小さくする */
+  .st-lyricsView {
+    padding: 12px 16px 40vh;
+  }
+
+  .st-lyricsView__line {
+    padding: 5px 10px;
+    font-size: 20px;
   }
 
   /* 上部ツールバー（スマホ）
@@ -4642,7 +5094,7 @@ onUnmounted(() => {
 
   /* いま鳴っている曲の案内も、上のすき間を少しつめて、2行にまとめる
 
-       1行目 … ♪ 全曲再生中　［再生中の曲を見る］
+       1行目 … ♪ 全曲再生中　［歌詞］（［歌詞］は、うた入りの曲のときだけ）
        2行目 … 6 / 7　06 きょうの大冒険、おしまい！
 
      前は「目印と N / 曲数」「曲名」「再生中の曲を見る」がそれぞれ1行ずつの3行（約98px）で、
@@ -4653,8 +5105,9 @@ onUnmounted(() => {
 
      ・::after … 高さ0の「改行」の役わり
                  flex-basis: 100% で1行まるごと使うので、この前と後ろで、かならず行が分かれる
-     ・order     … HTMLでは「目印・N/曲数・曲名・見るボタン」の順だが、
-                   目印と見るボタン（0）→ 改行（1）→ N/曲数と曲名（2）の順にならべかえる
+     ・order     … HTMLでは「目印・N/曲数・曲名・歌詞ボタン」の順だが、
+                   目印と歌詞ボタン（0）→ 改行（1）→ N/曲数と曲名（2）の順にならべかえる
+       （前は「再生中の曲を見る」も1行目にあったが、曲が鳴りはじめたときの自動スクロールにかえて、なくした）
      ・align-items: center … 1行目の目印とボタンの上下をそろえる */
   .st-playall__status {
     align-items: center;
@@ -4680,17 +5133,11 @@ onUnmounted(() => {
     text-align: center;
   }
 
-  /* 1行目の目印とボタンを、ひと回り小さくする
-     いちばん長い「🔀 シャッフル再生中」と「再生中の曲を見る」が、
-     幅 360px の画面でも1行にならぶようにするため（入りきらないと、また3行になってしまう） */
+  /* 1行目の目印を、ひと回り小さくする
+     いちばん長い「🔀 シャッフル再生中」と［歌詞］が、幅のせまい画面でも1行にならぶようにするため */
   .st-playall__badge {
     padding: 2px 10px;
     font-size: 13px;
-  }
-
-  .st-playall__see {
-    padding: 3px 10px;
-    font-size: 12px;
   }
 
   /* 再生の設定（🔁 リピート）
@@ -4848,7 +5295,8 @@ onUnmounted(() => {
     touch-action: pan-x pinch-zoom;
   }
 
-  .st-trackScroll {
+  .st-trackScroll,
+  .st-lyricsView {
     overscroll-behavior-y: contain;
   }
 }
@@ -4887,6 +5335,15 @@ onUnmounted(() => {
     flex: none;
     overflow-y: visible;
     scrollbar-gutter: auto;
+  }
+
+  /* 歌詞の画面は、ページ全体がスクロールするこの作りでも、自分の中でスクロールして いまの行を追いかけたいので、
+     高さを画面の6割までにしておく */
+  .st-lyricsView {
+    flex: none;
+    max-height: 60vh;
+    max-height: 60dvh;
+    padding-bottom: 30vh;
   }
 }
 </style>
