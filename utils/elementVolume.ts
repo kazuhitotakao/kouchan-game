@@ -28,8 +28,23 @@
        「効くブラウザ」とまちがえて、音量バーが効かないままだった
        そのため、この調べかたは、iPhone・iPad 以外で念のため使うだけにしてある
 
-   ※ iPhone で音量つまみに通した音は、画面を消す・ほかのアプリへ切りかえると止まることがある
-     （Web Audio は、画面が見えていないあいだ休むため）
+   ■ 画面を消した・ほかのアプリへ切りかえたあとも鳴らしつづける（バックグラウンド再生。サウンドトラックだけ）
+
+     iPhone は、ふだんは画面が見えなくなると Web Audio を止めてしまう
+     音量つまみに通した mp3 の音も、Web Audio の中を通っているので、いっしょに止まってしまう
+     （音量つまみを通す前は、ふつうの mp3 の音（HTMLAudioElement）だったので、画面を消しても鳴りつづけていた）
+
+     サウンドトラック（pages/soundtrack.vue）は曲を聴くためのページなので、
+     「このページは音楽を再生するもの」と iPhone に伝えて、画面を消しても鳴らしつづける
+       navigator.audioSession.type = 'playback'
+     こうすると、画面が見えなくなっても Web Audio を止めずに、鳴らしつづけてくれる
+     （→ keepAudioContextAwake() の backgroundPlayback。ページを離れるときに 'auto' へ戻す）
+     ・ゲーム本編・ミニゲームでは伝えない（画面を消したら、今までどおり音も止まる）
+     ・navigator.audioSession があるのは iOS 16.4 から。鳴りつづけるのは iOS 17.5 から
+       （それより前の iOS では、今までどおり止まる）
+     ・'playback' にすると、ほかのアプリの音楽は止まる・マナーモードでも鳴る
+       音量つまみを通す前の mp3 の音（HTMLAudioElement）も同じあつかいだったので、前と同じ
+     ・音量つまみを使わないブラウザ（パソコン・Android など）では、何もしない
    ============================================================ */
 
 /* iPhone・iPad（iPod touch もふくむ）かどうか
@@ -67,6 +82,26 @@ function canSetElementVolume() {
   }
 
   return canSetVolumeCache;
+}
+
+/* navigator.audioSession の種類を type にする（バックグラウンド再生のため。くわしくは、このファイルの先頭）
+
+   ・'playback' … 「このページは音楽を再生するもの」と伝える（画面を消しても鳴りつづける）
+   ・'auto'     … ブラウザにまかせる（はじめの値。画面を消すと止まる）
+   navigator.audioSession が無いブラウザ（iOS 16.3 までなど）では、何もしない
+   すでに その種類のときも、何もしない（何度呼んでもよい） */
+function setAudioSessionType(type: 'playback' | 'auto') {
+  const audioSession = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+
+  if (!audioSession || audioSession.type === type) {
+    return;
+  }
+
+  try {
+    audioSession.type = type;
+  } catch {
+    // 変えられなくても、音は今までどおり鳴る（画面を消すと止まるだけ）
+  }
 }
 
 /* 音量つまみに通したAudioと、そのつまみの組
@@ -128,8 +163,11 @@ export function setElementVolume(audio: HTMLAudioElement, volume: number, getCon
    （audio.volume が効くブラウザでは、つまみを使わないので何もしない）
 
    getContext … 作業台を返す関数（setElementVolume() に渡すものと同じ）
+   backgroundPlayback … true なら、画面を消しても鳴りつづけるようにする（サウンドトラックだけ。くわしくは、このファイルの先頭）
+                        さわった瞬間ごとに navigator.audioSession を 'playback' にして、受付をやめるときに 'auto' へ戻す
+                        （このサイトはページを移っても同じ画面のまま中身だけ入れかわるので、戻さないと、ほかのページにも残ってしまう）
    返す関数を呼ぶと、受付をやめる（ページを離れるときの後始末用） */
-export function keepAudioContextAwake(getContext: () => AudioContext | null) {
+export function keepAudioContextAwake(getContext: () => AudioContext | null, { backgroundPlayback = false } = {}) {
   if (!import.meta.client) {
     return () => {};
   }
@@ -137,6 +175,11 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null) {
   function wakeAudioContext() {
     if (canSetElementVolume()) {
       return;
+    }
+
+    // 作業台を起こす前に「音楽を再生するページ」と伝えておく（サウンドトラックだけ）
+    if (backgroundPlayback) {
+      setAudioSessionType('playback');
     }
 
     const context = getContext();
@@ -158,6 +201,11 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null) {
   return () => {
     for (const eventName of eventNames) {
       window.removeEventListener(eventName, wakeAudioContext, { capture: true });
+    }
+
+    // ほかのページ（ゲーム本編・ミニゲーム）では、画面を消したら音も止まる、今までどおりに戻す
+    if (backgroundPlayback && !canSetElementVolume()) {
+      setAudioSessionType('auto');
     }
   };
 }

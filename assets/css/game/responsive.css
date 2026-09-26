@@ -223,10 +223,12 @@
 
      ■ ゲーム画面以外は、今までどおり
        タイトル・おやつ選択・あそびかたは、ページ全体のスクロールのまま（.game は height: auto のまま）
-       秘密の小道も、遊んでいる最中だけは、フィールドと案内を画面いっぱいに見せたいので、
-       今までどおりページ全体がスクロールする作りのまま（.game-screen--secret-path は外している）
-       ※ はじまる前／小道をぬけたあとは、ほかの場面と同じこの作りを使う
-         （.game-screen--secret-path は、遊んでいる最中だけ付く → pages/index.vue） */
+
+     ■ 秘密の小道で遊んでいる最中も、この作りを使う
+       前は、遊んでいる最中だけページ全体がスクロールする作りにしていたが、
+       上部ステータスが画面の外へ押し出されて、1画面に収まっていなかった（375×667 で117px はみ出していた）
+       いまは、遊んでいる最中は上部ステータスを1行にたたみ（→ status.css の .game-screen--secret-path）、
+       入りきらないぶんはフィールドを縮めて、1画面に収める（→ この下の「秘密の小道で遊んでいる最中」） */
   /* flex: none が大事
      .game-screen は、もともと .game（たてに積む flex）の中で flex: 1（基準の高さ 0%）になっている
      スマホ幅の .game は height: auto なので、その「0%」は中身の高さとして扱われ、
@@ -235,7 +237,7 @@
   /* 高さからは、ノッチ・ホームインジケーターをよける余白（.game の padding）のぶんを引く
      引かないと、そのぶんだけページが縦にスクロールしてしまう
      （よける場所が無い画面では env() が 0 なので、今までどおり 100dvh ぴったり） */
-  .game-screen:not(.game-screen--secret-path) {
+  .game-screen {
     flex: none;
     height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
     height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
@@ -244,7 +246,7 @@
 
   /* overscroll-behavior: contain … 中央エリアをいちばん下までスクロールしたとき、
      その勢いでページ（うしろ）までいっしょに動かないようにする */
-  .game-screen:not(.game-screen--secret-path) .stage {
+  .game-screen .stage {
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -254,7 +256,7 @@
      PCでは、結果カードが縮んで、カードの中身だけがスクロールする（result.css の .stage > .result-card）
      スマホでそれをすると、中央エリアの中にさらに小さなスクロールの窓ができ、
      本文が1〜2行しか見えなくなるので、スマホでは中央エリアのスクロール1つにまとめる */
-  .game-screen:not(.game-screen--secret-path) .stage > .result-card {
+  .game-screen .stage > .result-card {
     flex: none;
   }
 
@@ -269,7 +271,7 @@
        そちらの貼りつけは command-shared.css に書いてある
        （CommandBox.vue は外側の要素が2つある作りなので、
          このファイル（pages/index.vue の scoped）からは .command-box に届かないため） */
-  .game-screen:not(.game-screen--secret-path) .stage > .command-area {
+  .game-screen .stage > .command-area {
     position: sticky;
     bottom: 0;
     z-index: 1;
@@ -286,6 +288,33 @@
 
      .game-screen--has-result は pages/index.vue が、結果が出ているあいだだけ付ける
      ※ 秘密の小道は、中の作りがちがうので対象にしない */
+  /* ===== 秘密の小道で遊んでいる最中 =====
+
+     カード（HUD ＋ フィールド）と下の操作の案内を、中央エリアの中に収める
+     ・カードは、中身の高さまで（PCのように中央エリアいっぱいには伸ばさない）
+       入りきらないときは縮んでよい（min-height: 0）。縮むのはフィールドだけ（→ secret-path-field.css のスマホ幅）
+     ・画面に余裕があるときは、カードと案内を中央エリアの上下まん中に置く
+     ・.game-screen--secret-path は、遊んでいる最中だけ付く（→ pages/index.vue） */
+  .game-screen--secret-path .stage {
+    justify-content: center;
+    justify-content: safe center;
+  }
+
+  .game-screen--secret-path .stage > .secret-path {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+
+  /* 操作の案内は1行に収める（2行になると、そのぶんフィールドが低くなるため）
+     とても細い画面では、まとまりの切れ目で2行になる */
+  .game-screen--secret-path .secret-path-guide {
+    font-size: 14.5px;
+  }
+
+  .game-screen--secret-path .secret-path-guide__item {
+    margin: 0 4px;
+  }
+
   .game-screen--has-result .stage:not(.stage--secret-path) > .place-card .place-card__text {
     display: none;
   }

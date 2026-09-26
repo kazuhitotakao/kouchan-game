@@ -362,9 +362,9 @@
      （通常の場所の .command-area の貼りつけは responsive.css のほう）
 
      枠そのものに紺色の背景があるので、うしろの文字がすけることはない
-     ※ 秘密の小道で遊んでいる最中は、ページ全体がスクロールする作りなので対象にしない
-       （はじまる前／小道をぬけたあとの「どうする？」は、ほかの場面と同じようにここで貼りつける） */
-  .game-screen:not(.game-screen--secret-path) .stage > .command-box {
+     ※ 秘密の小道の「どうする？」と、遊んでいる最中の操作の案内も、ここで貼りつける
+       （遊んでいる最中は、ふつうは中央エリアに収まるのでスクロールしない。とても背の低い画面での保険） */
+  .game-screen .stage > .command-box {
     position: sticky;
     bottom: 0;
     z-index: 1;
