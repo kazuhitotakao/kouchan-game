@@ -232,11 +232,14 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      はなしたとき・キャンセルされたとき・リセットや終了のときに、releaseSecretPathPointer() でまとめて戻す */
   let secretPathPointerId: number | null = null; // 押しているポインターの番号（押していないときは null）
   let secretPathPointerField: HTMLElement | null = null; // pointer capture をしているフィールド
-  let secretPathPointerDownLane: SecretPathLane | null = null; // 押しはじめたレーン（短いタップのときに使う）
-  let secretPathPointerLastX = 0; // 横の移動を数えはじめた位置（1レーン動くたびに、そこから数えなおす）
-  let secretPathPointerDragged = false; // 押しているあいだに、横へ動かして1レーン動いたか（タップとして動かさない）
+  let secretPathPointerDownLane: SecretPathLane | null = null; // 押しはじめたレーン（短いタップと、線をこえたかを見るときに使う）
+  let secretPathPointerStartX = 0; // 押しはじめた横の位置（はらった長さ・向きを見るときに使う）
+  let secretPathPointerDragged = false; // 押しているあいだに横へ動かしたか（タップとしては動かさない）
+  let secretPathPointerFollowing = false; // 線をこえて、押しはじめたのとちがうレーンへ入ったか（入ったあとは、指・マウスのいるレーンへついていく）
+  let secretPathPointerMovedPlayer = false; // ついていくことで、こうちゃんが動いたか（動いたときは、はなしたときにフリックとして動かさない）
   let secretPathPointerHeld = false; // 長押しになったか（タップとして動かさない）
   let secretPathHoldTimer: ReturnType<typeof setTimeout> | null = null; // 長押しを待つ予約
+  let secretPathDragTargetLane: SecretPathLane | null = null; // こうちゃんがついていく先のレーン（ついていっていない・もう着いたときは null。はなしたあとも、着くまでは残す）
 
   /* はやく進んでいるか（キーと、フィールドの長押しを別々に持つ）
      片方をはなしても、もう片方を押しているあいだは はやいまま */
@@ -440,8 +443,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       }
     }
 
-    // 時間切れで終わっていなければ、次のコマを予約する
+    // 時間切れで終わっていなければ、ドラッグしている先のレーンへ1レーンだけ近づけて、次のコマを予約する
+    // （近づけるのは、このコマの当たりを見たあと。とちゅうのレーンでも、かならず1コマは当たりを見てから次へ進む）
     if (isSecretPathPlaying.value) {
+      followSecretPathDragTarget();
       secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
     }
   }
@@ -697,6 +702,23 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     return lane === 0 || lane === 1 || lane === 2 ? lane : null;
   }
 
+  /* フィールドの横の位置（clientX）が、どのレーンの上か（押しているあいだ用）
+
+     レーンの区切りは、フィールドに引いてある点線（左から 1/3 と 2/3）
+     押したまま フィールドの左右の外へ出たときも（pointer capture で届きつづける）、
+     いちばん近いはしのレーンとみなす（はしのレーンへ、そのままついていけるように） */
+  function getSecretPathLaneAtX(field: HTMLElement, clientX: number): SecretPathLane {
+    const rect = field.getBoundingClientRect();
+
+    if (rect.width <= 0) {
+      return secretPathPlayerLane.value;
+    }
+
+    const lane = Math.floor(((clientX - rect.left) / rect.width) * 3);
+
+    return lane <= 0 ? 0 : lane >= 2 ? 2 : 1;
+  }
+
   /* はやく進む・ポインターを押している状態を、ぜんぶ元に戻す
 
      キーをはなしたこと（keyup）や、指をはなしたこと（pointerup）が届かないときでも、
@@ -708,10 +730,14 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      ・なにかの理由で「小道で遊んでいる最中」ではなくなったとき（runSecretPathFrame()） */
   function releaseSecretPathControls() {
     isSecretPathKeyBoosting.value = false;
+    secretPathDragTargetLane = null;
     releaseSecretPathPointer();
   }
 
-  /* ポインター（マウス・指・ペン）を押している状態だけを、元に戻す */
+  /* ポインター（マウス・指・ペン）を押している状態だけを、元に戻す
+     ※ ついていく先のレーン（secretPathDragTargetLane）は、ここでは消さない
+       はなしたときに まだ着いていなければ、そのあとのコマで1レーンずつ着くまで動かす
+       （はなした瞬間にまとめて動かすと、とちゅうのレーンの当たりを見ないまま すり抜けることがあるため） */
   function releaseSecretPathPointer() {
     if (secretPathHoldTimer !== null) {
       clearTimeout(secretPathHoldTimer);
@@ -731,8 +757,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathPointerId = null;
     secretPathPointerField = null;
     secretPathPointerDownLane = null;
-    secretPathPointerLastX = 0;
+    secretPathPointerStartX = 0;
     secretPathPointerDragged = false;
+    secretPathPointerFollowing = false;
+    secretPathPointerMovedPlayer = false;
     secretPathPointerHeld = false;
     isSecretPathPointerBoosting.value = false;
   }
@@ -745,12 +773,20 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
        （いっきに2レーン動けると、まん中のレーンの枝をすり抜けられて、道を押す操作だけ有利になるため）
        長押し・ドラッグと見分けるため、動かすのは はなしたとき（pointerup）
 
-     ■ 押したまま横へ動かす（しきい値をこえるたびに1レーン）
-       しきい値はマウスと指で分けてある（→ getSecretPathSwipeThreshold）
-       ・マウス             … ドラッグ。100pxこえるたびに1レーンずつ動く（左はし → まん中 → 右はし）
-       ・指・ペン           … フリック。32pxで1レーン。1回押すあいだに1レーンだけ（大きくはらっても、まん中で止まる）
-       ・長押しになったあと … 指・ペンでも、スライドでこえるたびに1レーンずつ動ける
-       長押しになる前に横へ動いたら、長押しの判定はやめる（フリック・ドラッグとして扱う）
+     ■ 押したまま横へ動かす（ドラッグ・スライド。マウスも指も同じ）
+       レーンの区切りの点線をこえて、押しはじめたのとちがうレーンへ入ったら、
+       はなすまで、こうちゃんは 指・マウスのいるレーンへついていく（→ dragSecretPathPlayer()）
+       ・左はし → 右はし へドラッグすると、まん中 → 右はし と1レーンずつ動く
+         動かすのは1コマに1レーンずつ（→ followSecretPathDragTarget()）。とちゅうのレーンの枝も、かならず当たりを見る
+       ・長押しで はやく進んでいるあいだも、そのままドラッグして動ける
+       ・フィールドの左右の外へ出ても、はしのレーンへついていく
+
+     ■ すばやく横へはらう（フリック。指・ペンだけ）
+       点線をこえなくても、しきい値（32px）より大きく横へはらったら、はらった向きへ1レーン
+       （ついていく動きで、こうちゃんがもう動いたときは、重ねては動かさない）
+
+     横へしきい値より大きく動かす・点線をこえると、タップ・長押しとしては扱わない
+     （しきい値はマウスと指で分けてある → getSecretPathSwipeThreshold）
 
      ■ 長押し（secretPathHoldBoostDelay だけ押しつづける）
        はなすまで、はやく進む（ゲームの時計が2倍）
@@ -782,8 +818,9 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
     secretPathPointerId = pointerId;
     secretPathPointerField = field;
-    secretPathPointerDownLane = getSecretPathLaneAt(field, event.clientX, event.clientY);
-    secretPathPointerLastX = event.clientX;
+    secretPathPointerDownLane = getSecretPathLaneAtX(field, event.clientX);
+    secretPathPointerStartX = event.clientX;
+    secretPathDragTargetLane = null;
 
     try {
       field.setPointerCapture(pointerId);
@@ -813,21 +850,36 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       return;
     }
 
-    swipeSecretPathPlayer(event);
+    dragSecretPathPlayer(event);
   }
 
+  /* はなしたとき
+
+     ① 横へ動かさず、長押しにもならなかった → 短いクリック・タップ（押したレーンの方向へ1レーン）
+     ② 点線をこえて、ついていく先のレーンにまだ着いていない → ここでは動かさず、このあとのコマで着くまで動く
+        （コマの切れ目より先に はなした、すばやいドラッグでも、行き先まで動く）
+     ③ 指・ペンで すばやく横へはらった（フリック）が、こうちゃんは動いていない・動く先も無い → はらった向きへ1レーン
+        長押しで はやく進んでいたときは、はなしただけなので動かさない */
   function handleSecretPathPointerUp(event: PointerEvent) {
     if (event.pointerId !== secretPathPointerId) {
       return;
     }
 
     if (isSecretPathPlaying.value) {
-      // pointermove が届く前に はなした、すばやいフリックも拾う
-      swipeSecretPathPlayer(event);
+      // pointermove が届く前に はなしたときのために、はなした位置でも見なおす
+      dragSecretPathPlayer(event);
 
-      // 横へ動かさず、長押しにもならなかった → 短いクリック・タップ
+      const currentLane = secretPathPlayerLane.value;
+      const distance = event.clientX - secretPathPointerStartX;
+      const isFlick = event.pointerType !== 'mouse' && Math.abs(distance) >= getSecretPathSwipeThreshold(event.pointerType);
+
+      const isStillFollowing = secretPathDragTargetLane !== null && secretPathDragTargetLane !== currentLane;
+
       if (!secretPathPointerDragged && !secretPathPointerHeld) {
         tapSecretPathLane(secretPathPointerDownLane);
+      } else if (isFlick && !isStillFollowing && !secretPathPointerHeld && !secretPathPointerMovedPlayer) {
+        secretPathDragTargetLane = null;
+        stepSecretPathPlayerToward(distance < 0 ? 0 : 2);
       }
     }
 
@@ -840,6 +892,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       return;
     }
 
+    secretPathDragTargetLane = null;
     releaseSecretPathPointer();
   }
 
@@ -849,35 +902,76 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     }
   }
 
-  /* 押したまま横へ、しきい値より大きく動いていたら、その方向へ1レーンだけ動かす */
-  function swipeSecretPathPlayer(event: PointerEvent) {
-    const distance = event.clientX - secretPathPointerLastX;
+  /* 押したまま動かしたとき（ドラッグ・スライド）
 
-    if (Math.abs(distance) < getSecretPathSwipeThreshold(event.pointerType)) {
+     ・横へしきい値より大きく動いた・点線をこえた … タップ・長押しとしては扱わない
+       （長押しになる前なら、長押しの予約もやめる。長押しになったあとは、はやいまま）
+     ・点線をこえて、押しはじめたのとちがうレーンへ入った … はなすまで、指・マウスのいるレーンへついていく
+       ついていく先（secretPathDragTargetLane）を決めるだけで、動かすのは1コマごとの followSecretPathDragTarget() */
+  function dragSecretPathPlayer(event: PointerEvent) {
+    const field = secretPathPointerField;
+
+    if (!field) {
       return;
     }
 
-    // 指・ペンのフリックは、1回押すあいだに1レーンだけ（長押しになったあとのスライドと、マウスのドラッグは何度でも）
-    const canMoveAgain = event.pointerType === 'mouse' || secretPathPointerHeld;
+    const pointerLane = getSecretPathLaneAtX(field, event.clientX);
+    const hasCrossedLine = pointerLane !== secretPathPointerDownLane;
+    const hasMovedFar = Math.abs(event.clientX - secretPathPointerStartX) >= getSecretPathSwipeThreshold(event.pointerType);
 
-    if (secretPathPointerDragged && !canMoveAgain) {
+    if (!secretPathPointerDragged && (hasCrossedLine || hasMovedFar)) {
+      secretPathPointerDragged = true;
+
+      // 長押しになる前に横へ動いたら、長押しにはしない
+      if (secretPathHoldTimer !== null) {
+        clearTimeout(secretPathHoldTimer);
+        secretPathHoldTimer = null;
+      }
+    }
+
+    if (hasCrossedLine) {
+      secretPathPointerFollowing = true;
+    }
+
+    // 一度こえたあとは、押しはじめたレーンへ戻ったときも、そこへついていく
+    if (secretPathPointerFollowing) {
+      secretPathDragTargetLane = pointerLane;
+    }
+  }
+
+  /* ついていく先のレーンへ、1レーンだけ近づける（1コマに1回。runSecretPathFrame() から呼ばれる）
+
+     左はし → 右はし のように2レーンはなれていても、いっきには動かさない
+     1コマに1レーンずつにして、とちゅうのまん中のレーンでも、かならず1コマは枝の当たりを見る
+     （いっきに動けると、まん中のレーンの枝をすり抜けられてしまうため。1コマは約16ミリ秒なので、見た目はほぼ すぐ） */
+  function followSecretPathDragTarget() {
+    if (secretPathDragTargetLane === null) {
       return;
     }
 
-    // 長押しになる前に横へ動いたら、長押しにはしない
-    if (secretPathHoldTimer !== null) {
-      clearTimeout(secretPathHoldTimer);
-      secretPathHoldTimer = null;
+    // 着いたら終わり（押しているあいだは、指・マウスがまた動けば、新しい行き先が入る）
+    if (secretPathDragTargetLane === secretPathPlayerLane.value) {
+      if (secretPathPointerId === null) {
+        secretPathDragTargetLane = null;
+      }
+
+      return;
     }
 
-    secretPathPointerDragged = true;
-    secretPathPointerLastX = event.clientX;
+    stepSecretPathPlayerToward(secretPathDragTargetLane);
+    secretPathPointerMovedPlayer = true;
+  }
 
+  /* lane の方向へ1レーンだけ動かして、動いた先のレーンを一瞬光らせる（いまいるレーンなら何もしない） */
+  function stepSecretPathPlayerToward(lane: SecretPathLane) {
     const laneBefore = secretPathPlayerLane.value;
 
-    moveSecretPathPlayer(distance < 0 ? -1 : 1);
+    if (lane === laneBefore) {
+      return;
+    }
 
-    // 動いた先のレーンを一瞬光らせる（はしで動けなかったときは光らせない）
+    moveSecretPathPlayer(lane < laneBefore ? -1 : 1);
+
     if (secretPathPlayerLane.value !== laneBefore) {
       secretPathTapLane.value = secretPathPlayerLane.value;
       secretPathTapUntil.value = secretPathElapsed.value + secretPathTapFlashDuration;
