@@ -6,7 +6,6 @@
 
    ・buildParkEntranceText     公園入口のあいさつ文
    ・buildGoalConfirmTimeText  ゴール確認ダイアログの残り時間の文
-   ・buildDangerWarnings       上部ステータスの警告メッセージ
 
    どれも受けとった値を見て文を返すだけで、
    ステータスや時計を見にいったり、書きかえたりはしない
@@ -69,28 +68,4 @@ export function buildGoalConfirmTimeText(currentMinutes: number) {
   }
 
   return `お昼（12:00）まで、あと${timeLeft}あります。`;
-}
-
-/* 上部ステータスに出す警告メッセージ
-   危険なものだけを配列に入れて、画面ではこれを上から順番に表示する
-
-   あぶない状態かどうか（20以下か）を決めているのは pages/index.vue の
-   isParentEnergyDanger・isParentCalmDanger・isChildEnergyDanger
-*/
-export function buildDangerWarnings(isParentEnergyDanger: boolean, isParentCalmDanger: boolean, isChildEnergyDanger: boolean) {
-  const warnings: string[] = [];
-
-  if (isParentEnergyDanger) {
-    warnings.push('⚠ 親の体力が残りわずかです');
-  }
-
-  if (isParentCalmDanger) {
-    warnings.push('⚠ 親の余裕が残りわずかです');
-  }
-
-  if (isChildEnergyDanger) {
-    warnings.push('⚠ こうちゃんはかなり疲れています');
-  }
-
-  return warnings;
 }

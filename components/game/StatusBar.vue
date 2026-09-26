@@ -3,7 +3,8 @@
    ゲーム画面の上部ステータス（いつも出ているステータスの帯）
 
    時計・こうちゃんと親のゲージ・おでかけポイント・おやつ残り・
-   見つけたもの・危険の警告・「そろそろお昼」のお知らせを出す
+   見つけたものを出す
+   （危険な状態・ぐずりだすライン・そろそろお昼は、メッセージではなく色で知らせる）
 
    ■ このコンポーネントは「受け取った値を表示するだけ」
      ステータスの計算・増減（statusChanges）の作成・危険かどうかの判定は、
@@ -53,20 +54,61 @@ const props = defineProps<{
   isParentEnergyDanger: boolean;
   isParentCalmDanger: boolean;
 
-  /* 危険の警告・「そろそろお昼」のお知らせ
-     リザルト画面（isResultScene）では、どちらも出さない */
-  dangerWarnings: string[];
+  /* ぐずりだすラインを下回っているか（ラベルとゲージをオレンジにするかどうか）
+     体力があぶないラインまで下がったときは、親のほうで false にしてある（赤い表示だけにする） */
+  isChildEnergyFuss: boolean;
+  isChildMoodFuss: boolean;
+
+  /* そろそろお昼（11:30以降。12:00を過ぎたあとも）か（時計をオレンジにするかどうか）
+     12:00を過ぎてから出口へ向かうまでのあいだに、色が元に戻らないよう、親のほうで isTimeOver もいっしょに渡している
+     リザルト画面（isResultScene）では、色を付けない */
   isAlmostNoon: boolean;
   isResultScene: boolean;
 }>();
 
-/* 危険の警告・「そろそろお昼」のお知らせを、いま出すかどうか
+/* 注意は、メッセージを出さずに色だけで知らせる
+   ・あぶないライン以下       … ゲージの行を赤く（.status-item--danger）＋ラベルに ⚠
+   ・ぐずりだすラインの下     … ラベルとゲージをオレンジに（.status-item--fuss）＋ラベルに ⚠
+   ・そろそろお昼（11:30以降）… 時計をオレンジに（.status-clock--almostNoon）
 
-   どちらも出ていないときは、上部ステータスに .status-area--noAlerts を付ける
-   背の低いスマホでは、そのとき警告・お知らせの2行を grid から外して、
-   空の行に付いてしまう すき間 をなくしている（→ assets/css/game/status.css） */
-const showWarnings = computed(() => props.dangerWarnings.length > 0 && !props.isResultScene);
-const showNotice = computed(() => props.isAlmostNoon && !props.isResultScene);
+   そろそろお昼は、前は「そろそろお昼の時間です。公園の出口へ向かいましょう。」の文を出していたが、
+   スマホではその1行ぶん上部ステータスが高くなり、いちばん大事な終盤で画面がせまくなっていた
+   ぐずりだすラインと同じオレンジにして「オレンジ ＝ そろそろ気をつけて」でそろえている */
+const isClockAlmostNoon = computed(() => props.isAlmostNoon && !props.isResultScene);
+
+/* ゲージの上に重ねる「今回変わったぶん」の帯（.gauge__change）の位置と向き
+
+   スマホ幅では、増減の数字だけだと小さくて見落としやすいので、
+   ゲージのどこからどこまでが変わったかを帯で見せる（見た目は assets/css/game/status.css）
+     ・減ったとき（--down） … なくなったぶん（いま 〜 行動前）に、赤いしま模様の帯
+     ・増えたとき（--up）   … ふえたぶん（行動前 〜 いま）に、白く光る帯
+
+   statusChanges は「いまの値 − 行動前の値」なので、行動前の値は いまの値 − 増減 で求められる
+   （念のため 0〜100 に収めてから使う）
+   増減が無い・結果を出していないときは null（帯を出さない） */
+function changeBand(value: number, change: number | undefined) {
+  if (!change) {
+    return null;
+  }
+
+  const before = Math.min(100, Math.max(0, value - change));
+
+  if (before === value) {
+    return null;
+  }
+
+  return {
+    className: before > value ? 'gauge__change--down' : 'gauge__change--up',
+    style: { left: Math.min(before, value) + '%', width: Math.abs(before - value) + '%' },
+  };
+}
+
+const changeBands = computed(() => ({
+  childEnergy: changeBand(props.childEnergy, props.statusChanges?.childEnergy),
+  childMood: changeBand(props.childMood, props.statusChanges?.childMood),
+  parentEnergy: changeBand(props.parentEnergy, props.statusChanges?.parentEnergy),
+  parentCalm: changeBand(props.parentCalm, props.statusChanges?.parentCalm),
+}));
 
 /* 見つけたもの：吹き出しで名前を出しているアイテム（null ＝ 出していない）
 
@@ -155,7 +197,7 @@ onBeforeUnmount(closeFoundTooltip);
 </script>
 
 <template>
-  <header class="status-area" :class="{ 'status-area--noAlerts': !showWarnings && !showNotice }">
+  <header class="status-area">
     <div class="status-area__head">
       <!-- タイトルと音ボタンを同じ行に並べる
            新しい行を作らないので、上部ステータスの高さは変わらない -->
@@ -168,7 +210,7 @@ onBeforeUnmount(closeFoundTooltip);
         <slot name="sound" />
       </div>
 
-      <span class="status-clock">
+      <span class="status-clock" :class="{ 'status-clock--almostNoon': isClockAlmostNoon }">
         <span class="status-clock__now">{{ currentTime }}</span>
         <span class="status-clock__limit">／ 12:00</span>
 
@@ -189,9 +231,12 @@ onBeforeUnmount(closeFoundTooltip);
         <p class="status-group__name">こうちゃん</p>
 
         <ul class="status-list">
-          <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger }">
+          <!-- あぶないライン以下は赤（--danger）、ぐずりだすラインを下回ったらオレンジ（--fuss）
+               オレンジは、ラベル（⚠ ＋ 体力）とゲージに付ける（色は status.css の .status-item--fuss） -->
+          <li class="status-item" :class="{ 'status-item--danger': isChildEnergyDanger, 'status-item--fuss': isChildEnergyFuss }">
             <span class="status-item__label">
               <span v-if="isChildEnergyDanger" class="status-item__alert">⚠</span>
+              <span v-else-if="isChildEnergyFuss" class="status-item__alert">⚠</span>
               体力
             </span>
             <span class="status-item__value">{{ childEnergy }}</span>
@@ -201,6 +246,9 @@ onBeforeUnmount(closeFoundTooltip);
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-energy" :style="{ width: childEnergy + '%' }"></span>
 
+              <!-- 今回変わったぶんの帯（スマホ幅だけ。目もりより下に重ねたいので、目もりより前に置く） -->
+              <span v-if="changeBands.childEnergy" class="gauge__change" :class="changeBands.childEnergy.className" :style="changeBands.childEnergy.style"></span>
+
               <!-- 目もり：ここを下回ると こうちゃん がぐずりだす（体力71） -->
               <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussEnergyLine + '%' }" title="ここより下がると、こうちゃんがぐずりだします（体力71）"></span>
 
@@ -209,14 +257,18 @@ onBeforeUnmount(closeFoundTooltip);
             </span>
           </li>
 
-          <li class="status-item">
-            <span class="status-item__label">機嫌</span>
+          <li class="status-item" :class="{ 'status-item--fuss': isChildMoodFuss }">
+            <span class="status-item__label">
+              <span v-if="isChildMoodFuss" class="status-item__alert">⚠</span>
+              機嫌
+            </span>
             <span class="status-item__value">{{ childMood }}</span>
             <span v-if="statusChanges && statusChanges.childMood !== 0" class="status-change" :class="changeClass('childMood', statusChanges.childMood)">
               {{ formatChange(statusChanges.childMood) }}
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--child-mood" :style="{ width: childMood + '%' }"></span>
+              <span v-if="changeBands.childMood" class="gauge__change" :class="changeBands.childMood.className" :style="changeBands.childMood.style"></span>
 
               <!-- 目もり：ここより下だと ぐずりやすくなる（機嫌50） -->
               <span class="gauge__mark gauge__mark--fuss" :style="{ left: fussMoodLine + '%' }" title="ここより下だと、いやいやが起きやすくなります（機嫌50）"></span>
@@ -240,6 +292,7 @@ onBeforeUnmount(closeFoundTooltip);
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-energy" :style="{ width: parentEnergy + '%' }"></span>
+              <span v-if="changeBands.parentEnergy" class="gauge__change" :class="changeBands.parentEnergy.className" :style="changeBands.parentEnergy.style"></span>
 
               <!-- 目もり：あぶないライン（親の体力20以下） -->
               <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerEnergyLine + '%' }" title="ここより下はあと1〜2回の行動で限界です（親の体力20）"></span>
@@ -257,6 +310,7 @@ onBeforeUnmount(closeFoundTooltip);
             </span>
             <span class="gauge">
               <span class="gauge__fill gauge__fill--parent-calm" :style="{ width: parentCalm + '%' }"></span>
+              <span v-if="changeBands.parentCalm" class="gauge__change" :class="changeBands.parentCalm.className" :style="changeBands.parentCalm.style"></span>
 
               <!-- 目もり：あぶないライン（親の余裕20以下／0でGAME OVER） -->
               <span class="gauge__mark gauge__mark--danger" :style="{ left: dangerCalmLine + '%' }" title="ここより左はあぶないです（親の余裕20以下で危険／0でGAME OVER）"></span>
@@ -340,22 +394,13 @@ onBeforeUnmount(closeFoundTooltip);
         :style="{ left: foundTooltipPos.left + 'px', top: foundTooltipPos.top + 'px' }"
         aria-hidden="true">{{ openFoundItem }}</span>
     </div>
-
-    <!-- 危険な状態の警告（GAME OVERになる前の合図）
-         リザルト画面では、もう気をつけようがないので出さない -->
-    <ul v-if="showWarnings" class="status-warnings">
-      <li v-for="warning in dangerWarnings" :key="warning" class="status-warnings__item">{{ warning }}</li>
-    </ul>
-
-    <!-- そろそろお昼のお知らせ（こちらもリザルト画面では出さない） -->
-    <p v-if="showNotice" class="status-notice">そろそろお昼の時間です。公園の出口へ向かいましょう。</p>
   </header>
 </template>
 
 <!-- 見た目は、このコンポーネント専用の assets/css/game/status.css だけを読みこむ
 
      index.vue の <style scoped> は index.vue の中の要素にしか効かず、
-     このコンポーネントの中の要素（ゲージ・警告など）には届かない
+     このコンポーネントの中の要素（ゲージ・お知らせなど）には届かない
      そこで、必要なCSSをこちらでも scoped で読みこんで、今までと同じ見た目にしている
 
      ■ game.css まるごとではなく status.css だけにした理由
