@@ -2637,8 +2637,10 @@ let stopWakingAudioContext: (() => void) | null = null;
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideCreditPointerDown);
 
-  // さわるたびに作業台（AudioContext）を起こす受付を始める（onUnmounted でやめる）
-  stopWakingAudioContext = keepAudioContextAwake(getEffectAudioContext);
+  /* さわるたびに作業台（AudioContext）を起こす受付を始める（onUnmounted でやめる）
+     backgroundPlayback … 曲を聴くためのページなので、iPhone で画面を消しても・ほかのアプリへ切りかえても鳴りつづけるようにする
+                          （ゲーム本編・ミニゲームは、今までどおり止まる。くわしくは utils/elementVolume.ts） */
+  stopWakingAudioContext = keepAudioContextAwake(getEffectAudioContext, { backgroundPlayback: true });
 
   /* このページでいちばん使う「▶ 全曲再生」にフォーカスを当てておく
      キーボードだけでも、開いてすぐ Enter で全曲再生を始められる */
@@ -2725,7 +2727,7 @@ onUnmounted(() => {
   // ページ全体の見張りをやめる（付けっぱなしにしない）
   document.removeEventListener('pointerdown', handleOutsideCreditPointerDown);
 
-  // さわるたびに作業台を起こす受付をやめる
+  // さわるたびに作業台を起こす受付をやめる（画面を消しても鳴りつづける設定も、ここで元に戻る）
   stopWakingAudioContext?.();
   stopWakingAudioContext = null;
 
