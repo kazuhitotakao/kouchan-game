@@ -625,8 +625,8 @@ onUnmounted(() => {
 
 /* ===== まんなかの列（カード ＋ 下の枠） =====
 
-   touch-action: manipulation … スマホで左右にすばやくタップしているうちに、
-   指がフィールドの外へずれても、ダブルタップで拡大しないようにする（本編の小道と同じ） */
+   ※ スマホでダブルタップしても画面が拡大しないようにする指定（touch-action: manipulation）は、
+     上部ツールバーや外まわりの余白にも効かせるため、app.vue にまとめてある */
 .mg-stage {
   display: flex;
   flex: 1;
@@ -637,7 +637,6 @@ onUnmounted(() => {
   max-width: 620px;
   margin: 0 auto;
   padding: 18px 20px 24px;
-  touch-action: manipulation;
 }
 
 /* ===== カード（本編の場所カード・こもれびの広場の紫のカードと同じ見た目） ===== */
