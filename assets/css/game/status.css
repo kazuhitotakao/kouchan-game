@@ -6,7 +6,7 @@
 
    ・時計、こうちゃんと親のゲージ、目もりの説明
    ・おでかけポイント／おやつ残りの pill、見つけたもの
-   ・危険の警告、「そろそろお昼」のお知らせ
+   ・「そろそろお昼」のお知らせ
    ・上のそれぞれに対する、画面の幅・高さごとの上書き（@media）
 
    ※ サウンドのコントロール（.sound-control 〜）は、まだ game.css のまま
@@ -24,9 +24,7 @@
   grid-template-areas:
     'clock gauges pills'
     'legend legend legend'
-    'found found found'
-    'warning warning warning'
-    'notice notice notice';
+    'found found found';
   grid-template-columns: auto minmax(0, 1fr) auto;
   /* 文字を大きくしたぶん、列のすき間と左右の余白を少しつめて場所を作る */
   gap: 10px 20px;
@@ -83,6 +81,19 @@
 .status-clock__limit {
   color: #daeffb;
   font-size: clamp(13px, 1vw, 15px);
+}
+
+/* そろそろお昼（11:30以降）… 時計の数字と「／ 12:00」をオレンジにする
+   ぐずりだすラインのオレンジ（.status-item--fuss）と同じ色で、「そろそろ気をつけて」の合図にそろえる
+   （出口まで10分かかり、12:00を過ぎて帰ると「時間オーバー」で -10点） */
+.status-clock__now,
+.status-clock__limit {
+  transition: color 0.5s ease-out;
+}
+
+.status-clock--almostNoon .status-clock__now,
+.status-clock--almostNoon .status-clock__limit {
+  color: #ff9f40;
 }
 
 /* 時間の増減（+20分）を置く場所
@@ -278,6 +289,30 @@
   margin-right: 3px;
 }
 
+/* ぐずりだすラインを下回ったステータス（危険の1段手前の「注意」）
+
+   メッセージは出さずに、ラベル（⚠ ＋ 体力／機嫌）とゲージをオレンジにして知らせる
+   ・ゲージは、中身の色をオレンジにかえて、まわりにもオレンジの線を付ける
+   ・黄色ではなくオレンジにしているのは、機嫌のゲージ（--child-mood）がもともとバターイエローで、
+     黄色にしても色が変わったことが分からないため
+     （危険のときの赤い線 .status-item--danger .gauge と同じ形）
+   ・ラインの下にいるあいだは、ずっとこの色のまま
+     危険ほどさわがしくしないよう、明るくなったり戻ったりの動きは付けない
+   ・体力があぶないラインまで下がったときは、StatusBar.vue に false が来るので、赤と重ならない */
+.status-item--fuss .status-item__label {
+  color: #ffb35c;
+  font-weight: 700;
+}
+
+.status-item--fuss .gauge {
+  outline: 2px solid rgb(255 159 64 / 80%);
+  outline-offset: 1px;
+}
+
+.status-item--fuss .gauge__fill {
+  background: #ff9f40;
+}
+
 .gauge {
   /* 目もり（.gauge__mark）を上に重ねるので、位置の基準にする */
   position: relative;
@@ -292,6 +327,37 @@
   overflow: hidden;
   border-radius: 999px;
   background: rgb(16 52 70 / 26%);
+}
+
+/* 今回変わったぶんの帯（スマホ幅だけ）
+
+   ゲージの上に重ねて、どこからどこまでが変わったかを見せる
+   位置と幅、減った（--down）か増えた（--up）かは、StatusBar.vue の changeBand() で決めている
+   PCでは出さず、@media (max-width: 700px) の中で display: block にしている
+   （PCは結果カードの「今回の変化（合計）」で、前 → 後 がくわしく見られるため） */
+.gauge__change {
+  display: none;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* 出たときに3回だけ点滅して、そのあとは結果を出しているあいだ、そのまま残る */
+  animation: gauge-change-blink 0.6s ease-in-out 3;
+}
+
+/* 減ったぶん … 赤いしま模様（ゲージの色がなくなったところに出る） */
+.gauge__change--down {
+  background: repeating-linear-gradient(-45deg, var(--bad) 0 3px, var(--bad-light) 3px 6px);
+}
+
+/* 増えたぶん … ゲージの色の上に、白い光を重ねる */
+.gauge__change--up {
+  background: rgb(255 255 255 / 55%);
+}
+
+@keyframes gauge-change-blink {
+  50% {
+    opacity: 0.25;
+  }
 }
 
 /* ゲージのしきい値を示す縦線（目もり）
@@ -330,8 +396,11 @@
   display: block;
   height: 100%;
   border-radius: 999px;
-  /* ステータスが変わったとき、パッと変わらず「スーッ」と伸び縮みする */
-  transition: width 0.5s ease-out;
+  /* ステータスが変わったとき、パッと変わらず「スーッ」と伸び縮みする
+     色（ぐずりだすラインを下回ったときのオレンジ）も、同じ速さでじわっと変える */
+  transition:
+    width 0.5s ease-out,
+    background-color 0.5s ease-out;
 }
 
 .gauge__fill--child-energy {
@@ -524,40 +593,6 @@
   display: none;
 }
 
-/* 危険な状態の警告（親の体力・親の余裕・こうちゃんの体力） */
-.status-warnings {
-  display: flex;
-  grid-area: warning;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.status-warnings__item {
-  padding: 2px 12px;
-  border: 1px solid #ff9d8c;
-  border-radius: 999px;
-  background: rgb(242 112 95 / 24%);
-  color: #ffd6cd;
-  font-size: clamp(13.5px, 1.1vw, 16px);
-  font-weight: 700;
-  line-height: 1.6;
-}
-
-/* そろそろお昼のお知らせ */
-.status-notice {
-  grid-area: notice;
-  margin: 0;
-  padding: 5px 12px;
-  border-left: 4px solid var(--gold);
-  border-radius: 4px;
-  background: rgb(255 192 67 / 18%);
-  color: #ffe6b0;
-  font-size: clamp(13.5px, 1.1vw, 16px);
-  line-height: 1.5;
-}
 
 /* --- 直前の増減値（-18 や +6）が出るときのポップ --- */
 /* @keyframes status-pop は assets/css/game/keyframes.css へ移動した
@@ -565,11 +600,6 @@
    result-card.css の .change-item__value と
    secret-path-field.css の .secret-path-hud__count からも参照するため
    （それぞれ別の <style scoped> なので、グローバルに置かないと名前が合わない） */
-
-/* 危険の警告メッセージも、出るときだけふわっと出す */
-.status-warnings__item {
-  animation: found-in 0.35s ease-out;
-}
 @media (max-height: 800px) {
   /* 上下の余白は、目もりの説明（.gauge-legend）を残す場所をつくるために
      2pxずつつめてある */
@@ -702,9 +732,7 @@
     grid-template-areas:
       'clock gauges'
       'legend legend'
-      'pills found'
-      'warning warning'
-      'notice notice';
+      'pills found';
     grid-template-columns: auto minmax(0, 1fr);
   }
 
@@ -835,9 +863,7 @@
       'gauges gauges'
       'legend legend'
       'pills pills'
-      'found found'
-      'warning warning'
-      'notice notice';
+      'found found';
     grid-template-columns: 1fr 1fr;
     gap: 3px 10px;
     padding: 6px 12px 8px;
@@ -1007,13 +1033,44 @@
     line-height: 1.1;
   }
 
+  /* 増減（-8 / +5）は、色つきのバッジにする
+
+     スマホでは文字が小さいので、色の文字だけだと、ゲージの横の数字にまぎれて見落としやすい
+     ふえたら緑・減ったら赤の地に白い文字にして、どこが変わったのかがひと目で分かるようにする
+     時間（+25分）は良い・悪いが無いので、うすい地にしておく */
   .status-change {
-    font-size: 12px;
+    /* 1項目の中では、増減は「残りの幅ぜんぶ」の列（minmax(0, 1fr)）に入っている
+       そのままだと列いっぱいに引きのばされて、横長のバッジになってしまうので、
+       左に寄せて、数字の幅ぶんだけにする */
+    justify-self: start;
+    padding: 0 7px;
+    border-radius: 999px;
+    font-size: 12.5px;
+    line-height: 1.35;
   }
 
-  /* ゲージは少し細く */
+  .status-change.change--good {
+    background: var(--good);
+    color: #fff;
+  }
+
+  .status-change.change--bad {
+    background: var(--bad);
+    color: #fff;
+  }
+
+  .status-change.change--neutral {
+    background: rgb(255 255 255 / 16%);
+  }
+
+  /* ゲージは少し細く
+     （PCの10pxよりは細いが、上に重ねる「今回変わったぶん」の帯が見えるように 8px にしてある） */
   .gauge {
-    height: 6px;
+    height: 8px;
+  }
+
+  .gauge__change {
+    display: block;
   }
 
   /* 凡例：あぶない／ぐずり を折り返さず1行（高さ約18px）。線の意味は残す */
@@ -1145,15 +1202,14 @@
        ただ、この高さでは説明の1行（約19px）を残すと、公園入口がどうしても1画面に収まらない
        ゲージの目もり自体は残るので、ここでは「1画面で遊べる」ほうを選んで、説明だけ隠している
 
-     ■ 警告・お知らせが出ていないときは、その2行を grid から外す
+     ■ 説明を隠したぶん、その行（legend）を grid から外す
        grid の空の行にも、行と行のすき間（row-gap）が付いてしまい、
-       何も出ていないのに、ステータスの下に8pxほどの空白ができていた
-       （.status-area--noAlerts は StatusBar.vue が付ける。出ているときは今までどおり） */
+       何も出ていないのに、ステータスの中に空白ができてしまうため */
   .gauge-legend {
     display: none;
   }
 
-  .status-area.status-area--noAlerts {
+  .status-area {
     grid-template-areas:
       'clock clock'
       'gauges gauges'

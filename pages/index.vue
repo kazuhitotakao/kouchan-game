@@ -7,7 +7,7 @@ import { changeClass, formatChange } from '~/utils/statusChange';
 import { unlockMinigame } from '~/utils/minigameStorage';
 
 /* 画面に出す文の組み立て（いまどんな状態か → 出す文） */
-import { buildDangerWarnings, buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
+import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
 /* ゲームの時計まわりの計算（いまの時刻から、何分か進んだ時刻を出す）
    「09:25」の文字を分の数に直すほうは、composables/useGameState.ts のなかで使っている */
@@ -972,16 +972,20 @@ const isChildEnergyDanger = computed(() => childEnergy.value <= dangerEnergyLine
    ・ゴール（総合スコアとランクの発表）
    ・GAME OVER
    どちらも遊びが終わったあとの画面なので、
-   上部ステータスの忠告（あぶないよ／そろそろお昼だよ）は出さない
+   上部ステータスの注意の色（そろそろお昼の時計のオレンジ）は付けない
 */
 const isResultScene = computed(() => currentEvent.value === 'goal' || currentEvent.value === 'gameOver');
 
-/* 上部ステータスに出す警告メッセージ
+/* ===== ぐずりだすラインを下回っているか（危険の1段手前の「注意」） =====
+   ここが true になったゲージは、上部ステータスでラベルとゲージをオレンジにする
+   しきい値は、いやいや・機嫌の下がりかたの判定と同じ data/game.ts の定数
+   ・体力 … 71未満で、いやいやが起きるようになる（useTantrum.ts の fussEnergyLine と同じ向き）
+   ・機嫌 … 50以下で、いやいやが起きやすくなる（useTantrum.ts の fussMoodLine と同じ向き）
 
-   どの文をどの順番でならべるかは utils/gameText.ts の buildDangerWarnings()
-   ここは、いまあぶない状態かどうかを渡すだけ
-*/
-const dangerWarnings = computed(() => buildDangerWarnings(isParentEnergyDanger.value, isParentCalmDanger.value, isChildEnergyDanger.value));
+   ※ 体力が あぶないライン（20以下）まで下がったときは、赤い「危険」のほうだけを出す
+     （同じゲージにオレンジと赤が重ならないように、ここで外しておく） */
+const isChildEnergyFuss = computed(() => childEnergy.value < fussEnergyLine && !isChildEnergyDanger.value);
+const isChildMoodFuss = computed(() => childMood.value <= fussMoodLine);
 
 /* ============================================================
    音（効果音・BGM・音量）
@@ -4405,8 +4409,9 @@ onUnmounted(() => {
           :is-child-energy-danger="isChildEnergyDanger"
           :is-parent-energy-danger="isParentEnergyDanger"
           :is-parent-calm-danger="isParentCalmDanger"
-          :danger-warnings="dangerWarnings"
-          :is-almost-noon="isAlmostNoon"
+          :is-child-energy-fuss="isChildEnergyFuss"
+          :is-child-mood-fuss="isChildMoodFuss"
+          :is-almost-noon="isAlmostNoon || isTimeOver"
           :is-result-scene="isResultScene">
           <template #sound>
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
@@ -4970,13 +4975,21 @@ onUnmounted(() => {
                     <span class="command-box__text">小道へ進む</span>
                   </button>
 
+                  <!-- スマホ幅では「← 場所選びにもどる」を「場所選びへ」の短い表示に入れかえて、
+                       横にならんだ「小道へ進む」と同じく、1行に収まるようにしている
+                       どちらの表示でも、読み上げ用の名前は aria-label の「場所選びにもどる」
+                       （リザルト画面の「はじめの画面へ戻る」と同じ考えかた） -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
+                    aria-label="場所選びにもどる"
                     @click="leaveSecretPathToEntrance"
                     @mouseenter="selectedCommandIndex = 1"
                     @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">← 場所選びにもどる</span>
+                    <span class="command-box__text">
+                      <span class="command-box__leaveText--full" aria-hidden="true">← 場所選びにもどる</span>
+                      <span class="command-box__leaveText--short" aria-hidden="true">場所選びへ</span>
+                    </span>
                   </button>
                 </template>
 
