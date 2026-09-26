@@ -1140,16 +1140,26 @@
     gap: 3px;
   }
 
-  /* ===== 秘密の小道（スマホ幅） =====
+  /* ===== 秘密の小道で遊んでいる最中（スマホ幅） =====
 
-     ・上部ステータスを、小道で遊んでいる最中だけ固定しない（ページといっしょに流れる）
-       固定したままだと、画面の半分近くを上部ステータスが使ってしまい、
-       フィールドと下の案内が同時に見えなくなるため
-     ・遊びはじめたら、カードが画面のいちばん上に来るようにスクロールする（components/game/SecretPathField.vue が出たとき）
-     ・フィールドは、カードと案内がいっしょに画面に収まる高さにする
-       （iPhone SE ほどの背の低い画面でも、案内まで見える） */
+     上部ステータスを、いちばん上の行（時計 ＋ サウンド）だけにたたむ
+     ・スマホ幅の上部ステータスは、ゲージ・目もりの説明・ポイント・見つけたものを たてに積むので、
+       そのままだと画面の3分の1ほどを使い、フィールドと下の案内が1画面に収まらない
+     ・遊んでいる15秒のあいだは、体力・機嫌・ポイントなどは変わらないので、見えなくても困らない
+       （小道をぬけたら、また全部出る）
+     ・サウンドのボタンは、いちばん上の行にあるので、遊んでいる最中も押せる
+     ・.game-screen--secret-path は、遊んでいる最中だけ付く（→ pages/index.vue）
+       フィールドの高さの合わせかたは responsive.css・secret-path-field.css のスマホ幅 */
+  .game-screen--secret-path .status-groups,
+  .game-screen--secret-path .gauge-legend,
+  .game-screen--secret-path .status-pills,
+  .game-screen--secret-path .status-found {
+    display: none;
+  }
+
+  /* 隠した段の行と、行と行のすき間（gap）が残らないよう、並べかたも1段だけにする */
   .game-screen--secret-path .status-area {
-    position: static;
+    grid-template-areas: 'clock clock';
   }
 
   .pill b {

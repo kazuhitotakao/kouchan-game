@@ -547,6 +547,79 @@ export function useAudio(options: UseAudioOptions) {
     playTone(1760, context.currentTime, 0.3, 0.05, 'triangle'); // 高いラ
   }
 
+  /* ⑥-4 はやく進みはじめた音「ヒュッ」（ミニゲーム「どこまで行ける？」の加速用）
+
+     風を切る音には音程が無いので、葉っぱのガサガサ音（⑧ playRustleNoise）と同じく、
+     でたらめな数字の列（ホワイトノイズ）から作る
+     ガサガサ音とのちがいは、通す高さ（フィルター）を低い所から高い所へ、すっと動かすところ
+     こうすると、風が「ヒュッ」と前へぬけていくように聞こえる
+
+     ・bandpass … frequency のまわりの高さだけを通すフィルター。ここを 500Hz → 2400Hz へ動かす
+     ・0.22秒ほどの短い音。何度も加速しても耳ざわりにならないよう、ほかの効果音と同じくらいの大きさにしている
+       （フィルターでせまい高さだけを通すぶん、音のエネルギーが減るので、数字はガサガサ音と同じくらい大きめ）
+
+     ※ BGMの速さは変えない（はやく進んでいるあいだに曲の速さを変えるのは、やめた → data/secretPathEndless.ts） */
+  function playBoostSound() {
+    const context = getAudioContext();
+
+    if (!context) {
+      return;
+    }
+
+    /* 効果音の大きさにも、音量スライダーのぶんをかける（playTone と同じ） */
+    const effectVolume = getSoundVolume(0.22);
+
+    /* 0（＝ミュート）のときは鳴らさずに終わり
+       下の exponentialRampToValueAtTime() は 0 を受け取れないため */
+    if (effectVolume <= 0) {
+      return;
+    }
+
+    try {
+      const startTime = context.currentTime;
+      const duration = 0.22;
+
+      // ① でたらめな数字の列（ホワイトノイズ）を作る（くわしくは playRustleNoise()）
+      const frameCount = Math.floor(context.sampleRate * duration);
+      const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < frameCount; i += 1) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = context.createBufferSource(); // 音の発生源（でたらめな数字を読み上げる）
+      const filter = context.createBiquadFilter(); // 通す高さを決める係
+      const gain = context.createGain(); // 音量つまみ
+
+      noise.buffer = buffer;
+
+      // ② 通す高さを、低い所から高い所へ動かす（Q … 通す はばのせまさ。大きいほど「ヒュー」と笛っぽくなる）
+      filter.type = 'bandpass';
+      filter.Q.setValueAtTime(1.2, startTime);
+      filter.frequency.setValueAtTime(500, startTime);
+      filter.frequency.exponentialRampToValueAtTime(2400, startTime + duration);
+
+      /* ③ 音量の動き（playTone と同じ考えかた）
+         風が近づいてくる感じを出すため、上げるところ（0.06秒）を ほかの効果音より少しゆっくりにしている */
+      const nearSilent = effectVolume * 0.02;
+
+      gain.gain.setValueAtTime(nearSilent, startTime);
+      gain.gain.exponentialRampToValueAtTime(effectVolume, startTime + 0.06);
+      gain.gain.exponentialRampToValueAtTime(nearSilent, startTime + duration);
+
+      // 発生源 → 通す高さを決める → 音量つまみ → スピーカー の順につなぐ
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(context.destination);
+
+      noise.start(startTime);
+      noise.stop(startTime + duration);
+    } catch {
+      // 音が鳴らなくても、ゲームは止めない
+    }
+  }
+
   /* ⑦ 転倒音「ヒュッ、ポテッ」（とつぜんのできごと「こうちゃんがころんだ」用）
 
      短い音を2つ、すきまなく続けて鳴らして「つまずいて、地面にすわりこむ」を表す
@@ -2514,7 +2587,8 @@ export function useAudio(options: UseAudioOptions) {
 
      ゲーム本編では変えない（いつも 1 のまま）
      ミニゲーム「どこまで行ける？」（pages/minigame/secret-path.vue）では、
-     レベルが上がる・はやく進む と、この曲を少しずつ速くして、きびしくなったことを耳でも伝える
+     レベルが上がると、この曲を少しずつ速くして、きびしくなったことを耳でも伝える
+     （はやく進んでいるあいだは変えない。理由は data/secretPathEndless.ts の secretPathEndlessBgmTempo）
      曲がまだ作られていないときに決められても、作るときに（getSecretBgm()）この値を使う */
   let secretBgmPlaybackRate = 1;
 
@@ -2998,6 +3072,7 @@ export function useAudio(options: UseAudioOptions) {
     playBranchBumpSound,
     playCountdownSound,
     playCountdownStartSound,
+    playBoostSound, // ミニゲーム「どこまで行ける？」だけが使う（はやく進みはじめたときの「ヒュッ」）
     playSuddenEventSound,
 
     /* ===== 公園のBGM ===== */
@@ -3030,7 +3105,7 @@ export function useAudio(options: UseAudioOptions) {
     playSecretBgmSoon,
     stopSecretBgm,
     resumeSecretBgm, // ミニゲーム「どこまで行ける？」で、ページを開いたときに鳴らせなかった曲を「はじめる」で鳴らす
-    setSecretBgmPlaybackRate, // ミニゲーム「どこまで行ける？」だけが使う（レベル・はやく進む で曲を速くする）
+    setSecretBgmPlaybackRate, // ミニゲーム「どこまで行ける？」だけが使う（レベルが上がると曲を速くする）
 
     /* ===== ページを開いたとき・離れるとき ===== */
     restoreSoundSettings,
