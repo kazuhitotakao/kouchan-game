@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 
 /* 曲の音量を入れる関数
@@ -13,6 +13,9 @@ import SoundControl from '~/components/game/SoundControl.vue';
 
 /* ゲームの題名（pages/index.vue と同じものを data/game.ts から読む） */
 import { gameTitle } from '~/data/game';
+
+/* 車のステアリング・ロック画面・イヤホンの操作を受け取り、曲名を知らせる（→ このファイルの「車のステアリング・ロック画面・イヤホンの操作」） */
+import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession } from '~/utils/mediaSession';
 
 /* ============================================================
    サウンドトラックページ（/soundtrack）
@@ -1892,6 +1895,68 @@ function playNextTrack() {
   playAdjacentSingleTrack('next');
 }
 
+/* ============================================================
+   車のステアリング・ロック画面・イヤホンの操作（Media Session API）
+
+   ■ 受け取る操作（受け取りかたは utils/mediaSession.ts）
+     車のステアリングの ⏮ ⏭、ロック画面・コントロールセンター・イヤホンのボタンを、
+     画面のボタンを押したときと同じ関数へつなぐ（聴きかたごとの動きも、画面のボタンと同じ）
+     ・次の曲 … playNextTrack()（「⏭ 次のトラックへ」と同じ）
+     ・前の曲 … playPreviousTrack()（「⏮ 前のトラックへ」と同じ）
+     ・一時停止・再生 … いまの曲の「⏸ 一時停止」「▶ 続きから」と同じ（→ toggleTrack）
+                        どの曲も選んでいないときの再生は「▶ 全曲再生」と同じ
+     ・停止 … 「■ 停止」と同じ（→ stopSoundtrack）
+     ※ 再生・一時停止も受け取るのは、ブラウザにまかせると、画面の表示（♪ 再生中 など）が
+       実際の音と食いちがってしまうため
+
+   ■ 知らせる曲名
+     ロック画面・コントロールセンター・車の画面に、いまの曲の名前を出してもらう
+     ・曲名         … 曲の一覧と同じ（title）
+     ・アーティスト … ゲームの題名（こうちゃんの大冒険）
+     ・アルバム     … ページの見出しと同じ「ORIGINAL SOUNDTRACK」
+     曲が変わるたびに入れかえ、曲を選んでいないときは消す
+     （出すかどうか・どこに出すかは、端末や車しだい）
+
+   ■ 受付を始めるのは onMounted、やめるのは onUnmounted
+   ============================================================ */
+
+/* 操作の受付をやめるための関数（受付していないときは null） */
+let stopMediaSession: (() => void) | null = null;
+
+/* 再生（どの曲も選んでいないときは、全曲再生を始める） */
+function handleMediaSessionPlay() {
+  const track = playingTrack.value;
+
+  if (!track) {
+    startPlaylist();
+
+    return;
+  }
+
+  if (!isPlaying.value) {
+    toggleTrack(track);
+  }
+}
+
+/* 一時停止（鳴っていないときは何もしない） */
+function handleMediaSessionPause() {
+  const track = playingTrack.value;
+
+  if (track && isPlaying.value) {
+    toggleTrack(track);
+  }
+}
+
+// いまの曲が変わったら、知らせる曲名を入れかえる（曲を選んでいないときは消す）
+watch(playingTrack, (track) => {
+  setMediaSessionTrack(track ? { title: track.title, artist: gameTitle, album: 'ORIGINAL SOUNDTRACK' } : null);
+});
+
+// 鳴っているか・一時停止中か・曲を選んでいないかを知らせる
+watch([playingTrack, isPlaying], ([track, playing]) => {
+  setMediaSessionPlaybackState(!track ? 'none' : playing ? 'playing' : 'paused');
+});
+
 /* 再生バーを動かして、聴く場所を変える（シーク）
 
    input type="range" の value は文字で届くので、Number() で数字に直す
@@ -2642,6 +2707,15 @@ onMounted(() => {
                           （ゲーム本編・ミニゲームは、今までどおり止まる。くわしくは utils/elementVolume.ts） */
   stopWakingAudioContext = keepAudioContextAwake(getEffectAudioContext, { backgroundPlayback: true });
 
+  // 車のステアリング・ロック画面・イヤホンの操作の受付を始める（onUnmounted でやめる）
+  stopMediaSession = startMediaSession({
+    play: handleMediaSessionPlay,
+    pause: handleMediaSessionPause,
+    stop: stopSoundtrack,
+    previousTrack: playPreviousTrack,
+    nextTrack: playNextTrack,
+  });
+
   /* このページでいちばん使う「▶ 全曲再生」にフォーカスを当てておく
      キーボードだけでも、開いてすぐ Enter で全曲再生を始められる */
   playAllButtonRef.value?.focus();
@@ -2730,6 +2804,11 @@ onUnmounted(() => {
   // さわるたびに作業台を起こす受付をやめる（画面を消しても鳴りつづける設定も、ここで元に戻る）
   stopWakingAudioContext?.();
   stopWakingAudioContext = null;
+
+  // 車のステアリング・ロック画面・イヤホンの操作の受付をやめて、知らせていた曲名も消す
+  // （ほかのページで、車の「次の曲」がこのページの関数を呼ばないように）
+  stopMediaSession?.();
+  stopMediaSession = null;
 
   stopSoundtrack();
 
