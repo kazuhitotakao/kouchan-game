@@ -13,6 +13,8 @@
    ■ HUD の右上と真ん中は、遊びかたで出すものがちがう
      ・本編の小道         … 「✨ 木漏れ日 3 / 5」と「あと 12秒」（timeLeft を渡す）
      ・どこまで行ける？   … 「✨ 木漏れ日 8」「❤❤🤍」「123m」（lives・distance を渡す）
+                             加速しているあいだは、距離の右上に「⏩ ×2 → ×3」の札と、次の段までのゲージ
+                             （boostTotalMultiplier・nextBoostMultiplier・comboProgress を渡す）
                              自己ベスト（bestDistance）を渡すと、HUD の下の「自己ベストまでのバー」と、
                              フィールドの「自己ベストの線」も出す
                              （こえた瞬間の「🎉 じこベスト更新！」は、使う側のページがフィールドの外に出す）
@@ -44,8 +46,11 @@ const props = defineProps<{
   bumpPenalty: string | null;
   bumpId: number;
 
-  /* 木漏れ日を取った直後か・出しなおすための番号 */
+  /* 木漏れ日を取った直後か・そのときに こうちゃんの上に出す文字・出しなおすための番号
+     sparkleLabel … 本編の小道は「✨ +1」（集めた数が1つ増える）、
+                    「どこまで行ける？」は「✨ +5m」（集めた数のほかに、進んだ距離にもボーナスが付く） */
   isSparkling: boolean;
+  sparkleLabel: string;
   sparkleId: number;
 
   /* 集めた木漏れ日の数と、全部でいくつか（「どこまで行ける？」は上限が無いので渡さない） */
@@ -79,14 +84,28 @@ const props = defineProps<{
      レーンの区切りの点線を下へ流す・フィールドのふちを光らせる */
   isBoosting: boolean;
 
-  /* 加速コンボの倍率（「どこまで行ける？」だけ。1 ＝ まだ倍率が付いていない）
-     渡すと、距離の右上の札が「⏩ 加速」「⏩ ×1.5」などになる */
-  comboMultiplier?: number;
+  /* 加速中に、進んだ距離が ふだんの何倍で数えられているか（「どこまで行ける？」だけ。1 ＝ 加速していない）
+     加速そのもので ×2、加速コンボが付くと 合わせて ×3 → ×4 → ×6（→ composables/useSecretPathGame.ts）
+     渡すと、距離の右上の札が「⏩ ×2」になり、コンボが付いているあいだは金色になる */
+  boostTotalMultiplier?: number;
+
+  /* 次の段まで届いたときの合計倍率（いちばん上の段まで届いたら null）と、次の段までの進み具合（0〜1。どちらも「どこまで行ける？」だけ）
+     札に「→ ×3」と出し、その下のゲージをためて見せる
+     （どこで倍率が上がるのかが見えないと、加速をどこまで続けるかを決められないため） */
+  nextBoostMultiplier?: number | null;
+  comboProgress?: number;
 
   /* いまのレベル（「どこまで行ける？」だけ。進んだ距離で上がる）
      渡すと、距離の丸の中に「Lv.3」を出し、上がった瞬間に距離の丸を金色に光らせる */
   level?: number;
 }>();
+
+/* 加速コンボの倍率が付いているか（加速だけの ×2 より多く数えられているあいだ。札と、こうちゃんの後ろの風の跡を金色にする） */
+const isComboActive = computed(() => (props.boostTotalMultiplier ?? 0) > secretPathBoostMultiplier);
+
+/* 次の段までのゲージの長さ（%）
+   1コマごとに書きかわるので、整数に丸めておく（同じ値のあいだは、style を書きかえない） */
+const comboGaugeWidth = computed(() => `${Math.round((props.comboProgress ?? 0) * 100)}%`);
 
 /* レベルが上がった直後か（距離の丸を金色に光らせているあいだ）
 
@@ -234,9 +253,10 @@ onMounted(() => {
       </span>
 
       <!-- 進んだ距離（どこまで行ける？）
-           右上の札は、加速コンボ（comboMultiplier）を出す
-           ・はやく進んでいるが、まだ倍率が付いていない … 「⏩ 加速」
-           ・倍率が付いた                             … 金色の「⏩ ×1.5」（上がるたびに key が変わって、ぽんっと出なおす） -->
+           右上の札は「いま、距離が ふだんの何倍で数えられているか」を出す（boostTotalMultiplier）
+           ・加速しただけ         … 「⏩ ×2」
+           ・加速コンボが付いた   … 金色の「⏩ ×3」「⏩ ×4」「⏩ ×6」（上がるたびに key が変わって、ぽんっと出なおす）
+           札の中には、次の段（「→ ×3」／いちばん上まで届いたら「MAX」）と、そこまでのゲージも出す -->
       <span
         v-else-if="distance !== undefined"
         class="secret-path-hud__distance"
@@ -246,10 +266,12 @@ onMounted(() => {
         {{ Math.floor(distance) }}m
         <span
           v-if="isBoosting"
-          :key="`combo-${comboMultiplier ?? 1}`"
+          :key="`boost-${boostTotalMultiplier ?? 1}`"
           class="secret-path-hud__boost"
-          :class="{ 'secret-path-hud__boost--combo': (comboMultiplier ?? 1) > 1 }">
-          {{ (comboMultiplier ?? 1) > 1 ? `⏩ ×${comboMultiplier}` : '⏩ 加速' }}
+          :class="{ 'secret-path-hud__boost--combo': isComboActive }">
+          ⏩ ×{{ boostTotalMultiplier ?? 1 }}
+          <small class="secret-path-hud__boostNext">{{ nextBoostMultiplier ? `→ ×${nextBoostMultiplier}` : 'MAX' }}</small>
+          <span class="secret-path-hud__boostGauge" :style="{ width: comboGaugeWidth }" aria-hidden="true"></span>
         </span>
       </span>
     </div>
@@ -332,11 +354,11 @@ onMounted(() => {
           いたっ！
           <span v-if="bumpPenalty" class="secret-path-player__minus">{{ bumpPenalty }}</span>
         </span>
-        <span v-if="isSparkling" :key="sparkleId" class="secret-path-player__plus">✨ +1</span>
+        <span v-if="isSparkling" :key="sparkleId" class="secret-path-player__plus">{{ sparkleLabel }}</span>
         <!-- はやく進んでいるあいだの、風の跡（こうちゃんのすぐ後ろ＝下に、短い線が流れる）
              こうちゃんより後ろは、もう通りすぎた所なので、枝をよけるのに見づらくならない
              加速コンボの倍率が付いたら（「どこまで行ける？」だけ）、HUD の札と同じ金色にする -->
-        <span v-if="isBoosting" class="secret-path-player__trail" :class="{ 'secret-path-player__trail--combo': (comboMultiplier ?? 1) > 1 }"></span>
+        <span v-if="isBoosting" class="secret-path-player__trail" :class="{ 'secret-path-player__trail--combo': isComboActive }"></span>
         <span
           class="secret-path-player__face"
           :class="{

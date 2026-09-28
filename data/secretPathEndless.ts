@@ -70,6 +70,19 @@ export const secretPathEndlessSunlightChance = 0.25;
    速さ 60 なら 1秒で 3m、90 なら 4.5m 進む */
 export const secretPathEndlessMetersPerField = 5;
 
+/* 木漏れ日を1つ取ったときに、進んだ距離へ足すボーナス（メートル）
+
+   「どこまで行ける？」の木漏れ日は、集めた数を数えるだけだったので、
+   取っても記録（進んだ距離）が伸びず、取りに行く意味が分かりにくかった
+   （木漏れ日の行は、たいてい枝もいっしょに出るので、取りに行くのは あぶない）
+   そこで、1つ取るたびに、この分だけ距離を足す（こうちゃんの上に「✨ +5m」と出す）
+
+   ・5 ＝ フィールドの高さ1つぶん（secretPathEndlessMetersPerField）と同じきりのいい数
+     Lv.1 だと 1秒で 3m 進むので、およそ1.7秒ぶん先へ進めることになる
+   ・加速コンボの倍率は、わざと掛けない（いつ取っても「✨ +5m」で同じなのが分かりやすいため）
+   ・距離でレベルが上がるので、たくさん取るほど、きびしくなるのも少しだけ早くなる */
+export const secretPathEndlessSunlightBonusMeters = 5;
+
 /* 加速コンボ（はやく進むと、進んだ距離が多めに数えられる）
 
    はやく進む（↑ / Space・長押し）を、枝に当たらずに続けているあいだ、
@@ -78,9 +91,17 @@ export const secretPathEndlessMetersPerField = 5;
    ・multiplier … そのあいだ、進んだ距離を何倍に数えるか
    枝に当たる・はやく進むのをやめると、最初（×1）に戻る
 
+   ■ 画面に出す倍率は、この multiplier ではなく「ふだんの何倍か（合計）」
+     はやく進むと、ゲームの時計そのものが2倍（data/secretPath.ts の secretPathBoostMultiplier）で進み、
+     距離も その時計で数えているので、加速しただけで すでに ×2 数えられている
+     そこへ下の multiplier が掛かるので、実際には ×3 → ×4 → ×6 になる
+     HUD の札・ルールの説明・知らせも、この合計（×2 → ×3 → ×4 → ×6）で出している
+     （前は multiplier の ×1.5・×3 をそのまま出していたので、伸びかたと数字が合っていなかった）
+
    はやく進むと、枝も木漏れ日も2倍の速さで来るので、よけるのが むずかしくなる
    そのかわりに記録が伸びる、という「がんばったぶんのごほうび」にしている
-   段を変えたいときは、ここの数字だけを書きかえればよい（上から順に、seconds が小さい順に並べること） */
+   段を変えたいときは、ここの数字だけを書きかえればよい（上から順に、seconds が小さい順に並べること）
+   ※ 次の段までの進み具合は、HUD の札の下のゲージで見せている（→ components/game/SecretPathField.vue） */
 export const secretPathEndlessBoostComboTiers = [
   { seconds: 3, multiplier: 1.5 },
   { seconds: 6, multiplier: 2 },

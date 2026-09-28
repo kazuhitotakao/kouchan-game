@@ -5,6 +5,7 @@
    ゲーム本編の「秘密の小道」を、エンドレスでくり返し遊べるページ
    ・枝に secretPathEndlessLives 回当たるまで続き、進んだ距離でレベルが上がって速くなる（上限なし）
    ・記録は「進んだ距離」と「集めた木漏れ日の数」。それぞれの自己ベストをこのブラウザに残す
+     木漏れ日は、集めた数を数えるだけでなく、1つごとに進んだ距離のボーナスにもなる（→ data/secretPathEndless.ts）
 
    ■ 入口
      起動画面（A画面）の「🌿 ミニゲーム」→ ミニゲームの一覧（pages/minigame/index.vue）→ このページ
@@ -34,7 +35,15 @@ import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
 import { useSecretPathGame } from '~/composables/useSecretPathGame';
 import { minigames } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
-import { secretPathEndlessBgmTempo, secretPathEndlessLevelMeters, secretPathEndlessLives, secretPathEndlessMetersPerField } from '~/data/secretPathEndless';
+import { secretPathBoostMultiplier } from '~/data/secretPath';
+import {
+  secretPathEndlessBgmTempo,
+  secretPathEndlessBoostComboTiers,
+  secretPathEndlessLevelMeters,
+  secretPathEndlessLives,
+  secretPathEndlessMetersPerField,
+  secretPathEndlessSunlightBonusMeters,
+} from '~/data/secretPathEndless';
 import type { GameEvent, StatusChanges } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
 
@@ -112,6 +121,10 @@ const {
   secretPathLives,
   secretPathDistance,
   secretPathComboMultiplier,
+  secretPathBoostTotalMultiplier,
+  secretPathNextBoostMultiplier,
+  secretPathComboProgress,
+  secretPathSunlightBonusMeters,
   secretPathLevel,
   isSecretPathPlaying,
   isSecretPathBoosting,
@@ -170,6 +183,19 @@ const isNewSunlightBest = ref(false);
 /* 画面に出す距離（メートル。小数は切り捨てる） */
 const distanceMeters = computed(() => Math.floor(secretPathDistance.value));
 
+/* 木漏れ日を取ったときに、こうちゃんの上に出す文字
+   本編の小道は「✨ +1」（集めた数が1つ増える）だが、こちらは進んだ距離のボーナスが付くので「✨ +5m」にする
+   （数のほうは、HUD の「✨ 木漏れ日 8」がぽんっと増えるので、そちらで分かる） */
+const sparkleLabel = `✨ +${secretPathEndlessSunlightBonusMeters}m`;
+
+/* はじまる前のルールに出す、加速コンボの倍率のならび（「×3 → ×4 → ×6」）
+
+   data/secretPathEndless.ts の段をそのまま並べるので、段を増やしても書きかえなくてよい
+   出すのは「ふだんの何倍か（合計）」なので、加速そのものの ×2 を掛けた数にしている
+   （加速すると、ゲームの時計が2倍で進み、距離もその時計で数えているため
+     → composables/useSecretPathGame.ts の secretPathBoostTotalMultiplier） */
+const comboLadderText = secretPathEndlessBoostComboTiers.map((tier) => `×${tier.multiplier * secretPathBoostMultiplier}`).join(' → ');
+
 /* ============================================================
    遊んでいる最中の、自己ベストとのくらべっこ
 
@@ -201,24 +227,47 @@ watch(isSecretPathBoosting, (isBoosting, wasBoosting) => {
   }
 });
 
-/* 加速コンボの倍率が上がった瞬間に、カウントダウンの「スタート！」と同じ「ピーン♪」を鳴らす
-   （×1.5 → ×2 → ×3 と上がるたび。下がったとき（枝に当たった・手をはなした）は鳴らさない） */
+/* 加速コンボの倍率が変わった瞬間の知らせ
+
+   ■ 上がったとき（加速を続けて、次の段へ届いた）
+     ・音   … カウントダウンの「スタート！」と同じ「ピーン♪」
+     ・文字 … 下の紺色の枠に「⏩ きょり ×3！」（→ showCommandNotice()）
+   ■ 下がったとき（枝に当たった・加速をやめた）
+     倍率が付いていたときだけ「⏩ コンボが きれた…」と出す
+     前は、なくなったことが音も文字もなく分からず、どうして記録の伸びが遅くなったのかが読めなかった
+     （もともと倍率が付いていなかったときは、何も出さない。加速をやめるたびに出てしまうため）
+
+   ※ 出す倍率は、コンボの倍率そのものではなく「ふだんの何倍か（合計）」
+     加速しただけで すでに ×2 数えられているので、合計は ×3 → ×4 → ×6 になる
+     （→ composables/useSecretPathGame.ts の secretPathBoostTotalMultiplier） */
 watch(secretPathComboMultiplier, (multiplier, previousMultiplier) => {
-  if (multiplier > previousMultiplier && isSecretPathPlaying.value) {
+  if (!isSecretPathPlaying.value) {
+    return;
+  }
+
+  if (multiplier > previousMultiplier) {
     playCountdownStartSound();
+    showCommandNotice('combo-up', `⏩ きょり ×${secretPathBoostMultiplier * multiplier}！`);
+    return;
+  }
+
+  if (previousMultiplier > 1) {
+    showCommandNotice('combo-end', '⏩ コンボが きれた…');
   }
 });
 
 /* 下の紺色の枠に重ねて出す、ひとことの知らせ（遊んでいる最中だけ）
 
-   ・levelup … レベルが上がった瞬間の「⏫ スピードアップ！ Lv.3」
-   ・record  … 距離の自己ベストをこえた瞬間の「🎉 じこベスト更新！」
-   どちらも、フィールドの上に出すと枝が流れてくる所にかぶさって見づらいので、フィールドの外に出す
+   ・levelup    … レベルが上がった瞬間の「⏫ スピードアップ！ Lv.3」
+   ・record     … 距離の自己ベストをこえた瞬間の「🎉 じこベスト更新！」
+   ・combo-up   … 加速コンボの倍率が上がった瞬間の「⏩ きょり ×3！」
+   ・combo-end  … 加速コンボが切れた瞬間の「⏩ コンボが きれた…」
+   どれも、フィールドの上に出すと枝が流れてくる所にかぶさって見づらいので、フィールドの外に出す
    commandNoticeDuration のあいだ出して消す。続けて起きたときは、あとから起きたほうだけを出す
    id … 出しなおすための番号（変わるたびに、ぽんっと出なおす） */
 type CommandNotice = {
   id: number;
-  kind: 'levelup' | 'record';
+  kind: 'levelup' | 'record' | 'combo-up' | 'combo-end';
   text: string;
 };
 
@@ -545,8 +594,15 @@ onUnmounted(() => {
             <span class="mg-rules__part">長押し：加速</span>
           </li>
           <li>🌿に{{ secretPathEndlessLives }}回当たると おしまい</li>
-          <!-- 加速コンボ（加速しつづけると、進んだ距離が多めに数えられる → data/secretPathEndless.ts） -->
-          <li class="mg-rules__combo">⏩ 加速したまま 当たらずにいると、きょりが 最大3ばい！</li>
+          <!-- 木漏れ日のボーナス（1つ取るごとに、進んだ距離が増える → data/secretPathEndless.ts） -->
+          <li class="mg-rules__bonus">✨ 1つで きょりが +{{ secretPathEndlessSunlightBonusMeters }}m！</li>
+          <!-- 加速コンボ（加速しつづけると、進んだ距離が多めに数えられる → data/secretPathEndless.ts）
+               出すのは「ふだんの何倍か（合計）」。加速しただけで ×2 数えられているので、コンボが付くと ×3 → ×4 → ×6 になる
+               （HUD の札に出る数字と、そろえてある） -->
+          <li class="mg-rules__bonus">
+            <span class="mg-rules__part">⏩ 加速中は きょり ×{{ secretPathBoostMultiplier }}！</span>
+            <span class="mg-rules__part">当たらずに続けると {{ comboLadderText }}</span>
+          </li>
           <li>⏫ {{ secretPathEndlessLevelMeters }}mごとに スピードアップ</li>
         </ul>
 
@@ -571,6 +627,7 @@ onUnmounted(() => {
         bump-penalty="❤️ -1"
         :bump-id="secretPathBumpId"
         :is-sparkling="isSecretPathSparkling"
+        :sparkle-label="sparkleLabel"
         :sparkle-id="secretPathSparkleId"
         :sunlight-count="secretPathSunlightCount"
         :lives="secretPathLives"
@@ -581,7 +638,9 @@ onUnmounted(() => {
         :best-distance="best.distance"
         :best-sunlight="best.sunlight"
         :meters-per-field="secretPathEndlessMetersPerField"
-        :combo-multiplier="secretPathComboMultiplier"
+        :boost-total-multiplier="secretPathBoostTotalMultiplier"
+        :next-boost-multiplier="secretPathNextBoostMultiplier"
+        :combo-progress="secretPathComboProgress"
         :level="secretPathLevel"
         :is-boosting="isSecretPathBoosting"
         @field-pointerdown="handleSecretPathPointerDown"
@@ -594,18 +653,26 @@ onUnmounted(() => {
       <article v-else class="place-card place-card--secret">
         <p class="place-card__flash">ここまで来た！</p>
 
+        <!-- 結果の記録（何の記録か → 数 → そのほか、の順に読めるよう、大きさを3つに分けている → .mg-result）
+             絵文字は、読み上げでは「旗」「きらきら」と読まれてしまうので隠して、となりの言葉（きょり・木漏れ日）で伝える -->
         <p class="mg-result">
           <span class="mg-result__item">
-            🏁
+            <span class="mg-result__icon" aria-hidden="true">🏁</span>
+            <span class="mg-result__label">きょり</span>
             <b class="mg-result__value">{{ distanceMeters }}</b>
-            m
+            <span class="mg-result__unit">m</span>
             <!-- とどいたレベル（「Lv.4 まで」） -->
             <span class="mg-result__level">Lv.{{ secretPathLevel }}</span>
             <span v-if="isNewDistanceBest" class="mg-result__new">じこベスト！</span>
           </span>
           <span class="mg-result__item">
-            ✨
+            <span class="mg-result__icon" aria-hidden="true">✨</span>
+            <span class="mg-result__label">木漏れ日</span>
             <b class="mg-result__value">{{ secretPathSunlightCount }}</b>
+            <span class="mg-result__unit">こ</span>
+            <!-- 集めた木漏れ日ぶんの距離ボーナス（1つで +5m。1つも取れなかったときは出さない）
+                 上の「きょり」には、このボーナスも入っている（🏁 を付けて、距離のことだと分かるようにする） -->
+            <span v-if="secretPathSunlightBonusMeters > 0" class="mg-result__bonus">🏁 +{{ secretPathSunlightBonusMeters }}m</span>
             <span v-if="isNewSunlightBest" class="mg-result__new">じこベスト！</span>
           </span>
         </p>
@@ -791,8 +858,8 @@ onUnmounted(() => {
   margin-right: 1em;
 }
 
-/* 加速コンボの説明は、記録が伸びるコツなので、金色の文字で目立たせる */
-.mg-rules__combo {
+/* 木漏れ日のボーナスと加速コンボの説明は、記録が伸びるコツなので、金色の文字で目立たせる */
+.mg-rules__bonus {
   color: #8a5a00;
   font-weight: 700;
 }
@@ -834,29 +901,59 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 結果（「🏁 123m」「✨ 8」） */
+/* 結果（「🏁 きょり 123m Lv.4」「✨ 木漏れ日 8こ 🏁 +40m」）
+
+   ぱっと読めるように、文字の大きさを3つに分けている
+   ・何の記録か（絵文字 ＋ 「きょり」「木漏れ日」）… 小さめ・うすい紫
+   ・数（いちばん見せたいもの）                    … いちばん大きく、太く、濃い紫
+   ・単位（m・こ）と、そのほかの札（Lv.4・ボーナス・じこベスト！）… 数より小さく
+   数字は tabular-nums（どの数字も同じ幅）にして、自己ベストと見くらべやすくしている */
 .mg-result {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
+  gap: 10px 20px;
   margin: 4px 0 12px;
   color: #6b4fb0;
   font-size: 20px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .mg-result__item {
   display: inline-flex;
   align-items: baseline;
-  gap: 4px;
+  gap: 5px;
   white-space: nowrap;
 }
 
+/* 記録の絵文字（🏁・✨）と、何の記録かの言葉（きょり・木漏れ日）
+   数より小さく・うすくして、大きい数字が先に目に入るようにする */
+.mg-result__icon {
+  font-size: 22px;
+}
+
+.mg-result__label {
+  color: #8471bd;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
 .mg-result__value {
-  font-size: 40px;
-  line-height: 1.1;
+  color: #57389e;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
   animation: status-pop 0.35s ease-out;
+}
+
+/* 単位（「123」の m・「8」の こ）。数にくっつけて、数よりは小さく */
+.mg-result__unit {
+  margin-left: -2px;
+  font-size: 17px;
+  font-weight: 700;
 }
 
 /* とどいたレベル（「Lv.4」。距離のとなりに、紺色の小さな丸で） */
@@ -868,6 +965,20 @@ onUnmounted(() => {
   color: #fff;
   font-size: 13px;
   font-weight: 800;
+}
+
+/* 集めた木漏れ日ぶんの距離ボーナス（「🏁 +40m」。木漏れ日のとなりに、クリーム色の小さな丸で）
+   とどいたレベル（.mg-result__level）と同じ形・大きさにして、ならびをそろえている */
+.mg-result__bonus {
+  align-self: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: #fff6e0;
+  box-shadow: inset 0 0 0 1px #f5e2be;
+  color: #8a5a00;
+  font-size: 13px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 自己ベストを更新したときの小さな印 */
@@ -926,6 +1037,19 @@ onUnmounted(() => {
   box-shadow:
     inset 0 0 0 3px var(--gold),
     0 0 14px 2px rgb(255 209 102 / 70%);
+}
+
+/* 加速コンボの倍率が上がった（「⏩ きょり ×3！」）… HUD の札と同じ金色の板
+   スピードアップの板と近い色だが、こちらは倍率の数字が出るので読み分けられる */
+.mg-notice--combo-up {
+  background: linear-gradient(180deg, #ffe09a 0%, #ffca4d 100%);
+}
+
+/* 加速コンボが切れた（「⏩ コンボが きれた…」）… うすい灰色の板
+   ごほうびではなく「なくなった」ことを伝えるので、金色にはしない */
+.mg-notice--combo-end {
+  background: linear-gradient(180deg, #eef1f4 0%, #d8dee4 100%);
+  color: #4a5560;
 }
 
 @keyframes mg-notice {
@@ -1072,6 +1196,26 @@ onUnmounted(() => {
 
   .mg-rules li {
     font-size: 15px;
+  }
+
+  /* 結果の記録は、スマホ幅では数字を少し小さくする
+     入りきらないときは、Lv.4・ボーナス・「じこベスト！」の札が次の行へ回り込むようにして、
+     横にはみ出さないようにする（数字と単位は、いちばん前なので同じ行に残る） */
+  .mg-result__item {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .mg-result__value {
+    font-size: 40px;
+  }
+
+  .mg-result__icon {
+    font-size: 20px;
+  }
+
+  .mg-result__label {
+    font-size: 14px;
   }
 
   /* 下の枠（操作の案内）は、1行に収まるよう、少し小さくする（とても細い画面では、まとまりの切れ目で2行になる）
