@@ -4885,6 +4885,7 @@ onUnmounted(() => {
               <!-- 遊んでいる最中（HUD ＋ 3レーンのフィールド。中身は components/game/SecretPathField.vue）
                    ミニゲーム「どこまで行ける？」（pages/minigame/secret-path.vue）と同じ部品を使う
                    ・bump-penalty … 枝に当たって木漏れ日が本当に減ったときだけ「✨ -1」を出す
+                   ・sparkle-label … 木漏れ日を取ったときに出す文字（本編は、集めた数が1つ増えるので「✨ +1」）
                    ・フィールドのポインター操作は、部品から知らせてもらって useSecretPathGame() の関数へつなぐ -->
               <SecretPathField
                 v-else-if="secretPathPhase === 'playing'"
@@ -4898,6 +4899,7 @@ onUnmounted(() => {
                 :bump-penalty="secretPathBumpLost ? '✨ -1' : null"
                 :bump-id="secretPathBumpId"
                 :is-sparkling="isSecretPathSparkling"
+                sparkle-label="✨ +1"
                 :sparkle-id="secretPathSparkleId"
                 :sunlight-count="secretPathSunlightCount"
                 :sunlight-total="secretPathSunlightTotal"
