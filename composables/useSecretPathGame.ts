@@ -37,8 +37,9 @@
                  ・時間では終わらず、枝に secretPathEndlessLives 回当たったら終わる（木漏れ日は減らない）
                  ・行の予定を、遊びながら1行ずつ作る
                  ・進んだ距離でレベルが上がり、速さ・行の間隔・枝2本の割合がきびしくなる（上限なし。速いときは1コマを細かく分けて当たりを見る）
-                 ・進んだ距離（メートル）を数える
-                 ・加速コンボ：はやく進むのを枝に当たらずに続けると、進んだ距離を多めに数える（×1.5 → ×2 → ×3）
+                 ・進んだ距離（メートル）を数える。木漏れ日を取ると、集めた数だけでなく、距離にもボーナスが付く（1つで +5m）
+                 ・加速コンボ：はやく進むのを枝に当たらずに続けると、進んだ距離を多めに数える
+                   （加速そのもので ×2、コンボが付くと合わせて ×3 → ×4 → ×6。画面に出すのは、この合計の倍率）
                  ・終わっても、おでかけポイント・こもれびの広場など、本編の状態にはさわらない
      story だけで使う options（outingPoint・goToPlace など）は、endless では読み書きしない
 
@@ -81,6 +82,7 @@ import {
   secretPathEndlessLives,
   secretPathEndlessMetersPerField,
   secretPathEndlessStepMs,
+  secretPathEndlessSunlightBonusMeters,
 } from '~/data/secretPathEndless';
 import type { GameEvent, SecretPathItem, SecretPathLane, SecretPathMode, SecretPathPhase, SecretPathSpawn, StatusChanges } from '~/types/game';
 
@@ -267,6 +269,60 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   const isSecretPathBoosting = computed(
     () => isSecretPathPlaying.value && !isSecretPathCountingDown.value && (isSecretPathKeyBoosting.value || isSecretPathPointerBoosting.value),
   );
+
+  /* ===== 加速の「いま何倍で数えているか」を、画面に出すための値（どれも「どこまで行ける？」だけ） =====
+
+     ■ 出すのは、コンボの倍率ではなく「ふだんの何倍か（合計）」
+       はやく進むと、ゲームの時計そのものが secretPathBoostMultiplier（2倍）で進み、
+       進んだ距離も その時計で数えているので、加速しただけで すでに ×2 数えられている
+       そこへ加速コンボの倍率（×1.5 → ×2 → ×3）が掛かるので、実際には ×3 → ×4 → ×6 になる
+       前は コンボの倍率をそのまま「⏩ ×1.5」と出していて、伸びかたと数字が合っていなかったので、
+       HUD の札・ルールの説明・知らせは、どれも この合計の倍率でそろえている
+       （数えかたそのものは、今までと まったく同じ） */
+
+  /* いま、進んだ距離が ふだんの何倍で数えられているか（加速していないときは 1） */
+  const secretPathBoostTotalMultiplier = computed(() => (isSecretPathBoosting.value ? secretPathBoostMultiplier * secretPathComboMultiplier.value : 1));
+
+  /* 加速コンボの、次の段（まだ届いていない、いちばん近い段。いちばん上まで届いたら undefined）
+     secretPathEndlessBoostComboTiers は seconds の小さい順に並んでいるので、最初に見つかったものが次の段 */
+  const secretPathNextComboTier = computed(() =>
+    isEndless ? secretPathEndlessBoostComboTiers.find((tier) => secretPathBoostComboTime.value < tier.seconds * 1000) : undefined,
+  );
+
+  /* 次の段まで届いたときの合計倍率（いちばん上の段まで届いたら null。HUD の札の「→ ×4」に出す） */
+  const secretPathNextBoostMultiplier = computed(() => {
+    const nextTier = secretPathNextComboTier.value;
+
+    return nextTier ? secretPathBoostMultiplier * nextTier.multiplier : null;
+  });
+
+  /* 次の段までの進み具合（0〜1。いちばん上の段まで届いたら 1）
+     いまの段の秒数から、次の段の秒数までを 0〜1 にする（HUD の札の下のゲージに出す）
+     どこで倍率が上がるのかが見えないと、加速をどこまで続けるかを決められないため */
+  const secretPathComboProgress = computed(() => {
+    const nextTier = secretPathNextComboTier.value;
+
+    if (!nextTier) {
+      return 1;
+    }
+
+    // いまの段（もう届いている、いちばん上の段）の秒数。まだ1つも届いていなければ 0 から数える
+    let from = 0;
+
+    for (const tier of secretPathEndlessBoostComboTiers) {
+      if (secretPathBoostComboTime.value >= tier.seconds * 1000) {
+        from = tier.seconds * 1000;
+      }
+    }
+
+    const to = nextTier.seconds * 1000;
+
+    return Math.min(1, Math.max(0, (secretPathBoostComboTime.value - from) / (to - from)));
+  });
+
+  /* 集めた木漏れ日ぶんの、進んだ距離のボーナス（メートル。結果の画面の「✨ 8 +40m」に出す）
+     本編の小道では使わない（木漏れ日は、おでかけポイントのボーナスになる） */
+  const secretPathSunlightBonusMeters = computed(() => (isEndless ? secretPathSunlightCount.value * secretPathEndlessSunlightBonusMeters : 0));
 
   /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない）
 
@@ -525,11 +581,22 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       const offset = item.y - secretPathPlayerY;
 
       // ③ 木漏れ日：こうちゃんに重なったら取る（枝より少しゆるめに見る）
+      //    「どこまで行ける？」では、集めた数のほかに、進んだ距離にもボーナスを足す
       if (item.kind === 'sunlight' && offset >= -10 && offset <= 6) {
         item.hit = true;
         needsCleanup = true;
 
         secretPathSunlightCount.value += 1;
+
+        /* 「どこまで行ける？」の距離ボーナス（1つで +5m → data/secretPathEndless.ts）
+           ・取りに行く意味を、記録（進んだ距離）にも出すため（木漏れ日の行は、たいてい枝もいっしょに出る）
+           ・加速コンボの倍率は掛けない（いつ取っても同じ +5m のほうが分かりやすい）
+           ・こうちゃんの上には「✨ +5m」と出す（→ pages/minigame/secret-path.vue の sparkle-label）
+           本編の小道は、今までどおり数を数えるだけ（小道をぬけたときの、おでかけポイントのボーナスになる） */
+        if (isEndless) {
+          secretPathDistance.value += secretPathEndlessSunlightBonusMeters;
+        }
+
         secretPathSparkleUntil.value = elapsed + secretPathSparkleDuration;
         secretPathSparkleId.value += 1;
 
@@ -598,6 +665,16 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathBumpLost.value = false;
     secretPathSparkleUntil.value = 0;
     secretPathFinishedAt = performance.now();
+
+    /* 加速コンボの、続けた長さも ここで 0 に戻す（「どこまで行ける？」だけで使う値）
+
+       戻すのを「もう一回」（resetSecretPathGame()）だけにしていると、
+       倍率が 3 → 1 に下がったことを、始まったあとの画面が受け取って、
+       新しいプレイのはじめに「⏩ コンボが きれた…」と出してしまう
+       （→ pages/minigame/secret-path.vue の watch(secretPathComboMultiplier)。
+         画面が受け取るのは、リセットと開始がぜんぶ終わったあとなので、そのときには もう遊んでいる最中になっている）
+       ここで戻しておけば、下がったのは まだ結果の画面のときなので、何も出ない */
+    secretPathBoostComboTime.value = 0;
 
     // 結果の画面は「もう一回」などのコマンドだけになるので、選択中のコマンドを一番上（0）に戻す
     selectedCommandIndex.value = 0;
@@ -1113,6 +1190,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathLives, // 「どこまで行ける？」だけ
     secretPathDistance, // 「どこまで行ける？」だけ
     secretPathComboMultiplier, // 「どこまで行ける？」だけ（加速コンボの倍率。1 ＝ コンボなし）
+    secretPathBoostTotalMultiplier, // 「どこまで行ける？」だけ（いま距離が ふだんの何倍で数えられているか。1 ＝ 加速していない）
+    secretPathNextBoostMultiplier, // 「どこまで行ける？」だけ（次の段まで届いたときの合計倍率。いちばん上まで届いたら null）
+    secretPathComboProgress, // 「どこまで行ける？」だけ（次の段までの進み具合。0〜1）
+    secretPathSunlightBonusMeters, // 「どこまで行ける？」だけ（集めた木漏れ日ぶんの、進んだ距離のボーナス）
     secretPathLevel, // 「どこまで行ける？」だけ（いまのレベル。1 ＝ Lv.1）
 
     /* ===== 画面に出す、計算した状態 ===== */
