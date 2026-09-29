@@ -416,6 +416,7 @@ const {
   /* S+ランク限定のうた入りBGM */
   hasUnlockedSPlusSong,
   isSPlusSongNewlyUnlocked,
+  isSPlusSongHintVisible,
 
   /* ゴールしたときに呼ぶ（順番は goToGoal() が決める） */
   judgeResult,
@@ -5357,11 +5358,16 @@ onUnmounted(() => {
 
                 <p class="ending-card__text">{{ endingMessage }}</p>
 
-                <!-- S+ランクのときだけ出す、うた入りエンディングBGMの小さな表示
+                <!-- うた入りエンディングBGMの小さな表示
 
-                     出すのは、どちらか1つだけ（スコア・ランク・結果の文をじゃましないように）
-                     ・このブラウザではじめて解放したとき … 「✨ サウンドトラックに新しい曲が追加されました！」＋ 曲名
-                     ・もう解放済みのとき                 … 「♪ 曲名」だけ（いま流れている曲の案内）
+                     出すのは、どれか1つだけ（スコア・ランク・結果の文をじゃましないように）
+                     ・S+で、このブラウザではじめて解放したとき … 「✨ サウンドトラックに新しい曲が追加されました！」＋ 曲名
+                     ・S+で、もう解放済みのとき                 … 「♪ 曲名」だけ（いま流れている曲の案内）
+                     ・A／Sで、まだ解放していないとき           … 「🔒 S+ランクを とると、なにかあるみたい…」のヒント
+                                                                  （出すランクの決めかたは utils/sPlusSong.ts の shouldShowSPlusSongHint()）
+                     ・それ以外                                 … 何も出さない
+
+                     ※ A／SとS+は同時にならないので、この3つがぶつかることはない
 
                      role="status" … 解放のお知らせが出たことを、読み上げソフトにも伝える -->
                 <p v-if="isSPlusSongNewlyUnlocked" class="ending-card__song ending-card__song--new" role="status">
@@ -5370,6 +5376,15 @@ onUnmounted(() => {
                 </p>
 
                 <p v-else-if="endingRank === 'S+ランク'" class="ending-card__song">♪ {{ sPlusSongTitle }}</p>
+
+                <!-- まだ うた入りBGMを取っていない人への、S+のヒント
+                     何がもらえるかは書かない（ミニゲームの「🔒 300m まで行くと、なにかあるみたい…」と同じ出しかた）
+                     何点からS+になるかも書かない（総合スコアは上に出ているので、「Sより上がある」ことだけ伝われば足りる）
+
+                     ※ ここは role="status" を付けない
+                       いま起きたことのお知らせではなく、リザルト画面といっしょに出る案内なので、
+                       上の「新しい曲が追加されました！」と区別している -->
+                <p v-else-if="isSPlusSongHintVisible" class="ending-card__song ending-card__song--locked">🔒 S+ランクを とると、なにかあるみたい…</p>
               </article>
 
               <!-- スコア内訳（何で何点もらったか）

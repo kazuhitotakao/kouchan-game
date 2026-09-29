@@ -160,6 +160,17 @@
   background: #fffaf0;
 }
 
+/* A／Sランクのときに出す、S+のヒント（まだ うた入りBGMを取っていない人だけ）
+
+   まだ手に入れていないものの話なので、金色のふち（ごほうび）は付けない
+   ミニゲームのヒント（pages/minigame/secret-path.vue の .mg-reward--locked）と同じ考えかたで、
+   白地＋うすい枠にして、文字も うすい茶色（スコアの「/ 100」と同じ色）にしてひかえめに置く */
+.ending-card__song--locked {
+  border-color: #ece2cd;
+  background: #fff;
+  color: #b08a3c;
+}
+
 /* スコア内訳（何で何点もらったかの一覧） */
 .score-card {
   padding: 18px 22px;
