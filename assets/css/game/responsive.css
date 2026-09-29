@@ -322,6 +322,13 @@
   .game-screen--has-result .stage:not(.stage--secret-path) > .place-card .place-card__title {
     margin-bottom: 0;
   }
+
+  /* 場所の絵（バナー）は、スマホでは高さ 88px まで
+     （中央エリアは本文のために残したいので、PCの 160px より低くする） */
+  .place-card__banner {
+    max-height: 88px;
+    margin-bottom: 8px;
+  }
 }
 
 /* ============================================================

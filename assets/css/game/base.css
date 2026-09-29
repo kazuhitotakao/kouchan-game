@@ -312,9 +312,24 @@
 }
 
 /* 起動画面のカードも、タイトル画面と同じ余白・同じ min-height を使う
-   （A→B で切り替えたときに、カードの外枠サイズがそろうようにする） */
+   （A→B で切り替えたときに、カードの外枠サイズがそろうようにする）
+
+   上の余白（auto）は、タイトルの上に置いたキービジュアル（.title-card__visual）が受けもつので、
+   ここでは 0 にする（auto のままだと、絵とタイトルのあいだが空いてしまう） */
 .title-card--boot .title-card__name {
-  margin: auto 0 28px;
+  margin: 0 0 28px;
+}
+
+/* 起動画面のキービジュアル（中身は components/common/NoImage.vue。縦横比は 16:9）
+
+   並び順はタイトルと同じ order: 2。HTMLでタイトルより先に書いてあるので、タイトルの上に出る
+   margin-top: auto … カードの縦のあまりを、タイトルの代わりにここで受けとめる
+   幅の上限 … 高さが 240px（スマホは 140px。→ @media (max-width: 700px)）をこえないよう、
+              高さ × 16 / 9 を幅の上限にしている（まんなかに置く） */
+.title-card__visual {
+  order: 2;
+  max-width: calc(240px * 16 / 9);
+  margin: auto auto 16px;
 }
 
 /* ============================================================
@@ -1404,6 +1419,34 @@
   line-height: 1.8;
 }
 
+/* 場所の絵（カードのいちばん上のバナー。中身は components/common/NoImage.vue）
+
+   縦横比は 3:1 だが、カードの幅いっぱいに広げると、PCでは高さが280pxほどになり、
+   中央エリア（下の結果カード・コマンド）の場所を取りすぎる
+   そこで高さに上限をつける。上限にかかると横長の帯になり、本番の画像は上下が切れる
+   （絵は、大事なものを まんなかの高さに置いて描いてもらう）
+   ・PC … 160px（スマホは responsive.css で 88px）
+   ・結果が出ているあいだは、PCでもスマホでも隠す（すぐ下） */
+.place-card__banner {
+  max-height: 160px;
+  margin: 0 0 12px;
+}
+
+/* 結果が出ているあいだは、場所の絵（バナー）をたたむ（結果の「もどる」などで結果が消えると、また出る）
+
+   PCでは結果カードが縮んで中身だけがスクロールする作りなので（result.css の .stage > .result-card）、
+   バナーが残っていると、1280×800 の画面で結果の本文が3〜4行ぶんしか見えなくなる
+   スマホでも、説明文をたたむ（responsive.css）のと同じ理由で、結果に場所をゆずる
+   .game-screen--has-result は pages/index.vue が、結果が出ているあいだだけ付ける
+
+   ※ いやいやタイム（.place-card--tantrum）だけは、結果が出ていても隠さない
+     いやいやが強くなる（レベル1→2→3）のは、対応がうまくいかずに結果が出ているときなので、
+     隠してしまうと、レベルごとに変わる絵が見えなくなるため
+     （そのぶんスマホでは、結果を読むのに少しスクロールが要る） */
+.game-screen--has-result .stage > .place-card:not(.place-card--tantrum) .place-card__banner {
+  display: none;
+}
+
 /* 秘密の場所 */
 .place-card--secret {
   border-color: #e6dbfa;
@@ -2166,6 +2209,11 @@
 
   .title-card__name {
     font-size: 26px;
+  }
+
+  /* 起動画面のキービジュアルは、高さ 140px まで（幅の上限 ＝ 140px × 16 / 9） */
+  .title-card__visual {
+    max-width: calc(140px * 16 / 9);
   }
 
   /* 説明文は大きいままにしたいが、スマホの画面幅に収まる大きさへ少し下げる */
