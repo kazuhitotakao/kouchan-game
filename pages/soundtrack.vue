@@ -1488,6 +1488,11 @@ function stopAudioForNavigation() {
      読み書きはどちらもブラウザの中だけ（onMounted より前には動かない）なので、
      サーバー側で作った画面と食いちがう（hydration mismatch）ことはない
 
+   ■ 歌詞の画面も覚える
+     「歌詞をぜんぶ見る」で歌詞の画面を出したまま離れたときは、また歌詞の画面のまま開く
+     （そのあいだ、曲の一覧のスクロール位置は覚えなおさない。
+       かくれている箱の scrollTop は 0 になるので、前に見ていた場所が消えてしまうため）
+
    ■ 全曲再生・シャッフル再生の「途中」も覚える
      曲と再生位置だけでなく、そのとき作られていた1周ぶんの曲順（playlistTracks）と、
      その何曲目か（playlistIndex）、シャッフルかどうか（isShufflePlaying）もいっしょに覚える
@@ -1517,6 +1522,7 @@ function stopAudioForNavigation() {
    ・全曲再生の途中 … {"id":3,"time":42.5,"playlist":{"shuffle":false,"ids":[1,2,3,4],"index":2}}
      ids … その1周ぶんの曲順（曲の番号だけ。シャッフルならシャッフルされた順）
      index … いま何曲目か（ids の何番目か）
+   ・歌詞の画面を出していた … {"id":8,"time":42.5,"lyrics":true}
 
    ※ playlist が入っていない、前のかたちのメモも、そのまま「1曲だけの再生」として読める */
 const lastPlayStorageKey = 'kouchan-soundtrack-last-play';
@@ -1638,7 +1644,11 @@ function saveLastPlayState(force = false) {
         }
       : undefined;
 
-    localStorage.setItem(lastPlayStorageKey, JSON.stringify({ id: playingTrackId.value, time: Math.max(0, currentTime.value), playlist }));
+    /* 歌詞の画面を出していたかどうかも覚える（出していないときは入れない）
+       ※ 歌詞の画面を出したまま離れて、また戻ってきたときに、歌詞のまま開くため */
+    const lyrics = isLyricsView.value ? true : undefined;
+
+    localStorage.setItem(lastPlayStorageKey, JSON.stringify({ id: playingTrackId.value, time: Math.max(0, currentTime.value), playlist, lyrics }));
   } catch {
     // ブラウザの設定で保存できないことがある
     // 覚えられなくても、このページを開いているあいだの再生はふつうに動く
@@ -1648,6 +1658,16 @@ function saveLastPlayState(force = false) {
 /* 曲の一覧のスクロール位置を覚えておく（force の意味は saveLastPlayState と同じ） */
 function saveTrackScroll(force = false) {
   if (!import.meta.client || isLastStateFixed) {
+    return;
+  }
+
+  /* 歌詞の画面を出しているあいだは、覚えない
+
+     曲の一覧はかくれていて（v-show ＝ display: none）、
+     かくれた箱には大きさが無いので、scrollTop はいつも 0 になる
+     そのまま覚えると、前に見ていた場所が 0 で上書きされてしまう
+     （歌詞のまま離れて、また戻ってきたときに、一覧がいちばん上に戻ってしまっていた） */
+  if (isLyricsView.value) {
     return;
   }
 
@@ -1763,7 +1783,7 @@ function restoreLastPlayState() {
     return;
   }
 
-  const { id, time, playlist } = saved as { id?: unknown; time?: unknown; playlist?: unknown };
+  const { id, time, playlist, lyrics } = saved as { id?: unknown; time?: unknown; playlist?: unknown; lyrics?: unknown };
   const track = typeof id === 'number' ? tracks.value.find((item) => item.id === id) : undefined;
 
   if (!track) {
@@ -1790,6 +1810,15 @@ function restoreLastPlayState() {
 
   // 全曲再生・シャッフル再生の途中だったなら、その曲順も戻す
   restorePlaylist(playlist, track);
+
+  /* 歌詞の画面を出したまま離れていたなら、歌詞の画面のまま開く（うた入りの曲のときだけ）
+
+     いまの行は、曲の何秒目かで決まる（→ updateLyricIndex）
+     戻した位置がAudioへ入ったところで行も決まり、その行まで自動でスクロールする
+     （開きかたは「歌詞をぜんぶ見る」を押したときと同じ openLyricsView） */
+  if (lyrics === true && track.lyrics) {
+    openLyricsView();
+  }
 
   try {
     /* preload … 開いただけで曲まるごと（数MB）を読み込ませない
@@ -1836,12 +1865,13 @@ function restoreTrackScroll() {
   }
 }
 
-/* 曲・再生/一時停止・全曲再生の状態が変わったら、そのたびに覚えておく
+/* 曲・再生/一時停止・全曲再生の状態・歌詞の画面が変わったら、そのたびに覚えておく
    （1秒に1回の制限はかけない）
 
    全曲再生の状態まで見ているのは、曲は変わらないまま
-   「全曲再生をやめて1曲だけの再生になる」ようなときも、覚えなおすため */
-watch([playingTrackId, isPlaying, isPlaylistPlaying, isShufflePlaying, playlistIndex], () => {
+   「全曲再生をやめて1曲だけの再生になる」ようなときも、覚えなおすため
+   歌詞の画面も、開け閉めしたその場で覚えておく */
+watch([playingTrackId, isPlaying, isPlaylistPlaying, isShufflePlaying, playlistIndex, isLyricsView], () => {
   saveLastPlayState(true);
 });
 
