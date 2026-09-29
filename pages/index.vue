@@ -200,8 +200,9 @@ const soundControlRef = ref<InstanceType<typeof SoundControl> | null>(null);
    SoundControl の中にあるので、コンポーネントごしに借りてくる
    （読むだけなので、今までの ref と同じように soundToggleButtonRef.value で使える）
 
-   ※ 音量スライダーは、A画面・B画面で Tab を回りこませるときに、
-     いちばん後ろの行き先として使う */
+   ※ 音量スライダーは、B画面で Tab を回りこませるときに、いちばん後ろの行き先として使う
+     A画面にはスライダーが無いので（:show-volume="false"）、そこでは null になり、
+     ミュートボタンがいちばん後ろの行き先になる（→ useKeyboardControls の handleTitleKeydown） */
 const soundToggleButtonRef = computed<HTMLButtonElement | null>(() => soundControlRef.value?.toggleButton ?? null);
 const soundVolumeSliderRef = computed<HTMLInputElement | null>(() => soundControlRef.value?.volumeSlider ?? null);
 
@@ -1691,14 +1692,19 @@ function handleScreenEnterEnd() {
    ページを開いた直後に鳴らそうとしても止められてしまうので、
    ボタンを1回押してもらい、その操作をきっかけに鳴らしはじめる
 
-   ※ ここでは決定音を鳴らさない
-     （曲が鳴りはじめること自体が、押せたことの合図になる）
-
    曲は少しだけ間を空けてから鳴らしはじめる
    押した瞬間にいきなり始まると唐突に聞こえるため
    （待つのは音だけで、画面の切り替えはこのあとすぐ行う）
+
+   ※ 決定音「ポン♪」はここで鳴らす
+     この画面でただ一つ、先へ進むボタンなので、押せたことを音でも返す
+     （となりの ♪ サントラ・🌿 ミニゲームは、ページごと移るだけなので鳴らさない）
+     曲が鳴りだすのは0.7秒あとなので、決定音と重なって聞こえることはない
 */
 function enterTitle() {
+  // 決定音「ポン♪」（ほかの「先へ進む」ボタンと同じ）
+  playDecisionSound();
+
   playTitleBgmSoon();
 
   titleEntered.value = true;
@@ -1720,9 +1726,9 @@ function enterTitle() {
    もう一度「はじめる」を押せば、enterTitle() でまたタイトルBGMが鳴る
 */
 function goBackToBoot() {
-  // 決定音「ポン♪」（ほかのボタンと同じ）
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない
+     この「戻る」は、先へ進むボタンではなく、ひとつ前の画面へ引き返すボタン
+     引き返すだけのボタンでは音を出さないようにしている（ほかの画面の「戻る」も同じ） */
   cancelTitleBgmStart();
   stopTitleBgm();
 
@@ -1837,9 +1843,8 @@ function openSnackSelection() {
 
    タイトルBGMも鳴ったままでよい（ここもまだゲーム開始前の画面） */
 function closeSnackSelection() {
-  // 決定音「ポン♪」（ほかのボタンと同じ）
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない（B画面の「戻る」goBackToBoot() と同じ考えかた）
+     引き返すだけのボタンなので、音は出さない */
   isSnackSelectionOpen.value = false;
 
   /* B画面のメインのボタン「きょうのおやつを選ぶ」へのフォーカスは、
@@ -1876,9 +1881,9 @@ function closeSnackSelection() {
    「← ひとつ前の画面へ戻る」へのフォーカスは、フェードが終わったときに
    handleScreenEnterEnd() が当ててくれる（おやつ選択画面を開くときと同じ） */
 function openHowToPlay() {
-  // 決定音「ポン♪」（ほかのボタンと同じ）
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない
+     ゲームを進めるボタンではなく、説明書をちょっと開くだけのボタンなので、音は出さない
+     （閉じる「← ひとつ前の画面へ戻る」closeHowToPlay() も、そろえて鳴らさない） */
   isHowToPlayOpen.value = true;
 }
 
@@ -1887,9 +1892,9 @@ function openHowToPlay() {
    B画面へ戻るだけ。タイトルBGMは鳴ったままでよい
    B画面のメインのボタンへのフォーカスは、フェードが終わってから handleScreenEnterEnd() が当てる */
 function closeHowToPlay() {
-  // 決定音「ポン♪」（ほかのボタンと同じ）
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない
+     開くとき（openHowToPlay()）も鳴らしていないので、閉じるときもそろえる
+     引き返すだけのボタンなので、音は出さない（ほかの画面の「戻る」も同じ） */
   isHowToPlayOpen.value = false;
 }
 
@@ -2043,9 +2048,10 @@ function goToSoundtrack() {
 
   isLeavingPage = true;
 
-  // 決定音「ポン♪」（ほかのボタンと同じ）
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない
+     このボタンを押すと、このあとすぐページごと切りかわる
+     切りかわりのとちゅうで「ポン♪」だけが残って聞こえるのを避けている
+     （🌿 ミニゲーム、サウンドトラック・ミニゲームの各ページの「戻る」も同じ） */
   cancelTitleBgmStart();
   stopTitleBgm();
 
@@ -2084,9 +2090,7 @@ function goToMinigame() {
 
   isLeavingPage = true;
 
-  // 決定音「ポン♪」（ほかのボタンと同じ）
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない（すぐ上の goToSoundtrack() と同じ理由） */
   cancelTitleBgmStart();
   stopTitleBgm();
 
@@ -3122,13 +3126,30 @@ function openGoalConfirm() {
   }
 }
 
-/* 確認ダイアログを閉じる（「もう少し遊ぶ」・Escape・ダイアログの外のクリック）
+/* 確認ダイアログを閉じる（表示を戻すだけ。音は鳴らさない）
 
    公園入口に戻るだけで、時間もステータスも変わらない
-   うしろの「どこへ行く？」は「公園の出口へ向かう」が選ばれたまま */
+   うしろの「どこへ行く？」は「公園の出口へ向かう」が選ばれたまま
+
+   ※ ここに決定音を入れないのが大事
+     「出口へ向かう」（confirmGoToGoal）や、もう一度あそぶ（resetGame）からも呼ばれる
+     ゴールではファンファーレだけを聞かせたいので、決定音を重ねない
+     （→ 下の cancelGoalConfirm()。人が「やめる」と押したときだけ鳴らす） */
 function closeGoalConfirm() {
   isGoalConfirmOpen.value = false;
   selectedGoalConfirmIndex.value = 0;
+}
+
+/* 確認ダイアログをやめる（「もう少し遊ぶ」・Escape・ダイアログの外のクリック）
+
+   やることは closeGoalConfirm() と同じで、決定音を鳴らすところだけがちがう
+   出口へ向かうのをやめて、公園入口の「どこへ行く？」へ戻る操作なので、
+   ほかのコマンドと同じように、押せたことを音で返す */
+function cancelGoalConfirm() {
+  // 決定音「ポン♪」（ほかのコマンドと同じ）
+  playDecisionSound();
+
+  closeGoalConfirm();
 }
 
 /* 確認ダイアログの「出口へ向かう」
@@ -3656,7 +3677,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, updateEntranceColumns, focus
   closeSnackSelection,
   closeHowToPlay,
   closeSnackMenu,
-  closeGoalConfirm,
+  cancelGoalConfirm,
   confirmGoToGoal,
   focusFirstSnackOption,
   pauseCommandPointer,
@@ -4044,15 +4065,23 @@ onUnmounted(() => {
                    ようにしているため（ボタン側で止める必要はない） -->
             <div class="title-card__toolsLeft">
               <!-- サウンドトラックへの入口
-                   ・広い画面   … 「♪ サウンドトラック」（文字も出す）
-                   ・スマホ幅   … 「♪」のアイコンだけにして、ミニゲームの入口と1行に並ぶようにする
-                                   何のボタンかは、hover / focus のときだけ出る吹き出しで伝える
-                                   （右のサウンドのコントロールと同じやりかた）
-                   文字と吹き出しの出しわけは CSS（.title-card__soundtrackText / .title-card__tooltip）
-                   読み上げは、どちらの画面でも aria-label の「サウンドトラック」だけにする（二重に読まれない） -->
+
+                   入りきる幅に合わせて、3段階で出しわける（文字があるほうが、何のボタンかがすぐ分かる）
+                   ・390px以上      … 「♪ サウンドトラック」
+                   ・341〜389px     … 「♪ サントラ」（細いスマホ。短くして1行に収める）
+                   ・340px以下      … 「♪」のアイコンだけ（とても細い画面）
+                                       何のボタンかは、hover / focus のときだけ出る吹き出しで伝える
+                                       （右のサウンドのコントロールと同じやりかた）
+                   出しわけは CSS（.title-card__soundtrackText--full / --short ／ .title-card__tooltip）
+                   読み上げは、どの幅でも aria-label の「サウンドトラック」だけにする
+                   （文字のほうは aria-hidden なので、「サントラ」と読まれることはない）
+
+                   ※ スマホ幅でも文字を出せるのは、右のサウンドから音量スライダーを外して
+                     横幅が空いたため（→ 右の SoundControl の :show-volume="false"） -->
               <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" aria-label="サウンドトラック" @click="goToSoundtrack">
                 <span aria-hidden="true">♪</span>
-                <span class="title-card__soundtrackText" aria-hidden="true">サウンドトラック</span>
+                <span class="title-card__soundtrackText--full" aria-hidden="true">サウンドトラック</span>
+                <span class="title-card__soundtrackText--short" aria-hidden="true">サントラ</span>
                 <span class="title-card__tooltip" aria-hidden="true">サウンドトラック</span>
               </button>
 
@@ -4062,19 +4091,28 @@ onUnmounted(() => {
               <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">🌿 ミニゲーム</button>
             </div>
 
-            <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+            <!-- サウンドのコントロール（この画面ではミュートボタンだけ）
 
-                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンだけの小さなボタンにしてある
                  何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る）
 
-                 ・ミュートボタン … 音を出すか、出さないか
-                 ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
-                 0% ＝ ミュートなので、2つはいつも同じ状態になる
-                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+                 ■ ここだけ音量スライダーを出さない（:show-volume="false"）
+                   A画面は、まだBGMが鳴っていない画面
+                   （鳴るのは ♪・🌿 を押したときの決定音だけで、押すとすぐ次の画面へ移る）
+                   スライダーを動かしても、その場では何も聞こえない＝手ごたえがないので出さない
+                   「はじめる」を押すとタイトルBGMが鳴りだすので、
+                   その前に音を消しておく役目は、ミュートボタンだけで足りる
+                   （大きさの調整は、音が鳴っているB画面以降でできる）
+
+                 ■ 空いた横幅は、左のサウンドトラックの入口が使う
+                   スマホ幅でも「♪」だけの丸にせず、文字を出せるようになった
+                   （→ assets/css/game/base.css の @media (max-width: 389px) の説明） -->
             <SoundControl
               ref="soundControlRef"
               :sound-enabled="soundEnabled"
               :sound-volume-percent="soundVolumePercent"
+              :show-volume="false"
               @toggle="toggleSound"
               @volume-change="changeSoundVolume" />
           </div>
@@ -5664,7 +5702,7 @@ onUnmounted(() => {
          role="alertdialog" と aria-modal="true" は、読み上げソフトに
          「大事な確認のダイアログが、画面の手前に出ている」ことを伝えるためのもの
          ============================================================ -->
-    <div v-if="isGoalConfirmVisible" class="goal-confirm" @click.self="closeGoalConfirm">
+    <div v-if="isGoalConfirmVisible" class="goal-confirm" @click.self="cancelGoalConfirm">
       <div class="goal-confirm__content" role="alertdialog" aria-modal="true" aria-labelledby="goal-confirm-title" aria-describedby="goal-confirm-text">
         <p id="goal-confirm-title" class="goal-confirm__title">公園の出口へ向かう？</p>
 
@@ -5677,7 +5715,7 @@ onUnmounted(() => {
         <p class="goal-confirm__time">{{ goalConfirmTimeText }}</p>
 
         <div class="goal-confirm__buttons">
-          <button type="button" class="cmd goal-confirm__button" :class="{ 'cmd--selected': selectedGoalConfirmIndex === 0 }" @click="closeGoalConfirm" @mouseenter="selectedGoalConfirmIndex = 0">
+          <button type="button" class="cmd goal-confirm__button" :class="{ 'cmd--selected': selectedGoalConfirmIndex === 0 }" @click="cancelGoalConfirm" @mouseenter="selectedGoalConfirmIndex = 0">
             <span class="cmd__text">もう少し遊ぶ</span>
           </button>
 

@@ -480,8 +480,10 @@ async function goToList() {
 
   isLeavingPage = true;
 
-  // 決定音「ポン♪」（効果音は曲とは別のしくみなので、このあと曲を止めても最後まで鳴る）
-  playDecisionSound();
+  /* ※ 決定音は鳴らさない
+     引き返すだけのボタンで、このあとすぐページごと切りかわるため
+     （遊んでいる最中でも、はじまる前・結果の画面でも、このボタンは同じここを通る）
+     ゲーム本編の「戻る」・ミニゲーム一覧の「戻る」も同じ */
   stopSecretBgm();
   stopGameOverBgm();
 
