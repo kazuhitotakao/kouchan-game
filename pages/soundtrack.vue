@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
+import { loadHasUnlockedSecretVocalSong, secretVocalSongSrc, secretVocalSongTitle } from '~/utils/secretVocalSong';
 
 /* うた入りの曲の歌詞（その曲を鳴らしているあいだ、1行ずつ出す → このファイルの「歌詞」） */
 import { sPlusSongLyrics, type LyricLine } from '~/data/sPlusSongLyrics';
+import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
 
 /* 曲の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
@@ -23,7 +25,7 @@ import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession }
 /* ============================================================
    サウンドトラックページ（/soundtrack）
 
-   ゲームの中で流れる曲（いまは7曲 ＋ S+ランクで解放されるボーナストラック1曲）を、ゆっくり聴くためのページ
+   ゲームの中で流れる曲（いまは7曲 ＋ 解放されるボーナストラック2曲）を、ゆっくり聴くためのページ
 
    ゲーム本編（pages/index.vue）のBGMとは、わざと作りを分けてある
    ・本編 … 場面に合わせて自動で切り替わる。曲はloopする
@@ -65,8 +67,8 @@ type SoundtrackTrack = {
    このページは曲そのものを聴くページなので、全体に大きめにしてある
 
    ※ ここに書くのは、はじめから聴ける曲だけ
-     S+ランクで解放されるボーナストラックは、すぐ下の sPlusBonusTrack に分けてある
-     再生のしくみが使うのは、この2つをあわせた tracks（さらに下）
+     解放されるボーナストラック（sPlusBonusTrack・secretVocalBonusTrack）は、すぐ下に分けてある
+     再生のしくみが使うのは、それらをあわせた tracks（さらに下）
 */
 const baseTracks: SoundtrackTrack[] = [
   {
@@ -128,22 +130,25 @@ const baseTracks: SoundtrackTrack[] = [
 ];
 
 /* ============================================================
-   ボーナストラック（S+ランクで解放される、うた入りエンディングBGM）
+   ボーナストラック（あそんで解放する、うた入りの2曲）
 
-   ゲーム本編で一度でもS+ランクを取ると、このブラウザに「解放済み」と保存される
-   （保存のしくみは utils/sPlusSong.ts。ゲーム本編と同じものを使っている）
+   ・08 … ゲーム本編で一度でもS+ランクを取ると解放（保存のしくみは utils/sPlusSong.ts）
+   ・09 … ミニゲーム「どこまで行ける？」で、1回のプレイで 300m まで行くと解放
+          （保存のしくみは utils/secretVocalSong.ts。解放するところは pages/minigame/secret-path.vue）
+   どちらも、それぞれのページと同じ保存場所を使っている
+   （保存場所の名前がずれると、「取ったのに、サウンドトラックでは聴けない」ということが起きてしまうため）
 
    ■ 「再生できる曲」と「画面のロック表示」を分けてある
      ・tracks（すぐ下） … 再生できる曲だけの一覧
-                          解放前は baseTracks の7曲だけ、解放後は最後にボーナストラックを足した8曲
+                          解放前は baseTracks の7曲だけ、解放したぶんだけ、うしろに足していく
                           個別再生・全曲再生・シャッフル・前後移動・リピートは、ぜんぶ tracks だけを見る
-     ・ロック表示        … 解放前だけ、テンプレートの曲一覧の最後に「🔒 ？？？」を1枚出す
-                          ボタンを持たない、ただの表示（tracks には入れない）
+     ・ロック表示        … まだ解放していない曲のぶんだけ、テンプレートの曲一覧の最後に「🔒 ？？？」を出す
+                          ボタンを持たない、ただの表示（tracks には入れない → lockedTrackHints）
      こうしておけば、再生のしくみのあちこちで「ロック中の曲はとばす」と書かなくてよい
 
    ■ 解放されているかは、ページを開いたとき（onMounted）に localStorage から読む
-     ゲーム本編でS+を取ってからこのページへ来ると、このページは作り直されるので、
-     再読み込みしなくても解放済みとして出る
+     本編でS+を取ってから・ミニゲームで300mまで行ってからこのページへ来ると、
+     このページは作り直されるので、再読み込みしなくても解放済みとして出る
    ============================================================ */
 const sPlusBonusTrack: SoundtrackTrack = {
   id: 8,
@@ -158,19 +163,58 @@ const sPlusBonusTrack: SoundtrackTrack = {
   lyrics: sPlusSongLyrics,
 };
 
+/* ============================================================
+   ボーナストラック（ミニゲーム「どこまで行ける？」で 300m まで行くと解放される、うた入り「こもれびの奥で」）
+
+   ミニゲームで ずっと流れている曲（04 こもれびの奥で）に、うたを足したもの
+   ============================================================ */
+const secretVocalBonusTrack: SoundtrackTrack = {
+  id: 9,
+  title: secretVocalSongTitle,
+  description: 'ミニゲーム達成の特別BGM',
+  src: secretVocalSongSrc,
+  // 音量と制作情報は、通常版（04 こもれびの奥で）と同じ
+  // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
+  volume: 0.4,
+  credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
+  // うた入りなので、鳴らしているあいだ歌詞を1行ずつ出す（→ data/secretVocalSongLyrics.ts）
+  lyrics: secretVocalSongLyrics,
+};
+
 /* ボーナストラックを解放済みかどうか（はじめは false。onMounted で思い出して入れなおす）
    ※ サーバー側では localStorage を読めないので、ここでは読まない
    ※ このページでは読むだけで、false に戻すことはない */
 const hasUnlockedSPlusSong = ref(false);
+const hasUnlockedSecretVocalSong = ref(false);
 
 /* 再生できる曲の一覧（画面に並ぶ曲のカードも、この順番）
 
-   解放後は、ボーナストラックを いちばん最後に足す
+   解放したボーナストラックを、うしろに足していく
    （既存の曲の id と順番は変えないので、全曲再生の開始曲などの覚えごとはくずれない）
 
+   ※ 片方だけ解放しているときは、曲番号がとぶことがある（07 → 09）
+     番号は id をそのまま出しているため。曲ごとの番号が、解放の進み具合で変わらないほうを取っている
    ※ computed なので、使うときは tracks.value と書く（テンプレートの中では .value は要らない）
    ※ baseTracks そのものは書きかえず、解放後は新しい配列を作って返す */
-const tracks = computed(() => (hasUnlockedSPlusSong.value ? [...baseTracks, sPlusBonusTrack] : baseTracks));
+const tracks = computed(() => [...baseTracks, ...(hasUnlockedSPlusSong.value ? [sPlusBonusTrack] : []), ...(hasUnlockedSecretVocalSong.value ? [secretVocalBonusTrack] : [])]);
+
+/* まだ解放していない曲のぶんだけ出す、ロック表示の説明（→ テンプレートの st-lockedTrack）
+
+   何をすれば解放できるかだけを、みじかく出す（曲名は出さない）
+   ぜんぶ解放すると、からっぽになって、ロック表示は1枚も出なくなる */
+const lockedTrackHints = computed(() => {
+  const hints: string[] = [];
+
+  if (!hasUnlockedSPlusSong.value) {
+    hints.push('S+ランクで解放');
+  }
+
+  if (!hasUnlockedSecretVocalSong.value) {
+    hints.push('ミニゲーム「どこまで行ける？」で解放');
+  }
+
+  return hints;
+});
 
 /* ============================================================
    再生のしくみ
@@ -2985,6 +3029,7 @@ onMounted(() => {
      サーバー側では localStorage を読めないので、はじめはロック表示で組み立てておき、
      ブラウザで動くここで読みなおしている（サウンドON/OFFの思い出しかたと同じ） */
   hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
+  hasUnlockedSecretVocalSong.value = loadHasUnlockedSecretVocalSong();
 });
 
 /* このページから離れるときの後始末
@@ -3534,10 +3579,10 @@ onUnmounted(() => {
           </div>
         </li>
 
-        <!-- ボーナストラックのロック表示（まだS+ランクを取っていないときだけ）
+        <!-- ボーナストラックのロック表示（まだ解放していない曲のぶんだけ → lockedTrackHints）
 
-             「まだ何か1曲ある」ことだけ分かるように、曲名は「？？？」にして、一覧の最後に出す
-             解放すると、この場所がそのままボーナストラック（tracks の最後の曲）に置きかわる
+             「まだ聴けない曲がある」ことだけ分かるように、曲名は「？？？」にして、一覧の最後に出す
+             解放すると、この場所がそのままボーナストラック（tracks のうしろの曲）に置きかわる
 
              ・ボタンを1つも持たないので、押せない・再生できない・Tabでも止まらない
              ・再生できる曲の一覧（tracks）には入れていないので、
@@ -3546,7 +3591,7 @@ onUnmounted(() => {
                .track を「ボタンのある曲のカード」として数えるため
                ここも数えてしまうと、End で最後の曲へ行けず、↑↓ の回りこみも止まってしまう
              ・「？？？」は読み上げると記号の連続になるので、読み上げソフトには「まだ聴けない曲」と伝える -->
-        <li v-if="!hasUnlockedSPlusSong" class="st-lockedTrack">
+        <li v-for="hint in lockedTrackHints" :key="hint" class="st-lockedTrack">
           <span class="st-lockedTrack__icon" aria-hidden="true">🔒</span>
 
           <div class="st-lockedTrack__body">
@@ -3555,7 +3600,7 @@ onUnmounted(() => {
               <span class="st-lockedTrack__srText">まだ聴けない曲</span>
             </p>
 
-            <p class="st-lockedTrack__description">S+ランクで解放</p>
+            <p class="st-lockedTrack__description">{{ hint }}</p>
           </div>
         </li>
       </ol>
