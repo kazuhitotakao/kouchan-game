@@ -398,6 +398,13 @@ const stopPlaybackButtonRef = ref<HTMLButtonElement | null>(null);
    「▶ 全曲再生」から ↑↓ で曲の一覧へ入るときに、行き先のボタンを探すのに使う */
 const trackListRef = ref<HTMLElement | null>(null);
 
+/* 曲の一覧のスクロールエリア（<div class="st-trackScroll">）そのものを覚えておく箱
+
+   上下に動くのは、このページではこの箱だけ（ページ全体はのびない）
+   どこまでスクロールしていたかを覚えて、次に開いたときに戻すのに使う
+   （→ 下の「前回の続きから聴けるようにする」） */
+const trackScrollRef = ref<HTMLElement | null>(null);
+
 /* ↑↓ で曲の一覧へ入るとき、どのボタンから入ったかを覚えておく
 
    一覧の上には、いくつかボタンが出ている
@@ -1211,6 +1218,10 @@ function handleTimeUpdate() {
 
   // 一時停止中に再生バーを動かしたときも、歌詞の行を合わせる（→ updateLyricIndex）
   updateLyricIndex();
+
+  /* どこまで聴いたかを覚えておく（次にこのページを開いたときのため）
+     1秒に4回くらい呼ばれるので、覚えるのは1秒に1回までにしている（→ saveLastPlayState） */
+  saveLastPlayState();
 }
 
 /* 曲の長さが分かったときに呼ばれる
@@ -1226,6 +1237,12 @@ function handleLoadedMetadata() {
   const length = soundtrackAudio.duration;
 
   duration.value = Number.isFinite(length) ? length : 0;
+
+  /* 前回の続きの位置が残っていたら、ここで入れる
+
+     曲の長さが分かる前には入れられないブラウザもあるので、
+     読み込めたこのタイミングでも入れなおしている（入るのは1回だけ） */
+  applyPendingStartTime(soundtrackAudio, playingTrackId.value);
 }
 
 /* 曲が最後まで流れきったときに呼ばれる
@@ -1315,6 +1332,11 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   /* いまのリピートの設定を入れておく
      （どこから鳴らしはじめても、かならずここを通る） */
   applyRepeatToAudio(audio);
+
+  /* 前回の続きの位置が、まだ入っていなければ ここで入れる
+     （開いてすぐ「▶ 続きから」を押されて、曲の長さが分かるより先にここへ来たとき）
+     ふだんの再生では、入れるものが無いので何も起きない */
+  applyPendingStartTime(audio, track.id);
 
   // この再生指示の番号を取っておく（あとで「まだ最新の指示か」を見分けるため）
   playRequestId += 1;
@@ -1444,6 +1466,319 @@ function stopAudioForNavigation() {
     // 止められなくても、このあとページごと消えるので何もしない
   }
 }
+
+/* ============================================================
+   前回の続きから聴けるようにする（曲・再生位置・一覧のスクロール位置を覚える）
+
+   ■ やりたいこと
+     このページを離れて、また戻ってきたときに
+     ・前に選んでいた曲
+     ・その曲のどこまで聴いたか（再生位置）
+     ・曲の一覧をどこまでスクロールしていたか
+     の3つを、前と同じ状態に戻す
+
+   ■ 戻すのは「一時停止のかたち」まで（勝手には鳴らさない）
+     ブラウザには「ユーザーがまださわっていないページで、勝手に音を鳴らしてはいけない」
+     という決まりがある。開いたとたんに鳴らそうとしても止められてしまうので、
+     曲と再生位置だけを戻しておいて、鳴らすのは「▶ 続きから」を押してもらってから
+     （押すと、戻しておいた位置から続きが鳴る）
+
+   ■ 覚え先は localStorage
+     このページの音量・サウンドON/OFF・リピートと同じ覚えかたにそろえてある
+     読み書きはどちらもブラウザの中だけ（onMounted より前には動かない）なので、
+     サーバー側で作った画面と食いちがう（hydration mismatch）ことはない
+
+   ■ 覚えるタイミング
+     ・曲が進んでいるあいだ … 1秒に1回まで（→ saveLastPlayState の throttle）
+     ・曲・再生/一時停止が変わったとき … 下の watch
+     ・このページを離れるとき … goToTitle() と onUnmounted()（止める前に最後の1回）
+     「■ 停止」を押したときは playingTrackId が null になるので、覚えごとも消える
+     （止めた人に、次もまた同じ曲を見せないため）
+
+   ■ 一覧のスクロール位置と「再生中の曲への自動追従」がけんかしないように
+     ・開いた直後 … 覚えていたスクロール位置へ戻す。
+                    このとき、曲を戻したことで動く「自動追従」は1回だけ止める
+                    （→ skipNextPlayingTrackScroll。戻した位置が上書きされないように）
+     ・そのあと   … ふつうどおり、曲が切りかわったら自動追従する
+     ・戻した曲を「▶ 続きから」で鳴らしはじめたときも、そこで1回だけ自動追従する
+                    （→ scrollAfterRestoreOnPlay。鳴りはじめてからは、追従のほうを優先する）
+   ============================================================ */
+
+/* 前回の曲と再生位置を覚えておく名前（localStorageのキー）
+   中身は {"id":3,"time":42.5} のような、短いJSONの文字 */
+const lastPlayStorageKey = 'kouchan-soundtrack-last-play';
+
+/* 曲の一覧のスクロール位置を覚えておく名前（localStorageのキー）
+   中身は '240' のような、上からの距離（px）の文字 */
+const trackScrollStorageKey = 'kouchan-soundtrack-list-scroll';
+
+/* 最後に覚えた時刻（ミリ秒）。1秒に1回までにするために使う
+   ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい */
+let lastPlayStateSavedAt = 0;
+let trackScrollSavedAt = 0;
+
+/* もう覚えごとを書きかえないかどうか（このページを離れるときに true にする）
+
+   「戻る」を押したあと・画面が消えたあとには、
+   音を止める後始末（currentTime = 0）で「0秒から」と書きかえてしまわないよう、
+   最後の1回を覚えたところで、それ以上さわらないようにする */
+let isLastStateFixed = false;
+
+/* 読み込んだmp3の用意ができたら入れなおす「続きの位置」（秒）と、その曲の番号
+
+   曲の長さが分かる前に currentTime を入れても、ブラウザによっては効かないことがある
+   そこで、いったんここに置いておき
+   ・曲の長さが分かったとき（→ handleLoadedMetadata）
+   ・「▶ 続きから」で鳴らしはじめるとき（→ playTrackAudio）
+   の早いほうで入れて、入れたら null に戻す（入るのは1回だけ）
+
+   曲の番号もいっしょに覚えているのが大事
+   戻した曲を鳴らさずに、別の曲や「▶ 全曲再生」を押されたときに、
+   新しい曲が とちゅうから鳴ってしまわないようにするため
+   （番号がちがえば、入れずに捨てる） */
+let pendingStartTime: number | null = null;
+let pendingStartTrackId: number | null = null;
+
+/* 次に「曲が切りかわった」ときの自動追従を、1回だけ止めるかどうか
+   （開いた直後に、覚えていた曲を戻したときだけ true にする） */
+let skipNextPlayingTrackScroll = false;
+
+/* 戻した曲を鳴らしはじめたときに、1回だけ自動追従するかどうか */
+let scrollAfterRestoreOnPlay = false;
+
+/* 覚えておいた「続きの位置」を、Audioへ入れる（入れられるのは1回だけ）
+
+   曲の長さが分かる前でも、いまのブラウザは
+   「読み込めたら、その位置から鳴らす」と覚えておいてくれる
+   （ここで入れられなかったときのために、handleLoadedMetadata からも呼んでいる） */
+function applyPendingStartTime(audio: HTMLAudioElement, trackId: number | null) {
+  if (pendingStartTime === null) {
+    return;
+  }
+
+  const seconds = pendingStartTime;
+  const targetTrackId = pendingStartTrackId;
+
+  pendingStartTime = null;
+  pendingStartTrackId = null;
+
+  // 覚えていた曲ではなくなっていたら、入れずに捨てる（新しい曲は先頭から鳴る）
+  if (trackId !== targetTrackId) {
+    return;
+  }
+
+  try {
+    audio.currentTime = seconds;
+  } catch {
+    /* 読み込む前は受けつけないブラウザもあるので、そのときは覚えなおして、あとでもう一度入れる
+       （曲の長さが分かったとき → handleLoadedMetadata ／ 鳴らしはじめるとき → playTrackAudio） */
+    pendingStartTime = seconds;
+    pendingStartTrackId = targetTrackId;
+
+    return;
+  }
+
+  currentTime.value = seconds;
+}
+
+/* いまの曲と再生位置を覚えておく（次にこのページを開いたときのため）
+
+   force … true のときは、1秒に1回の制限をかけずにかならず覚える
+           （ページを離れるときなど、最後の1回を取りこぼさないため）
+*/
+function saveLastPlayState(force = false) {
+  // サーバー側には localStorage が無いので、ここで終わり
+  if (!import.meta.client || isLastStateFixed) {
+    return;
+  }
+
+  /* 続きの位置を入れなおす前（読み込み中）は、まだ覚えない
+     ここで覚えると、入れなおす前の0秒で上書きしてしまうため */
+  if (pendingStartTime !== null) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (!force && now - lastPlayStateSavedAt < 1000) {
+    return;
+  }
+
+  lastPlayStateSavedAt = now;
+
+  try {
+    /* どの曲も選んでいないとき（「■ 停止」・曲が終わったとき）は、覚えごとを消す
+       次に開いたときは、前と同じ「まだ何も選んでいない」状態ではじまる */
+    if (playingTrackId.value === null) {
+      localStorage.removeItem(lastPlayStorageKey);
+
+      return;
+    }
+
+    localStorage.setItem(lastPlayStorageKey, JSON.stringify({ id: playingTrackId.value, time: Math.max(0, currentTime.value) }));
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 覚えられなくても、このページを開いているあいだの再生はふつうに動く
+  }
+}
+
+/* 曲の一覧のスクロール位置を覚えておく（force の意味は saveLastPlayState と同じ） */
+function saveTrackScroll(force = false) {
+  if (!import.meta.client || isLastStateFixed) {
+    return;
+  }
+
+  const scrollArea = trackScrollRef.value;
+
+  if (!scrollArea) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (!force && now - trackScrollSavedAt < 500) {
+    return;
+  }
+
+  trackScrollSavedAt = now;
+
+  try {
+    localStorage.setItem(trackScrollStorageKey, String(Math.round(scrollArea.scrollTop)));
+  } catch {
+    // 覚えられなくても、スクロールそのものはふつうに動く
+  }
+}
+
+/* 曲の一覧をスクロールしたとき（指・マウス・キーボード・自動追従のどれでも呼ばれる） */
+function handleTrackScroll() {
+  saveTrackScroll();
+}
+
+/* このページを離れるときに、最後の状態を覚えて、それ以上は書きかえないようにする
+
+   呼ぶのは、音を止める「前」
+   止めると再生位置が0秒に戻ってしまい、そのあと覚えると「0秒から」になってしまうため */
+function fixLastState() {
+  saveLastPlayState(true);
+  saveTrackScroll(true);
+
+  isLastStateFixed = true;
+}
+
+/* 前回の曲と再生位置を思い出して、一時停止のかたちで戻す
+
+   ・覚えごとが無い／こわれている／もう無い曲だったときは、何もしない
+     （ボーナストラックは、解放していないと一覧に出ないので、ここで弾かれる）
+   ・音は鳴らさない（鳴らすのは「▶ 続きから」を押してもらってから）
+*/
+function restoreLastPlayState() {
+  if (!import.meta.client) {
+    return;
+  }
+
+  let saved: unknown = null;
+
+  try {
+    const text = localStorage.getItem(lastPlayStorageKey);
+
+    saved = text === null ? null : JSON.parse(text);
+  } catch {
+    // こわれたメモが入っていたときは、何も戻さない（ふつうに開くだけ）
+    return;
+  }
+
+  if (typeof saved !== 'object' || saved === null) {
+    return;
+  }
+
+  const { id, time } = saved as { id?: unknown; time?: unknown };
+  const track = typeof id === 'number' ? tracks.value.find((item) => item.id === id) : undefined;
+
+  if (!track) {
+    return;
+  }
+
+  const seconds = typeof time === 'number' && Number.isFinite(time) && time > 0 ? time : 0;
+  const audio = getSoundtrackAudio();
+
+  if (!audio) {
+    return;
+  }
+
+  /* 曲を戻すと「曲が切りかわった」ことになり、自動追従が動いてしまう
+     ここでは、覚えていたスクロール位置のほうを優先したいので、1回だけ止める
+     （鳴らしはじめたときに、あらためて1回だけ追従する） */
+  skipNextPlayingTrackScroll = true;
+  scrollAfterRestoreOnPlay = true;
+
+  playingTrackId.value = track.id;
+  isPlaying.value = false;
+  currentTime.value = seconds;
+  duration.value = 0; // 曲の長さは、mp3を読み込めたら handleLoadedMetadata が入れる
+
+  try {
+    /* preload … 開いただけで曲まるごと（数MB）を読み込ませない
+       曲の長さと、続きの位置に必要なところだけにしておく
+       （「▶ 続きから」を押せば、そこから先はふつうに読み込まれる） */
+    audio.preload = 'metadata';
+    audio.src = track.src;
+    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
+  } catch {
+    // 用意できなくても、曲を選んだ表示のままにしておく（押せば先頭から鳴る）
+  }
+
+  // 続きの位置は、読み込めてから入れる（→ applyPendingStartTime）
+  pendingStartTime = seconds > 0 ? seconds : null;
+  pendingStartTrackId = seconds > 0 ? track.id : null;
+
+  applyPendingStartTime(audio, track.id);
+}
+
+/* 覚えておいた、曲の一覧のスクロール位置に戻す
+
+   一覧のカードがぜんぶ並んだあと（nextTick のあと）に呼ぶこと
+   （ボーナストラックの解放で曲数が変わるため。短いうちに戻すと、そこまで動けない）
+*/
+function restoreTrackScroll() {
+  const scrollArea = trackScrollRef.value;
+
+  if (!import.meta.client || !scrollArea) {
+    return;
+  }
+
+  try {
+    const saved = Number(localStorage.getItem(trackScrollStorageKey));
+
+    if (!Number.isFinite(saved) || saved <= 0) {
+      return;
+    }
+
+    /* 一覧が前より短いときは、いちばん下で止まる（ブラウザがそろえてくれる）
+       なめらかな動きはさせない。開いたとたんに動いて見えると落ち着かないため */
+    scrollArea.scrollTop = saved;
+  } catch {
+    // 戻せなくても、いちばん上から読めるだけ
+  }
+}
+
+// 曲・再生/一時停止が変わったら、そのたびに覚えておく（1秒に1回の制限はかけない）
+watch([playingTrackId, isPlaying], () => {
+  saveLastPlayState(true);
+});
+
+/* 戻した曲を鳴らしはじめたときだけ、その曲のカードまで1回スクロールする
+
+   ふだんの「一時停止 → 続きから」では動かさない（見ている場所を奪わないため）
+   開いた直後に戻した曲は、自動追従を1回見送っているので、ここで追いつかせている */
+watch(isPlaying, (playing) => {
+  if (!playing || !scrollAfterRestoreOnPlay) {
+    return;
+  }
+
+  scrollAfterRestoreOnPlay = false;
+
+  nextTick(scrollToPlayingTrack);
+});
 
 /* トラック番号を押したときに、その曲を「全曲再生の開始曲」にする
 
@@ -2375,9 +2710,26 @@ function scrollToPlayingTrack() {
 // 曲が切りかわって鳴りはじめたら、その最初に1回だけ、その曲のカードまでスクロールする
 // （一時停止・再開では playingTrackId は変わらないので、動かない）
 watch(playingTrackId, (trackId, previousTrackId) => {
-  if (trackId !== null && trackId !== previousTrackId) {
-    nextTick(scrollToPlayingTrack);
+  if (trackId === null || trackId === previousTrackId) {
+    return;
   }
+
+  /* ページを開いた直後に、前回の曲を戻したときだけは、ここでは動かさない
+
+     覚えておいた「曲の一覧のスクロール位置」のほうを先に戻したいため
+     （鳴らしはじめたときに、あらためて1回だけ追従する
+       → 「前回の続きから聴けるようにする」の watch(isPlaying)） */
+  if (skipNextPlayingTrackScroll) {
+    skipNextPlayingTrackScroll = false;
+
+    return;
+  }
+
+  /* ふつうに曲が切りかわったときは、ここで追従する
+     （戻した曲を鳴らしたときの追従は、もう要らないので取り消しておく） */
+  scrollAfterRestoreOnPlay = false;
+
+  nextTick(scrollToPlayingTrack);
 });
 
 /* ============================================================
@@ -2933,6 +3285,11 @@ async function goToTitle() {
   /* ※ 決定音は鳴らさない
      引き返すだけのボタンで、このあとすぐページごと切りかわるため
      （ゲーム本編のA画面・B画面の「戻る」、ミニゲームの「戻る」も同じ） */
+
+  /* 音を止める前に、いまの曲・再生位置・一覧のスクロール位置を覚えておく
+     （次にこのページを開いたときは、ここから続きを聴ける） */
+  fixLastState();
+
   stopAudioForNavigation();
 
   await navigateTo('/');
@@ -3026,6 +3383,29 @@ onMounted(() => {
      ブラウザで動くここで読みなおしている（サウンドON/OFFの思い出しかたと同じ） */
   hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
   hasUnlockedSecretVocalSong.value = loadHasUnlockedSecretVocalSong();
+
+  /* 前回の曲・再生位置と、曲の一覧のスクロール位置を思い出す
+     （→ 「前回の続きから聴けるようにする」）
+
+     ■ 順番が大事
+       ① ボーナストラックの解放（すぐ上）… ここで「一覧に何曲あるか」が決まる
+       ② 前回の曲を戻す                  … もう一覧に無い曲なら、戻さずに見送る
+       ③ nextTick のあとにスクロール位置を戻す
+          ②で増えた曲がカードとして並びおわってからでないと、そこまで動けないため
+
+     ■ 音は鳴らさない
+       ブラウザが勝手な再生を止めるので、戻すのは「一時停止のかたち」まで
+       「▶ 続きから」を押すと、戻しておいた位置から鳴りはじめる */
+  restoreLastPlayState();
+
+  nextTick(() => {
+    restoreTrackScroll();
+
+    /* 念のため、自動追従を止めるしるしも戻しておく
+       （曲を戻せなかったときに、しるしだけが残って
+         次に曲を切りかえたときの追従まで止めてしまわないように） */
+    skipNextPlayingTrackScroll = false;
+  });
 });
 
 /* このページから離れるときの後始末
@@ -3048,6 +3428,13 @@ onMounted(() => {
      止まっている音をもう一度止めても何も起きないだけなので、そのままで安全
 */
 onUnmounted(() => {
+  /* 下の stopSoundtrack() で音を止める「前」に、いまの状態を覚えておく
+
+     止めると再生位置が0秒に戻ってしまうので、覚えるのはかならず止める前
+     覚えたあとは、もう書きかえない（→ fixLastState）
+     ※ ブラウザの戻るボタンで出ていったときも、かならずここを通る */
+  fixLastState();
+
   // ページ全体の見張りをやめる（付けっぱなしにしない）
   document.removeEventListener('pointerdown', handleOutsideCreditPointerDown);
 
@@ -3474,8 +3861,11 @@ onUnmounted(() => {
       </ol>
     </div>
 
-    <!-- 曲の一覧は、歌詞の画面を出しているあいだ かくすだけ（v-show。戻ったとき、前に見ていた場所のまま） -->
-    <div v-show="!isLyricsView" class="st-trackScroll">
+    <!-- 曲の一覧は、歌詞の画面を出しているあいだ かくすだけ（v-show。戻ったとき、前に見ていた場所のまま）
+
+         ref・@scroll … どこまでスクロールしていたかを覚えて、次に開いたときに戻すため
+                        （→ 「前回の続きから聴けるようにする」。passive はスクロールを重くしないためのしるし） -->
+    <div v-show="!isLyricsView" ref="trackScrollRef" class="st-trackScroll" @scroll.passive="handleTrackScroll">
       <!-- ============================================================
            曲の一覧
 
