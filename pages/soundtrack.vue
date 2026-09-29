@@ -3036,11 +3036,19 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- soundtrack--playing … 曲を選んでいるあいだ（再生中・一時停止中。⏮ 前へ／⏭ 次へ／■ 停止 が出ているあいだ）だけ付ける
-       ページの見出しを画面からかくして、曲の一覧・歌詞の画面を広くする（→ style の .soundtrack--playing）
-       soundtrack--lyricsView … 歌詞の画面を出しているあいだだけ付ける
-       曲の一覧のための案内をかくす（→ style の .soundtrack--lyricsView） -->
   <main class="soundtrack" :class="{ 'soundtrack--playing': hasPlaybackControls, 'soundtrack--lyricsView': isLyricsView }">
+    <!-- いちばん外の <main> に付く目印（上の :class）
+         ・soundtrack--playing … 曲を選んでいるあいだ（再生中・一時停止中。⏮ 前へ／⏭ 次へ／■ 停止 が出ているあいだ）だけ付ける
+                                 ページの見出しを画面からかくして、曲の一覧・歌詞の画面を広くする（→ style の .soundtrack--playing）
+         ・soundtrack--lyricsView … 歌詞の画面を出しているあいだだけ付ける
+                                    曲の一覧のための案内をかくす（→ style の .soundtrack--lyricsView）
+
+         ※ このコメントを <main> の外（template のすぐ下）に書かないこと
+           開発中（nuxt dev）はコメントも残るので、ページのいちばん外が2つ（コメント ＋ <main>）になる
+           そうなると、ページを移るときのフェード（nuxt.config.ts の pageTransition）がこわれて、
+           「← はじめの画面へ戻る」を押したときに、移った先の画面がまっ暗のまま何も出なくなる
+           （本番のビルドではコメントが消えるので、この不具合は開発中だけ起きる）
+           （ミニゲームのページ（pages/minigame/secret-path.vue）にも、同じ注意書きがある） -->
     <!-- ============================================================
          画面に残る操作エリア（st-fixedArea）
 
