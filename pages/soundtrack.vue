@@ -2930,13 +2930,9 @@ async function goToTitle() {
 
   isLeavingPage = true;
 
-  /* 決定音「ポン♪」（ゲーム本編のボタンと同じ音）
-
-     曲を止めるより先に鳴らす
-     ※ 効果音は曲とは別のしくみ（AudioContext）で鳴らしているので、
-       このあと曲を止めても、効果音は最後まで鳴りきる */
-  playDecisionSound();
-
+  /* ※ 決定音は鳴らさない
+     引き返すだけのボタンで、このあとすぐページごと切りかわるため
+     （ゲーム本編のA画面・B画面の「戻る」、ミニゲームの「戻る」も同じ） */
   stopAudioForNavigation();
 
   await navigateTo('/');

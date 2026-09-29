@@ -88,6 +88,10 @@ const hasAnyUnlocked = computed(() => unlockedIds.value.length > 0);
    ページが入れかわるときも短いフェードをはさむので、
    押したあとも しばらくこのページが見えている
    そのあいだに続けて押されても、移動のお願いを2回出さないようにする
+   （どちらの行き先も、この isLeavingPage ひとつで1回きりにしている）
+
+   決定音「ポン♪」を鳴らすのは、ミニゲームのカードを選んだときだけ
+   「← はじめの画面へ戻る」では鳴らさない（引き返すだけのボタンなので）
    ============================================================ */
 let isLeavingPage = false;
 
@@ -102,6 +106,20 @@ async function goTo(path: string) {
   playDecisionSound();
 
   await navigateTo(path);
+}
+
+/* 「← はじめの画面へ戻る」（上部ツールバーの左のボタン）
+
+   やることは goTo() と同じで、決定音を鳴らさないところだけがちがう
+   （ゲーム本編のA画面・B画面の「戻る」、それぞれのミニゲームの「戻る」とそろえている） */
+async function goBackToTitle() {
+  if (isLeavingPage) {
+    return;
+  }
+
+  isLeavingPage = true;
+
+  await navigateTo('/');
 }
 
 /* ============================================================
@@ -184,7 +202,7 @@ onUnmounted(() => {
     variant="menu"
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
-    @back="goTo('/')"
+    @back="goBackToTitle"
     @toggle-sound="toggleSound"
     @volume-change="changeSoundVolume">
     <!-- 外枠（背景 ＋ 上部ツールバー「← はじめの画面へ戻る ／ サウンド」）は、それぞれのミニゲームと同じ部品

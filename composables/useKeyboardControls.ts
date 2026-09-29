@@ -81,7 +81,9 @@ export type UseKeyboardControlsOptions = {
   closeSnackSelection: () => void;
   closeHowToPlay: () => void;
   closeSnackMenu: () => void;
-  closeGoalConfirm: () => void;
+
+  /* 「公園の出口へ向かう？」をやめる（決定音も鳴らす。→ pages/index.vue の cancelGoalConfirm()） */
+  cancelGoalConfirm: () => void;
   confirmGoToGoal: () => void;
 
   /* そのほか */
@@ -127,7 +129,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     closeSnackSelection,
     closeHowToPlay,
     closeSnackMenu,
-    closeGoalConfirm,
+    cancelGoalConfirm,
     confirmGoToGoal,
     focusFirstSnackOption,
     pauseCommandPointer,
@@ -1343,7 +1345,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     if (isGoalConfirmVisible.value) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        closeGoalConfirm();
+        cancelGoalConfirm();
         return;
       }
 
@@ -1375,7 +1377,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
         if (selectedGoalConfirmIndex.value === 1) {
           confirmGoToGoal();
         } else {
-          closeGoalConfirm();
+          cancelGoalConfirm();
         }
       }
 
