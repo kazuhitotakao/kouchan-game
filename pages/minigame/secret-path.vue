@@ -7,6 +7,14 @@
    ・記録は「進んだ距離」と「集めた木漏れ日の数」。それぞれの自己ベストをこのブラウザに残す
      木漏れ日は、集めた数を数えるだけでなく、1つごとに進んだ距離のボーナスにもなる（→ data/secretPathEndless.ts）
 
+   ■ ご褒美（うた入りの「こもれびの奥で」）
+     1回のプレイで secretVocalSongUnlockDistance（300m。結果のひとことが「小道の名人です！」になるのと同じ距離）まで行くと、
+     このミニゲームで ずっと流れている曲のうた入り版が、サウンドトラックで聴けるようになる
+     （曲と解放の保存は utils/secretVocalSong.ts。聴くところは pages/soundtrack.vue）
+     ・とどいた瞬間に、下の紺色の枠へ知らせを出して、そのまま保存する（プレイは止めない）
+     ・まだ解放していないうちは、はじまる前と結果の画面に「🔒 300m まで行くと…」のヒントを出す
+       （どこにも出しておかないと、そういうご褒美があること自体に気づけないため）
+
    ■ 入口
      起動画面（A画面）の「🌿 ミニゲーム」→ ミニゲームの一覧（pages/minigame/index.vue）→ このページ
      ゲーム本編で、秘密の小道をぬけたら解放される（→ pages/index.vue の unlockMinigame('secret-path')）
@@ -46,6 +54,13 @@ import {
 } from '~/data/secretPathEndless';
 import type { GameEvent, StatusChanges } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
+import {
+  judgeSecretVocalSongUnlock,
+  loadHasUnlockedSecretVocalSong,
+  saveSecretVocalSongUnlocked,
+  secretVocalSongTitle,
+  secretVocalSongUnlockDistance,
+} from '~/utils/secretVocalSong';
 
 /* このミニゲームの id（URL の /minigame/secret-path と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
 const minigameId: MinigameId = 'secret-path';
@@ -180,6 +195,15 @@ const best = ref<SecretPathBest>({ distance: 0, sunlight: 0 });
 const isNewDistanceBest = ref(false);
 const isNewSunlightBest = ref(false);
 
+/* ご褒美（うた入りの「こもれびの奥で」）を、このブラウザで解放してあるか
+   はじめは false にしておいて、onMounted で localStorage から読みなおす
+   （サーバー側では localStorage を読めないため。→ utils/secretVocalSong.ts） */
+const hasUnlockedSecretVocalSong = ref(false);
+
+/* いま遊んでいる（遊んでいた）プレイで、はじめて解放したか
+   結果の画面で「解放しました」と伝えるためだけに使う（次に「もう一回」を押したら false に戻す） */
+const isNewlyUnlockedSecretVocalSong = ref(false);
+
 /* 画面に出す距離（メートル。小数は切り捨てる） */
 const distanceMeters = computed(() => Math.floor(secretPathDistance.value));
 
@@ -216,6 +240,32 @@ watch(isBeatingDistanceBest, (isBeating) => {
     playItemSound();
     showCommandNotice('record', '🎉 じこベスト更新！');
   }
+});
+
+/* ご褒美（うた入りの「こもれびの奥で」）にとどいた瞬間
+
+   ・音   … 加速コンボの「ピーン♪」と、自己ベストの「キラリン♪」を重ねる（ここだけの、いちばん華やかな鳴らしかた）
+   ・文字 … 下の紺色の枠に「🎁 うた入りの曲を 見つけた！」（→ showCommandNotice()）
+   ・そのまま解放を保存する（プレイは止めない。曲の名前と、どこで聴けるかは、結果の画面で伝える）
+
+   とどいたあとも距離は伸びつづけるが、judgeSecretVocalSongUnlock() が
+   2回目からは 'alreadyUnlocked' を返すので、知らせは1回だけ出る */
+watch(distanceMeters, (meters) => {
+  if (!isSecretPathPlaying.value) {
+    return;
+  }
+
+  if (judgeSecretVocalSongUnlock(meters, hasUnlockedSecretVocalSong.value) !== 'newlyUnlocked') {
+    return;
+  }
+
+  hasUnlockedSecretVocalSong.value = true;
+  isNewlyUnlockedSecretVocalSong.value = true;
+  saveSecretVocalSongUnlocked();
+
+  playCountdownStartSound();
+  playItemSound();
+  showCommandNotice('unlock', '🎁 うた入りの曲を 見つけた！');
 });
 
 /* はやく進みはじめた瞬間に、風を切る「ヒュッ」を鳴らす（やめたときは鳴らさない）
@@ -262,12 +312,13 @@ watch(secretPathComboMultiplier, (multiplier, previousMultiplier) => {
    ・record     … 距離の自己ベストをこえた瞬間の「🎉 じこベスト更新！」
    ・combo-up   … 加速コンボの倍率が上がった瞬間の「⏩ きょり ×3！」
    ・combo-end  … 加速コンボが切れた瞬間の「⏩ コンボが きれた…」
+   ・unlock     … ご褒美にとどいた瞬間の「🎁 うた入りの曲を 見つけた！」
    どれも、フィールドの上に出すと枝が流れてくる所にかぶさって見づらいので、フィールドの外に出す
    commandNoticeDuration のあいだ出して消す。続けて起きたときは、あとから起きたほうだけを出す
    id … 出しなおすための番号（変わるたびに、ぽんっと出なおす） */
 type CommandNotice = {
   id: number;
-  kind: 'levelup' | 'record' | 'combo-up' | 'combo-end';
+  kind: 'levelup' | 'record' | 'combo-up' | 'combo-end' | 'unlock';
   text: string;
 };
 
@@ -370,6 +421,9 @@ function play() {
     if (secretPathPhase.value === 'playing') {
       stopGameOverBgm();
       playSecretBgmSoon();
+
+      // 前のプレイで解放したときの知らせは、次のプレイには持ちこさない（解放そのものは、そのまま残る）
+      isNewlyUnlockedSecretVocalSong.value = false;
     }
 
     return;
@@ -507,6 +561,9 @@ onMounted(() => {
 
   unlockState.value = loadUnlockedMinigames().includes(minigameId) ? 'unlocked' : 'locked';
 
+  // ご褒美（うた入りの「こもれびの奥で」）を、もう解放してあるか（→ utils/secretVocalSong.ts）
+  hasUnlockedSecretVocalSong.value = loadHasUnlockedSecretVocalSong();
+
   // 保存してある自己ベストを、数に直して読む（まだ遊んでいない・こわれた記録は 0）
   const savedBest = loadMinigameBest(minigameId);
 
@@ -611,6 +668,11 @@ onUnmounted(() => {
           <span class="mg-best__item">🏁 {{ best.distance }}m</span>
           <span class="mg-best__item">✨ {{ best.sunlight }}</span>
         </p>
+
+        <!-- ご褒美のヒント（まだ解放していないときだけ）
+             何がもらえるかは言わず、「その先に何かある」ことと、めざす距離だけを伝える
+             （解放したあとは、もう出さない。曲はサウンドトラックのページにある） -->
+        <p v-if="!hasUnlockedSecretVocalSong" class="mg-reward mg-reward--locked">🔒 {{ secretVocalSongUnlockDistance }}m まで行くと、なにかあるみたい…</p>
       </article>
 
       <!-- 遊んでいる最中（HUD ＋ 3レーンのフィールド。本編の小道と同じ部品）
@@ -678,6 +740,17 @@ onUnmounted(() => {
         </p>
 
         <p class="mg-text">{{ resultComment }}</p>
+
+        <!-- ご褒美（うた入りの「こもれびの奥で」）
+             ・このプレイで解放したとき … 曲の名前と、どこで聴けるかを伝える（遊んでいる最中の知らせは1.6秒で消えるため）
+             ・まだ解放していないとき   … はじまる前と同じヒントを、もう一度出す
+                                          （あと何mだったかは、上の「🏁 きょり」を見れば分かる）
+             ・もう解放してあるとき     … 何も出さない -->
+        <p v-if="isNewlyUnlockedSecretVocalSong" class="mg-reward mg-reward--new">
+          🎁 「{{ secretVocalSongTitle }}」を 見つけた！
+          <span class="mg-reward__note">サウンドトラックで 聴けるようになりました</span>
+        </p>
+        <p v-else-if="!hasUnlockedSecretVocalSong" class="mg-reward mg-reward--locked">🔒 {{ secretVocalSongUnlockDistance }}m まで行くと、なにかあるみたい…</p>
 
         <p class="mg-best">
           じこベスト
@@ -901,6 +974,44 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+/* ご褒美の行（はじまる前・結果の画面）
+
+   ・まだ解放していないとき（--locked） … うすい紫の枠に、かこみ文字だけ。ひかえめに置く
+   ・このプレイで解放したとき（--new）  … 紫の下地に白ぬきで、いちばん目立たせる（めったに出ない知らせのため）
+   色は、こもれびの広場のカードと同じ紫の系統でそろえている */
+.mg-reward {
+  box-sizing: border-box;
+  margin: 12px 0 0;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.mg-reward--locked {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #e6dbfa;
+  color: #7f6aa8;
+}
+
+.mg-reward--new {
+  background: linear-gradient(180deg, #8f6ad4 0%, #7a54c4 100%);
+  box-shadow: 0 4px 12px rgb(122 84 196 / 30%);
+  color: #fff;
+  font-size: 16px;
+  animation: found-in 0.4s ease-out 0.2s backwards;
+}
+
+/* 「サウンドトラックで 聴けるようになりました」（曲名の下に、少し小さく） */
+.mg-reward__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.92;
+}
+
 /* 結果（「🏁 きょり 123m Lv.4」「✨ 木漏れ日 8こ 🏁 +40m」）
 
    ぱっと読めるように、文字の大きさを3つに分けている
@@ -1043,6 +1154,18 @@ onUnmounted(() => {
    スピードアップの板と近い色だが、こちらは倍率の数字が出るので読み分けられる */
 .mg-notice--combo-up {
   background: linear-gradient(180deg, #ffe09a 0%, #ffca4d 100%);
+}
+
+/* ご褒美にとどいた（「🎁 うた入りの曲を 見つけた！」）… 紫の板
+
+   ほかの知らせ（金色・クリーム色・灰色）とは色から変えて、めったに出ないものだと分かるようにする
+   色は、こもれびの広場のカード（.place-card--secret）と同じ紫の系統 */
+.mg-notice--unlock {
+  background: linear-gradient(180deg, #f3e9ff 0%, #ddc9fa 100%);
+  box-shadow:
+    inset 0 0 0 3px #8f6ad4,
+    0 0 14px 2px rgb(143 106 212 / 60%);
+  color: #4a2f86;
 }
 
 /* 加速コンボが切れた（「⏩ コンボが きれた…」）… うすい灰色の板
