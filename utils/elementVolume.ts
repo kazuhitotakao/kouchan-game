@@ -84,6 +84,25 @@ function canSetElementVolume() {
   return canSetVolumeCache;
 }
 
+/* mp3 の音（HTMLAudioElement）を、Web Audio の「音量つまみ」に通しているか
+
+   ・true  … iPhone・iPad（audio.volume が効かないので、つまみに通してから鳴らしている）
+   ・false … パソコン・Android など（audio.volume にそのまま入れている）
+
+   つまみに通した音は、Web Audio の中を通ってからスピーカーへ出る
+   この通り道では、再生の速さ（playbackRate）を変えたときに
+   「音の高さは変えない」という指定（preservesPitch）が効かず、
+   曲の高さまで上がってしまう・音がくずれることがある
+   そこで「速さを変えてよい鳴らしかたか」を、ここで見分けられるようにしてある
+   （→ composables/useAudio.ts の setSecretBgmPlaybackRate()） */
+export function usesWebAudioVolume() {
+  if (!import.meta.client) {
+    return false;
+  }
+
+  return !canSetElementVolume();
+}
+
 /* navigator.audioSession の種類を type にする（バックグラウンド再生のため。くわしくは、このファイルの先頭）
 
    ・'playback' … 「このページは音楽を再生するもの」と伝える（画面を消しても鳴りつづける）

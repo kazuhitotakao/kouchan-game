@@ -38,7 +38,7 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
 /* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { keepAudioContextAwake, setElementVolume } from '~/utils/elementVolume';
+import { keepAudioContextAwake, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
 
 /* 音のほうから「いま画面はどうなっているか」を見るための値
 
@@ -320,8 +320,11 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      // まだ無いときだけ作る（2回目からは、この行は通らない）
-      if (!audioContext) {
+      /* まだ無いときだけ作る（2回目からは、この行は通らない）
+
+         閉じたあと（cleanupAudio() のあと）に呼ばれたときも、作りなおす
+         閉じた作業台は、もう音を鳴らせないため */
+      if (!audioContext || audioContext.state === 'closed') {
         audioContext = new AudioContext();
       }
 
@@ -338,6 +341,52 @@ export function useAudio(options: UseAudioOptions) {
       // 音が使えない環境でも、ゲームは続けられるようにする
       return null;
     }
+  }
+
+  /* ============================================================
+     作業台が止まっているあいだに、効果音をためこまないようにする
+
+     ■ 何が起きていたか
+       効果音は「作業台の時計（context.currentTime）の、いまの時刻」を見て鳴らしている
+       ところが作業台は、
+       ・ユーザーが操作する前（suspended）
+       ・iPhone で、ほかのアプリに音を取られたとき（interrupted）
+       ・曲の速さを切りかえるなどで、音の流れがくずれたとき
+       のあいだ、時計が進まなくなる
+       そのあいだに鳴らした効果音は、どれも「止まっている同じ時刻」に予約されるので、
+       作業台が動きだした瞬間に、ぜんぶがまとめて鳴ってしまう
+       （ミニゲームで「ぽこっ」が何回も繰り返し聞こえるのは、これが起きているとき）
+
+     ■ どうするか
+       作業台が動いていないあいだに鳴らせるのは、はじめの stalledToneWindow ミリ秒ぶんだけにする
+       ・1つぶんの効果音（「キラリン♪」のように音を3つ重ねるもの）は、そのまま鳴らせる
+       ・そのあと、止まったままのあいだに鳴らそうとしたぶんは、鳴らさずに捨てる
+       動きだしたら（running）、また ふつうに鳴らせるようにする
+
+       鳴らないより、まとめて鳴るほうが耳にうるさいので、あふれたぶんは捨てている
+     ============================================================ */
+  const stalledToneWindow = 300;
+
+  /* 作業台が止まっているあいだに、はじめて効果音を鳴らした時刻（実際の時計。0 = 止まっていない） */
+  let stalledToneStartedAt = 0;
+
+  function canScheduleTone(context: AudioContext) {
+    // 動いているときは、いつもどおり鳴らせる
+    if (context.state === 'running') {
+      stalledToneStartedAt = 0;
+      return true;
+    }
+
+    const now = performance.now();
+
+    // 止まってから、はじめの1つ目
+    if (stalledToneStartedAt === 0) {
+      stalledToneStartedAt = now;
+      return true;
+    }
+
+    // 1つ目と同時に鳴らすぶん（重ねている音）までは鳴らし、それより後のぶんは捨てる
+    return now - stalledToneStartedAt <= stalledToneWindow;
   }
 
   /* 音を1つだけ鳴らす、共通の関数
@@ -358,6 +407,11 @@ export function useAudio(options: UseAudioOptions) {
     const context = getAudioContext();
 
     if (!context) {
+      return;
+    }
+
+    // 作業台が止まっているあいだに、ためこまない（→ canScheduleTone()）
+    if (!canScheduleTone(context)) {
       return;
     }
 
@@ -566,6 +620,11 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
+    // 作業台が止まっているあいだに、ためこまない（→ canScheduleTone()）
+    if (!canScheduleTone(context)) {
+      return;
+    }
+
     /* 効果音の大きさにも、音量スライダーのぶんをかける（playTone と同じ） */
     const effectVolume = getSoundVolume(0.22);
 
@@ -711,6 +770,11 @@ export function useAudio(options: UseAudioOptions) {
     const context = getAudioContext();
 
     if (!context) {
+      return;
+    }
+
+    // 作業台が止まっているあいだに、ためこまない（→ canScheduleTone()）
+    if (!canScheduleTone(context)) {
       return;
     }
 
@@ -2592,11 +2656,44 @@ export function useAudio(options: UseAudioOptions) {
      曲がまだ作られていないときに決められても、作るときに（getSecretBgm()）この値を使う */
   let secretBgmPlaybackRate = 1;
 
+  /* 曲の速さを変えてよい鳴らしかたか（iPhone・iPad では false）
+
+     iPhone・iPad では、音量バーを効かせるために、mp3 の音を
+     Web Audio の「音量つまみ」に通してから鳴らしている（→ utils/elementVolume.ts）
+     この通り道では、
+     ・「音の高さは変えない」という指定（preservesPitch）が効かず、速くすると曲の高さまで上がってしまう
+     ・速さを切りかえたときに音がくずれ、あとから鳴らす効果音（「ぽこっ」など）が
+       まとめて鳴ったり、同じ音がくり返し聞こえたりする
+     ということが起きる
+     そこで、つまみに通しているときは、テンポを上げるのをやめて、いつも 1 のままにする
+     （レベルが上がったことは「⏫ スピードアップ！」の知らせと「ピピッ」で分かるので、遊びかたは変わらない） */
+  function canChangeBgmTempo() {
+    return !usesWebAudioVolume();
+  }
+
+  /* 曲の速さを入れる（音の高さは変えない）
+
+     preservesPitch … 速くしても、音の高さは変えない（テンポだけが上がる）
+     webkitPreservesPitch … 古い Safari 用の、同じ指定
+     速さを入れる直前に、毎回そろえておく（作ったときに入れただけだと、ブラウザによっては戻っていることがある） */
+  function applyBgmPlaybackRate(bgm: HTMLAudioElement, rate: number) {
+    try {
+      const media = bgm as HTMLAudioElement & { webkitPreservesPitch?: boolean };
+
+      media.preservesPitch = true;
+      media.webkitPreservesPitch = true;
+      bgm.playbackRate = rate;
+    } catch {
+      // 速さを変えられなくても、曲はそのままの速さで鳴る
+    }
+  }
+
   function setSecretBgmPlaybackRate(rate: number) {
-    secretBgmPlaybackRate = rate;
+    // 速さを変えられない鳴らしかたのときは、いつも ふつうの速さ（1）にしておく
+    secretBgmPlaybackRate = canChangeBgmTempo() ? rate : 1;
 
     if (secretBgm) {
-      secretBgm.playbackRate = rate;
+      applyBgmPlaybackRate(secretBgm, secretBgmPlaybackRate);
     }
   }
 
@@ -2624,10 +2721,8 @@ export function useAudio(options: UseAudioOptions) {
         // volume … 音の大きさ（上の secretBgmVolume で決めている）
         setElementVolume(secretBgm, getSoundVolume(secretBgmVolume), getAudioContext);
 
-        /* 再生の速さ（ミニゲーム「どこまで行ける？」だけが変える → setSecretBgmPlaybackRate()）
-           preservesPitch … 速くしても、音の高さは変えない（テンポだけが上がる） */
-        secretBgm.preservesPitch = true;
-        secretBgm.playbackRate = secretBgmPlaybackRate;
+        /* 再生の速さ（ミニゲーム「どこまで行ける？」だけが変える → setSecretBgmPlaybackRate()） */
+        applyBgmPlaybackRate(secretBgm, secretBgmPlaybackRate);
       }
 
       return secretBgm;
@@ -2808,6 +2903,15 @@ export function useAudio(options: UseAudioOptions) {
     try {
       secretBgm.pause();
       secretBgm.currentTime = 0; // 次に入ったときは、また曲の先頭から
+
+      /* 速さも ふつう（1）へ戻す
+
+         ミニゲームで速くしたまま止めると、次に鳴らしはじめたときに
+         いきなり速い曲から始まってしまう
+         （鳴らしていないあいだに速さを切りかえると音がくずれることがあるので、
+           鳴っていない いま のうちに戻しておく） */
+      secretBgmPlaybackRate = 1;
+      applyBgmPlaybackRate(secretBgm, 1);
     } catch {
       // 何もしない
     }
@@ -3054,6 +3158,23 @@ export function useAudio(options: UseAudioOptions) {
     cancelGameOverBgmStart();
     cancelFileSound();
     cancelBgmFade();
+
+    /* 効果音の作業台（AudioContext）も閉じる
+
+       ページを移るたびに useAudio() は作りなおされ、そのたびに新しい作業台ができる
+       閉じずに離れると、前のページの作業台がそのまま残り、
+       ミニゲームの一覧 ⇄ ミニゲーム を行き来するほど、動いたままの作業台が増えていく
+       増えすぎると、iPhone では新しく作れなくなって音が出なくなったり、
+       音の流れがくずれて、効果音がまとめて鳴ったり途切れたりする
+
+       この作業台につないでいるのは、このページで作った音だけなので、閉じても ほかのページに影響しない
+       （また必要になったときは getAudioContext() が作りなおす） */
+    if (audioContext && audioContext.state !== 'closed') {
+      audioContext.close().catch(() => {});
+    }
+
+    audioContext = null;
+    stalledToneStartedAt = 0;
   }
 
   return {

@@ -120,7 +120,15 @@ export const secretPathEndlessBoostComboTiers = [
      曲がくずれて聞こえる・アウトのときに「ぽこっ」がまとめて何回も鳴る、ということが起きていた
      （押す・はなすのたびに曲の速さが切りかわるのが引き金とみられる）
      かわりに、こうちゃんの後ろに風の跡を出して、はじめた瞬間に「ヒュッ」と鳴らす
-     （→ components/game/SecretPathField.vue・composables/useAudio.ts の playBoostSound()） */
+     （→ components/game/SecretPathField.vue・composables/useAudio.ts の playBoostSound()）
+
+   ※ iPhone・iPad では、レベルが上がっても曲の速さを変えない（いつも ふつうの速さ）
+     この2つでは、音量バーを効かせるために mp3 の音を Web Audio に通しており、
+     その通り道では「音の高さは変えない」という指定が効かないので、
+     速くすると曲の高さまで上がってしまい、音もくずれていた
+     （上の「はやく進んでいるあいだ」で残っていた不具合の、もう半分）
+     → composables/useAudio.ts の setSecretBgmPlaybackRate()・utils/elementVolume.ts の usesWebAudioVolume()
+     レベルが上がったことは「⏫ スピードアップ！」の知らせと「ピピッ」で分かるので、遊びかたは変わらない */
 export const secretPathEndlessBgmTempo = {
   perLevel: 0.03,
   maxLevelRate: 1.25,
