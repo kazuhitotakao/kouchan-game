@@ -20,6 +20,10 @@ import ResultCard from '~/components/game/ResultCard.vue';
 import SecretPathField from '~/components/game/SecretPathField.vue';
 import SoundControl from '~/components/game/SoundControl.vue';
 
+/* 画像の置き場所（まだ画像が無いあいだは「NO IMAGE」の仮の枠を出す）
+   起動画面のキービジュアルと、公園入口・場所・いやいや・できごとのカードの上のバナーで使う */
+import NoImage from '~/components/common/NoImage.vue';
+
 /* キーボード操作（中身は composables/useKeyboardControls.ts） */
 import { useKeyboardControls } from '~/composables/useKeyboardControls';
 
@@ -4117,6 +4121,9 @@ onUnmounted(() => {
               @volume-change="changeSoundVolume" />
           </div>
 
+          <!-- キービジュアル（こうちゃんと公園）。タイトルの上に出す（大きさ・並び順は base.css の .title-card__visual） -->
+          <NoImage class="title-card__visual" ratio="16 / 9" label="キービジュアル" />
+
           <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <!-- 「ホーム画面に追加」の案内（ふつうの Safari / Chrome で開いているときだけ）
@@ -4484,6 +4491,8 @@ onUnmounted(() => {
                                    （中央エリアの高さの下限を外す → assets/css/game/responsive.css） -->
             <section class="stage stage--entrance">
               <article class="place-card">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="公園入口" />
+
                 <h2 class="place-card__title">公園入口</h2>
 
                 <!-- あいさつ文は3段階（着いたばかり／前半のおかえり／午前後半）
@@ -4631,6 +4640,11 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'restArea'" class="scene" key="restArea">
             <section class="stage">
               <article class="place-card place-card--rest">
+                <!-- 場所の絵（カードのいちばん上に出すバナー）
+                     公園入口・7つの場所（ここ〜こもれびの広場）・いやいやタイム・5つのとつぜんのできごとで、同じ大きさの枠を使う
+                     大きさと、結果が出ているあいだは隠すこと（いやいやタイムは隠さない）は、base.css / responsive.css の .place-card__banner -->
+                <NoImage class="place-card__banner" ratio="3 / 1" label="ひとやすみ" />
+
                 <h2 class="place-card__title">ひとやすみ</h2>
 
                 <p class="place-card__text">ベンチに座って、親子でひと息つこう。休憩する？ それとも、おやつにする？</p>
@@ -4678,6 +4692,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'slide'" class="scene" key="slide">
             <section class="stage">
               <article class="place-card">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="すべり台" />
+
                 <h2 class="place-card__title">すべり台</h2>
 
                 <p class="place-card__text">
@@ -4722,6 +4738,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'sandbox'" class="scene" key="sandbox">
             <section class="stage">
               <article class="place-card">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="砂場" />
+
                 <h2 class="place-card__title">砂場</h2>
 
                 <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
@@ -4761,6 +4779,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'acornArea'" class="scene" key="acornArea">
             <section class="stage">
               <article class="place-card">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="どんぐりの木" />
+
                 <h2 class="place-card__title">どんぐりの木</h2>
 
                 <p class="place-card__text">大きな木の下に、どんぐりがたくさん落ちています。</p>
@@ -4800,6 +4820,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'pond'" class="scene" key="pond">
             <section class="stage">
               <article class="place-card">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="池" />
+
                 <h2 class="place-card__title">池</h2>
 
                 <p class="place-card__text">池には白鳥が泳ぎ、コイもたくさん集まっています。こうちゃんは指をさして大はしゃぎです。</p>
@@ -4839,6 +4861,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'grassArea'" class="scene" key="grassArea">
             <section class="stage">
               <article class="place-card">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="芝生広場" />
+
                 <h2 class="place-card__title">芝生広場</h2>
 
                 <p class="place-card__text">やわらかい芝生が広がっています。思いきり走り回れそうです。</p>
@@ -5052,6 +5076,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
             <section class="stage">
               <article class="place-card place-card--secret">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="こもれびの広場" />
+
                 <h2 class="place-card__title">こもれびの広場</h2>
 
                 <p class="place-card__text">
@@ -5106,6 +5132,11 @@ onUnmounted(() => {
                      画面は 'tantrum' のままでも isTantrum が false になるので、
                      その瞬間にバウンスが止まる -->
               <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum, 'place-card--tantrum-big': tantrumLevel === 3 }">
+                <!-- いやいやのこうちゃんの絵（場所のカードと同じバナー）
+                     激しさ（レベル1〜3）で絵を変えられるよう、名前にもレベルを出しておく
+                     レベルが上がるのは結果が出ているときなので、ほかのカードとちがい、結果が出ても隠さない（→ base.css） -->
+                <NoImage class="place-card__banner" ratio="3 / 1" :label="`いやいやタイム（レベル${tantrumLevel}）`" />
+
                 <!-- 見出しは、いやいやの激しさで変わる（数字の「Lv」は出さない）
                      😫 いやいやタイム → 😭 いやいやタイム！ → 😭💥 大いやいやタイム！ -->
                 <h2 class="place-card__title">
@@ -5178,6 +5209,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'emergencySiren'" class="scene" key="emergencySiren">
             <section class="stage">
               <article class="place-card place-card--sudden">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="救急車" />
+
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
@@ -5216,6 +5249,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'ladybug'" class="scene" key="ladybug">
             <section class="stage">
               <article class="place-card place-card--sudden">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="テントウムシ" />
+
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
@@ -5254,6 +5289,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'dog'" class="scene" key="dog">
             <section class="stage">
               <article class="place-card place-card--sudden">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="犬" />
+
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
@@ -5296,6 +5333,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'fallDown'" class="scene" key="fallDown">
             <section class="stage">
               <article class="place-card place-card--sudden">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="ころんだ" />
+
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
@@ -5334,6 +5373,8 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'fountain'" class="scene" key="fountain">
             <section class="stage">
               <article class="place-card place-card--sudden">
+                <NoImage class="place-card__banner" ratio="3 / 1" label="噴水" />
+
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
                 <h2 class="place-card__title">⛲ 噴水が出た！</h2>
