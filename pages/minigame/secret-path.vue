@@ -442,6 +442,8 @@ function play() {
    ・遊んでいる最中は、レベルが上がると、曲のテンポを少しずつ上げる（音の高さは変えない）
      速さの数字は data/secretPathEndless.ts の secretPathEndlessBgmTempo
      はやく進んでいるあいだは、曲の速さを変えない（理由は data/secretPathEndless.ts）
+     iPhone・iPad では、レベルが上がっても速さを変えない（同じく、理由は data/secretPathEndless.ts）
+     ※ ここは「いくつにしたいか」を渡すだけ。変えてよいかどうかは composables/useAudio.ts が決める
    ============================================================ */
 
 /* 場面が変わったら、音に渡す場面を切りかえて、曲を入れかえる
