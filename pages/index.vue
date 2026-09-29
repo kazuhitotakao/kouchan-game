@@ -200,8 +200,9 @@ const soundControlRef = ref<InstanceType<typeof SoundControl> | null>(null);
    SoundControl の中にあるので、コンポーネントごしに借りてくる
    （読むだけなので、今までの ref と同じように soundToggleButtonRef.value で使える）
 
-   ※ 音量スライダーは、A画面・B画面で Tab を回りこませるときに、
-     いちばん後ろの行き先として使う */
+   ※ 音量スライダーは、B画面で Tab を回りこませるときに、いちばん後ろの行き先として使う
+     A画面にはスライダーが無いので（:show-volume="false"）、そこでは null になり、
+     ミュートボタンがいちばん後ろの行き先になる（→ useKeyboardControls の handleTitleKeydown） */
 const soundToggleButtonRef = computed<HTMLButtonElement | null>(() => soundControlRef.value?.toggleButton ?? null);
 const soundVolumeSliderRef = computed<HTMLInputElement | null>(() => soundControlRef.value?.volumeSlider ?? null);
 
@@ -4044,15 +4045,23 @@ onUnmounted(() => {
                    ようにしているため（ボタン側で止める必要はない） -->
             <div class="title-card__toolsLeft">
               <!-- サウンドトラックへの入口
-                   ・広い画面   … 「♪ サウンドトラック」（文字も出す）
-                   ・スマホ幅   … 「♪」のアイコンだけにして、ミニゲームの入口と1行に並ぶようにする
-                                   何のボタンかは、hover / focus のときだけ出る吹き出しで伝える
-                                   （右のサウンドのコントロールと同じやりかた）
-                   文字と吹き出しの出しわけは CSS（.title-card__soundtrackText / .title-card__tooltip）
-                   読み上げは、どちらの画面でも aria-label の「サウンドトラック」だけにする（二重に読まれない） -->
+
+                   入りきる幅に合わせて、3段階で出しわける（文字があるほうが、何のボタンかがすぐ分かる）
+                   ・390px以上      … 「♪ サウンドトラック」
+                   ・341〜389px     … 「♪ サントラ」（細いスマホ。短くして1行に収める）
+                   ・340px以下      … 「♪」のアイコンだけ（とても細い画面）
+                                       何のボタンかは、hover / focus のときだけ出る吹き出しで伝える
+                                       （右のサウンドのコントロールと同じやりかた）
+                   出しわけは CSS（.title-card__soundtrackText--full / --short ／ .title-card__tooltip）
+                   読み上げは、どの幅でも aria-label の「サウンドトラック」だけにする
+                   （文字のほうは aria-hidden なので、「サントラ」と読まれることはない）
+
+                   ※ スマホ幅でも文字を出せるのは、右のサウンドから音量スライダーを外して
+                     横幅が空いたため（→ 右の SoundControl の :show-volume="false"） -->
               <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" aria-label="サウンドトラック" @click="goToSoundtrack">
                 <span aria-hidden="true">♪</span>
-                <span class="title-card__soundtrackText" aria-hidden="true">サウンドトラック</span>
+                <span class="title-card__soundtrackText--full" aria-hidden="true">サウンドトラック</span>
+                <span class="title-card__soundtrackText--short" aria-hidden="true">サントラ</span>
                 <span class="title-card__tooltip" aria-hidden="true">サウンドトラック</span>
               </button>
 
@@ -4062,15 +4071,23 @@ onUnmounted(() => {
               <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">🌿 ミニゲーム</button>
             </div>
 
-            <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
+            <!-- サウンドのコントロール（この画面ではミュートボタンだけ）
 
-                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンとスライダーだけの小さなまとまりにしてある
+                 文字（「サウンド」「ON」「OFF」）は出さず、アイコンだけの小さなボタンにしてある
                  何のボタンかは aria-label（読み上げ用）と、hover / focus のときだけ出る吹き出しで伝える
+                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る）
 
-                 ・ミュートボタン … 音を出すか、出さないか
-                 ・スライダー     … 音の大きさ（BGMも効果音も、まとめて同じだけ変わる）
-                 0% ＝ ミュートなので、2つはいつも同じ状態になる
-                 （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る） -->
+                 ■ ここだけ音量スライダーを出さない（:show-volume="false"）
+                   A画面は、まだBGMが鳴っていない画面
+                   （鳴るのは ♪・🌿 を押したときの決定音だけで、押すとすぐ次の画面へ移る）
+                   スライダーを動かしても、その場では何も聞こえない＝手ごたえがないので出さない
+                   「はじめる」を押すとタイトルBGMが鳴りだすので、
+                   その前に音を消しておく役目は、ミュートボタンだけで足りる
+                   （大きさの調整は、音が鳴っているB画面以降でできる）
+
+                 ■ 空いた横幅は、左のサウンドトラックの入口が使う
+                   スマホ幅でも「♪」だけの丸にせず、文字を出せるようになった
+                   （→ assets/css/game/base.css の @media (max-width: 389px) の説明） -->
             <SoundControl
               ref="soundControlRef"
               :sound-enabled="soundEnabled"
@@ -4095,6 +4112,7 @@ onUnmounted(() => {
             <span>iPhone：共有 → ホーム画面に追加</span>
             <span>Android：メニュー → ホーム画面に追加</span>
           </p>
+              :show-volume="false"
         </div>
       </div>
 

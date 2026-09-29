@@ -985,7 +985,11 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
          スライダーはボタンではないので items には入っていないが、
          HTMLではサウンドボタンのすぐ後ろ（＝いちばん最後）に置いてある
          ここで行き先に入れておかないと、サウンドボタンでTabを押したときに
-         スライダーを飛びこして、先頭まで戻ってしまう */
+         スライダーを飛びこして、先頭まで戻ってしまう
+
+         ※ A画面には音量スライダーが無い（まだ音が鳴っていない画面なので出していない）
+           そのときは soundVolumeSliderRef が null になるので、
+           items のいちばん後ろ（＝ミュートボタン）が、そのまま行き先になる */
       const last = soundVolumeSliderRef.value ?? items[items.length - 1];
 
       if (!event.shiftKey && document.activeElement === last) {
