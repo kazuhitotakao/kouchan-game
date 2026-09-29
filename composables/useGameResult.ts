@@ -9,6 +9,7 @@
      ・総合スコアと内訳を作って持っておく（calculateFinalScore()）
      ・ランク・見出し・文章を決めて持っておく（judgeResult()）
      ・S+ランクなら、うた入りBGMを解放して、お知らせを出すか決める（unlockSPlusSongIfEarned()）
+     ・A／Sランクなら、まだ解放していない人に「S+に なにかあるみたい」のヒントを出す（isSPlusSongHintVisible）
      ・GAME OVER画面に出す文章の入れものを持つ（入れるのは pages/index.vue の checkGameOver()）
      ・ここで持っている状態を、まとめて最初に戻す（resetGameResult()）
 
@@ -31,12 +32,12 @@
      同じ値を2か所に書いておく必要がない（composables/useGameState.ts と同じ考えかた）
    ============================================================ */
 
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 
 import { calculateScore, judgeEnding } from '~/composables/useScore';
 import { fussMoodLine, playedALotLine, totalPlaceCount } from '~/data/game';
-import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked } from '~/utils/sPlusSong';
+import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, shouldShowSPlusSongHint } from '~/utils/sPlusSong';
 import type { GameEvent, ScoreBreakdownItem } from '~/types/game';
 
 /* ============================================================
@@ -112,6 +113,23 @@ export function useGameResult(options: UseGameResultOptions) {
      こちらはその1プレイだけの表示なので、resetGameResult() で false に戻す
   */
   const isSPlusSongNewlyUnlocked = ref(initialIsSPlusSongNewlyUnlocked);
+
+  /* リザルト画面に「🔒 S+ランクを とると、なにかあるみたい…」のヒントを出すかどうか
+
+     A／Sランクで、まだ うた入りBGMを解放していないときだけ true になる
+     （どのランクで出すか・なぜAとSだけなのかは utils/sPlusSong.ts の shouldShowSPlusSongHint()）
+
+     ■ なぜヒントを出すのか
+       サウンドトラックのページには「🔒 ？？？ / S+ランクで解放」が出ているが、
+       本編だけで遊んでいる人には、S+ランクがあること自体が見えない
+       A／Sを出した直後は「あと少し」がいちばん伝わる場面なので、そこで知らせる
+
+     ■ ここは ref ではなく computed
+       ランクと「解放済みかどうか」から毎回決まるだけの値なので、
+       ゴールのたびに入れたり、resetGameResult() で戻したりする必要がない
+       （リザルト画面から出ると endingRank が空に戻るので、ヒントも自然に消える）
+  */
+  const isSPlusSongHintVisible = computed(() => shouldShowSPlusSongHint(endingRank.value, hasUnlockedSPlusSong.value));
 
   /* 今回のプレイの総合スコア（0〜100点）
      ゴールしたときに calculateFinalScore() で計算して入れる
@@ -280,6 +298,7 @@ export function useGameResult(options: UseGameResultOptions) {
     /* ===== S+ランク限定のうた入りBGM ===== */
     hasUnlockedSPlusSong,
     isSPlusSongNewlyUnlocked,
+    isSPlusSongHintVisible,
 
     /* ===== ゴールしたときに呼ぶ（順番は goToGoal() が決める） =====
        ※ calculateFinalScore() は judgeResult() の中から呼ぶので、外へは出していない */

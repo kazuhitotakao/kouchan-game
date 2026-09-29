@@ -98,3 +98,38 @@ export function judgeSPlusSongUnlock(endingRank: string, hasUnlockedSPlusSong: b
 
   return 'newlyUnlocked';
 }
+
+/* リザルト画面に「S+ランクを とると、なにかあるみたい…」のヒントを出すランク
+
+   ■ AとSだけにしている理由
+     ・S+は92点から（composables/useScore.ts の judgeEnding）。
+       Aランク（70点から）まで来ていれば「あと少し」の話になるが、
+       Bランク（55点から）に出すと、遠すぎてヒントというより ただの煽りになる
+     ・特殊エンド（いやいや3回以上）は、点数に関係なくS+にならないので出さない
+       （ここに '特殊エンド' を足すと、取れないものを「もう少し」と言うことになる）
+
+   ※ ランク名は judgeEnding() が返す文字とそろえてあるので、あちらを変えたときは ここも合わせて変えること */
+const sPlusSongHintRanks = ['Aランク', 'Sランク'];
+
+/* リザルト画面に、うた入りBGMのヒントを出すかどうか（出すなら true）
+
+   endingRank           … judgeEnding() が決めたランク名
+   hasUnlockedSPlusSong … いま画面が覚えている「解放済みかどうか」
+
+   ・もう解放してあるなら出さない（曲を知っている人に、もう一度 隠して見せることになるため）
+   ・A／Sランク以外では出さない（上の sPlusSongHintRanks の説明のとおり）
+
+   ※ judgeSPlusSongUnlock() とちがって、localStorage は読みにいかない
+     こちらは画面を描くたびに見られる（computed）ので、
+     ・サーバー側では localStorage が無く、読んでも false にしかならない
+     ・別のタブで解放しても、localStorage を読んだことは画面の作りなおしにつながらない
+     という2つの理由から、画面が覚えている値だけで決める
+     （別のタブでS+を取った直後に、こちらのタブでA／Sを出すと、1回だけヒントが出ることになるが、
+       次にこのページを開いたときには onMounted で思い出すので、出なくなる） */
+export function shouldShowSPlusSongHint(endingRank: string, hasUnlockedSPlusSong: boolean) {
+  if (hasUnlockedSPlusSong) {
+    return false;
+  }
+
+  return sPlusSongHintRanks.includes(endingRank);
+}
