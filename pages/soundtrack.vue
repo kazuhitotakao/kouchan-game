@@ -41,6 +41,9 @@ import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession }
    id          … 曲番号（01・02… の表示にも使う）
    title       … 曲名
    description … 曲の雰囲気をひとことで説明する文
+                 「|」は、せまい画面で折り返してよい場所のしるし（画面には出ない → splitPhrases）
+                 例）'S+ランク|特別エンディングBGM' … 入りきらないときは「S+ランク」「特別エンディングBGM」の2行になる
+                 ※ 「BGM」「解放」のような短い言葉だけが次の行に残らないよう、短い言葉は前の言葉とくっつけておく
    src         … 音声ファイルの場所（public/audio/ の中のファイル）
    volume      … 音の大きさ（0＝無音、1＝そのままの大きさ）
    lyrics      … 歌詞（うた入りの曲だけ。歌詞の無い曲は書かない）
@@ -74,7 +77,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 1,
     title: 'こうちゃんの大冒険',
-    description: 'はじまりのBGM',
+    description: 'はじまりの|BGM',
     src: '/audio/title-bgm.mp3',
     volume: 0.55,
     credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
@@ -82,7 +85,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 2,
     title: 'こうえんたんけん',
-    description: '公園での探検BGM 前半',
+    description: '公園での|探検BGM 前半',
     src: '/audio/park-bgm.mp3',
     volume: 0.4,
     credit: '音楽生成：Suno',
@@ -90,7 +93,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 3,
     title: 'ひるまえのぼうけん',
-    description: '公園での探検BGM 後半',
+    description: '公園での|探検BGM 後半',
     src: '/audio/park-bgm2.mp3',
     volume: 0.4,
     credit: '音楽生成：Suno',
@@ -106,7 +109,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 5,
     title: 'いやいやタイム！',
-    description: 'いやいやタイムBGM',
+    description: 'いやいやタイム|BGM',
     src: '/audio/tantrum-bgm.mp3',
     volume: 0.43,
     credit: '音楽生成：Suno',
@@ -114,7 +117,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 6,
     title: 'きょうの大冒険、おしまい！',
-    description: 'リザルト画面BGM',
+    description: 'リザルト画面|BGM',
     src: '/audio/result-bgm.mp3',
     volume: 0.43,
     credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
@@ -122,7 +125,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 7,
     title: 'きょうはここまで',
-    description: 'GAME OVER画面BGM',
+    description: 'GAME OVER|画面|BGM',
     src: '/audio/game-over-bgm.mp3',
     volume: 0.43,
     credit: '音楽生成：Suno',
@@ -153,7 +156,7 @@ const baseTracks: SoundtrackTrack[] = [
 const sPlusBonusTrack: SoundtrackTrack = {
   id: 8,
   title: sPlusSongTitle,
-  description: 'S+ランク特別エンディングBGM',
+  description: 'S+ランク|特別エンディングBGM',
   src: sPlusSongSrc,
   // 音量と制作情報は、通常版（06 きょうの大冒険、おしまい！）と同じ
   // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
@@ -171,7 +174,7 @@ const sPlusBonusTrack: SoundtrackTrack = {
 const secretVocalBonusTrack: SoundtrackTrack = {
   id: 9,
   title: secretVocalSongTitle,
-  description: 'ミニゲーム達成の特別BGM',
+  description: 'ミニゲーム達成の|特別BGM',
   src: secretVocalSongSrc,
   // 音量と制作情報は、通常版（04 こもれびの奥で）と同じ
   // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
@@ -201,7 +204,8 @@ const tracks = computed(() => [...baseTracks, ...(hasUnlockedSPlusSong.value ? [
 /* まだ解放していない曲のぶんだけ出す、ロック表示の説明（→ テンプレートの st-lockedTrack）
 
    何をすれば解放できるかだけを、みじかく出す（曲名は出さない）
-   ぜんぶ解放すると、からっぽになって、ロック表示は1枚も出なくなる */
+   ぜんぶ解放すると、からっぽになって、ロック表示は1枚も出なくなる
+   「|」は、折り返してよい場所のしるし（曲の description と同じ → splitPhrases） */
 const lockedTrackHints = computed(() => {
   const hints: string[] = [];
 
@@ -210,11 +214,27 @@ const lockedTrackHints = computed(() => {
   }
 
   if (!hasUnlockedSecretVocalSong.value) {
-    hints.push('ミニゲーム「どこまで行ける？」で解放');
+    hints.push('ミニゲーム|「どこまで行ける？」で解放');
   }
 
   return hints;
 });
+
+/* 説明文を「折り返してよい場所」（|）で区切って返す
+
+   日本語は、ふつうはどの文字のあいだでも折り返されてしまうので、
+   せまい画面だと「どこまで行け｜る？」「エンディング｜BGM」のように、言葉のとちゅうで割れてしまう
+   そこで、区切ったひとつひとつを「中では折り返さないかたまり」（.st-phrase）にして、
+   あいだに <wbr>（ここで折り返してよい、というしるし）を入れる
+   ※ word-break: keep-all だけでは足りない
+     「」」「、」のような記号のうしろでは、keep-all でも折り返されてしまうため
+     （「どこまで行ける？」｜で解放 のように割れていた）
+
+   例）'S+ランク|特別エンディングBGM' → ['S+ランク', '特別エンディングBGM']
+   ※ 「|」そのものは画面に出ない（区切りに使うだけ） */
+function splitPhrases(text: string) {
+  return text.split('|');
+}
 
 /* ============================================================
    再生のしくみ
@@ -329,24 +349,26 @@ const duration = ref(0);
         ・スターターで↑     … 同じ列のツールバー（戻る／サウンド）へ
         ・スターターで↓     … 曲の一覧の01「▶ 再生」へ（左右どちらの列からでも）
 
-      ■ 再生中（個別・全曲・シャッフル。ツールバー → スターター → 操作行 → 曲の一覧）
+      ■ 再生中（個別・全曲・シャッフル。ツールバー → ⏸ 一時停止 → 操作行 → 曲の一覧）
 
         一時停止中・サウンドOFFで止まっているときも、曲を選んでいるので、こちらになる
+        スターター（▶ 全曲再生／🔀 シャッフル）は、このあいだ「⏸ 一時停止 ／ ▶ 続きから」と入れかわっている
 
           [ ← 戻る ]                    [ 🔊 サウンド ]
-              ↑↓                               ↑↓
-          [ ▶ 全曲再生 ]        ←→        [ 🔀 シャッフル ]
-                  ↑↓                               ↑↓
+                   ↓                ↓
+                [ ⏸ 一時停止 ／ ▶ 続きから ]
+                   ↑↓
           [ ⏮ 前へ ] ←→ [ ⏭ 次へ ]   ←→   [ ■ 停止 ]
                           ↓
                     曲の一覧（01 ▶ 再生 …）
 
-        ・全曲再生で↓   … ⏭ 次のトラックへ（真下の「次」へ降りる。「前」ではない）
-        ・シャッフルで↓ … ■ 停止
+        ・戻る／サウンドで↓ … ⏸ 一時停止（左右どちらの列からでも）
+        ・⏸ 一時停止で↑     … ← 戻る
+        ・⏸ 一時停止で↓     … ⏭ 次のトラックへ（真下のまんなか）
         ・「⏮ 前のトラックへ」へは、「⏭ 次のトラックへ」から←で入る
-        ・前／次で↑ … ▶ 全曲再生、停止で↑ … 🔀 シャッフル再生
-        ・前／次／停止で↓ … 曲の一覧の01「▶ 再生」へ（3つのどこからでも）
-        ※ 個別再生でも、スターターから↓で曲の一覧へ飛ばさない（あいだの操作行へ降りる）
+        ・前／次／停止で↑   … ⏸ 一時停止（3つのどこからでも）
+        ・前／次／停止で↓   … 曲の一覧の01「▶ 再生」へ（3つのどこからでも）
+        ※ 個別再生でも、⏸ 一時停止から↓で曲の一覧へ飛ばさない（あいだの操作行へ降りる）
 
       曲の一覧から↑で戻るときは、直前に一覧へ入ったボタンへ帰る（→ lastOutsideButton）
       （「⏮ 前」から入ったなら「⏮ 前」へ、「⏭ 次」なら「⏭ 次」へ、「■ 停止」なら「■ 停止」へ）
@@ -356,7 +378,7 @@ const duration = ref(0);
    ※ document や window では矢印キーを見張らない（曲の一覧のスクロールや、
      再生バー・音量バーの操作をじゃましないため）
      見張りは3か所だけ
-     （.st-toolbar ／ .st-playall__starters・.st-playall__actions ／ <ol class="st-list">）
+     （.st-toolbar ／ .st-playall__starters・.st-playall__transport・.st-playall__actions ／ <ol class="st-list">）
    ※ 音量スライダーは、矢印キーの移動先に入れない
      矢印キーでそのまま音量を大小させるものなので、
      移動先にしてしまうと「動かすつもりが移動になる」ため（Tabで移れる）
@@ -370,9 +392,10 @@ const duration = ref(0);
    ref="〜" と書いたボタンが、そのままここに入ってくる（出ていないときは null）
 
    画面の位置でならべると
-     ツールバー（いつも）   … backButtonRef（左） / soundToggleButtonRef（右）
-     スターター（いつも）   … playAllButtonRef（左） / shuffleButtonRef（右）
-     操作行（再生中だけ）   … previousTrackButtonRef・nextTrackButtonRef（左列の下） / stopPlaybackButtonRef（右列の下）
+     ツールバー（いつも）         … backButtonRef（左） / soundToggleButtonRef（右）
+     スターター（止まっているとき）… playAllButtonRef（左） / shuffleButtonRef（右）
+     ⏸ 一時停止（再生中だけ）     … playPauseButtonRef（スターターと入れかわって、同じ場所に出る）
+     操作行（再生中だけ）         … previousTrackButtonRef・nextTrackButtonRef（左列の下） / stopPlaybackButtonRef（右列の下）
 
    ↑↓ で列をたどるとき・← → でとなりへ移るときの行き先に使う
    （→ handleToolbarKeydown / handlePlayallButtonsKeydown / findPlayallVerticalTarget）
@@ -390,6 +413,10 @@ const soundControlRef = ref<InstanceType<typeof SoundControl> | null>(null);
 const soundToggleButtonRef = computed<HTMLButtonElement | null>(() => soundControlRef.value?.toggleButton ?? null);
 const playAllButtonRef = ref<HTMLButtonElement | null>(null);
 const shuffleButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* 再生中にだけ出る「⏸ 一時停止 ／ ▶ 続きから」（▶ 全曲再生・🔀 シャッフル再生と入れかわる）
+   全曲再生を始めたあとや、前回の続きを戻したあとに、ここへフォーカスを移すのに使う */
+const playPauseButtonRef = ref<HTMLButtonElement | null>(null);
 const previousTrackButtonRef = ref<HTMLButtonElement | null>(null);
 const nextTrackButtonRef = ref<HTMLButtonElement | null>(null);
 const stopPlaybackButtonRef = ref<HTMLButtonElement | null>(null);
@@ -398,11 +425,18 @@ const stopPlaybackButtonRef = ref<HTMLButtonElement | null>(null);
    「▶ 全曲再生」から ↑↓ で曲の一覧へ入るときに、行き先のボタンを探すのに使う */
 const trackListRef = ref<HTMLElement | null>(null);
 
+/* 曲の一覧のスクロールエリア（<div class="st-trackScroll">）そのものを覚えておく箱
+
+   上下に動くのは、このページではこの箱だけ（ページ全体はのびない）
+   どこまでスクロールしていたかを覚えて、次に開いたときに戻すのに使う
+   （→ 下の「前回の続きから聴けるようにする」） */
+const trackScrollRef = ref<HTMLElement | null>(null);
+
 /* ↑↓ で曲の一覧へ入るとき、どのボタンから入ったかを覚えておく
 
    一覧の上には、いくつかボタンが出ている
-   ・いつも … 「▶ 全曲再生」「🔀 シャッフル再生」
-   ・再生中 … ＋「⏮ 前のトラックへ」「⏭ 次のトラックへ」「■ 停止」（個別・全曲・シャッフル共通）
+   ・止まっているとき … 「▶ 全曲再生」「🔀 シャッフル再生」
+   ・再生中           … 「⏸ 一時停止 ／ ▶ 続きから」＋「⏮ 前のトラックへ」「⏭ 次のトラックへ」「■ 停止」（個別・全曲・シャッフル共通）
 
    一覧のはしで↑↓を押して戻るときは、出てきたボタンへ帰りたい
    （「■ 停止」から入ったのに「⏭ 次のトラックへ」へ帰ると、
@@ -1211,6 +1245,10 @@ function handleTimeUpdate() {
 
   // 一時停止中に再生バーを動かしたときも、歌詞の行を合わせる（→ updateLyricIndex）
   updateLyricIndex();
+
+  /* どこまで聴いたかを覚えておく（次にこのページを開いたときのため）
+     1秒に4回くらい呼ばれるので、覚えるのは1秒に1回までにしている（→ saveLastPlayState） */
+  saveLastPlayState();
 }
 
 /* 曲の長さが分かったときに呼ばれる
@@ -1226,6 +1264,12 @@ function handleLoadedMetadata() {
   const length = soundtrackAudio.duration;
 
   duration.value = Number.isFinite(length) ? length : 0;
+
+  /* 前回の続きの位置が残っていたら、ここで入れる
+
+     曲の長さが分かる前には入れられないブラウザもあるので、
+     読み込めたこのタイミングでも入れなおしている（入るのは1回だけ） */
+  applyPendingStartTime(soundtrackAudio, playingTrackId.value);
 }
 
 /* 曲が最後まで流れきったときに呼ばれる
@@ -1315,6 +1359,11 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   /* いまのリピートの設定を入れておく
      （どこから鳴らしはじめても、かならずここを通る） */
   applyRepeatToAudio(audio);
+
+  /* 前回の続きの位置が、まだ入っていなければ ここで入れる
+     （開いてすぐ「▶ 続きから」を押されて、曲の長さが分かるより先にここへ来たとき）
+     ふだんの再生では、入れるものが無いので何も起きない */
+  applyPendingStartTime(audio, track.id);
 
   // この再生指示の番号を取っておく（あとで「まだ最新の指示か」を見分けるため）
   playRequestId += 1;
@@ -1444,6 +1493,428 @@ function stopAudioForNavigation() {
     // 止められなくても、このあとページごと消えるので何もしない
   }
 }
+
+/* ============================================================
+   前回の続きから聴けるようにする（曲・再生位置・一覧のスクロール位置を覚える）
+
+   ■ やりたいこと
+     このページを離れて、また戻ってきたときに
+     ・前に選んでいた曲
+     ・その曲のどこまで聴いたか（再生位置）
+     ・曲の一覧をどこまでスクロールしていたか
+     の3つを、前と同じ状態に戻す
+
+   ■ 戻すのは「一時停止のかたち」まで（勝手には鳴らさない）
+     ブラウザには「ユーザーがまださわっていないページで、勝手に音を鳴らしてはいけない」
+     という決まりがある。開いたとたんに鳴らそうとしても止められてしまうので、
+     曲と再生位置だけを戻しておいて、鳴らすのは「▶ 続きから」を押してもらってから
+     （押すと、戻しておいた位置から続きが鳴る）
+
+   ■ 覚え先は localStorage
+     このページの音量・サウンドON/OFF・リピートと同じ覚えかたにそろえてある
+     読み書きはどちらもブラウザの中だけ（onMounted より前には動かない）なので、
+     サーバー側で作った画面と食いちがう（hydration mismatch）ことはない
+
+   ■ 歌詞の画面も覚える
+     「歌詞をぜんぶ見る」で歌詞の画面を出したまま離れたときは、また歌詞の画面のまま開く
+     （そのあいだ、曲の一覧のスクロール位置は覚えなおさない。
+       かくれている箱の scrollTop は 0 になるので、前に見ていた場所が消えてしまうため）
+
+   ■ 全曲再生・シャッフル再生の「途中」も覚える
+     曲と再生位置だけでなく、そのとき作られていた1周ぶんの曲順（playlistTracks）と、
+     その何曲目か（playlistIndex）、シャッフルかどうか（isShufflePlaying）もいっしょに覚える
+     戻すと「全曲再生を一時停止している」状態になり、「▶ 続きから」を押すと
+     続きが鳴って、その曲が終われば、覚えていた曲順のとおりに次の曲へ進む
+
+   ■ 覚えるタイミング
+     ・曲が進んでいるあいだ … 1秒に1回まで（→ saveLastPlayState の throttle）
+     ・曲・再生/一時停止・全曲再生の状態が変わったとき … 下の watch
+     ・このページを離れるとき … goToTitle() と onUnmounted()（止める前に最後の1回）
+     「■ 停止」を押したときは playingTrackId が null になるので、覚えごとも消える
+     （止めた人に、次もまた同じ曲を見せないため）
+
+   ■ 一覧のスクロール位置と「再生中の曲への自動追従」がけんかしないように
+     ・開いた直後 … 覚えていたスクロール位置へ戻す。
+                    このとき、曲を戻したことで動く「自動追従」は1回だけ止める
+                    （→ skipNextPlayingTrackScroll。戻した位置が上書きされないように）
+     ・そのあと   … ふつうどおり、曲が切りかわったら自動追従する
+     ・戻した曲を「▶ 続きから」で鳴らしはじめたときも、そこで1回だけ自動追従する
+                    （→ scrollAfterRestoreOnPlay。鳴りはじめてからは、追従のほうを優先する）
+   ============================================================ */
+
+/* 前回の曲と再生位置を覚えておく名前（localStorageのキー）
+
+   中身は、こんな短いJSONの文字
+   ・1曲だけの再生 … {"id":3,"time":42.5}
+   ・全曲再生の途中 … {"id":3,"time":42.5,"playlist":{"shuffle":false,"ids":[1,2,3,4],"index":2}}
+     ids … その1周ぶんの曲順（曲の番号だけ。シャッフルならシャッフルされた順）
+     index … いま何曲目か（ids の何番目か）
+   ・歌詞の画面を出していた … {"id":8,"time":42.5,"lyrics":true}
+
+   ※ playlist が入っていない、前のかたちのメモも、そのまま「1曲だけの再生」として読める */
+const lastPlayStorageKey = 'kouchan-soundtrack-last-play';
+
+/* 曲の一覧のスクロール位置を覚えておく名前（localStorageのキー）
+   中身は '240' のような、上からの距離（px）の文字 */
+const trackScrollStorageKey = 'kouchan-soundtrack-list-scroll';
+
+/* 最後に覚えた時刻（ミリ秒）。1秒に1回までにするために使う
+   ※ 画面に出す数字ではないので、ref ではなくふつうの入れものでよい */
+let lastPlayStateSavedAt = 0;
+let trackScrollSavedAt = 0;
+
+/* もう覚えごとを書きかえないかどうか（このページを離れるときに true にする）
+
+   「戻る」を押したあと・画面が消えたあとには、
+   音を止める後始末（currentTime = 0）で「0秒から」と書きかえてしまわないよう、
+   最後の1回を覚えたところで、それ以上さわらないようにする */
+let isLastStateFixed = false;
+
+/* 読み込んだmp3の用意ができたら入れなおす「続きの位置」（秒）と、その曲の番号
+
+   曲の長さが分かる前に currentTime を入れても、ブラウザによっては効かないことがある
+   そこで、いったんここに置いておき
+   ・曲の長さが分かったとき（→ handleLoadedMetadata）
+   ・「▶ 続きから」で鳴らしはじめるとき（→ playTrackAudio）
+   の早いほうで入れて、入れたら null に戻す（入るのは1回だけ）
+
+   曲の番号もいっしょに覚えているのが大事
+   戻した曲を鳴らさずに、別の曲や「▶ 全曲再生」を押されたときに、
+   新しい曲が とちゅうから鳴ってしまわないようにするため
+   （番号がちがえば、入れずに捨てる） */
+let pendingStartTime: number | null = null;
+let pendingStartTrackId: number | null = null;
+
+/* 次に「曲が切りかわった」ときの自動追従を、1回だけ止めるかどうか
+   （開いた直後に、覚えていた曲を戻したときだけ true にする） */
+let skipNextPlayingTrackScroll = false;
+
+/* 戻した曲を鳴らしはじめたときに、1回だけ自動追従するかどうか */
+let scrollAfterRestoreOnPlay = false;
+
+/* 覚えておいた「続きの位置」を、Audioへ入れる（入れられるのは1回だけ）
+
+   曲の長さが分かる前でも、いまのブラウザは
+   「読み込めたら、その位置から鳴らす」と覚えておいてくれる
+   （ここで入れられなかったときのために、handleLoadedMetadata からも呼んでいる） */
+function applyPendingStartTime(audio: HTMLAudioElement, trackId: number | null) {
+  if (pendingStartTime === null) {
+    return;
+  }
+
+  const seconds = pendingStartTime;
+  const targetTrackId = pendingStartTrackId;
+
+  pendingStartTime = null;
+  pendingStartTrackId = null;
+
+  // 覚えていた曲ではなくなっていたら、入れずに捨てる（新しい曲は先頭から鳴る）
+  if (trackId !== targetTrackId) {
+    return;
+  }
+
+  try {
+    audio.currentTime = seconds;
+  } catch {
+    /* 読み込む前は受けつけないブラウザもあるので、そのときは覚えなおして、あとでもう一度入れる
+       （曲の長さが分かったとき → handleLoadedMetadata ／ 鳴らしはじめるとき → playTrackAudio） */
+    pendingStartTime = seconds;
+    pendingStartTrackId = targetTrackId;
+
+    return;
+  }
+
+  currentTime.value = seconds;
+}
+
+/* いまの曲と再生位置を覚えておく（次にこのページを開いたときのため）
+
+   force … true のときは、1秒に1回の制限をかけずにかならず覚える
+           （ページを離れるときなど、最後の1回を取りこぼさないため）
+*/
+function saveLastPlayState(force = false) {
+  // サーバー側には localStorage が無いので、ここで終わり
+  if (!import.meta.client || isLastStateFixed) {
+    return;
+  }
+
+  /* 続きの位置を入れなおす前（読み込み中）は、まだ覚えない
+     ここで覚えると、入れなおす前の0秒で上書きしてしまうため */
+  if (pendingStartTime !== null) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (!force && now - lastPlayStateSavedAt < 1000) {
+    return;
+  }
+
+  lastPlayStateSavedAt = now;
+
+  try {
+    /* どの曲も選んでいないとき（「■ 停止」・曲が終わったとき）は、覚えごとを消す
+       次に開いたときは、前と同じ「まだ何も選んでいない」状態ではじまる */
+    if (playingTrackId.value === null) {
+      localStorage.removeItem(lastPlayStorageKey);
+
+      return;
+    }
+
+    /* 全曲再生・シャッフル再生の途中なら、その曲順もいっしょに覚える
+       （1曲だけの再生のときは playlist を入れない＝そのぶんメモも短くなる） */
+    const playlist = isPlaylistPlaying.value
+      ? {
+          shuffle: isShufflePlaying.value,
+          ids: playlistTracks.value.map((item) => item.id),
+          index: playlistIndex.value,
+        }
+      : undefined;
+
+    /* 歌詞の画面を出していたかどうかも覚える（出していないときは入れない）
+       ※ 歌詞の画面を出したまま離れて、また戻ってきたときに、歌詞のまま開くため */
+    const lyrics = isLyricsView.value ? true : undefined;
+
+    localStorage.setItem(lastPlayStorageKey, JSON.stringify({ id: playingTrackId.value, time: Math.max(0, currentTime.value), playlist, lyrics }));
+  } catch {
+    // ブラウザの設定で保存できないことがある
+    // 覚えられなくても、このページを開いているあいだの再生はふつうに動く
+  }
+}
+
+/* 曲の一覧のスクロール位置を覚えておく（force の意味は saveLastPlayState と同じ） */
+function saveTrackScroll(force = false) {
+  if (!import.meta.client || isLastStateFixed) {
+    return;
+  }
+
+  /* 歌詞の画面を出しているあいだは、覚えない
+
+     曲の一覧はかくれていて（v-show ＝ display: none）、
+     かくれた箱には大きさが無いので、scrollTop はいつも 0 になる
+     そのまま覚えると、前に見ていた場所が 0 で上書きされてしまう
+     （歌詞のまま離れて、また戻ってきたときに、一覧がいちばん上に戻ってしまっていた） */
+  if (isLyricsView.value) {
+    return;
+  }
+
+  const scrollArea = trackScrollRef.value;
+
+  if (!scrollArea) {
+    return;
+  }
+
+  const now = Date.now();
+
+  if (!force && now - trackScrollSavedAt < 500) {
+    return;
+  }
+
+  trackScrollSavedAt = now;
+
+  try {
+    localStorage.setItem(trackScrollStorageKey, String(Math.round(scrollArea.scrollTop)));
+  } catch {
+    // 覚えられなくても、スクロールそのものはふつうに動く
+  }
+}
+
+/* 曲の一覧をスクロールしたとき（指・マウス・キーボード・自動追従のどれでも呼ばれる） */
+function handleTrackScroll() {
+  saveTrackScroll();
+}
+
+/* このページを離れるときに、最後の状態を覚えて、それ以上は書きかえないようにする
+
+   呼ぶのは、音を止める「前」
+   止めると再生位置が0秒に戻ってしまい、そのあと覚えると「0秒から」になってしまうため */
+function fixLastState() {
+  saveLastPlayState(true);
+  saveTrackScroll(true);
+
+  isLastStateFixed = true;
+}
+
+/* 覚えておいた「全曲再生・シャッフル再生の途中」を戻す
+
+   戻すのは、つぎの3つ
+   ・その1周ぶんの曲順（playlistTracks）
+   ・いま何曲目か（playlistIndex）
+   ・シャッフルかどうか（isShufflePlaying）
+
+   ■ 戻さないとき（1曲だけの再生としてあつかう）
+     ・メモに playlist が入っていない（1曲だけの再生だった・前のかたちのメモ）
+     ・曲順がこわれている
+     ・曲順の中に、いま鳴らそうとしている曲が見あたらない
+       （たとえば、覚えたあとにブラウザを変えて、ボーナストラックが一覧から消えたとき）
+
+   ■ もう一覧に無い曲は、曲順から外す
+     外したぶん番号がずれるので、いま鳴らす曲が「何曲目か」は、
+     覚えていた index ではなく、作り直した曲順の中から探しなおす
+
+   playingTrack … いま戻そうとしている曲（この曲が、曲順の中のどこかにいるはず）
+*/
+function restorePlaylist(playlist: unknown, playingTrack: SoundtrackTrack) {
+  if (typeof playlist !== 'object' || playlist === null) {
+    return;
+  }
+
+  const { shuffle, ids } = playlist as { shuffle?: unknown; ids?: unknown };
+
+  if (!Array.isArray(ids)) {
+    return;
+  }
+
+  /* 覚えていた曲順を、いまの曲の一覧で組み立て直す
+     （もう一覧に無い曲は、ここで落ちる） */
+  const orderedTracks = ids
+    .map((savedId) => (typeof savedId === 'number' ? tracks.value.find((item) => item.id === savedId) : undefined))
+    .filter((item): item is SoundtrackTrack => item !== undefined);
+
+  const index = orderedTracks.findIndex((item) => item.id === playingTrack.id);
+
+  // 曲順の中に、いま戻す曲がいないときは、1曲だけの再生としてあつかう
+  if (index === -1) {
+    return;
+  }
+
+  playlistTracks.value = orderedTracks;
+  playlistIndex.value = index;
+  isPlaylistPlaying.value = true;
+  isShufflePlaying.value = shuffle === true;
+}
+
+/* 前回の曲と再生位置を思い出して、一時停止のかたちで戻す
+
+   ・覚えごとが無い／こわれている／もう無い曲だったときは、何もしない
+     （ボーナストラックは、解放していないと一覧に出ないので、ここで弾かれる）
+   ・音は鳴らさない（鳴らすのは「▶ 続きから」を押してもらってから）
+*/
+function restoreLastPlayState() {
+  if (!import.meta.client) {
+    return;
+  }
+
+  let saved: unknown = null;
+
+  try {
+    const text = localStorage.getItem(lastPlayStorageKey);
+
+    saved = text === null ? null : JSON.parse(text);
+  } catch {
+    // こわれたメモが入っていたときは、何も戻さない（ふつうに開くだけ）
+    return;
+  }
+
+  if (typeof saved !== 'object' || saved === null) {
+    return;
+  }
+
+  const { id, time, playlist, lyrics } = saved as { id?: unknown; time?: unknown; playlist?: unknown; lyrics?: unknown };
+  const track = typeof id === 'number' ? tracks.value.find((item) => item.id === id) : undefined;
+
+  if (!track) {
+    return;
+  }
+
+  const seconds = typeof time === 'number' && Number.isFinite(time) && time > 0 ? time : 0;
+  const audio = getSoundtrackAudio();
+
+  if (!audio) {
+    return;
+  }
+
+  /* 曲を戻すと「曲が切りかわった」ことになり、自動追従が動いてしまう
+     ここでは、覚えていたスクロール位置のほうを優先したいので、1回だけ止める
+     （鳴らしはじめたときに、あらためて1回だけ追従する） */
+  skipNextPlayingTrackScroll = true;
+  scrollAfterRestoreOnPlay = true;
+
+  playingTrackId.value = track.id;
+  isPlaying.value = false;
+  currentTime.value = seconds;
+  duration.value = 0; // 曲の長さは、mp3を読み込めたら handleLoadedMetadata が入れる
+
+  // 全曲再生・シャッフル再生の途中だったなら、その曲順も戻す
+  restorePlaylist(playlist, track);
+
+  /* 歌詞の画面を出したまま離れていたなら、歌詞の画面のまま開く（うた入りの曲のときだけ）
+
+     いまの行は、曲の何秒目かで決まる（→ updateLyricIndex）
+     戻した位置がAudioへ入ったところで行も決まり、その行まで自動でスクロールする
+     （開きかたは「歌詞をぜんぶ見る」を押したときと同じ openLyricsView） */
+  if (lyrics === true && track.lyrics) {
+    openLyricsView();
+  }
+
+  try {
+    /* preload … 開いただけで曲まるごと（数MB）を読み込ませない
+       曲の長さと、続きの位置に必要なところだけにしておく
+       （「▶ 続きから」を押せば、そこから先はふつうに読み込まれる） */
+    audio.preload = 'metadata';
+    audio.src = track.src;
+    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
+  } catch {
+    // 用意できなくても、曲を選んだ表示のままにしておく（押せば先頭から鳴る）
+  }
+
+  // 続きの位置は、読み込めてから入れる（→ applyPendingStartTime）
+  pendingStartTime = seconds > 0 ? seconds : null;
+  pendingStartTrackId = seconds > 0 ? track.id : null;
+
+  applyPendingStartTime(audio, track.id);
+}
+
+/* 覚えておいた、曲の一覧のスクロール位置に戻す
+
+   一覧のカードがぜんぶ並んだあと（nextTick のあと）に呼ぶこと
+   （ボーナストラックの解放で曲数が変わるため。短いうちに戻すと、そこまで動けない）
+*/
+function restoreTrackScroll() {
+  const scrollArea = trackScrollRef.value;
+
+  if (!import.meta.client || !scrollArea) {
+    return;
+  }
+
+  try {
+    const saved = Number(localStorage.getItem(trackScrollStorageKey));
+
+    if (!Number.isFinite(saved) || saved <= 0) {
+      return;
+    }
+
+    /* 一覧が前より短いときは、いちばん下で止まる（ブラウザがそろえてくれる）
+       なめらかな動きはさせない。開いたとたんに動いて見えると落ち着かないため */
+    scrollArea.scrollTop = saved;
+  } catch {
+    // 戻せなくても、いちばん上から読めるだけ
+  }
+}
+
+/* 曲・再生/一時停止・全曲再生の状態・歌詞の画面が変わったら、そのたびに覚えておく
+   （1秒に1回の制限はかけない）
+
+   全曲再生の状態まで見ているのは、曲は変わらないまま
+   「全曲再生をやめて1曲だけの再生になる」ようなときも、覚えなおすため
+   歌詞の画面も、開け閉めしたその場で覚えておく */
+watch([playingTrackId, isPlaying, isPlaylistPlaying, isShufflePlaying, playlistIndex, isLyricsView], () => {
+  saveLastPlayState(true);
+});
+
+/* 戻した曲を鳴らしはじめたときだけ、その曲のカードまで1回スクロールする
+
+   ふだんの「一時停止 → 続きから」では動かさない（見ている場所を奪わないため）
+   開いた直後に戻した曲は、自動追従を1回見送っているので、ここで追いつかせている */
+watch(isPlaying, (playing) => {
+  if (!playing || !scrollAfterRestoreOnPlay) {
+    return;
+  }
+
+  scrollAfterRestoreOnPlay = false;
+
+  nextTick(scrollToPlayingTrack);
+});
 
 /* トラック番号を押したときに、その曲を「全曲再生の開始曲」にする
 
@@ -1648,12 +2119,12 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 
   playTrackAudio(audio, firstTrack);
 
-  /* 再生を始めても、フォーカスは動かさない（押した「▶ 全曲再生／🔀 シャッフル再生」に残す）
-
-     再生を始めると操作行（⏮ 前／⏭ 次／■ 停止）が出てくるが（個別再生の途中なら、もう出ている）、
-     ここで勝手に操作行へ飛ばすと、ユーザーが自分で↓を押す前に操作位置が動いてしまう
-     ユーザーが↓を押したときにだけ、真下の操作行へ移る
-     （▶ 全曲再生 → ⏭ 次のトラックへ／🔀 シャッフル再生 → ■ 停止） */
+  /* 再生を始めると、押した「▶ 全曲再生／🔀 シャッフル再生」は画面から消えて、
+     同じ場所に「⏸ 一時停止」が出てくる（→ テンプレートの st-playall__transport）
+     押したボタンが消えるとフォーカスの行き先が無くなるので、同じ場所の「⏸ 一時停止」へ移す
+     （キーボードで押したなら、そのまま Enter でもう一度押せば止められる）
+     ※ 移すのは、フォーカスが行き場を失ったときだけ（→ focusAfterPlaylistChange） */
+  focusAfterPlaylistChange(playPauseButtonRef);
 }
 
 /* 「▶ 全曲再生」を押したとき
@@ -2141,6 +2612,39 @@ function playNextTrack() {
 }
 
 /* ============================================================
+   いまの曲の「⏸ 一時停止 ／ ▶ 続きから」（操作エリアの大きなボタン）
+
+   ■ なぜ、このボタンがあるのか
+     前は、一時停止・続きからのボタンが、曲の一覧のカード（▶ 再生）にしか無かった
+     一覧をスクロールして鳴っている曲が見えなくなると止めにくく、
+     歌詞の画面では一覧ごとかくれるので、「■ 停止」以外に止める方法が無かった
+
+     そこで、いつも画面に残る操作エリアに、いまの曲を止める・続きから鳴らすボタンを置く
+     「▶ 全曲再生」「🔀 シャッフル再生」は、聴きはじめるときに1回押すだけのボタンなので、
+     曲を選んでいるあいだ（hasPlaybackControls）は、その場所をこのボタンにゆずる
+     （■ 停止で止めれば、また「▶ 全曲再生」「🔀 シャッフル再生」に戻る）
+
+   ■ 押したときの中身は、曲のカードの「⏸ 一時停止 ／ ▶ 続きから」とまったく同じ（→ toggleTrack）
+     ・全曲再生・シャッフル再生のとちゅうでも、その聴きかたのまま止まる・続きから鳴る
+     ・サウンドOFFで止まっているときは、ONに戻してから続きを鳴らす（→ ensureSoundEnabled）
+     ・前回の続きを戻したとき（まだ一度も鳴らしていない）も、戻した位置から鳴る
+   ============================================================ */
+
+/* ボタンの文字（鳴っているときは止める、止まっているときは続きから鳴らす） */
+const playPauseLabel = computed(() => (isPlaying.value ? '⏸ 一時停止' : '▶ 続きから'));
+
+function togglePlayback() {
+  const track = playingTrack.value;
+
+  // どの曲も選んでいないときは、このボタン自体が出ていないが、念のため
+  if (!track) {
+    return;
+  }
+
+  toggleTrack(track);
+}
+
+/* ============================================================
    車のステアリング・ロック画面・イヤホンの操作（Media Session API）
 
    ■ 受け取る操作（受け取りかたは utils/mediaSession.ts）
@@ -2375,9 +2879,26 @@ function scrollToPlayingTrack() {
 // 曲が切りかわって鳴りはじめたら、その最初に1回だけ、その曲のカードまでスクロールする
 // （一時停止・再開では playingTrackId は変わらないので、動かない）
 watch(playingTrackId, (trackId, previousTrackId) => {
-  if (trackId !== null && trackId !== previousTrackId) {
-    nextTick(scrollToPlayingTrack);
+  if (trackId === null || trackId === previousTrackId) {
+    return;
   }
+
+  /* ページを開いた直後に、前回の曲を戻したときだけは、ここでは動かさない
+
+     覚えておいた「曲の一覧のスクロール位置」のほうを先に戻したいため
+     （鳴らしはじめたときに、あらためて1回だけ追従する
+       → 「前回の続きから聴けるようにする」の watch(isPlaying)） */
+  if (skipNextPlayingTrackScroll) {
+    skipNextPlayingTrackScroll = false;
+
+    return;
+  }
+
+  /* ふつうに曲が切りかわったときは、ここで追従する
+     （戻した曲を鳴らしたときの追従は、もう要らないので取り消しておく） */
+  scrollAfterRestoreOnPlay = false;
+
+  nextTick(scrollToPlayingTrack);
 });
 
 /* ============================================================
@@ -2687,24 +3208,27 @@ function findListPlayButton(key: string) {
   return key === 'ArrowDown' ? playButtons[0] : playButtons[playButtons.length - 1];
 }
 
-/* スターター・操作行の2つのならびで ↑↓ を押したときの行き先
+/* スターター・⏸ 一時停止・操作行のならびで ↑↓ を押したときの行き先
 
    画面の位置どおりに、上下の段をたどる
    button … いま選んでいるボタン（どの ref のボタンかで、左列か右列かを見分ける）
 
    ■ スターター（.st-playall__starters）… ▶ 全曲再生(左) / 🔀 シャッフル再生(右)
+     出ているのは、どの曲も選んでいないときだけ
 
      ↑ … 同じ列のツールバーへ（左＝← 戻る／右＝🔊 サウンド）
-     ↓ …
-        止まっているとき … そのまま曲の一覧へ（01の「▶ 再生」）
-        再生中           … 真下の操作行へ（▶ 全曲再生＝⏭ 次のトラックへ／🔀 シャッフル＝■ 停止）
-                           個別再生・全曲再生・シャッフル再生、一時停止中、どれでも同じ
-                           （「⏮ 前のトラックへ」へは、「⏭ 次のトラックへ」から←で入る）
+     ↓ … そのまま曲の一覧へ（01の「▶ 再生」）
+          （再生中の分かれ道も残してあるが、再生中はスターターが出ていないので、ふだんは通らない）
+
+   ■ ⏸ 一時停止 ／ ▶ 続きから（.st-playall__transport）
+     曲を選んでいるあいだだけ、スターターと入れかわって出る
+
+     ↑ … ツールバーの「← 戻る」へ
+     ↓ … 真下の操作行の「⏭ 次のトラックへ」へ（まんなか）
 
    ■ 操作行（.st-playall__actions）… ⏮ 前のトラックへ / ⏭ 次のトラックへ / ■ 停止
 
-     ↑ … 前・次は左の「▶ 全曲再生」へ、停止は右の「🔀 シャッフル再生」へ
-          （スターターから↓で降りてきた道を、そのまま戻れる）
+     ↑ … 「⏸ 一時停止 ／ ▶ 続きから」へ（3つのどれからでも）
      ↓ … 曲の一覧へ（01の「▶ 再生」。3つのどれからでも）
 
    曲の一覧は「▶ 再生」の1列だけなので、一覧へ入るときは、どこからでも01の「▶ 再生」に入る
@@ -2712,6 +3236,13 @@ function findListPlayButton(key: string) {
    （テンプレートの v-if と同じものを見ているので、画面に出ているならびと食いちがわない）
 */
 function findPlayallVerticalTarget(key: string, row: HTMLElement, button: HTMLElement) {
+  /* 「⏸ 一時停止 ／ ▶ 続きから」の段（曲を選んでいるあいだ、スターターと入れかわって出る）
+     ・↑ … 上のツールバーの「← はじめの画面へ戻る」
+     ・↓ … 真下の操作行の「⏭ 次のトラックへ」（まんなかのボタン） */
+  if (row.classList.contains('st-playall__transport')) {
+    return key === 'ArrowUp' ? backButtonRef.value : nextTrackButtonRef.value;
+  }
+
   const isStarterRow = row.classList.contains('st-playall__starters');
 
   if (isStarterRow) {
@@ -2733,9 +3264,10 @@ function findPlayallVerticalTarget(key: string, row: HTMLElement, button: HTMLEl
 
   // ここからは操作行（前／次／停止）
 
-  // ↑ … 停止だけは右の「🔀 シャッフル再生」へ、前・次は左の「▶ 全曲再生」へ
+  /* ↑ … すぐ上の「⏸ 一時停止 ／ ▶ 続きから」へ（前・次・停止のどれからでも）
+     操作行が出ているのは曲を選んでいるあいだだけで、そのあいだスターターは出ていないため */
   if (key === 'ArrowUp') {
-    return button === stopPlaybackButtonRef.value ? shuffleButtonRef.value : playAllButtonRef.value;
+    return playPauseButtonRef.value;
   }
 
   // ↓ … 曲の一覧の01「▶ 再生」へ
@@ -2785,8 +3317,13 @@ function handleToolbarKeydown(event: KeyboardEvent) {
       nextButton = backButtonRef.value;
     }
   } else if (event.key === 'ArrowDown') {
-    // 同じ列の下＝スターターへ（左＝▶ 全曲再生／右＝🔀 シャッフル再生）
-    nextButton = onBack ? playAllButtonRef.value : shuffleButtonRef.value;
+    /* 同じ列の下＝スターターへ（左＝▶ 全曲再生／右＝🔀 シャッフル再生）
+       曲を選んでいるあいだは、スターターのかわりに出ている「⏸ 一時停止 ／ ▶ 続きから」へ（左右どちらからでも） */
+    if (hasPlaybackControls.value) {
+      nextButton = playPauseButtonRef.value;
+    } else {
+      nextButton = onBack ? playAllButtonRef.value : shuffleButtonRef.value;
+    }
   } else {
     // ↑ やそのほかのキーは、ここでは何もしない（いちばん上の段なので上は無い）
     return;
@@ -2801,12 +3338,15 @@ function handleToolbarKeydown(event: KeyboardEvent) {
   nextButton.focus();
 }
 
-/* スターター・操作行の「ボタンのならび」のキーボード操作
+/* スターター・⏸ 一時停止・操作行の「ボタンのならび」のキーボード操作
 
-   一覧の上には、ボタンのならびが2つある（どちらも同じこの関数で動かす）
+   一覧の上には、ボタンのならびがある（どれも同じこの関数で動かす）
 
-     ふだんから出ている（.st-playall__starters）
+     止まっているときだけ出る（.st-playall__starters）
        [ ▶ 全曲再生 ]  [ 🔀 シャッフル再生 ]
+
+     再生中だけ、スターターと入れかわって出る（.st-playall__transport）
+       [ ⏸ 一時停止 ／ ▶ 続きから ]
 
      再生中だけ出る操作行（.st-playall__actions）… 個別再生・全曲再生・シャッフル再生で共通
        [ ⏮ 前のトラックへ ]  [ ⏭ 次のトラックへ ]  [ ■ 停止 ]
@@ -2930,12 +3470,13 @@ async function goToTitle() {
 
   isLeavingPage = true;
 
-  /* 決定音「ポン♪」（ゲーム本編のボタンと同じ音）
+  /* ※ 決定音は鳴らさない
+     引き返すだけのボタンで、このあとすぐページごと切りかわるため
+     （ゲーム本編のA画面・B画面の「戻る」、ミニゲームの「戻る」も同じ） */
 
-     曲を止めるより先に鳴らす
-     ※ 効果音は曲とは別のしくみ（AudioContext）で鳴らしているので、
-       このあと曲を止めても、効果音は最後まで鳴りきる */
-  playDecisionSound();
+  /* 音を止める前に、いまの曲・再生位置・一覧のスクロール位置を覚えておく
+     （次にこのページを開いたときは、ここから続きを聴ける） */
+  fixLastState();
 
   stopAudioForNavigation();
 
@@ -3030,6 +3571,36 @@ onMounted(() => {
      ブラウザで動くここで読みなおしている（サウンドON/OFFの思い出しかたと同じ） */
   hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
   hasUnlockedSecretVocalSong.value = loadHasUnlockedSecretVocalSong();
+
+  /* 前回の曲・再生位置と、曲の一覧のスクロール位置を思い出す
+     （→ 「前回の続きから聴けるようにする」）
+
+     ■ 順番が大事
+       ① ボーナストラックの解放（すぐ上）… ここで「一覧に何曲あるか」が決まる
+       ② 前回の曲を戻す                  … もう一覧に無い曲なら、戻さずに見送る
+       ③ nextTick のあとにスクロール位置を戻す
+          ②で増えた曲がカードとして並びおわってからでないと、そこまで動けないため
+
+     ■ 音は鳴らさない
+       ブラウザが勝手な再生を止めるので、戻すのは「一時停止のかたち」まで
+       「▶ 続きから」を押すと、戻しておいた位置から鳴りはじめる */
+  restoreLastPlayState();
+
+  /* 前回の曲を戻したときは、上で当てた「▶ 全曲再生」が画面から消えて、
+     同じ場所に「▶ 続きから」が出てくる。フォーカスもそちらへ移しておく
+     （キーボードだけでも、開いてすぐ Enter で続きから聴ける） */
+  if (hasPlaybackControls.value) {
+    focusAfterPlaylistChange(playPauseButtonRef);
+  }
+
+  nextTick(() => {
+    restoreTrackScroll();
+
+    /* 念のため、自動追従を止めるしるしも戻しておく
+       （曲を戻せなかったときに、しるしだけが残って
+         次に曲を切りかえたときの追従まで止めてしまわないように） */
+    skipNextPlayingTrackScroll = false;
+  });
 });
 
 /* このページから離れるときの後始末
@@ -3052,6 +3623,13 @@ onMounted(() => {
      止まっている音をもう一度止めても何も起きないだけなので、そのままで安全
 */
 onUnmounted(() => {
+  /* 下の stopSoundtrack() で音を止める「前」に、いまの状態を覚えておく
+
+     止めると再生位置が0秒に戻ってしまうので、覚えるのはかならず止める前
+     覚えたあとは、もう書きかえない（→ fixLastState）
+     ※ ブラウザの戻るボタンで出ていったときも、かならずここを通る */
+  fixLastState();
+
   // ページ全体の見張りをやめる（付けっぱなしにしない）
   document.removeEventListener('pointerdown', handleOutsideCreditPointerDown);
 
@@ -3227,9 +3805,11 @@ onUnmounted(() => {
              鳴らしはじめたあとの動き（曲が終わったら次へ・⏭ 次のトラックへ・
              1周したら終わり）は、2つともまったく同じしくみを使っている
 
-             再生中も出したままにしてあるので、いつでも押しかえられる
-             （シャッフル中に「▶ 全曲再生」を押せば通常順で始めなおし、
-               通常再生中に「🔀 シャッフル再生」を押せば新しい順で始めなおす）
+             ■ 出すのは、どの曲も選んでいないときだけ（!hasPlaybackControls）
+               この2つは「聴きはじめるときに1回押すだけ」のボタンなので、
+               曲を選んでいるあいだ（個別・全曲・シャッフル・一時停止中）は、
+               同じ場所を、いまの曲の「⏸ 一時停止 ／ ▶ 続きから」にゆずる（→ すぐ下の v-else）
+               聴きかたを変えたいときは、「■ 停止」で止めれば、また この2つが出てくる
 
              ※ ここには「開始曲：03 ひるまえのぼうけん」の案内は出さない
                どの曲から始まるかは、下の一覧で番号に色が付いているので分かる
@@ -3242,24 +3822,38 @@ onUnmounted(() => {
                      再生中（個別・全曲・シャッフル）＝真下の操作行へ（全曲再生→⏭ 次のトラックへ／シャッフル→■ 停止）
              （このならびは曲の一覧の外にあるので、ここにも見張りを付けている
                くわしくは handlePlayallButtonsKeydown / findPlayallVerticalTarget） -->
-        <div class="st-playall__starters" @keydown="handlePlayallButtonsKeydown">
+        <div v-if="!hasPlaybackControls" class="st-playall__starters" @keydown="handlePlayallButtonsKeydown">
           <!-- ref … ページを開いたときと、「■ 停止」で止めたときに
                このボタンへフォーカスを当てるための目印 -->
           <button ref="playAllButtonRef" type="button" class="st-playall__button" @click="startPlaylist">▶ 全曲再生</button>
 
           <!-- ふつうのbutton要素なので、Tabで移動でき、Enter / Spaceで押せる
                aria-label … 「シャッフル」だけでは何が起きるか分かりにくいので、
-               読み上げソフトには「全曲を鳴らす」ことまで伝える
-               ref … 再生中に「■ 停止」から↑で戻ってくる先 -->
+               読み上げソフトには「全曲を鳴らす」ことまで伝える -->
           <button ref="shuffleButtonRef" type="button" class="st-playall__button st-playall__button--shuffle" aria-label="曲順をランダムに並べかえて全曲再生する" @click="startShufflePlaylist">
             🔀 シャッフル再生
           </button>
         </div>
 
-        <!-- どの曲から始めるかの案内（全曲再生中は下の状態表示に切り替える）
-             開始曲を使うのは「▶ 全曲再生」だけなので、そのことも書いておく -->
+        <!-- いまの曲の「⏸ 一時停止 ／ ▶ 続きから」（曲を選んでいるあいだだけ、全曲再生・シャッフル再生と入れかわる）
+
+             操作エリアはいつも画面に残るので、一覧をスクロールしていても、歌詞の画面を出していても、ここで止められる
+             押したときの中身は、曲のカードのボタンと同じ（→ togglePlayback / toggleTrack）
+             入れかわる2つと同じ高さの1段なので、再生を始めても操作エリアの高さは変わらない（一覧がガタつかない）
+
+             @keydown … ↑＝上のツールバー（戻る）、↓＝下の操作行（⏭ 次へ）（→ findPlayallVerticalTarget）
+             ref … 全曲再生を始めたとき・前回の続きを戻したときに、ここへフォーカスを移す -->
+        <div v-else class="st-playall__transport" @keydown="handlePlayallButtonsKeydown">
+          <button ref="playPauseButtonRef" type="button" class="st-playall__button st-playall__button--toggle" :class="{ 'st-playall__button--pause': isPlaying }" @click="togglePlayback">
+            {{ playPauseLabel }}
+          </button>
+        </div>
+
+        <!-- どの曲から始めるかの案内（曲を選んでいるあいだは出さない）
+             開始曲を使うのは「▶ 全曲再生」だけなので、そのことも書いておく
+             「▶ 全曲再生」のボタンが出ているときだけの案内なので、ボタンと同じ条件で出しわける -->
         <!-- 「▶ 全曲再生」はボタンの名前なので、途中で2行に割れないよう span で1つにまとめている -->
-        <p v-if="!isPlaylistPlaying" class="st-playall__hint">
+        <p v-if="!hasPlaybackControls" class="st-playall__hint">
           下の一覧で番号を押すと、
           <span class="st-playall__hintButton">「▶ 全曲再生」</span>
           を始める曲を選べます
@@ -3478,8 +4072,11 @@ onUnmounted(() => {
       </ol>
     </div>
 
-    <!-- 曲の一覧は、歌詞の画面を出しているあいだ かくすだけ（v-show。戻ったとき、前に見ていた場所のまま） -->
-    <div v-show="!isLyricsView" class="st-trackScroll">
+    <!-- 曲の一覧は、歌詞の画面を出しているあいだ かくすだけ（v-show。戻ったとき、前に見ていた場所のまま）
+
+         ref・@scroll … どこまでスクロールしていたかを覚えて、次に開いたときに戻すため
+                        （→ 「前回の続きから聴けるようにする」。passive はスクロールを重くしないためのしるし） -->
+    <div v-show="!isLyricsView" ref="trackScrollRef" class="st-trackScroll" @scroll.passive="handleTrackScroll">
       <!-- ============================================================
            曲の一覧
 
@@ -3507,39 +4104,52 @@ onUnmounted(() => {
           </button>
 
           <div class="track__body">
+            <!-- 曲名の行（曲名 ＋「♪ 再生中」＋ ⓘ）
+
+                 ■ 変なところで改行しないように
+                   ・「♪ 再生中」と ⓘ は、ひとかたまり（track__titleSide）にして、曲名の最後の文字のすぐうしろに続ける
+                     入りきらないときは、2つがいっしょに次の行へ移る（ⓘ だけが取り残されない）
+                   ・曲名は、言葉のとちゅうで割らず、「、」や空白のところで折り返す（→ CSS の word-break: keep-all）
+
+                 ※ 曲名と track__titleSide のあいだの空白は、わざと同じ行に書いてある（消さないこと）
+                   この空白が「ここで折り返してよい」しるしになる
+                   （Vue は、改行をふくむ空白をテンプレートから消してしまうので、同じ行に書く必要がある） -->
             <p class="track__title">
-              {{ track.title }}
+              <span class="track__titleText">{{ track.title }}</span> <span class="track__titleSide">
+                <!-- いま鳴っている曲にだけ出す目印 -->
+                <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
 
-              <!-- いま鳴っている曲にだけ出す目印 -->
-              <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
+                <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
 
-              <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
+                     出しかたは3とおり
+                     ・マウスを乗せているあいだだけ出す       … CSSの :hover
+                     ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
+                     ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
 
-                   出しかたは3とおり
-                   ・マウスを乗せているあいだだけ出す       … CSSの :hover
-                   ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
-                   ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
+                     @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
+                     （曲のカードに、あとから押したときの処理が増えても、
+                       ⓘを押しただけで曲が動いてしまわないようにしておく）
 
-                   @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
-                   （曲のカードに、あとから押したときの処理が増えても、
-                     ⓘを押しただけで曲が動いてしまわないようにしておく）
+                     pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
+                <span class="track__info" :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }" @pointerleave="releaseCreditHoverSuppression(track.id)">
+                  <button
+                    type="button"
+                    class="track__infoBtn"
+                    :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
+                    :aria-label="track.title + 'の制作情報を表示'"
+                    :aria-expanded="openedCreditTrackId === track.id"
+                    @click.stop="toggleCredit(track.id)"
+                    @blur="releaseCreditHoverSuppression(track.id)"></button>
 
-                   pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
-              <span class="track__info" :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }" @pointerleave="releaseCreditHoverSuppression(track.id)">
-                <button
-                  type="button"
-                  class="track__infoBtn"
-                  :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
-                  :aria-label="track.title + 'の制作情報を表示'"
-                  :aria-expanded="openedCreditTrackId === track.id"
-                  @click.stop="toggleCredit(track.id)"
-                  @blur="releaseCreditHoverSuppression(track.id)"></button>
-
-                <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+                  <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+                </span>
               </span>
             </p>
 
-            <p class="track__description">{{ track.description }}</p>
+            <!-- 説明文（「|」のところを <wbr>＝折り返してよい場所 にして出す → splitPhrases） -->
+            <p class="track__description">
+              <template v-for="(phrase, index) in splitPhrases(track.description)" :key="index"><wbr v-if="index > 0" /><span class="st-phrase">{{ phrase }}</span></template>
+            </p>
           </div>
 
           <!-- button要素なので、Tabキーで移動でき、Enter / Spaceで押せる -->
@@ -3600,7 +4210,10 @@ onUnmounted(() => {
               <span class="st-lockedTrack__srText">まだ聴けない曲</span>
             </p>
 
-            <p class="st-lockedTrack__description">{{ hint }}</p>
+            <!-- 何をすれば解放できるか（曲の説明文と同じく、「|」のところだけで折り返す → splitPhrases） -->
+            <p class="st-lockedTrack__description">
+              <template v-for="(phrase, index) in splitPhrases(hint)" :key="index"><wbr v-if="index > 0" /><span class="st-phrase">{{ phrase }}</span></template>
+            </p>
           </div>
         </li>
       </ol>
@@ -4103,6 +4716,32 @@ onUnmounted(() => {
   gap: 10px;
 }
 
+/* 曲を選んでいるあいだの「⏸ 一時停止 ／ ▶ 続きから」の段
+   （▶ 全曲再生・🔀 シャッフル再生の段と入れかわって、同じ場所に出る）
+
+   ならべかたはスターターの段と同じ（真ん中へ寄せる）なので、入れかわっても位置がずれない */
+.st-playall__transport {
+  display: flex;
+  justify-content: center;
+}
+
+/* 「⏸ 一時停止 ／ ▶ 続きから」のボタン
+
+   ・幅 … 入れかわる前の2つ（148px × 2 ＋ すき間10px）と同じにして、段の大きさをそろえる
+   ・色 … 止まっているとき（▶ 続きから）は、「▶ 全曲再生」と同じ金色（押すと鳴りはじめるボタン）
+           鳴っているとき（⏸ 一時停止）は、曲のカードの「⏸ 一時停止」（.track__button--playing）と同じ紺色にする
+           （すぐ下の --pause。同じ操作のボタンは、上でも下でも同じ色に見えるようにそろえている）
+           色が入れかわるので、いま鳴っているかどうかも ひと目で分かる */
+.st-playall__button--toggle {
+  min-width: 306px;
+}
+
+.st-playall__button--pause {
+  border-color: var(--navy-deep);
+  background: var(--navy);
+  color: #fff;
+}
+
 /* 「🔀 シャッフル再生」は、白〜水色＋紺色の文字にする
    （「⏭ 次のトラックへ」と同じ考えかた）
 
@@ -4115,19 +4754,23 @@ onUnmounted(() => {
   color: var(--navy-deep);
 }
 
-/* 鳴っているあいだは紺色にして、「押すと止まる」ことを伝える */
-.st-playall__button--stop {
-  border-color: var(--navy-deep);
-  background: var(--navy);
-  color: #fff;
-}
+/* 操作行の3つ（⏮ 前のトラックへ ／ ⏭ 次のトラックへ ／ ■ 停止）は、どれも白〜水色＋紺色の文字にする
 
-/* 「⏮ 前のトラックへ」「⏭ 次のトラックへ」は、白〜水色＋紺色の文字にする
-   紺色でぬりつぶした「■ 停止」より軽い見た目にして、
-   まちがえて止めてしまわないように見分けやすくしている
-   （大きさは、下の「操作行の3つのボタンの大きさをそろえる」で、停止ボタンといっしょに決めている） */
+   ■ ボタンの色の意味（このページ全体でそろえている）
+     ・金色         … 押すと鳴りはじめる（▶ 全曲再生・▶ 続きから）
+     ・紺色ぬりつぶし … いま鳴っている。押すと止まる（上の ⏸ 一時停止・曲のカードの ⏸ 一時停止）
+     ・白〜水色     … そのほかの操作（前へ・次へ・停止・曲のカードの ▶ 再生）
+
+   ■ 前は「■ 停止」も紺色でぬりつぶしていた
+     上の「⏸ 一時停止」を曲のカードと同じ紺色にしたので、紺色のボタンが2つならび、
+     見分けにくくなってしまった。そこで「■ 停止」は前・次と同じ白〜水色にして、
+     紺色は「⏸ 一時停止」だけ（＝いま鳴っているしるし）にした
+     「■ 停止」は、いちばん右のはしで、文字（■ 停止）でも見分けられる
+
+   （大きさは、下の「操作行の3つのボタンの大きさをそろえる」で、3ついっしょに決めている） */
 .st-playall__button--previous,
-.st-playall__button--next {
+.st-playall__button--next,
+.st-playall__button--stop {
   border-color: var(--navy);
   background: linear-gradient(180deg, #fff 0%, #d6f0fb 100%);
   color: var(--navy-deep);
@@ -4550,16 +5193,50 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+/* 曲名の行（曲名 ＋「♪ 再生中」＋ ⓘ）
+
+   ■ 前は display: flex で横にならべていた
+     flex だと、曲名がまるごと1つの箱になるので、入りきらないと
+     「♪ 再生中」と ⓘ が曲名の下の行へ落ちたり、ⓘ だけが次の行に取り残されたりしていた
+
+   ■ いまは、ふつうの文章と同じならべかた（display: block のまま）
+     ・曲名の最後の文字のすぐうしろに「♪ 再生中 ⓘ」のかたまり（.track__titleSide）が続く
+     ・かたまりが入りきらないときは、2つがいっしょに次の行の先頭へ移る
+
+   ■ word-break: keep-all … 曲名を、言葉のとちゅう（「おしま｜い」など）で割らない
+     折り返すのは「、」や空白のところだけになる
+     （たとえば「きょうの大冒険、おしまい！ ～うた入り～」は「おしまい！」のうしろで折り返す）
+   ■ overflow-wrap: anywhere … ただし、1つの言葉がカードの幅より長いときだけは、
+     はみ出さないように、とちゅうでも折り返す（念のための逃げ道） */
 .track__title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
   margin: 0 0 2px;
   color: var(--navy-deep);
   font-size: 19px;
   font-weight: 700;
   line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 曲名と「♪ 再生中 ⓘ」のすき間
+
+   右がわの余白（曲名のうしろ）＋ テンプレートの空白1つぶん で、約10pxあける
+   かたまりの左に余白を付けないのは、次の行へ移ったときに、行の先頭が字下げされて見えないようにするため
+   （曲名のうしろの余白は、前の行の終わりに残るだけで、目に見えない） */
+.track__titleText {
+  margin-right: 5px;
+}
+
+/* 「♪ 再生中」と ⓘ のかたまり
+
+   inline-flex … このかたまりの中では折り返さない（2つが いつもいっしょ）
+                  文章の中の1文字のようにあつかわれるので、曲名の最後の文字に続けてならぶ
+   vertical-align: middle … 曲名の文字の高さの まんなかに、目印と ⓘ をそろえる */
+.track__titleSide {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  vertical-align: middle;
 }
 
 /* 「♪ 再生中」の目印 */
@@ -4709,11 +5386,19 @@ onUnmounted(() => {
   visibility: visible;
 }
 
+/* 曲の説明文
+
+   word-break: keep-all … 言葉のとちゅうでは折り返さない
+                          折り返すのは、テンプレートの <wbr>（説明文の「|」のところ）と空白だけ
+   overflow-wrap: anywhere … 1つのかたまりがカードの幅より長いときだけ、はみ出さないように、とちゅうでも折り返す
+   （曲名の行 .track__title と同じ考えかた） */
 .track__description {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* 曲ごとの再生ボタン
@@ -4819,11 +5504,24 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
+/* 説明文を「|」で区切った、ひとつひとつのかたまり（→ splitPhrases）
+
+   inline-block … かたまりの中では折り返さない。折り返すのは、かたまりとかたまりのあいだ（<wbr>）だけ
+   max-width: 100% … ただし、1つのかたまりがカードの幅より長いときだけは、
+                    中でも折り返して、はみ出さないようにする（念のための逃げ道） */
+.st-phrase {
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* 何をすれば解放できるかの案内（曲の説明文 .track__description と同じ折り返しかた） */
 .st-lockedTrack__description {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* 読み上げソフトにだけ伝える文字（画面には出さない）
@@ -5086,6 +5784,12 @@ onUnmounted(() => {
   .st-playall__starters,
   .st-playall__actions {
     gap: 8px;
+  }
+
+  /* 「⏸ 一時停止 ／ ▶ 続きから」は、スマホ幅では段いっぱいまで広げる（指で押しやすくする）
+     PC用の最低幅（306px）は外す。320px の画面でもはみ出さないように */
+  .st-playall__button--toggle {
+    min-width: 0;
   }
 
   .st-playall__actions {

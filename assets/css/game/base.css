@@ -507,11 +507,19 @@
 
 /* 「♪ サウンドトラック」
 
-   広い画面では、今までどおり「♪ サウンドトラック」と文字も出す
-   スマホ幅では文字をかくして「♪」だけの丸にし、何のボタンかは吹き出しで伝える
-   （→ @media (max-width: 700px) の .title-card__soundtrack〜） */
+   入りきる幅に合わせて、文字を3段階で出しわける
+   ・390px以上   … 「♪ サウンドトラック」（ここ。--full を出す）
+   ・341〜389px  … 「♪ サントラ」（→ @media (max-width: 389px)）
+   ・340px以下   … 「♪」だけの丸（→ @media (max-width: 340px)。何のボタンかは吹き出しで伝える） */
 .title-card__soundtrack {
-  position: relative; /* スマホ幅で出す吹き出しの置き場所の基準 */
+  position: relative; /* 細い画面で出す吹き出しの置き場所の基準 */
+}
+
+/* 短いほうの文字（「サントラ」）は、ふだんは出さない
+   細い画面（389px以下）でだけ、長いほうと入れかわる
+   （B画面の「← はじめの画面へ戻る」→「← 戻る」と同じやりかた。→ .title-card__backText--〜） */
+.title-card__soundtrackText--short {
+  display: none;
 }
 
 /* 小さな吹き出し（スマホ幅で「♪」だけにしたときの、hover / focus のときだけ出る案内）
@@ -2127,24 +2135,12 @@
     font-size: 13.5px;
   }
 
-  /* A画面の「♪ サウンドトラック」は、スマホでは「♪」だけの丸にする
-     （ミニゲームの入口とサウンドのコントロールが、1行に収まるように）
-     ・文字はかくし、かわりに hover / focus のときだけ吹き出しを出す（読み上げは aria-label）
-     ・すぐ上の padding で横長にならないよう、高さと同じ幅にする */
-  .title-card__soundtrack {
-    width: 36px;
-    padding: 0;
-    font-size: 17px;
-    letter-spacing: 0;
-  }
-
-  .title-card__soundtrackText {
-    display: none;
-  }
-
-  .title-card__tooltip {
-    display: block;
-  }
+  /* ※ A画面のサウンドトラックは、スマホ幅でも文字を出す
+       A画面のサウンドには音量スライダーが無く（pages/index.vue の :show-volume="false"）、
+       そのぶん横幅が空いたので、1行に収まるようになった
+       ・389px以下 … 文字を「サントラ」に短くする
+       ・340px以下 … 文字をやめて「♪」だけの丸にする
+       （→ このファイルの最後の @media (max-width: 389px) / (max-width: 340px)） */
 
   /* B画面の「？ あそびかた」も、スマホでは「?」だけの短い表示にする
      （「サウンド」の文字を隠すのと同じ考えかた。読み上げ用の名前は aria-label にある）
@@ -2323,14 +2319,66 @@
   }
 }
 
-/* とても細い画面（340px以下）だけは、上のツールバーを折り返せるようにする
+/* 細い画面（389px以下）では、A画面のサウンドトラックの文字を「サントラ」に短くする
 
-   スマホ幅（700px以下）では flex-wrap: nowrap にして、音量スライダーを縮めて1行に収めている
-   ただ、スライダーは短くなりすぎると動かしにくいので、最低48pxで止めてある
-   それでも入りきらないほど細い画面では、はみ出さないよう下の行へ回りこませる
-   （サウンドのコントロールも、B画面の右上のまとまりも margin-left: auto なので、回りこんでも右へ寄る）
-   おやつ選択・あそびかたも、上の @media (max-width: 700px) で nowrap にしているので、ここでまとめて戻す */
+   ■ 文字は、出せるかぎり出す
+     A画面のサウンドは、ミュートボタンだけで音量スライダーが無い（→ pages/index.vue の :show-volume="false"）
+     そのぶん横幅が空いたので、スマホ幅でも文字を出せるようになった
+     文字が出ていれば、何のボタンかが吹き出しを待たずに分かるので、
+     長いのが入らない幅では、短い「サントラ」に替えて出しつづける
+     （読み上げは、どの幅でも aria-label の「サウンドトラック」のまま）
+
+   ■ 389pxで切っている理由（実際に測った値）
+     A画面の上の行は、この3つが横1行にならぶ（折り返さない → 上の flex-wrap: nowrap）
+       サウンドトラック ＋ 「🌿 ミニゲーム」（114px） ＋ サウンド（🔊だけ・60px）
+     長いほう「♪ サウンドトラック」は154pxあり、収まるのは 390px から
+       ・390px … となりとのすき間8px、カードのふちまで8px（ぎりぎり収まる）
+       ・380px … 2pxはみ出す（カードの内側の余白に食い込む）
+     なので 389px以下では、短いほう「♪ サントラ」（約95px）に入れかえる
+     （360px・375pxのような細いスマホ ＝ サントラ、390px以上（iPhone 12以降・Pixelなど）＝ サウンドトラック）
+
+   ※ さらに細い340px以下では、短いほうも外して「♪」だけの丸にする（→ すぐ下） */
+@media (max-width: 389px) {
+
+  .title-card__soundtrackText--full {
+    display: none;
+  }
+
+  .title-card__soundtrackText--short {
+    display: inline;
+  }
+}
+
+/* とても細い画面（340px以下）
+
+   ■ ① A画面のサウンドトラックは「♪」だけの丸にする
+     短いほうの「サントラ」（約95px）でも、🌿 ミニゲーム・サウンドと3つならぶと入りきらない
+     ここまで細いときは文字をあきらめて、何のボタンかは
+     hover / focus のときだけ出る吹き出しで伝える（読み上げは、これまでどおり aria-label）
+     ・@media (max-width: 700px) の padding で横長にならないよう、高さと同じ幅にする
+
+   ■ ② 上のツールバーを折り返せるようにする
+     スマホ幅（700px以下）では flex-wrap: nowrap にして、音量スライダーを縮めて1行に収めている
+     ただ、スライダーは短くなりすぎると動かしにくいので、最低48pxで止めてある
+     それでも入りきらないほど細い画面では、はみ出さないよう下の行へ回りこませる
+     （サウンドのコントロールも、B画面の右上のまとまりも margin-left: auto なので、回りこんでも右へ寄る）
+     おやつ選択・あそびかたも、上の @media (max-width: 700px) で nowrap にしているので、ここでまとめて戻す */
 @media (max-width: 340px) {
+
+  .title-card__soundtrack {
+    width: 36px;
+    padding: 0;
+    font-size: 17px;
+    letter-spacing: 0;
+  }
+
+  .title-card__soundtrackText--short {
+    display: none;
+  }
+
+  .title-card__tooltip {
+    display: block;
+  }
 
   .title-card__tools,
   .title-card--snack .title-card__tools,

@@ -81,7 +81,9 @@ export type UseKeyboardControlsOptions = {
   closeSnackSelection: () => void;
   closeHowToPlay: () => void;
   closeSnackMenu: () => void;
-  closeGoalConfirm: () => void;
+
+  /* 「公園の出口へ向かう？」をやめる（決定音も鳴らす。→ pages/index.vue の cancelGoalConfirm()） */
+  cancelGoalConfirm: () => void;
   confirmGoToGoal: () => void;
 
   /* そのほか */
@@ -127,7 +129,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     closeSnackSelection,
     closeHowToPlay,
     closeSnackMenu,
-    closeGoalConfirm,
+    cancelGoalConfirm,
     confirmGoToGoal,
     focusFirstSnackOption,
     pauseCommandPointer,
@@ -985,7 +987,11 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
          スライダーはボタンではないので items には入っていないが、
          HTMLではサウンドボタンのすぐ後ろ（＝いちばん最後）に置いてある
          ここで行き先に入れておかないと、サウンドボタンでTabを押したときに
-         スライダーを飛びこして、先頭まで戻ってしまう */
+         スライダーを飛びこして、先頭まで戻ってしまう
+
+         ※ A画面には音量スライダーが無い（まだ音が鳴っていない画面なので出していない）
+           そのときは soundVolumeSliderRef が null になるので、
+           items のいちばん後ろ（＝ミュートボタン）が、そのまま行き先になる */
       const last = soundVolumeSliderRef.value ?? items[items.length - 1];
 
       if (!event.shiftKey && document.activeElement === last) {
@@ -1339,7 +1345,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     if (isGoalConfirmVisible.value) {
       if (event.key === 'Escape') {
         event.preventDefault();
-        closeGoalConfirm();
+        cancelGoalConfirm();
         return;
       }
 
@@ -1371,7 +1377,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
         if (selectedGoalConfirmIndex.value === 1) {
           confirmGoToGoal();
         } else {
-          closeGoalConfirm();
+          cancelGoalConfirm();
         }
       }
 

@@ -10,6 +10,14 @@
    0% ＝ ミュートなので、2つはいつも同じ状態になる
    （0%まで下げるとアイコンが 🔊× になり、上げると音が戻る）
 
+   ■ 音量スライダーを出さない置き場所もある（showVolume）
+     A画面（起動画面）は、まだBGMが鳴っていない画面
+     音量を動かしても、その場ではほとんど何も聞こえない＝手ごたえがないので、
+     ここではミュートボタンだけにして、スライダーは出さない
+     （「はじめる」を押す前に音を消しておける、という役目はミュートボタンが果たす）
+     音が鳴っている画面（B画面・おやつ選択・あそびかた・ゲーム本編・ミニゲーム・
+     サウンドトラック）では、これまでどおり2つとも出す
+
    ■ このコンポーネントは「いまの状態を出して、押されたことを親へ伝えるだけ」
      音を鳴らす・止める・音量を変える処理は、ぜんぶ親（pages/index.vue）にある
      BGM・効果音・localStorage も、今までどおり親のまま
@@ -36,8 +44,12 @@ withDefaults(
 
     /* どこに置くか（上の説明を参照） */
     variant?: 'title' | 'status';
+
+    /* 音量スライダーを出すか（上の「showVolume」の説明を参照）
+       ふだんは出す。出さないのは、まだ音が鳴っていないA画面だけ */
+    showVolume?: boolean;
   }>(),
-  { variant: 'title' },
+  { variant: 'title', showVolume: true },
 );
 
 defineEmits<{
@@ -52,7 +64,11 @@ defineEmits<{
 
    A画面・B画面では、Tabやカーソルキーでの行き来のときに
    pages/index.vue がこの2つを直接さわる（focus を当てる・いちばん最後の項目として使う）
-   上部ステータスバーのほうは使わないので、親から ref を付けていない */
+   上部ステータスバーのほうは使わないので、親から ref を付けていない
+
+   ※ スライダーを出していないとき（A画面）は、volumeSlider は null のまま
+     親（useKeyboardControls）は、そのときミュートボタンを
+     いちばん最後の項目として使うようにしてある */
 const toggleButton = ref<HTMLButtonElement | null>(null);
 const volumeSlider = ref<HTMLInputElement | null>(null);
 
@@ -90,13 +106,17 @@ defineExpose({ toggleButton, volumeSlider });
 
     <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
 
+         showVolume が false のとき（A画面）は、まるごと出さない
+         まだ音が鳴っていない画面では、動かしても何も聞こえないため
+         （→ このファイルの先頭の「showVolume」の説明）
+
          吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
          :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
          （サウンドトラックページの音量スライダーと同じ作りかた）
 
          0%まで下げるとミュート、そこから上げるとミュート解除になる
          （スピーカーのアイコンも、いっしょに切りかわる） -->
-    <span class="sound-control__sliderWrap">
+    <span v-if="showVolume" class="sound-control__sliderWrap">
       <input
         ref="volumeSlider"
         type="range"
