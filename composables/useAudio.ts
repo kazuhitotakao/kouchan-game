@@ -943,13 +943,13 @@ export function useAudio(options: UseAudioOptions) {
   */
 
   /* 救急車のサイレンの音量 */
-  const ambulanceSirenVolume = 0.2;
+  const ambulanceSirenVolume = 0.15;
 
   /* 犬の鳴き声の音量 */
-  const dogBarkVolume = 0.2;
+  const dogBarkVolume = 0.15;
 
   /* 噴水の音量 */
-  const fountainVolume = 0.2;
+  const fountainVolume = 0.15;
 
   /* 音声ファイルの効果音を鳴らしはじめるまでの待ち時間（ミリ秒）
 
