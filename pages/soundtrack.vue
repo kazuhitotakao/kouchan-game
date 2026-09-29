@@ -41,6 +41,9 @@ import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession }
    id          … 曲番号（01・02… の表示にも使う）
    title       … 曲名
    description … 曲の雰囲気をひとことで説明する文
+                 「|」は、せまい画面で折り返してよい場所のしるし（画面には出ない → splitPhrases）
+                 例）'S+ランク|特別エンディングBGM' … 入りきらないときは「S+ランク」「特別エンディングBGM」の2行になる
+                 ※ 「BGM」「解放」のような短い言葉だけが次の行に残らないよう、短い言葉は前の言葉とくっつけておく
    src         … 音声ファイルの場所（public/audio/ の中のファイル）
    volume      … 音の大きさ（0＝無音、1＝そのままの大きさ）
    lyrics      … 歌詞（うた入りの曲だけ。歌詞の無い曲は書かない）
@@ -74,7 +77,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 1,
     title: 'こうちゃんの大冒険',
-    description: 'はじまりのBGM',
+    description: 'はじまりの|BGM',
     src: '/audio/title-bgm.mp3',
     volume: 0.55,
     credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
@@ -82,7 +85,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 2,
     title: 'こうえんたんけん',
-    description: '公園での探検BGM 前半',
+    description: '公園での|探検BGM 前半',
     src: '/audio/park-bgm.mp3',
     volume: 0.4,
     credit: '音楽生成：Suno',
@@ -90,7 +93,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 3,
     title: 'ひるまえのぼうけん',
-    description: '公園での探検BGM 後半',
+    description: '公園での|探検BGM 後半',
     src: '/audio/park-bgm2.mp3',
     volume: 0.4,
     credit: '音楽生成：Suno',
@@ -106,7 +109,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 5,
     title: 'いやいやタイム！',
-    description: 'いやいやタイムBGM',
+    description: 'いやいやタイム|BGM',
     src: '/audio/tantrum-bgm.mp3',
     volume: 0.43,
     credit: '音楽生成：Suno',
@@ -114,7 +117,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 6,
     title: 'きょうの大冒険、おしまい！',
-    description: 'リザルト画面BGM',
+    description: 'リザルト画面|BGM',
     src: '/audio/result-bgm.mp3',
     volume: 0.43,
     credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
@@ -122,7 +125,7 @@ const baseTracks: SoundtrackTrack[] = [
   {
     id: 7,
     title: 'きょうはここまで',
-    description: 'GAME OVER画面BGM',
+    description: 'GAME OVER|画面|BGM',
     src: '/audio/game-over-bgm.mp3',
     volume: 0.43,
     credit: '音楽生成：Suno',
@@ -153,7 +156,7 @@ const baseTracks: SoundtrackTrack[] = [
 const sPlusBonusTrack: SoundtrackTrack = {
   id: 8,
   title: sPlusSongTitle,
-  description: 'S+ランク特別エンディングBGM',
+  description: 'S+ランク|特別エンディングBGM',
   src: sPlusSongSrc,
   // 音量と制作情報は、通常版（06 きょうの大冒険、おしまい！）と同じ
   // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
@@ -171,7 +174,7 @@ const sPlusBonusTrack: SoundtrackTrack = {
 const secretVocalBonusTrack: SoundtrackTrack = {
   id: 9,
   title: secretVocalSongTitle,
-  description: 'ミニゲーム達成の特別BGM',
+  description: 'ミニゲーム達成の|特別BGM',
   src: secretVocalSongSrc,
   // 音量と制作情報は、通常版（04 こもれびの奥で）と同じ
   // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
@@ -201,7 +204,8 @@ const tracks = computed(() => [...baseTracks, ...(hasUnlockedSPlusSong.value ? [
 /* まだ解放していない曲のぶんだけ出す、ロック表示の説明（→ テンプレートの st-lockedTrack）
 
    何をすれば解放できるかだけを、みじかく出す（曲名は出さない）
-   ぜんぶ解放すると、からっぽになって、ロック表示は1枚も出なくなる */
+   ぜんぶ解放すると、からっぽになって、ロック表示は1枚も出なくなる
+   「|」は、折り返してよい場所のしるし（曲の description と同じ → splitPhrases） */
 const lockedTrackHints = computed(() => {
   const hints: string[] = [];
 
@@ -210,11 +214,27 @@ const lockedTrackHints = computed(() => {
   }
 
   if (!hasUnlockedSecretVocalSong.value) {
-    hints.push('ミニゲーム「どこまで行ける？」で解放');
+    hints.push('ミニゲーム|「どこまで行ける？」で解放');
   }
 
   return hints;
 });
+
+/* 説明文を「折り返してよい場所」（|）で区切って返す
+
+   日本語は、ふつうはどの文字のあいだでも折り返されてしまうので、
+   せまい画面だと「どこまで行け｜る？」「エンディング｜BGM」のように、言葉のとちゅうで割れてしまう
+   そこで、区切ったひとつひとつを「中では折り返さないかたまり」（.st-phrase）にして、
+   あいだに <wbr>（ここで折り返してよい、というしるし）を入れる
+   ※ word-break: keep-all だけでは足りない
+     「」」「、」のような記号のうしろでは、keep-all でも折り返されてしまうため
+     （「どこまで行ける？」｜で解放 のように割れていた）
+
+   例）'S+ランク|特別エンディングBGM' → ['S+ランク', '特別エンディングBGM']
+   ※ 「|」そのものは画面に出ない（区切りに使うだけ） */
+function splitPhrases(text: string) {
+  return text.split('|');
+}
 
 /* ============================================================
    再生のしくみ
@@ -4084,39 +4104,52 @@ onUnmounted(() => {
           </button>
 
           <div class="track__body">
+            <!-- 曲名の行（曲名 ＋「♪ 再生中」＋ ⓘ）
+
+                 ■ 変なところで改行しないように
+                   ・「♪ 再生中」と ⓘ は、ひとかたまり（track__titleSide）にして、曲名の最後の文字のすぐうしろに続ける
+                     入りきらないときは、2つがいっしょに次の行へ移る（ⓘ だけが取り残されない）
+                   ・曲名は、言葉のとちゅうで割らず、「、」や空白のところで折り返す（→ CSS の word-break: keep-all）
+
+                 ※ 曲名と track__titleSide のあいだの空白は、わざと同じ行に書いてある（消さないこと）
+                   この空白が「ここで折り返してよい」しるしになる
+                   （Vue は、改行をふくむ空白をテンプレートから消してしまうので、同じ行に書く必要がある） -->
             <p class="track__title">
-              {{ track.title }}
+              <span class="track__titleText">{{ track.title }}</span> <span class="track__titleSide">
+                <!-- いま鳴っている曲にだけ出す目印 -->
+                <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
 
-              <!-- いま鳴っている曲にだけ出す目印 -->
-              <span v-if="isTrackPlaying(track)" class="track__nowPlaying">♪ 再生中</span>
+                <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
 
-              <!-- ⓘ 制作情報（再生・開始トラック選択とは別の操作。押しても曲は動かない）
+                     出しかたは3とおり
+                     ・マウスを乗せているあいだだけ出す       … CSSの :hover
+                     ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
+                     ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
 
-                   出しかたは3とおり
-                   ・マウスを乗せているあいだだけ出す       … CSSの :hover
-                   ・Tabキーで移動してきたあいだだけ出す     … CSSの :focus-visible
-                   ・押して（クリック・タップで）開いたまま … toggleCredit（openedCreditTrackId）
+                     @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
+                     （曲のカードに、あとから押したときの処理が増えても、
+                       ⓘを押しただけで曲が動いてしまわないようにしておく）
 
-                   @click.stop は、このⓘのクリックを、外側へ伝えないためのもの
-                   （曲のカードに、あとから押したときの処理が増えても、
-                     ⓘを押しただけで曲が動いてしまわないようにしておく）
+                     pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
+                <span class="track__info" :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }" @pointerleave="releaseCreditHoverSuppression(track.id)">
+                  <button
+                    type="button"
+                    class="track__infoBtn"
+                    :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
+                    :aria-label="track.title + 'の制作情報を表示'"
+                    :aria-expanded="openedCreditTrackId === track.id"
+                    @click.stop="toggleCredit(track.id)"
+                    @blur="releaseCreditHoverSuppression(track.id)"></button>
 
-                   pointerleave / blur … ⓘから離れたら「閉じたばかり」を忘れる -->
-              <span class="track__info" :class="{ 'track__info--suppress-hover': suppressedCreditHoverTrackId === track.id }" @pointerleave="releaseCreditHoverSuppression(track.id)">
-                <button
-                  type="button"
-                  class="track__infoBtn"
-                  :class="{ 'track__infoBtn--open': openedCreditTrackId === track.id }"
-                  :aria-label="track.title + 'の制作情報を表示'"
-                  :aria-expanded="openedCreditTrackId === track.id"
-                  @click.stop="toggleCredit(track.id)"
-                  @blur="releaseCreditHoverSuppression(track.id)"></button>
-
-                <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+                  <span class="track__tooltip" :class="{ 'track__tooltip--open': openedCreditTrackId === track.id }" role="tooltip">{{ track.credit }}</span>
+                </span>
               </span>
             </p>
 
-            <p class="track__description">{{ track.description }}</p>
+            <!-- 説明文（「|」のところを <wbr>＝折り返してよい場所 にして出す → splitPhrases） -->
+            <p class="track__description">
+              <template v-for="(phrase, index) in splitPhrases(track.description)" :key="index"><wbr v-if="index > 0" /><span class="st-phrase">{{ phrase }}</span></template>
+            </p>
           </div>
 
           <!-- button要素なので、Tabキーで移動でき、Enter / Spaceで押せる -->
@@ -4177,7 +4210,10 @@ onUnmounted(() => {
               <span class="st-lockedTrack__srText">まだ聴けない曲</span>
             </p>
 
-            <p class="st-lockedTrack__description">{{ hint }}</p>
+            <!-- 何をすれば解放できるか（曲の説明文と同じく、「|」のところだけで折り返す → splitPhrases） -->
+            <p class="st-lockedTrack__description">
+              <template v-for="(phrase, index) in splitPhrases(hint)" :key="index"><wbr v-if="index > 0" /><span class="st-phrase">{{ phrase }}</span></template>
+            </p>
           </div>
         </li>
       </ol>
@@ -5157,16 +5193,50 @@ onUnmounted(() => {
   min-width: 0;
 }
 
+/* 曲名の行（曲名 ＋「♪ 再生中」＋ ⓘ）
+
+   ■ 前は display: flex で横にならべていた
+     flex だと、曲名がまるごと1つの箱になるので、入りきらないと
+     「♪ 再生中」と ⓘ が曲名の下の行へ落ちたり、ⓘ だけが次の行に取り残されたりしていた
+
+   ■ いまは、ふつうの文章と同じならべかた（display: block のまま）
+     ・曲名の最後の文字のすぐうしろに「♪ 再生中 ⓘ」のかたまり（.track__titleSide）が続く
+     ・かたまりが入りきらないときは、2つがいっしょに次の行の先頭へ移る
+
+   ■ word-break: keep-all … 曲名を、言葉のとちゅう（「おしま｜い」など）で割らない
+     折り返すのは「、」や空白のところだけになる
+     （たとえば「きょうの大冒険、おしまい！ ～うた入り～」は「おしまい！」のうしろで折り返す）
+   ■ overflow-wrap: anywhere … ただし、1つの言葉がカードの幅より長いときだけは、
+     はみ出さないように、とちゅうでも折り返す（念のための逃げ道） */
 .track__title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
   margin: 0 0 2px;
   color: var(--navy-deep);
   font-size: 19px;
   font-weight: 700;
   line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+/* 曲名と「♪ 再生中 ⓘ」のすき間
+
+   右がわの余白（曲名のうしろ）＋ テンプレートの空白1つぶん で、約10pxあける
+   かたまりの左に余白を付けないのは、次の行へ移ったときに、行の先頭が字下げされて見えないようにするため
+   （曲名のうしろの余白は、前の行の終わりに残るだけで、目に見えない） */
+.track__titleText {
+  margin-right: 5px;
+}
+
+/* 「♪ 再生中」と ⓘ のかたまり
+
+   inline-flex … このかたまりの中では折り返さない（2つが いつもいっしょ）
+                  文章の中の1文字のようにあつかわれるので、曲名の最後の文字に続けてならぶ
+   vertical-align: middle … 曲名の文字の高さの まんなかに、目印と ⓘ をそろえる */
+.track__titleSide {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  vertical-align: middle;
 }
 
 /* 「♪ 再生中」の目印 */
@@ -5316,11 +5386,19 @@ onUnmounted(() => {
   visibility: visible;
 }
 
+/* 曲の説明文
+
+   word-break: keep-all … 言葉のとちゅうでは折り返さない
+                          折り返すのは、テンプレートの <wbr>（説明文の「|」のところ）と空白だけ
+   overflow-wrap: anywhere … 1つのかたまりがカードの幅より長いときだけ、はみ出さないように、とちゅうでも折り返す
+   （曲名の行 .track__title と同じ考えかた） */
 .track__description {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* 曲ごとの再生ボタン
@@ -5426,11 +5504,24 @@ onUnmounted(() => {
   line-height: 1.5;
 }
 
+/* 説明文を「|」で区切った、ひとつひとつのかたまり（→ splitPhrases）
+
+   inline-block … かたまりの中では折り返さない。折り返すのは、かたまりとかたまりのあいだ（<wbr>）だけ
+   max-width: 100% … ただし、1つのかたまりがカードの幅より長いときだけは、
+                    中でも折り返して、はみ出さないようにする（念のための逃げ道） */
+.st-phrase {
+  display: inline-block;
+  max-width: 100%;
+}
+
+/* 何をすれば解放できるかの案内（曲の説明文 .track__description と同じ折り返しかた） */
 .st-lockedTrack__description {
   margin: 0;
   color: var(--ink-soft);
   font-size: 14px;
   line-height: 1.6;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* 読み上げソフトにだけ伝える文字（画面には出さない）
