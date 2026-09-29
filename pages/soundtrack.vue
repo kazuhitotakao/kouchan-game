@@ -1488,9 +1488,15 @@ function stopAudioForNavigation() {
      読み書きはどちらもブラウザの中だけ（onMounted より前には動かない）なので、
      サーバー側で作った画面と食いちがう（hydration mismatch）ことはない
 
+   ■ 全曲再生・シャッフル再生の「途中」も覚える
+     曲と再生位置だけでなく、そのとき作られていた1周ぶんの曲順（playlistTracks）と、
+     その何曲目か（playlistIndex）、シャッフルかどうか（isShufflePlaying）もいっしょに覚える
+     戻すと「全曲再生を一時停止している」状態になり、「▶ 続きから」を押すと
+     続きが鳴って、その曲が終われば、覚えていた曲順のとおりに次の曲へ進む
+
    ■ 覚えるタイミング
      ・曲が進んでいるあいだ … 1秒に1回まで（→ saveLastPlayState の throttle）
-     ・曲・再生/一時停止が変わったとき … 下の watch
+     ・曲・再生/一時停止・全曲再生の状態が変わったとき … 下の watch
      ・このページを離れるとき … goToTitle() と onUnmounted()（止める前に最後の1回）
      「■ 停止」を押したときは playingTrackId が null になるので、覚えごとも消える
      （止めた人に、次もまた同じ曲を見せないため）
@@ -1505,7 +1511,14 @@ function stopAudioForNavigation() {
    ============================================================ */
 
 /* 前回の曲と再生位置を覚えておく名前（localStorageのキー）
-   中身は {"id":3,"time":42.5} のような、短いJSONの文字 */
+
+   中身は、こんな短いJSONの文字
+   ・1曲だけの再生 … {"id":3,"time":42.5}
+   ・全曲再生の途中 … {"id":3,"time":42.5,"playlist":{"shuffle":false,"ids":[1,2,3,4],"index":2}}
+     ids … その1周ぶんの曲順（曲の番号だけ。シャッフルならシャッフルされた順）
+     index … いま何曲目か（ids の何番目か）
+
+   ※ playlist が入っていない、前のかたちのメモも、そのまま「1曲だけの再生」として読める */
 const lastPlayStorageKey = 'kouchan-soundtrack-last-play';
 
 /* 曲の一覧のスクロール位置を覚えておく名前（localStorageのキー）
@@ -1615,7 +1628,17 @@ function saveLastPlayState(force = false) {
       return;
     }
 
-    localStorage.setItem(lastPlayStorageKey, JSON.stringify({ id: playingTrackId.value, time: Math.max(0, currentTime.value) }));
+    /* 全曲再生・シャッフル再生の途中なら、その曲順もいっしょに覚える
+       （1曲だけの再生のときは playlist を入れない＝そのぶんメモも短くなる） */
+    const playlist = isPlaylistPlaying.value
+      ? {
+          shuffle: isShufflePlaying.value,
+          ids: playlistTracks.value.map((item) => item.id),
+          index: playlistIndex.value,
+        }
+      : undefined;
+
+    localStorage.setItem(lastPlayStorageKey, JSON.stringify({ id: playingTrackId.value, time: Math.max(0, currentTime.value), playlist }));
   } catch {
     // ブラウザの設定で保存できないことがある
     // 覚えられなくても、このページを開いているあいだの再生はふつうに動く
@@ -1665,6 +1688,55 @@ function fixLastState() {
   isLastStateFixed = true;
 }
 
+/* 覚えておいた「全曲再生・シャッフル再生の途中」を戻す
+
+   戻すのは、つぎの3つ
+   ・その1周ぶんの曲順（playlistTracks）
+   ・いま何曲目か（playlistIndex）
+   ・シャッフルかどうか（isShufflePlaying）
+
+   ■ 戻さないとき（1曲だけの再生としてあつかう）
+     ・メモに playlist が入っていない（1曲だけの再生だった・前のかたちのメモ）
+     ・曲順がこわれている
+     ・曲順の中に、いま鳴らそうとしている曲が見あたらない
+       （たとえば、覚えたあとにブラウザを変えて、ボーナストラックが一覧から消えたとき）
+
+   ■ もう一覧に無い曲は、曲順から外す
+     外したぶん番号がずれるので、いま鳴らす曲が「何曲目か」は、
+     覚えていた index ではなく、作り直した曲順の中から探しなおす
+
+   playingTrack … いま戻そうとしている曲（この曲が、曲順の中のどこかにいるはず）
+*/
+function restorePlaylist(playlist: unknown, playingTrack: SoundtrackTrack) {
+  if (typeof playlist !== 'object' || playlist === null) {
+    return;
+  }
+
+  const { shuffle, ids } = playlist as { shuffle?: unknown; ids?: unknown };
+
+  if (!Array.isArray(ids)) {
+    return;
+  }
+
+  /* 覚えていた曲順を、いまの曲の一覧で組み立て直す
+     （もう一覧に無い曲は、ここで落ちる） */
+  const orderedTracks = ids
+    .map((savedId) => (typeof savedId === 'number' ? tracks.value.find((item) => item.id === savedId) : undefined))
+    .filter((item): item is SoundtrackTrack => item !== undefined);
+
+  const index = orderedTracks.findIndex((item) => item.id === playingTrack.id);
+
+  // 曲順の中に、いま戻す曲がいないときは、1曲だけの再生としてあつかう
+  if (index === -1) {
+    return;
+  }
+
+  playlistTracks.value = orderedTracks;
+  playlistIndex.value = index;
+  isPlaylistPlaying.value = true;
+  isShufflePlaying.value = shuffle === true;
+}
+
 /* 前回の曲と再生位置を思い出して、一時停止のかたちで戻す
 
    ・覚えごとが無い／こわれている／もう無い曲だったときは、何もしない
@@ -1691,7 +1763,7 @@ function restoreLastPlayState() {
     return;
   }
 
-  const { id, time } = saved as { id?: unknown; time?: unknown };
+  const { id, time, playlist } = saved as { id?: unknown; time?: unknown; playlist?: unknown };
   const track = typeof id === 'number' ? tracks.value.find((item) => item.id === id) : undefined;
 
   if (!track) {
@@ -1715,6 +1787,9 @@ function restoreLastPlayState() {
   isPlaying.value = false;
   currentTime.value = seconds;
   duration.value = 0; // 曲の長さは、mp3を読み込めたら handleLoadedMetadata が入れる
+
+  // 全曲再生・シャッフル再生の途中だったなら、その曲順も戻す
+  restorePlaylist(playlist, track);
 
   try {
     /* preload … 開いただけで曲まるごと（数MB）を読み込ませない
@@ -1761,8 +1836,12 @@ function restoreTrackScroll() {
   }
 }
 
-// 曲・再生/一時停止が変わったら、そのたびに覚えておく（1秒に1回の制限はかけない）
-watch([playingTrackId, isPlaying], () => {
+/* 曲・再生/一時停止・全曲再生の状態が変わったら、そのたびに覚えておく
+   （1秒に1回の制限はかけない）
+
+   全曲再生の状態まで見ているのは、曲は変わらないまま
+   「全曲再生をやめて1曲だけの再生になる」ようなときも、覚えなおすため */
+watch([playingTrackId, isPlaying, isPlaylistPlaying, isShufflePlaying, playlistIndex], () => {
   saveLastPlayState(true);
 });
 
