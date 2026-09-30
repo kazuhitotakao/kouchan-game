@@ -11,8 +11,8 @@
      親が useSecretPathGame() の handleSecretPathPointer〜 へつなぐ
 
    ■ HUD の右上と真ん中は、遊びかたで出すものがちがう
-     ・本編の小道         … 「✨ 木漏れ日 3 / 5」と「あと 12秒」（timeLeft を渡す）
-     ・どこまで行ける？   … 「✨ 木漏れ日 8」「❤❤🤍」「123m」（lives・distance を渡す）
+     ・本編の小道         … 「✨ こもれび 3 / 5」と「あと 12秒」（timeLeft を渡す）
+     ・どこまで行ける？   … 「✨ こもれび 8」「❤❤🤍」「123m」（lives・distance を渡す）
                              加速しているあいだは、距離の右上に「⏩ ×2 → ×3」の札と、次の段までのゲージ
                              （boostTotalMultiplier・nextBoostMultiplier・comboProgress を渡す）
                              自己ベスト（bestDistance）を渡すと、HUD の下の「自己ベストまでのバー」と、
@@ -29,7 +29,7 @@ import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY } from '~
 import type { SecretPathItem, SecretPathLane } from '~/types/game';
 
 const props = defineProps<{
-  /* こうちゃんのレーンと、いまフィールドに出ている枝・木漏れ日 */
+  /* こうちゃんのレーンと、いまフィールドに出ている枝・こもれび */
   playerLane: SecretPathLane;
   items: SecretPathItem[];
 
@@ -46,18 +46,18 @@ const props = defineProps<{
   bumpPenalty: string | null;
   bumpId: number;
 
-  /* 木漏れ日を取った直後か・そのときに こうちゃんの上に出す文字・出しなおすための番号
+  /* こもれびを取った直後か・そのときに こうちゃんの上に出す文字・出しなおすための番号
      sparkleLabel … 本編の小道は「✨ +1」（集めた数が1つ増える）、
                     「どこまで行ける？」は「✨ +5m」（集めた数のほかに、進んだ距離にもボーナスが付く） */
   isSparkling: boolean;
   sparkleLabel: string;
   sparkleId: number;
 
-  /* 集めた木漏れ日の数と、全部でいくつか（「どこまで行ける？」は上限が無いので渡さない） */
+  /* 集めたこもれびの数と、全部でいくつか（「どこまで行ける？」は上限が無いので渡さない） */
   sunlightCount: number;
   sunlightTotal?: number;
 
-  /* 枝に当たって、木漏れ日が減った直後か（本編の小道だけ。HUD の木漏れ日を さんご色に光らせる） */
+  /* 枝に当たって、こもれびが減った直後か（本編の小道だけ。HUD のこもれびを さんご色に光らせる） */
   isSunlightLost?: boolean;
 
   /* 残り時間（秒。本編の小道だけ） */
@@ -161,7 +161,7 @@ const metersToBest = computed(() => Math.max(0, (props.bestDistance ?? 0) + 1 - 
 
    こうちゃんの位置（secretPathPlayerY）から、自己ベストをこえる所までの残りの距離ぶんだけ上に置く
    フィールドの高さ1つぶんが metersPerField メートルなので、残り 5m（1つぶん）なら ちょうどフィールドの いちばん上
-   枝や木漏れ日と同じ速さで下りてきて、こうちゃんの所を通りすぎた瞬間が、自己ベストの更新になる
+   枝やこもれびと同じ速さで下りてきて、こうちゃんの所を通りすぎた瞬間が、自己ベストの更新になる
 
    ※ 線を置くのは「自己ベスト ＋ 1m」の所
      距離は切り捨てた整数でくらべる（97m の記録なら、98m になったら更新）ので、
@@ -214,7 +214,7 @@ onMounted(() => {
 
 <template>
   <article ref="cardRef" class="place-card place-card--secret secret-path">
-    <!-- secret-path-hud--endless … 「どこまで行ける？」の HUD（❤ と距離もならぶので、スマホ幅では「木漏れ日」の文字を省いて1行に収める） -->
+    <!-- secret-path-hud--endless … 「どこまで行ける？」の HUD（❤ と距離もならぶので、スマホ幅では「こもれび」の文字を省いて1行に収める） -->
     <div class="secret-path-hud" :class="{ 'secret-path-hud--endless': distance !== undefined }">
       <span
         class="secret-path-hud__sunlight"
@@ -224,7 +224,7 @@ onMounted(() => {
           'secret-path-hud__sunlight--record': isSunlightRecord,
         }"
         aria-live="polite">
-        ✨ <span class="secret-path-hud__sunlightLabel">木漏れ日</span>
+        ✨ <span class="secret-path-hud__sunlightLabel">こもれび</span>
         <!-- key を数にしておくと、取るたびに数字がぽんっと出なおす -->
         <b :key="sunlightCount" class="secret-path-hud__count">{{ sunlightCount }}</b>
         <!-- 前のすき間（「3 / 5」の3と/のあいだ）も、この中に書いておく
@@ -294,7 +294,7 @@ onMounted(() => {
     </div>
 
     <!-- フィールド（左・まん中・右の3レーン）
-         枝と木漏れ日の位置は、JavaScript が1コマごとに top を書きかえて動かしている
+         枝とこもれびの位置は、JavaScript が1コマごとに top を書きかえて動かしている
          aria-hidden … 流れてくる絵文字を、ひとつずつ読み上げないようにする -->
     <!-- ポインター操作（クリック・タップ・ドラッグ・フリック・長押し）は、フィールド1か所でまとめて受け取り、
          そのまま親へ知らせる（useSecretPathGame() の handleSecretPathPointerDown() を参照）
@@ -317,7 +317,7 @@ onMounted(() => {
            ・--destination … マウスを乗せたレーンを押したときの動く先。目印がはっきりする
                              （遠いレーンに乗せたときは、まん中の目印がはっきりする）
            ・--flash       … 押したレーン・動いた先のレーンが一瞬光る
-           ※ 枝・木漏れ日・こうちゃんは pointer-events: none なので、上に重なっていても押せる -->
+           ※ 枝・こもれび・こうちゃんは pointer-events: none なので、上に重なっていても押せる -->
       <div
         v-for="lane in secretPathLanes"
         :key="`lane-${lane}`"

@@ -860,7 +860,7 @@ const nextPlaceCommandLabel = computed(() => {
 });
 
 /* 公園入口の「ひとやすみ」が何番目になるか
-   行き先（すべり台〜芝生広場、見つけていれば細い道の先）のすぐあと
+   行き先（すべり台〜芝生広場、見つけていれば秘密の小道）のすぐあと
    秘密の場所が出ていれば7番目（＝6）
    まだ出ていないときは、その行が画面に無いので1つくり上がって6番目（＝5）
 */
@@ -875,14 +875,14 @@ const goalCommandIndex = computed(() => restCommandIndex.value + 1);
 /* 公園入口へ戻ってきたとき、どのコマンドにカーソルを合わせるか（restoreEntranceCursor() で使う）
 
    その場所へ入るためのコマンドの番号を返す
-   公園入口にその行が出ていないとき（場所選びから入る場所ではない・「細い道の先」が出ていない）は null
+   公園入口にその行が出ていないとき（場所選びから入る場所ではない・「秘密の小道」が出ていない）は null
    → 呼ぶ側は何もせず、今までどおり先頭（0）のままにする
 
-   ※ 「細い道の先」は canEnterSecretSpot のときだけ画面に出る
+   ※ 「秘密の小道」は canEnterSecretSpot のときだけ画面に出る
      おでかけポイントもアイテムも減らないので、広場や小道にいるあいだに消えることは無いはずだが、
      出ていないときに5番を返すと、1つくり上がったゴールを選んでしまうので、念のため確かめる */
 function getPlaceSelectionIndex(place: GameEvent): number | null {
-  // ひとやすみ（ベンチ）は、細い道の先が出ているかどうかで番号が変わるので、ここで決める
+  // ひとやすみ（ベンチ）は、秘密の小道が出ているかどうかで番号が変わるので、ここで決める
   if (place === 'restArea') {
     return restCommandIndex.value;
   }
@@ -905,7 +905,7 @@ function getPlaceSelectionIndex(place: GameEvent): number | null {
    goToPlace() で、公園入口に行がある場所（placeSelectionIndexes にある場所と、ひとやすみ）へ入るときに書きかえる
    ・とつぜんのできごと・いやいやタイムは goToPlace() を通らない（goToNextPlace() が直接切りかえる）ので、
      途中に入っても上書きされず、そのあと公園入口へ戻ったときに「遊んでいた場所」を選べる
-   ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「細い道の先」なので同じ
+   ・秘密の小道 → こもれびの広場 と進むと secretSpot になるが、どちらも「秘密の小道」なので同じ
    null … このプレイでまだ場所を選んでいない（ゲーム開始直後）。startGame() / resetGame() で null に戻す */
 const lastSelectedPlace = ref<GameEvent | null>(null);
 
@@ -2436,8 +2436,8 @@ function runPlaceAction(action: PlaceActionDefinition) {
 /* ============================================================
    秘密の小道（こもれびの広場へ続くミニゲーム）
 
-   公園入口の「細い道の先」を、そのプレイではじめて選んだときだけ通る
-   左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、木漏れ日を集める
+   公園入口の「秘密の小道」を、そのプレイではじめて選んだときだけ通る
+   左・まん中・右の3レーンを動いて、上から流れてくる枝をよけながら、こもれびを集める
 
    ■ 中身は composables/useSecretPathGame.ts にある
      ミニゲームの中だけで意味を持つ状態・1コマごとの処理（requestAnimationFrame）・
@@ -2451,7 +2451,7 @@ function runPlaceAction(action: PlaceActionDefinition) {
        statusChanges・selectedCommandIndex）を、ref のまま渡す
      ・場所の移動 goToPlace()・公園入口のカーソル合わせ restoreEntranceCursor()・
        音を鳴らす4つを、関数のまま渡す
-     ・公園入口の「細い道の先」goToSecretArea()
+     ・公園入口の「秘密の小道」goToSecretArea()
        （小道へ入るか、そのまま広場へ入るかを決めるところなので、ゲーム全体の側）
 
    ■ 流れ（secretPathPhase）
@@ -2462,12 +2462,12 @@ function runPlaceAction(action: PlaceActionDefinition) {
                 「先へ進む」で secretSpot（こもれびの広場）へ入る
 
    ■ ご褒美として楽しむミニゲーム
-     ・枝に当たっても GAME OVER にはならない（集めた木漏れ日が1つ減るだけ。0より下にはならない）
+     ・枝に当たっても GAME OVER にはならない（集めたこもれびが1つ減るだけ。0より下にはならない）
        本編のステータス（体力・機嫌・余裕）にはダメージを与えず、左右にもそのまま動ける
-     ・木漏れ日をいくつ取っても、かならず広場へ行ける
+     ・こもれびをいくつ取っても、かならず広場へ行ける
      ・親子のステータスと時間は、いっさい変えない
-     ・木漏れ日をたくさん集めたときだけ、おでかけポイントを少しだけボーナス
-       （集められなくても損はしない。木漏れ日の数で変わるのは、結果の文章とボーナスだけ）
+     ・こもれびをたくさん集めたときだけ、おでかけポイントを少しだけボーナス
+       （集められなくても損はしない。こもれびの数で変わるのは、結果の文章とボーナスだけ）
 
    ■ BGM
      小道のあいだは公園BGMのまま（ここではBGMにさわらない）
@@ -2530,7 +2530,7 @@ const {
   playCountdownStartSound,
 });
 
-/* 公園入口の「細い道の先」
+/* 公園入口の「秘密の小道」
 
    ・このプレイで、まだ広場を見つけていない … 秘密の小道（ミニゲーム）へ
    ・もう見つけている                     … 今までどおり、そのまま こもれびの広場へ
@@ -3224,7 +3224,7 @@ function resetGame() {
   resetGameState();
 
   // 秘密の小道のミニゲームも片づける
-  // （ループ・流れてくるもの・木漏れ日の数・こうちゃんの位置を、まとめて止めて戻す）
+  // （ループ・流れてくるもの・こもれびの数・こうちゃんの位置を、まとめて止めて戻す）
   resetSecretPathGame();
 
   // いやいやの理由・レベル・対応の記録・ナイス対応も「いやいやしていない」状態に戻す
@@ -3507,7 +3507,7 @@ function runSelectedCommand() {
       break;
 
     /* こもれびの広場
-       0 木漏れ日の中を探検する／1 広場の奥を見てみる
+       0 こもれびの中を探検する／1 広場の奥を見てみる
        （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
@@ -4510,13 +4510,13 @@ onUnmounted(() => {
                 <template v-if="hasDiscoveredSecretSpot">
                   <h2 class="place-card__title">こもれびの広場</h2>
 
-                  <p class="place-card__text">こうちゃんは、木々のあいだの細い道を覚えているようです。また行ってみよう！</p>
+                  <p class="place-card__text">こうちゃんは、木々のあいだの秘密の小道を覚えているようです。また行ってみよう！</p>
                 </template>
 
                 <template v-else>
-                  <h2 class="place-card__title">細い道を見つけた！</h2>
+                  <h2 class="place-card__title">秘密の小道を見つけた！</h2>
 
-                  <p class="place-card__text">木々のあいだに、細い道があるのを見つけました。この先には何があるのかな？行ってみよう！</p>
+                  <p class="place-card__text">木々のあいだに、秘密の小道があるのを見つけました。この先には何があるのかな？行ってみよう！</p>
                 </template>
               </article>
             </section>
@@ -4534,7 +4534,7 @@ onUnmounted(() => {
                  バッジは、文字（.cmd__badgeText）と印（.cmd__badgeIcon）に分けてある
                  スマホ幅では、印（✓・★）だけを見せて、文字は読み上げ用に残す
 
-                 command--entrance-withSecret … 「細い道の先」が出ているときだけ付ける
+                 command--entrance-withSecret … 「秘密の小道」が出ているときだけ付ける
                                                  ボタンが1段ふえるので、スマホ幅ではボタンを少し低くして、1画面に収める
                                                  （→ assets/css/game/command.css） -->
             <nav
@@ -4591,7 +4591,9 @@ onUnmounted(() => {
                 @click="goToSecretArea"
                 @mouseenter="selectedCommandIndex = 5"
                 @focus="selectedCommandIndex = 5">
-                <span class="cmd__text">細い道の先</span>
+                <!-- 広場をもう見つけていれば、行き先の名前（こもれびの広場）にする
+                     （上のカードと同じく hasDiscoveredSecretSpot で切り替える） -->
+                <span class="cmd__text" :class="{ 'cmd__text--long': hasDiscoveredSecretSpot }">{{ hasDiscoveredSecretSpot ? 'こもれびの広場' : '秘密の小道' }}</span>
                 <span v-if="isVisited('secretSpot')" class="cmd__badges">
                   <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
                   <span v-if="hasFoundPlaceItem('secretSpot')" class="cmd__badge cmd__badge--item-found"><span class="cmd__badgeIcon" aria-hidden="true">★</span> <span class="cmd__badgeText">発見済み</span></span>
@@ -4604,7 +4606,7 @@ onUnmounted(() => {
                    前は各場所の「どうする？」の中にあった「休憩・おやつ」を、行き先と同じ階層のここへまとめた
                    （遊んで体力が減ったあと、「次の場所を選ぶ」でここへ戻ってきて、そのまま休める）
 
-                   番号は、細い道の先が出ているかどうかで変わるので restCommandIndex を見る（出ていれば 6／なければ 5）
+                   番号は、秘密の小道が出ているかどうかで変わるので restCommandIndex を見る（出ていれば 6／なければ 5）
                    スマホの2列では、行き先5つのとなりの空いたマス（芝生広場の右）に入る -->
               <button
                 class="cmd cmd--rest"
@@ -4900,7 +4902,7 @@ onUnmounted(() => {
 
           <!-- 秘密の小道（こもれびの広場へ続くミニゲーム）
 
-               そのプレイではじめて「細い道の先」を選んだときだけ、ここを通る
+               そのプレイではじめて「秘密の小道」を選んだときだけ、ここを通る
                secretPathPhase で、中身を3つに切りかえる
                ・ready    … 説明と「小道へ進む」「← 場所選びにもどる」（まだ何も動かない）
                ・playing  … 3レーンのフィールドと「道をクリック・タップして動こう」の案内
@@ -4913,7 +4915,7 @@ onUnmounted(() => {
                 <h2 class="place-card__title">🌿 秘密の小道</h2>
 
                 <!-- secret-path-intro … スマホ幅では出さない（→ assets/css/game/responsive.css） -->
-                <p class="place-card__text secret-path-intro">木々のあいだの細い道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
+                <p class="place-card__text secret-path-intro">木々のあいだの秘密の小道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
 
                 <p class="secret-path-lead">
                   えだをよけながら
@@ -4947,8 +4949,8 @@ onUnmounted(() => {
 
               <!-- 遊んでいる最中（HUD ＋ 3レーンのフィールド。中身は components/game/SecretPathField.vue）
                    ミニゲーム「どこまで行ける？」（pages/minigame/secret-path.vue）と同じ部品を使う
-                   ・bump-penalty … 枝に当たって木漏れ日が本当に減ったときだけ「✨ -1」を出す
-                   ・sparkle-label … 木漏れ日を取ったときに出す文字（本編は、集めた数が1つ増えるので「✨ +1」）
+                   ・bump-penalty … 枝に当たってこもれびが本当に減ったときだけ「✨ -1」を出す
+                   ・sparkle-label … こもれびを取ったときに出す文字（本編は、集めた数が1つ増えるので「✨ +1」）
                    ・フィールドのポインター操作は、部品から知らせてもらって useSecretPathGame() の関数へつなぐ -->
               <SecretPathField
                 v-else-if="secretPathPhase === 'playing'"
@@ -4982,7 +4984,7 @@ onUnmounted(() => {
                 <h2 class="place-card__title">🌿 秘密の小道</h2>
 
                 <p class="secret-path-result">
-                  ✨ 木漏れ日
+                  ✨ こもれび
                   <b>{{ secretPathSunlightCount }}</b>
                   / {{ secretPathSunlightTotal }}
                 </p>
@@ -4991,10 +4993,10 @@ onUnmounted(() => {
 
                 <p class="place-card__text secret-path-light">木々のすき間から、まぶしい光が差しこんできました。</p>
 
-                <!-- 木漏れ日ボーナス（2個以上集めたときだけ）
+                <!-- こもれびボーナス（2個以上集めたときだけ）
                      見た目は、いやいやタイムの「✨ ナイス対応！」と同じ緑の枠を使う -->
                 <div v-if="secretPathBonusPoint > 0" class="event-flash event-flash--nice">
-                  <p class="event-flash__label">✨ 木漏れ日ボーナス！</p>
+                  <p class="event-flash__label">✨ こもれびボーナス！</p>
 
                   <ul class="event-flash__list">
                     <li class="event-flash__item">
@@ -5081,7 +5083,7 @@ onUnmounted(() => {
                 <h2 class="place-card__title">こもれびの広場</h2>
 
                 <p class="place-card__text">
-                  木々のあいだの細い道を、こうちゃんと葉っぱをかき分けながら進むと、やわらかな木漏れ日が差しこむ小さな広場に出ました。風がそっと吹いて、葉っぱがきらきら揺れています。「きれいー！」こうちゃんは、目をかがやかせています。
+                  木々のあいだの秘密の小道を、こうちゃんと葉っぱをかき分けながら進むと、やわらかなこもれびが差しこむ小さな広場に出ました。風がそっと吹いて、葉っぱがきらきら揺れています。「きれいー！」こうちゃんは、目をかがやかせています。
                 </p>
               </article>
 
@@ -5103,7 +5105,7 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: '木漏れ日の中を探検する' }, { label: '広場の奥を見てみる' }]"
+                  :commands="[{ label: 'こもれびの中を探検する' }, { label: '広場の奥を見てみる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
