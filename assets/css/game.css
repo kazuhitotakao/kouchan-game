@@ -16,6 +16,8 @@
 
    1. result    … リザルト・GAME OVER
    2. command   … コマンドボタン（.cmd）・コマンド欄の外わく
+      park-map  … 公園入口の地図（絵の枠の上に行き先を置く。試作）
+                   ※ command のあとに置くこと（.cmd の幅・バッジを上書きするため）
    3. sound     … サウンドの置き場所（タイトル画面／ゲーム画面上部バー）
    4. base      … ゲーム画面の土台（わく・中央エリア・タイトル画面など）
    5. responsive … 画面の大きさに合わせた上書き（全体レイアウト）
@@ -44,6 +46,7 @@
 
 @import './game/result.css';
 @import './game/command.css';
+@import './game/park-map.css';
 @import './game/sound.css';
 @import './game/base.css';
 @import './game/responsive.css';

@@ -879,10 +879,4 @@
   .command--entrance .cmd::before {
     left: 10px;
   }
-
-  /* 広場を見つけたあとの「こもれびの広場」（7文字）は、余白をつめても1行に入りきらないので、
-     この行き先の文字だけ少し小さくする（.cmd__text--long は pages/index.vue で付ける） */
-  .command--entrance .cmd__text--long {
-    font-size: 14px;
-  }
 }
