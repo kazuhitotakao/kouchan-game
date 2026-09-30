@@ -8,7 +8,7 @@
      ・1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
      ・ミニゲームのページの「どこまで行ける？」の、レベル（進んだ距離から）・1行ずつの予定・速さ・行の間隔を決める
        （設定の数字は data/secretPathEndless.ts）
-     ・集めた木漏れ日の数から、結果の文章とボーナスポイントを決める
+     ・集めたこもれびの数から、結果の文章とボーナスポイントを決める
      ・レーンの番号を、画面の位置（%）にする
      ・いま操作しているものに合わせて、スワイプのしきい値を選ぶ
 
@@ -49,20 +49,20 @@ import {
 } from '~/data/secretPathEndless';
 import type { SecretPathLane, SecretPathSpawn } from '~/types/game';
 
-/* 集めた木漏れ日の数に合わせた、結果の文章 */
+/* 集めたこもれびの数に合わせた、結果の文章 */
 export function getSecretPathResultText(sunlightCount: number) {
   if (sunlightCount >= 4) {
-    return '✨ 木漏れ日が道を照らしています！「きらきらー！」こうちゃんはうれしそうに奥へ走っていきます。';
+    return '✨ こもれびが道を照らしています！「きらきらー！」こうちゃんはうれしそうに奥へ走っていきます。';
   }
 
   if (sunlightCount >= 2) {
-    return '木漏れ日を追いかけながら、こうちゃんと小道の奥へ進みました！';
+    return 'こもれびを追いかけながら、こうちゃんと小道の奥へ進みました！';
   }
 
   return '木々のあいだをゆっくり進みました。道の奥が少し明るくなっています。';
 }
 
-/* 集めた木漏れ日の数から、ボーナスのおでかけポイントを決める（結果の文章と同じ区切り） */
+/* 集めたこもれびの数から、ボーナスのおでかけポイントを決める（結果の文章と同じ区切り） */
 export function getSecretPathBonusPoint(sunlightCount: number) {
   if (sunlightCount >= 4) {
     return secretPathBonusGreatPoint;
@@ -97,7 +97,7 @@ function pickRandomSecretPathLane(candidates: SecretPathLane[] = secretPathLanes
 
 /* 1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
 
-   木漏れ日の数（5つ）は毎回同じにして、出てくるレーンだけをランダムにする
+   こもれびの数（5つ）は毎回同じにして、出てくるレーンだけをランダムにする
    どの行も、少なくとも1つのレーンは空いているので、よけられない形にはならない
 
    ■ 前の行とのつながりも見る
@@ -110,12 +110,12 @@ function pickRandomSecretPathLane(candidates: SecretPathLane[] = secretPathLanes
 
      そうならないように、次の2つを守る
      ・枝2本の行   … 空けるレーンは、前の行のどの空きレーンからも1レーン以内で行ける所にする
-     ・木漏れ日の行 … 木漏れ日も、前の行のどの空きレーンからも1レーン以内で取れる所に出す
+     ・こもれびの行 … こもれびも、前の行のどの空きレーンからも1レーン以内で取れる所に出す
      枝1本の行は、前の行のどこにいても、いまのレーンかとなりのレーンのどちらかが空いているので、そのままでよい
      （いちばん最初の行は、こうちゃんのスタート位置（まん中）を「前の行」として見る）
 
-     前の行で空いていたどのレーンにいても、次の行をよけられて・木漏れ日も取れるので、
-     木漏れ日を取りに行ったあとや、枝をよけた先で、つみにならない */
+     前の行で空いていたどのレーンにいても、次の行をよけられて・こもれびも取れるので、
+     こもれびを取りに行ったあとや、枝をよけた先で、つみにならない */
 export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
   const queue: SecretPathSpawn[] = [];
 
@@ -133,7 +133,7 @@ export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
   return queue.sort((a, b) => a.at - b.at);
 }
 
-/* 1行ぶんの予定（どのレーンに枝・木漏れ日を出すか）を作る
+/* 1行ぶんの予定（どのレーンに枝・こもれびを出すか）を作る
 
    本編の小道（buildSecretPathSpawnQueue()）と、
    ミニゲームのページの「どこまで行ける？」（composables/useSecretPathGame.ts）の両方が使う
@@ -141,7 +141,7 @@ export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
 
    at                 … この行を出す時刻（ゲームの時計）
    previousOpenLanes  … 前の行で空いていたレーン（こうちゃんがいるかもしれない所）
-   isSunlightRow      … 木漏れ日の行にするか
+   isSunlightRow      … こもれびの行にするか
    doubleBranchChance … ふつうの行を、枝2本（空きレーン1つ）にする割合
 
    返すのは、この行の予定（spawns）と、この行で空いているレーン（次の行の previousOpenLanes になる）
@@ -159,9 +159,9 @@ export function buildSecretPathRow(at: number, previousOpenLanes: SecretPathLane
 
     spawns.push({ at, kind: 'sunlight', lane: sunlightLane });
 
-    // たいていは、木漏れ日とはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
-    // ときどき枝を2本にして、木漏れ日のレーンしか空いていない行にする
-    // （木漏れ日は前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
+    // たいていは、こもれびとはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
+    // ときどき枝を2本にして、こもれびのレーンしか空いていない行にする
+    // （こもれびは前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
     if (Math.random() < secretPathSunlightBranchChance) {
       const otherLanes = secretPathLanes.filter((lane) => lane !== sunlightLane);
 
@@ -227,7 +227,7 @@ export function getSecretPathEndlessNextRowAt(at: number, distance: number) {
 
 /* 「どこまで行ける？」の1行ぶんの予定を作る（at に出す行。枝2本の割合は、いまのレベルで決まる）
 
-   木漏れ日の行にするかどうかを抽選して、行の中身は本編と同じ buildSecretPathRow() で作る
+   こもれびの行にするかどうかを抽選して、行の中身は本編と同じ buildSecretPathRow() で作る
    （前の行とつなげて見ても、よけられる・取れる並びになる） */
 export function buildSecretPathEndlessRow(at: number, previousOpenLanes: SecretPathLane[], distance: number) {
   const { doubleBranchChance } = getSecretPathEndlessLevelSettings(getSecretPathEndlessLevel(distance));

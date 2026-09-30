@@ -28,6 +28,8 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 
+import { parkMapMoves, parkMapReturnMoves, parkMapStartPlace } from '~/data/parkMap';
+import type { ParkMapDirection, ParkMapSpot } from '~/data/parkMap';
 import type { GameEvent } from '~/types/game';
 
 export type UseKeyboardControlsOptions = {
@@ -53,6 +55,10 @@ export type UseKeyboardControlsOptions = {
   commandCount: ComputedRef<number>;
   goalCommandIndex: ComputedRef<number>;
   isGoalConfirmVisible: ComputedRef<boolean>;
+
+  /* 公園入口で、その場所へ入るコマンドが何番か（出ていないときは null。→ pages/index.vue）
+     公園入口の地図で、矢印キーの移動先の番号を調べるのに使う */
+  getPlaceSelectionIndex: (place: GameEvent) => number | null;
   isSecretPathPlaying: ComputedRef<boolean>;
 
   /* ===== フォーカスを当てるためのボタン・入力欄 ===== */
@@ -112,6 +118,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     commandCount,
     goalCommandIndex,
     isGoalConfirmVisible,
+    getPlaceSelectionIndex,
     isSecretPathPlaying,
     startButtonRef,
     soundtrackButtonRef,
@@ -234,183 +241,63 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectedSnackMenuIndex.value += 1;
   }
 
-  /* ===== ここから下は、公園入口（3列にならぶコマンド）のための処理 ===== */
+  /* ===== ここから下は、公園入口（地図の上にならぶ行き先）のための処理 ===== */
 
-  /* 公園入口のコマンドが、いま何列で並んでいるか
-     CSSと同じ幅で切り替える
-     ・901px以上   … 3列
-     ・900px以下   … 2列（スマホ幅の700px以下も2列のまま）
+  /* 地図の上の場所が、いま何番のコマンドか（地図に出ていないときは null）
 
-     ※ スマホ幅も前は1列だったが、6段たてにならぶと1画面に収まらないので、
-       2列にした（assets/css/game/command.css の .command--entrance）
-  */
-  const entranceColumns = ref(3);
-
-  /* ゴールの行に入る直前、何列目にいたかを覚えておく箱
-     0 = 左はし、1 = まん中、2 = 右はし
-
-     ゴール（公園の出口へ向かう）の行は横はばをまるごと使っていて、
-     ほかのコマンドのような「列」を持っていない
-     そのため覚えておかないと、↑で戻るときに行き先の
-     いちばんうしろへ帰ってしまい、
-     「池」で↓→↑としたのに「芝生広場」に移動してしまう
-
-     ※ 見た目には出てこない、キーボード操作のためだけのメモ
-  */
-  const entranceColumnBeforeGoal = ref(0);
-
-  /* いまの画面幅を見て、列の数を updateする
-     画面が表示されたときと、幅が変わったときに呼ぶ
-  */
-  function updateEntranceColumns() {
-    if (window.matchMedia('(max-width: 900px)').matches) {
-      entranceColumns.value = 2;
-      return;
+     番号は、ほかの画面と同じ selectedCommandIndex の番号をそのまま使う
+     （Enter / Space で runSelectedCommand() が選ぶ遊び、マウスで選んだときの番号と同じ）
+     ・行き先・きゅうけい … 親の getPlaceSelectionIndex()
+                           （秘密の小道がまだ出ていないときは null を返してくれる）
+     ・おうちへ帰る（ゴール） … goalCommandIndex */
+  function getParkMapSpotIndex(spot: ParkMapSpot): number | null {
+    if (spot === 'goal') {
+      return goalCommandIndex.value;
     }
 
-    entranceColumns.value = 3;
+    return getPlaceSelectionIndex(spot);
   }
 
-  /* ↑：公園入口では「1行ぶん（列の数ぶん）」上へ動かす
-     例）3列のとき 池(3) の1つ上は すべり台(0)
+  /* 地図の上で、矢印キーで動く前にいた場所（「来たほうへ戻る」ために使う → data/parkMap.ts の parkMapReturnMoves）
 
-     いちばん上の行（すべり台・砂場・どんぐりの木 など）で↑を押しても、動かない
-     いちばん下の「公園の出口へ向かう」へは回りこまない
-     （↑を押しすぎたときに、うっかりゴールを選んでしまわないようにするため）
+     矢印キーの動きかただけに使う覚え書きなので、ゲームの状態（useGameState）には入れない
+     マウス・タップで選びなおしたあとや、公園入口へ戻ってきたあとは古いままのこともあるが、
+     候補に入っていなければ使わないので、ふつうの動きかたになるだけ */
+  let previousMapSpot: ParkMapSpot | null = null;
 
-     ゴールの行から↑を押したときは、entranceColumnBeforeGoal に
-     覚えておいた列へ戻る（池で↓→↑なら、ちゃんと池へ帰ってくる）
+  /* 公園入口の ↑ ↓ ← →：地図の上で、押した向きにある場所へ動かす
 
-     ※ 「公園の出口へ向かう（ゴール）」だけは、CSSで横1行をまるごと使っている
-       （.cmd--goal の grid-column: 1 / -1）ので、列のマス目には入っていない
-       そのため、ゴールはいちばん下の1行として別あつかいで計算する
+     どこへ動くかは data/parkMap.ts の parkMapMoves に書いてある
+     候補を前から順に見て、いま地図に出ている最初の場所へ動く
+     ただし parkMapReturnMoves に書いた向きは、候補の中に直前にいた場所があれば、先にそこへ戻る
+     どの候補も出ていない・その向きに何もないときは、動かない（はしで止まる） */
+  function moveEntranceOnMap(direction: ParkMapDirection) {
+    const spots = Object.keys(parkMapMoves) as ParkMapSpot[];
 
-       [すべり台] [砂場] [どんぐり]
-       [池]       [芝生] [秘密]
-       [───── ゴール ─────]   ← 横いっぱいの1行
-  */
-  function moveEntranceUp() {
-    const columns = entranceColumns.value;
+    // いま選んでいる番号が、地図のどの場所か
+    const current = spots.find((spot) => getParkMapSpotIndex(spot) === selectedCommandIndex.value);
 
-    // ゴールの番号は、そのまま「行き先の数」でもある
-    // （行き先が 0〜4 の5つなら、ゴールは5番）
-    const goalIndex = goalCommandIndex.value;
-
-    // いまゴールの行にいるなら、ゴールへ降りてくる前と同じ列へ戻る
-    if (selectedCommandIndex.value === goalIndex) {
-      // 行き先のいちばん下の行が、何番から始まるかを求める
-      // 例）行き先が5つ・3列なら、いちばん下の行は 3番（池）から
-      const lastRowStart = Math.floor((goalIndex - 1) / columns) * columns;
-
-      // その行の、覚えておいた列へ戻る
-      const back = lastRowStart + entranceColumnBeforeGoal.value;
-
-      // その列にコマンドが無いとき（いちばん下の行が途中で終わっているとき）は、
-      // その行のいちばん右のコマンドへ寄せる
-      selectedCommandIndex.value = Math.min(back, goalIndex - 1);
+    // どの場所でもない（番号がずれている）ときは、公園入口に来たときと同じ場所（地図のまん中の芝生広場）へ戻す
+    if (!current) {
+      selectedCommandIndex.value = getPlaceSelectionIndex(parkMapStartPlace) ?? 0;
       return;
     }
 
-    // 1行ぶん上へ
-    const next = selectedCommandIndex.value - columns;
+    const candidates = parkMapMoves[current][direction] ?? [];
+    const returnsToPrevious = parkMapReturnMoves[current]?.includes(direction) ?? false;
+    const ordered = returnsToPrevious && previousMapSpot && candidates.includes(previousMapSpot)
+      ? [previousMapSpot, ...candidates.filter((spot) => spot !== previousMapSpot)]
+      : candidates;
 
-    // 上にはみ出した＝いちばん上の行にいたので、動かさない
-    // （いちばん下の「公園の出口へ向かう」へは回りこまない）
-    if (next < 0) {
-      return;
+    for (const next of ordered) {
+      const nextIndex = getParkMapSpotIndex(next);
+
+      if (nextIndex !== null) {
+        previousMapSpot = current;
+        selectedCommandIndex.value = nextIndex;
+        return;
+      }
     }
-
-    selectedCommandIndex.value = next;
-  }
-
-  /* ↓：公園入口では「1行ぶん（列の数ぶん）」下へ動かす
-     行き先のいちばん下の行から↓を押すと、その下にあるゴールへ進む
-
-     ゴール（いちばん下の行）で↓を押しても、動かない
-     いちばん上の「すべり台」へは回りこまない
-     （↑でゴールへ回りこまないのと同じく、上下のはしで止まるようにそろえている）
-  */
-  function moveEntranceDown() {
-    const columns = entranceColumns.value;
-    const goalIndex = goalCommandIndex.value;
-
-    // いまゴールの行にいる＝いちばん下なので、動かさない
-    if (selectedCommandIndex.value === goalIndex) {
-      return;
-    }
-
-    // 1行ぶん下へ
-    const next = selectedCommandIndex.value + columns;
-
-    // まっすぐ下にコマンドがあるときは、そこへ動かすだけ
-    if (next < goalIndex) {
-      selectedCommandIndex.value = next;
-      return;
-    }
-
-    // ここから下は「まっすぐ下にコマンドが無かった」とき
-
-    // 行き先のいちばん下の行が、何番から始まるかを求める
-    // 例）行き先が5つ・3列なら、いちばん下の行は 3番（池）から
-    const lastRowStart = Math.floor((goalIndex - 1) / columns) * columns;
-
-    // まだ下に行き先の行が残っているとき
-    //   例）行き先が5つ・3列で「どんぐり(2)」にいる場合、
-    //      すぐ下の [池][芝生広場] の行には3列目が無い
-    //      ここでゴールへ飛ばすと、池・芝生広場の行をまるごと飛びこえてしまうので、
-    //      その行のいちばん近いコマンド（芝生広場）へ寄せる
-    if (selectedCommandIndex.value < lastRowStart) {
-      selectedCommandIndex.value = goalIndex - 1;
-      return;
-    }
-
-    // いちばん下の行にいたので、その下のゴールへ進む
-    // ↑で戻ってきたときに同じ列へ帰れるよう、いまの列を覚えておく
-    entranceColumnBeforeGoal.value = selectedCommandIndex.value % columns;
-    selectedCommandIndex.value = goalIndex;
-  }
-
-  /* ←：公園入口では1つ前のコマンドへ動かす
-
-     いちばん最初の「すべり台」で←を押しても、動かない
-     いちばん後ろの「公園の出口へ向かう」へは回りこまない
-     （↑と同じく、うっかりゴールを選んでしまわないようにするため）
-
-     ※ moveCommandUp() はほかの場所の「どうする？」でも使っているので書きかえず、
-       公園入口のためだけに、この関数を分けている */
-  function moveEntranceLeft() {
-    if (selectedCommandIndex.value <= 0) {
-      return;
-    }
-
-    selectedCommandIndex.value -= 1;
-  }
-
-  /* →：公園入口では1つ次のコマンドへ動かす
-
-     いちばん後ろの「公園の出口へ向かう」で→を押しても、動かない
-     いちばん最初の「すべり台」へは回りこまない
-     （↓と同じく、端で止まるようにそろえている
-       スマホの1列表示では → と ↓ が同じ向きになるので、動きがちがうと迷うため）
-
-     いちばん後ろの行き先から→でゴールへ進んだときは、
-     ↓で進んだときと同じように、いまの列を覚えておく
-     （ゴールから↑で戻ったときに、→を押す前のコマンドへ帰れるようにするため）
-
-     ※ moveCommandDown() はほかの場所の「どうする？」でも使っているので書きかえず、
-       公園入口のためだけに、この関数を分けている */
-  function moveEntranceRight() {
-    const goalIndex = goalCommandIndex.value;
-
-    if (selectedCommandIndex.value >= goalIndex) {
-      return;
-    }
-
-    if (selectedCommandIndex.value === goalIndex - 1) {
-      entranceColumnBeforeGoal.value = selectedCommandIndex.value % entranceColumns.value;
-    }
-
-    selectedCommandIndex.value += 1;
   }
 
   /* ============================================================
@@ -1460,8 +1347,8 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    // 公園入口だけは、コマンドが横にも並んでいる（3列・2列・1列）ので、
-    // ↑↓の動きかたが他の場所とちがう
+    // 公園入口だけは、行き先が地図の上にバラバラに並んでいるので、
+    // ↑↓←→ の動きかたが他の場所とちがう（押した向きにある場所へ動く → moveEntranceOnMap()）
     const isEntrance = currentEvent.value === 'parkEntrance';
 
     /* ⓪-3 読む画面で ↑↓ を押したとき（どの画面が「読む画面」かは isReadingScene を参照）
@@ -1505,7 +1392,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       event.preventDefault();
 
       if (isEntrance) {
-        moveEntranceUp(); // 公園入口は1行ぶん（列の数ぶん）上へ
+        moveEntranceOnMap('up'); // 公園入口は、地図の上で上にある場所へ
       } else {
         moveCommandUp(); // たて1列の場所は1つ上へ
       }
@@ -1520,7 +1407,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       event.preventDefault();
 
       if (isEntrance) {
-        moveEntranceDown(); // 公園入口は1行ぶん（列の数ぶん）下へ
+        moveEntranceOnMap('down'); // 公園入口は、地図の上で下にある場所へ
       } else {
         moveCommandDown(); // たて1列の場所は1つ下へ
       }
@@ -1531,7 +1418,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
     /* ③ ← →：となりのコマンドへ1つ動かす
 
-       ・公園入口 … 1つ前／次へ（はしで止まる）
+       ・公園入口 … 地図の上で左／右にある場所へ（はしで止まる → moveEntranceOnMap()）
        ・読む画面 … 1つ前（左）／次（右）へ
                     横ならびの選択肢（いやいや・とつぜんのできごと・秘密の小道・ゴール／GAME OVER）は、見た目の左右と同じ向きに動く
                     ↑↓ で結果をスクロールしているあいだも、ここでコマンドを選べる
@@ -1547,9 +1434,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
       if (isEntrance) {
         if (event.key === 'ArrowLeft') {
-          moveEntranceLeft(); // ← は1つ前へ（すべり台からゴールへは回りこまない）
+          moveEntranceOnMap('left'); // 地図の上で左にある場所へ
         } else {
-          moveEntranceRight(); // → は1つ次へ（ゴールからすべり台へは回りこまない）
+          moveEntranceOnMap('right'); // 地図の上で右にある場所へ
         }
       } else if (event.key === 'ArrowLeft') {
         moveCommandPrevious(); // ← は1つ左へ（いちばん左で止まる）
@@ -1594,7 +1481,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     moveSnackSelectionToHovered,
 
     /* pages/index.vue のほかの場所から呼ぶもの */
-    updateEntranceColumns,
     focusTitleMainButton,
     handleKeydown,
   };

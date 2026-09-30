@@ -1,0 +1,470 @@
+/* ============================================================
+   公園入口の地図
+
+   公園入口だけは、カードの中に公園の地図の絵（PC用 public/images/park/park-map.png／スマホ用 park-map-sp.png）を出し、
+   その上に行き先のボタン（すべり台・砂場 …）とゴール（おうちへ帰る）を重ねて置いている
+   （前は、絵の枠と、下のコマンド欄の「どこへ行く？」の一覧が別々だった）
+   絵には文字を入れていない。場所の名前は、ぜんぶボタンの文字
+
+   ・ボタンの見た目（色・選択カーソル「▶」・浮き上がる動き）は、コマンドボタン .cmd のまま
+     （→ assets/css/game/command.css）。地図の上では、少し小さくしている
+   ・ここで決めているのは「地図の大きさ」「ボタンの大きさ」「どこに置くか」だけ
+   ・矢印キーで選ぶときの移動先は、見た目とは別に data/parkMap.ts で決めている
+     置き場所を大きく変えたときは、そちらも見た目に合わせること
+
+   ■ しくみ
+
+     .park-map          … 地図のわく（カードの中で、地図に使ってよい場所）
+       .park-map__canvas  … 地図の絵と同じ縦横比の板（position: relative）
+         .park-map__base    … 地図の絵（板いっぱい）
+         .park-map__spot    … 行き先1つぶんの箱（position: absolute。板に対する % で置く）
+
+     絵とボタンが同じ板に乗っているので、画面の大きさが変わっても、ボタンは絵の同じ場所に乗ったまま
+
+   ■ 地図のならび（下が公園の出入り口、上が公園の奥）
+
+     [どんぐりの木]              [秘密の小道]
+                  [芝生広場]
+     [砂場]                            [池]
+     [きゅうけい]                  [すべり台]
+                 [おうちへ帰る]
+                     （門）
+
+   ■ 置き場所を変えたいとき
+
+     下の「行き先ごとの置き場所」の、その場所のクラスの --x / --y だけを書きかえる
+       例）すべり台を少し右へ … .park-map__spot--slide の --x を大きくする
+           池を少し下へ       … .park-map__spot--pond の --y を大きくする
+     ・--x / --y は、ボタンのまん中の位置（地図の横はば・高さに対する %）
+     ・PCでは、どのボタンも同じ幅（11em）。文字の大きさは、地図の横はば 760px 以上で 18px、それより細いと 16px
+       スマホ幅（700px以下）と、PCで地図が小さいとき（横はば 600px 未満）は、名前が1行に入るぶんだけの幅
+     ・スマホ幅（700px以下）では、絵がスマホ用（3:4）に切りかわるので、いちばん下の @media で、ぜんぶの場所の --x / --y を上書きしている
+       PCの置き場所を変えても、スマホには効かない（スマホの置き場所は、いちばん下の @media の中を書きかえる）
+
+   ■ スマホ幅で気をつけること
+
+     スマホでは縦長の絵（3:4）。スクロールしないよう、背の低い画面では地図が縮む（320×568 の画面で いちばん小さい）
+     ボタンの文字も地図の横はばに合わせて縮む（15px 〜 12px）
+     % を変えたときは 320×568・375×667・360×740・390×844 などで、重ならないか・地図からはみ出さないか・スクロールが出ないか確かめる
+     （いちばんきついのは、320×568 で どんぐりの木 が地図の左へはみ出さないか、すべり台 と おうちへ帰る が重ならないか）
+   ============================================================ */
+
+/* 公園入口のカード
+
+   中を「あいさつ文 → 地図」のたてならびにする
+   ・横はばは、中央エリアいっぱいまで広げる（ふだんの .stage > * は --stage-width（900px）まで）
+   ・高さは中身ぶん（地図の絵の縦横比で決まる）。中央エリアに入りきらないときだけ縮み、
+     そのぶん地図（.park-map）が低くなる（地図の絵は、低くなったぶんだけ横はばもちぢめて、形を保つ）
+   ・box-sizing: border-box … 横はばの上限を外すと、padding と左の太いふちのぶんだけ
+     中央エリアの左右へはみ出してしまうので、幅の中に収める */
+.stage--entrance > .place-card--entrance {
+  box-sizing: border-box;
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-width: none;
+}
+
+/* 地図のわく（カードの中で、地図に使ってよい場所）
+
+   ・横はばはカードいっぱい。高さは、ふだんは絵の縦横比ぶん（aspect-ratio）
+     中央エリアの高さが足りないときは、カードといっしょに縮む（flex-shrink）
+     ボタン5段ぶん（約230px）より低くはしない（min-height）
+   ・container-type: size … わくの高さ（cqh）を、中の板（.park-map__canvas）の大きさを決めるのに使う
+   ・--park-map-ratio … 地図の絵（PC用 public/images/park/park-map.png）の 横 ÷ 縦
+     スマホ幅では、スマホ用の絵（park-map-sp.png）の縦横比に上書きする（→ いちばん下の @media (max-width: 700px)）
+     絵を差しかえて縦横比が変わったときは、ここの値をそろえる */
+.park-map {
+  --park-map-ratio: calc(1672 / 941);
+
+  flex: 0 1 auto;
+  aspect-ratio: var(--park-map-ratio);
+  min-height: 230px;
+  margin: 12px 0 0;
+  container-type: size;
+}
+
+/* 地図の板（地図の絵と、その上の行き先のボタンを乗せる）
+
+   ・いつも地図の絵と同じ縦横比にする
+     わくより横長のときは高さに、縦長のときは横はばに合わせて縮める（はみ出さない大きいほう）
+     わくより細くなったときは、左右のまん中に置く
+   ・position: relative … 行き先（.park-map__spot）は、この板を基準に % で置く
+     板と絵の大きさがいつも同じなので、画面の大きさが変わっても、ボタンは絵の同じ場所に乗る
+   ・container … 板の横はばで、ボタンの大きさを切りかえる（→ 下の @container park-map） */
+.park-map__canvas {
+  container: park-map / inline-size;
+  position: relative;
+  width: min(100%, 100cqh * var(--park-map-ratio));
+  aspect-ratio: var(--park-map-ratio);
+  margin: 0 auto;
+}
+
+/* 地図の絵（<picture>。画面の幅で PC用・スマホ用の絵を切りかえる → pages/index.vue）
+
+   板いっぱいに広げる。板と絵の縦横比が同じなので、絵は切れない
+   角の丸め（10px）は、ほかの場所の絵の枠（components/common/NoImage.vue）とそろえてある */
+.park-map__base {
+  position: absolute;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.park-map__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 行き先1つぶんの箱（この箱を動かして、置き場所を決める）
+
+   ・--x / --y … ボタンのまん中を置く場所（地図の横はば・高さに対する %）
+     left / top にそのまま入れて、translate(-50%, -50%) で箱の半分だけ左上へずらし、まん中をそこに合わせる
+     ボタンの幅がPCとスマホでちがっても、まん中の位置は変わらない
+   ・ボタン（.cmd）そのものではなく、外の箱を動かしているのは、
+     .cmd が選択中・マウスを乗せたときに transform で浮き上がる動きを持っているため
+     ボタンに transform で位置を付けると、その動きと取り合いになってしまう */
+.park-map__spot {
+  position: absolute;
+  top: var(--y);
+  left: var(--x);
+  transform: translate(-50%, -50%);
+}
+
+/* 地図の上のボタン（PC）
+
+   ふだんの .cmd は、コマンド欄のマス目いっぱいに広がる大きなボタン
+   地図の上では、どのボタンも同じ幅にそろえる
+   ・幅は、いちばん長い「こもれびの広場」（7文字）が、左右の余白をふくめて1行に入る 11em
+   ・文字はまん中にそろえる
+     左の余白は、選択カーソル「▶」の置き場所。右にも同じだけ余白をとって、文字が左右のまん中に来るようにする
+   ・大きさは、地図の板の横はばで3段階に切りかえる
+       760px 以上   … いちばん大きい（ここ。文字 18px）
+       600〜759px   … ひとまわり小さい（文字 16px → すぐ下の @container）
+       600px 未満   … 名前ぶんの幅（→ あとの @container park-map (max-width: 599px)）
+     ボタンの幅は文字の大きさ（em）で決まるので、地図が細いと、はしの すべり台 などが地図からはみ出すため
+   絵の上でも読めるよう、ふだんより少し濃い影を付ける（選択中の見た目は .cmd--selected のまま） */
+.park-map .cmd {
+  width: 11em;
+  padding: 10px 30px;
+  border-bottom-width: 3px;
+  font-size: 18px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgb(35 57 94 / 28%);
+}
+
+.park-map .cmd__text {
+  text-align: center;
+}
+
+.park-map .cmd::before {
+  left: 12px;
+  font-size: 11px;
+}
+
+@container park-map (max-width: 759px) {
+
+  .park-map .cmd {
+    padding: 7px 26px;
+    font-size: 16px;
+  }
+
+  .park-map .cmd::before {
+    left: 10px;
+    font-size: 10px;
+  }
+}
+
+/* ===== 行き先ごとの置き場所 =====
+
+   地図の絵の、その場所の絵に合わせて置いている（--x / --y は、ボタンのまん中の位置）
+   絵をかくしすぎないよう、ボタンはその場所の絵のすぐ下（看板のような位置）に置いてある
+   スマホで位置を変えたい場所は、いちばん下の @media (max-width: 700px) で --x / --y だけ上書きする */
+
+/* 左上：どんぐりの木（大きな木の根もとの、土の輪の下） */
+.park-map__spot--acorn {
+  --x: 16%;
+  --y: 32%;
+}
+
+/* 右上：秘密の小道（右上の奥へ続く小道の上。見つけたあとは こもれびの広場） */
+.park-map__spot--secret {
+  --x: 74%;
+  --y: 10%;
+}
+
+/* まん中：芝生広場（まん中の広い芝生） */
+.park-map__spot--grass {
+  --x: 50%;
+  --y: 40%;
+}
+
+/* 左の中ほど：砂場（丸い砂場のすぐ下） */
+.park-map__spot--sandbox {
+  --x: 16.5%;
+  --y: 57%;
+}
+
+/* 右の中ほど：池（池のすぐ下） */
+.park-map__spot--pond {
+  --x: 84%;
+  --y: 57%;
+}
+
+/* 左下：きゅうけい（ベンチのすぐ下。ベンチの絵が見えるようにする） */
+.park-map__spot--rest {
+  --x: 19%;
+  --y: 84%;
+}
+
+/* 右下：すべり台（すべり台のすぐ下。すべり台の絵が見えるようにする。きゅうけい と同じ段） */
+.park-map__spot--slide {
+  --x: 86%;
+  --y: 85%;
+}
+
+/* いちばん下のまん中：おうちへ帰る
+
+   きゅうけい・すべり台 より下の段にして、地図のいちばん下の門（公園の出入り口）に重ねる
+   （門の柱は少しかくれてよい。ベンチ・すべり台の絵を見せるほうを優先している） */
+.park-map__spot--goal {
+  --x: 50%;
+  --y: 92.5%;
+}
+
+/* ===== 見つけたばかりの秘密の小道（NEW の印・ゆっくり光る） =====
+
+   秘密の小道が地図に出てから、小道の先（こもれびの広場）を見つけるまでのあいだだけ付く
+   （pages/index.vue の hasNewSecretPath。あいさつ文も、同じあいだだけ秘密の小道の案内になる）
+   ・.cmd--new … ボタンのまわりを、金色にゆっくり光らせる
+   ・.cmd__new … ボタンの左上の角に重ねる「NEW」の印（右上の角は ✓・★ の印の場所なので、反対がわに置く）
+   選択中は、選択中の見た目（.cmd--selected の影）を優先して、光る動きは止める
+   NEW の印は z-index: 1 で、選択中の水色の枠（.cmd--selected::after。command.css）より手前に出す
+   （::after はボタンの中でいちばんあとに描かれるので、そのままだと印の上に枠がかぶる） */
+.park-map .cmd--new:not(.cmd--selected) {
+  animation: park-map-new-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes park-map-new-glow {
+  0%,
+  100% {
+    box-shadow: 0 2px 6px rgb(35 57 94 / 28%), 0 0 0 0 rgb(255 214 102 / 0%);
+  }
+
+  50% {
+    box-shadow: 0 2px 6px rgb(35 57 94 / 28%), 0 0 0 5px rgb(255 214 102 / 75%);
+  }
+}
+
+.park-map .cmd__new {
+  position: absolute;
+  z-index: 1;
+  top: -9px;
+  left: -6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ffcf4d;
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  color: #5a3b00;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+/* 動きをへらす設定のときは、光らせない（NEW の印だけで知らせる） */
+@media (prefers-reduced-motion: reduce) {
+  .park-map .cmd--new:not(.cmd--selected) {
+    animation: none;
+  }
+}
+
+/* ===== バッジ（探検済み・★ 発見済み） =====
+
+   地図の上では、どの幅でも、ボタンの右上の角に重ねた小さな印（✓・★）にする
+   （「探検済み」の文字のバッジを横に付けると、ボタンが長くなって、となりと重なりやすいため）
+   文字は、見た目からは消して、読み上げ用に残す */
+.park-map .cmd__badges {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  flex-wrap: nowrap;
+  gap: 2px;
+  pointer-events: none;
+}
+
+.park-map .cmd__badge {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #c8d4e6;
+  box-sizing: border-box;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.park-map .cmd__badgeIcon--compactOnly {
+  display: inline;
+}
+
+.park-map .cmd__badgeText {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* 地図が小さいとき（板の横はば 600px 未満）
+
+   PCでも、背の低い画面では地図が高さに合わせて小さくなり、同じ幅（11em）のボタンだと となりと重なる
+   そのときは、スマホと同じく、名前が1行に入るぶんだけの幅にして、文字も少し小さくする
+   （画面の幅ではなく、地図の板の幅で決めている。スマホ幅はこのあとの @media でさらに小さくする） */
+@container park-map (max-width: 599px) {
+
+  .park-map .cmd {
+    width: auto;
+    padding: 5px 20px;
+    font-size: 14px;
+  }
+
+  .park-map .cmd::before {
+    left: 7px;
+    font-size: 9px;
+  }
+}
+
+/* スマホ幅（700px以下）：スマホ用の縦長の地図（3:4）
+
+   <picture> の <source media="(max-width: 700px)"> で、絵が park-map-sp.png に切りかわる（→ pages/index.vue）
+   ここでは、同じ幅で、板の縦横比・ボタンの大きさ・ボタンの置き場所を、スマホ用の絵に合わせて切りかえる
+   （場所・押したときの処理・矢印キーの動き（data/parkMap.ts）はPCと同じ。ちがうのは見た目の置き場所だけ）
+
+   ・地図の大きさ … ふだんは横はばがカードいっぱい（390×844px の画面で 350×467px ほど）
+     背の低い画面（320×568・375×667 など）では、スクロールしないで1画面に収まるよう、
+     PCと同じく、中央エリアの残りの高さに合わせて縦横比を保ったまま縮める（→ 上の .park-map / .park-map__canvas）
+     700px に近い幅（小さいタブレットなど）で大きくなりすぎないよう、横はばは 480px までにして、まん中に置く
+     画面の左右には、中央エリアとカードの余白・ふちのぶん（20px ほど）が残る
+     セレクタを1段強くしているのは、あとから読みこむ responsive.css の .stage--entrance .place-card の padding に勝つため
+   ・高さの下限（min-height）は外す（地図の高さは、絵の縦横比と、中央エリアの残りの高さで決まる）
+   ・ボタン … 地図が縮んでもはみ出さないよう、文字の大きさを地図の横はばに合わせる（4.3cqw。15px 〜 12px）
+     余白も em（文字の大きさの何倍か）で決めて、文字といっしょに縮める
+     地図が 350px 幅のときに、高さ 42px ほど・文字 15px（指で押しやすい大きさ）になる
+     幅はそろえず、名前が1行に入るぶんだけ（そろえると「こもれびの広場」に合わせた幅になり、地図をかくしすぎるため）
+   ・置き場所 … スマホ用の絵の、その場所の絵のすぐ下に置く（--x / --y だけを上書き。PCと同じく、ボタンのまん中の位置）
+
+     [どんぐりの木]          [秘密の小道]
+               [芝生広場]
+     [砂場]                        [池]
+     [きゅうけい]
+                              [すべり台]
+                [おうちへ帰る]
+                   （門） */
+@media (max-width: 700px) {
+
+  .stage--entrance > .place-card.place-card--entrance {
+    padding-right: 4px;
+    padding-left: 4px;
+  }
+
+  .place-card--entrance > .place-card__text {
+    padding: 0 8px;
+  }
+
+  .park-map {
+    --park-map-ratio: calc(1086 / 1448);
+
+    width: 100%;
+    max-width: 480px;
+    min-height: 0;
+    margin: 8px auto 0;
+  }
+
+  .park-map .cmd {
+    width: auto;
+    padding: 0.6em 1.2em;
+    border-bottom-width: 2px;
+    font-size: clamp(12px, 4.3cqw, 15px);
+    line-height: 1.35;
+  }
+
+  .park-map .cmd::before {
+    left: 0.4em;
+    font-size: 0.6em;
+  }
+
+  .park-map .cmd__badges {
+    top: -8px;
+    right: -6px;
+  }
+
+  .park-map .cmd__badge {
+    width: 16px;
+    height: 16px;
+    font-size: 9.5px;
+  }
+
+  .park-map .cmd__new {
+    top: -9px;
+    left: -6px;
+    padding: 1px 6px;
+    font-size: 9.5px;
+  }
+
+  /* 左上：どんぐりの木（木の根もとの、土の輪の下） */
+  .park-map__spot--acorn {
+    --x: 27%;
+    --y: 27%;
+  }
+
+  /* 右上：秘密の小道（右上の奥へ続く小道の上） */
+  .park-map__spot--secret {
+    --x: 70%;
+    --y: 12%;
+  }
+
+  /* まん中：芝生広場（まん中の広い芝生） */
+  .park-map__spot--grass {
+    --x: 52%;
+    --y: 42%;
+  }
+
+  /* 左の中ほど：砂場（丸い砂場のすぐ下） */
+  .park-map__spot--sandbox {
+    --x: 16%;
+    --y: 51%;
+  }
+
+  /* 右の中ほど：池（池のすぐ下） */
+  .park-map__spot--pond {
+    --x: 86%;
+    --y: 53%;
+  }
+
+  /* 左下：きゅうけい（ベンチのすぐ下） */
+  .park-map__spot--rest {
+    --x: 24%;
+    --y: 75%;
+  }
+
+  /* 右下：すべり台（すべり台のすぐ下） */
+  .park-map__spot--slide {
+    --x: 78%;
+    --y: 76%;
+  }
+
+  /* いちばん下のまん中：おうちへ帰る（門に重ねる。門の柱は少しかくれてよい） */
+  .park-map__spot--goal {
+    --x: 50%;
+    --y: 92%;
+  }
+}

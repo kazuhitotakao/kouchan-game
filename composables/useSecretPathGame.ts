@@ -6,7 +6,7 @@
 
    ■ ここがやること
      ・ミニゲームの中だけで意味を持つ状態（進み具合・レーン・流れてくるもの・
-       木漏れ日の数・ゲームの時計・演出の残り時間など）を持つ
+       こもれびの数・ゲームの時計・演出の残り時間など）を持つ
      ・requestAnimationFrame の1コマごとの処理（出す・動かす・当たりを見る・片づける）
      ・キー操作とポインター操作（クリック・タップ・ドラッグ・フリック・長押し）
      ・小道専用のイベント（keyup / blur / visibilitychange）の登録と解除
@@ -22,7 +22,7 @@
          ここでは options で受けとった ref をそのまま読み書きする）
      ・場所の移動そのもの（goToPlace()）・公園入口のカーソル合わせ（restoreEntranceCursor()）・
        音を鳴らす中身（composables/useAudio.ts）は、どれも options でもらった関数を呼ぶだけ
-     ・公園入口の「細い道の先」（goToSecretArea()）は、
+     ・公園入口の「秘密の小道」（goToSecretArea()）は、
        小道へ入るか広場へ入るかを決めるゲーム全体の分かれ道なので pages/index.vue のまま
 
    ■ ゲームの中身は、いっさい変えていない
@@ -34,10 +34,10 @@
      ・story   … ゲーム本編の小道（pages/index.vue）。上に書いたとおりで、何も変えていない
      ・endless … ミニゲームのページの「どこまで行ける？」（pages/minigame/secret-path.vue）
                  フィールド・操作・カウントダウン・当たり判定は story と同じで、ちがうのは次のところだけ
-                 ・時間では終わらず、枝に secretPathEndlessLives 回当たったら終わる（木漏れ日は減らない）
+                 ・時間では終わらず、枝に secretPathEndlessLives 回当たったら終わる（こもれびは減らない）
                  ・行の予定を、遊びながら1行ずつ作る
                  ・進んだ距離でレベルが上がり、速さ・行の間隔・枝2本の割合がきびしくなる（上限なし。速いときは1コマを細かく分けて当たりを見る）
-                 ・進んだ距離（メートル）を数える。木漏れ日を取ると、集めた数だけでなく、距離にもボーナスが付く（1つで +5m）
+                 ・進んだ距離（メートル）を数える。こもれびを取ると、集めた数だけでなく、距離にもボーナスが付く（1つで +5m）
                  ・加速コンボ：はやく進むのを枝に当たらずに続けると、進んだ距離を多めに数える
                    （加速そのもので ×2、コンボが付くと合わせて ×3 → ×4 → ×6。画面に出すのは、この合計の倍率）
                  ・終わっても、おでかけポイント・こもれびの広場など、本編の状態にはさわらない
@@ -140,13 +140,13 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* こうちゃんのレーン（はじめは、まん中） */
   const secretPathPlayerLane = ref<SecretPathLane>(1);
 
-  /* いまフィールドに出ている枝と木漏れ日 */
+  /* いまフィールドに出ている枝とこもれび */
   const secretPathItems = ref<SecretPathItem[]>([]);
 
-  /* 集めた木漏れ日の数 */
+  /* 集めたこもれびの数 */
   const secretPathSunlightCount = ref(0);
 
-  /* 小道をぬけたときにもらった木漏れ日ボーナス（結果カードに「+3」と出すため。0 = なし） */
+  /* 小道をぬけたときにもらったこもれびボーナス（結果カードに「+3」と出すため。0 = なし） */
   const secretPathBonusPoint = ref(0);
 
   /* 始まってから何ミリ秒たったか（ゲームの時計）
@@ -157,13 +157,13 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      はじまる前のカウントダウンも、この時計で数える
      「小道へ進む」を押したら -(secretPathCountdownLeadIn + secretPathCountdownDuration) から始めて、0 になったらスタート
      （はじめの secretPathCountdownLeadIn のあいだは、まだ数字を出さない「間」）
-     （枝と木漏れ日の予定はどれも 0 より後なので、マイナスのあいだは何も出てこない） */
+     （枝とこもれびの予定はどれも 0 より後なので、マイナスのあいだは何も出てこない） */
   const secretPathElapsed = ref(0);
 
   /* 「いたっ！」を出しておくのは、ゲームの時計が何ミリ秒になるまでか（0 = 出していない） */
   const secretPathBumpUntil = ref(0);
 
-  /* 直前に枝に当たったとき、木漏れ日が本当に1つ減ったか
+  /* 直前に枝に当たったとき、こもれびが本当に1つ減ったか
 
      0個のときに当たっても減らない（0のまま）ので、そのときは「✨ -1」を出さない
      （数が変わっていないのに「-1」と出ると、何が起きたか分かりにくくなるため） */
@@ -186,7 +186,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   const secretPathSparkleUntil = ref(0);
 
   /* 「✨ +1」の番号
-     続けて木漏れ日を取ったときに、ふわっと上がる動きを最初からやりなおすための key */
+     続けてこもれびを取ったときに、ふわっと上がる動きを最初からやりなおすための key */
   const secretPathSparkleId = ref(0);
 
   /* 「どこまで行ける？」だけで使う、のこりの ❤（枝に当たるたびに1つ減り、0 になったら おしまい） */
@@ -320,18 +320,18 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     return Math.min(1, Math.max(0, (secretPathBoostComboTime.value - from) / (to - from)));
   });
 
-  /* 集めた木漏れ日ぶんの、進んだ距離のボーナス（メートル。結果の画面の「✨ 8 +40m」に出す）
-     本編の小道では使わない（木漏れ日は、おでかけポイントのボーナスになる） */
+  /* 集めたこもれびぶんの、進んだ距離のボーナス（メートル。結果の画面の「✨ 8 +40m」に出す）
+     本編の小道では使わない（こもれびは、おでかけポイントのボーナスになる） */
   const secretPathSunlightBonusMeters = computed(() => (isEndless ? secretPathSunlightCount.value * secretPathEndlessSunlightBonusMeters : 0));
 
   /* 枝に当たった直後かどうか（「いたっ！」を出しているあいだ。見た目だけで、動きは止めない）
 
      ※ カウントダウン中は、かならず false
        「出していない」ことを 0 で表しているので、時計がマイナスのあいだは
-       「まだ出しているあいだ」に見えてしまうため（カウントダウン中は、枝も木漏れ日も来ない） */
+       「まだ出しているあいだ」に見えてしまうため（カウントダウン中は、枝もこもれびも来ない） */
   const isSecretPathBumped = computed(() => isSecretPathPlaying.value && !isSecretPathCountingDown.value && secretPathElapsed.value < secretPathBumpUntil.value);
 
-  /* 木漏れ日を取った直後かどうか（「✨ +1」と光を出しているあいだ。カウントダウン中は、上と同じ理由で false） */
+  /* こもれびを取った直後かどうか（「✨ +1」と光を出しているあいだ。カウントダウン中は、上と同じ理由で false） */
   const isSecretPathSparkling = computed(
     () => isSecretPathPlaying.value && !isSecretPathCountingDown.value && secretPathElapsed.value < secretPathSparkleUntil.value,
   );
@@ -357,7 +357,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* 残り時間（秒）。「あと 12秒」のように出す（カウントダウン中は 15秒のまま） */
   const secretPathTimeLeft = computed(() => Math.max(0, Math.ceil((secretPathDuration - Math.max(secretPathElapsed.value, 0)) / 1000)));
 
-  /* 集めた木漏れ日の数に合わせた、結果の文章 */
+  /* 集めたこもれびの数に合わせた、結果の文章 */
   const secretPathResultText = computed(() => getSecretPathResultText(secretPathSunlightCount.value));
 
   /* カウントダウン中の時計（マイナス）から、出す数字（3 → 2 → 1）を決める
@@ -386,7 +386,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
   /* 秘密の小道を、はじまる前の状態に戻す
 
-     ループ・流れてくるもの・木漏れ日の数・こうちゃんの位置・時計を、まとめて片づける
+     ループ・流れてくるもの・こもれびの数・こうちゃんの位置・時計を、まとめて片づける
      （hasDiscoveredSecretSpot はここでは戻さない。戻すのは resetGame() だけ） */
   function resetSecretPathGame() {
     stopSecretPathLoop();
@@ -580,7 +580,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       // マイナス … まだ こうちゃんより上／プラス … こうちゃんより下
       const offset = item.y - secretPathPlayerY;
 
-      // ③ 木漏れ日：こうちゃんに重なったら取る（枝より少しゆるめに見る）
+      // ③ こもれび：こうちゃんに重なったら取る（枝より少しゆるめに見る）
       //    「どこまで行ける？」では、集めた数のほかに、進んだ距離にもボーナスを足す
       if (item.kind === 'sunlight' && offset >= -10 && offset <= 6) {
         item.hit = true;
@@ -589,7 +589,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
         secretPathSunlightCount.value += 1;
 
         /* 「どこまで行ける？」の距離ボーナス（1つで +5m → data/secretPathEndless.ts）
-           ・取りに行く意味を、記録（進んだ距離）にも出すため（木漏れ日の行は、たいてい枝もいっしょに出る）
+           ・取りに行く意味を、記録（進んだ距離）にも出すため（こもれびの行は、たいてい枝もいっしょに出る）
            ・加速コンボの倍率は掛けない（いつ取っても同じ +5m のほうが分かりやすい）
            ・こうちゃんの上には「✨ +5m」と出す（→ pages/minigame/secret-path.vue の sparkle-label）
            本編の小道は、今までどおり数を数えるだけ（小道をぬけたときの、おでかけポイントのボーナスになる） */
@@ -608,11 +608,11 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
         continue;
       }
 
-      // ④ 枝：こうちゃんの所まで来たら当たる → 集めた木漏れ日を1つ減らす（0より下にはしない）
+      // ④ 枝：こうちゃんの所まで来たら当たる → 集めたこもれびを1つ減らす（0より下にはしない）
       //    ・本編のステータス（体力・機嫌・余裕）には、いっさいさわらない（小道の中だけのペナルティ）
       //    ・枝1本につき1回だけ（item.hit）なので、同じ枝で何度も減ることはない
       //    ・当たったあとも、左右にはそのまま動ける
-      //    「どこまで行ける？」では、木漏れ日は減らさず、かわりに ❤ を1つ減らす（0 になったら、⑥ でおしまい）
+      //    「どこまで行ける？」では、こもれびは減らさず、かわりに ❤ を1つ減らす（0 になったら、⑥ でおしまい）
       if (item.kind === 'branch' && offset >= -7 && offset <= 3) {
         item.hit = true;
 
@@ -632,14 +632,14 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
         secretPathBumpUntil.value = elapsed + secretPathBumpEffectDuration;
         secretPathBumpId.value += 1;
 
-        // 木漏れ日を取った直後の「✨ +1」が残っていたら消す（「いたっ！」と重ならないように、あとから起きたほうだけを出す）
+        // こもれびを取った直後の「✨ +1」が残っていたら消す（「いたっ！」と重ならないように、あとから起きたほうだけを出す）
         secretPathSparkleUntil.value = 0;
 
         playBranchBumpSound();
       }
     }
 
-    // ⑤ 下へ出ていったものと、取った木漏れ日を片づける
+    // ⑤ 下へ出ていったものと、取ったこもれびを片づける
     if (needsCleanup) {
       secretPathItems.value = secretPathItems.value.filter((item) => item.y <= secretPathRemoveY && !(item.kind === 'sunlight' && item.hit));
     }
@@ -686,7 +686,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       return;
     }
 
-    /* 木漏れ日ボーナス
+    /* こもれびボーナス
 
        ・addOutingPoint() ではなく、そのまま足す
          （「2回目の場所は半分」は場所の探検のためのルールで、小道は場所ではないため）
@@ -735,10 +735,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      小道に入らずに引き返すだけなので、何も変えない
      ・時間・親子のステータス・おでかけポイント・アイテム・visitedPlaces は、そのまま
      ・hasDiscoveredSecretSpot も false のまま
-       → あとでもう一度「細い道の先」を選ぶと、また ready 画面から始まる
+       → あとでもう一度「秘密の小道」を選ぶと、また ready 画面から始まる
      ・BGMは公園BGMのまま（goToPlace() がBGMを入れかえるのは secretSpot のときだけ）
      ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ）
-     ・カーソルは「細い道の先」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
+     ・カーソルは「秘密の小道」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
   function leaveSecretPathToEntrance() {
     if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'ready') {
       return;
@@ -752,7 +752,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* こうちゃんを左（-1）か右（+1）へ、1レーンだけ動かす
 
      ・遊んでいる最中でなければ動かさない
-     ・枝に当たった直後も、ふつうに動ける（枝のペナルティは木漏れ日 -1 だけ）
+     ・枝に当たった直後も、ふつうに動ける（枝のペナルティはこもれび -1 だけ）
      ・左はしでさらに左、右はしでさらに右は、その場のまま */
   function moveSecretPathPlayer(direction: -1 | 1) {
     if (!isSecretPathPlaying.value) {
@@ -1193,7 +1193,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     secretPathBoostTotalMultiplier, // 「どこまで行ける？」だけ（いま距離が ふだんの何倍で数えられているか。1 ＝ 加速していない）
     secretPathNextBoostMultiplier, // 「どこまで行ける？」だけ（次の段まで届いたときの合計倍率。いちばん上まで届いたら null）
     secretPathComboProgress, // 「どこまで行ける？」だけ（次の段までの進み具合。0〜1）
-    secretPathSunlightBonusMeters, // 「どこまで行ける？」だけ（集めた木漏れ日ぶんの、進んだ距離のボーナス）
+    secretPathSunlightBonusMeters, // 「どこまで行ける？」だけ（集めたこもれびぶんの、進んだ距離のボーナス）
     secretPathLevel, // 「どこまで行ける？」だけ（いまのレベル。1 ＝ Lv.1）
 
     /* ===== 画面に出す、計算した状態 ===== */

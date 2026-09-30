@@ -198,7 +198,7 @@ export const placeActions = {
 
   /* ===== こもれびの広場 ===== */
 
-  /* ① 木漏れ日の中を探検する */
+  /* ① こもれびの中を探検する */
   exploreSunlight: {
     place: 'secretSpot',
     childEnergy: -16,
@@ -207,7 +207,7 @@ export const placeActions = {
     parentEnergy: -14,
     parentCalm: -4,
     minutes: 25,
-    message: '木漏れ日の中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。',
+    message: 'こもれびの中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。',
   },
 
   /* ② 広場の奥を見てみる
