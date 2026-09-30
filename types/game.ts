@@ -240,16 +240,16 @@ export type SecretPathPhase = 'ready' | 'playing' | 'finished';
 
 /* 上から流れてくるものの種類
    branch   … 枝 🌿（よけるもの）
-   sunlight … 木漏れ日 ✨（集めるもの） */
+   sunlight … こもれび ✨（集めるもの） */
 export type SecretPathItemKind = 'branch' | 'sunlight';
 
 /* 流れてくるもの1つぶん
 
    id   … v-for の key にするための番号
-   kind … 枝か木漏れ日か
+   kind … 枝かこもれびか
    lane … どのレーンを流れてくるか
    y    … フィールドの上から何%の位置にいるか（0 = いちばん上、100 = いちばん下）
-   hit  … もう当たった（枝）／取った（木漏れ日）か
+   hit  … もう当たった（枝）／取った（こもれび）か
           1つにつき1回だけ数えるための印 */
 export type SecretPathItem = {
   id: number;
@@ -267,7 +267,7 @@ export type SecretPathSpawn = {
 };
 
 /* 秘密の小道の遊びかた
-   story   … ゲーム本編の小道（15秒でぬける。木漏れ日の数でボーナス）
+   story   … ゲーム本編の小道（15秒でぬける。こもれびの数でボーナス）
    endless … ミニゲーム（/minigame/secret-path）の「どこまで行ける？」
              （枝に3回当たるまで続き、進むほど速くなる） */
 export type SecretPathMode = 'story' | 'endless';

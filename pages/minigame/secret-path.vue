@@ -4,8 +4,8 @@
 
    ゲーム本編の「秘密の小道」を、エンドレスでくり返し遊べるページ
    ・枝に secretPathEndlessLives 回当たるまで続き、進んだ距離でレベルが上がって速くなる（上限なし）
-   ・記録は「進んだ距離」と「集めた木漏れ日の数」。それぞれの自己ベストをこのブラウザに残す
-     木漏れ日は、集めた数を数えるだけでなく、1つごとに進んだ距離のボーナスにもなる（→ data/secretPathEndless.ts）
+   ・記録は「進んだ距離」と「集めたこもれびの数」。それぞれの自己ベストをこのブラウザに残す
+     こもれびは、集めた数を数えるだけでなく、1つごとに進んだ距離のボーナスにもなる（→ data/secretPathEndless.ts）
 
    ■ ご褒美（うた入りの「こもれびの奥で」）
      1回のプレイで secretVocalSongUnlockDistance（300m。結果のひとことが「小道の名人です！」になるのと同じ距離）まで行くと、
@@ -68,7 +68,7 @@ const minigameInfo = minigames.find((minigame) => minigame.id === minigameId)!;
 
 /* このミニゲームの自己ベストの形
    distance … いちばん遠くまで行ったときの距離（メートル。切り捨てた整数）
-   sunlight … いちばん多く集めたときの木漏れ日の数
+   sunlight … いちばん多く集めたときのこもれびの数
    2つは別々に数える（遠くまで行ったプレイと、たくさん集めたプレイが、同じとは限らないため） */
 type SecretPathBest = {
   distance: number;
@@ -207,9 +207,9 @@ const isNewlyUnlockedSecretVocalSong = ref(false);
 /* 画面に出す距離（メートル。小数は切り捨てる） */
 const distanceMeters = computed(() => Math.floor(secretPathDistance.value));
 
-/* 木漏れ日を取ったときに、こうちゃんの上に出す文字
+/* こもれびを取ったときに、こうちゃんの上に出す文字
    本編の小道は「✨ +1」（集めた数が1つ増える）だが、こちらは進んだ距離のボーナスが付くので「✨ +5m」にする
-   （数のほうは、HUD の「✨ 木漏れ日 8」がぽんっと増えるので、そちらで分かる） */
+   （数のほうは、HUD の「✨ こもれび 8」がぽんっと増えるので、そちらで分かる） */
 const sparkleLabel = `✨ +${secretPathEndlessSunlightBonusMeters}m`;
 
 /* はじまる前のルールに出す、加速コンボの倍率のならび（「×3 → ×4 → ×6」）
@@ -228,7 +228,7 @@ const comboLadderText = secretPathEndlessBoostComboTiers.map((tier) => `×${tier
      なので、遊んでいる最中は「はじめる前の記録と、いまのプレイ」をくらべていることになる
    ============================================================ */
 
-/* 進んだ距離・集めた木漏れ日が、自己ベストをこえているか */
+/* 進んだ距離・集めたこもれびが、自己ベストをこえているか */
 const isBeatingDistanceBest = computed(() => best.value.distance > 0 && distanceMeters.value > best.value.distance);
 const isBeatingSunlightBest = computed(() => best.value.sunlight > 0 && secretPathSunlightCount.value > best.value.sunlight);
 
@@ -376,7 +376,7 @@ const resultComment = computed(() => {
 });
 
 /* 終わったら、自己ベストをくらべて、更新していたら保存する
-   距離と木漏れ日は別々にくらべる（片方だけ更新することもある） */
+   距離とこもれびは別々にくらべる（片方だけ更新することもある） */
 watch(secretPathPhase, (phase) => {
   if (phase !== 'finished') {
     return;
@@ -655,7 +655,7 @@ onUnmounted(() => {
             <span class="mg-rules__part">長押し：加速</span>
           </li>
           <li>🌿に{{ secretPathEndlessLives }}回当たると おしまい</li>
-          <!-- 木漏れ日のボーナス（1つ取るごとに、進んだ距離が増える → data/secretPathEndless.ts） -->
+          <!-- こもれびのボーナス（1つ取るごとに、進んだ距離が増える → data/secretPathEndless.ts） -->
           <li class="mg-rules__bonus">✨ 1つで きょりが +{{ secretPathEndlessSunlightBonusMeters }}m！</li>
           <!-- 加速コンボ（加速しつづけると、進んだ距離が多めに数えられる → data/secretPathEndless.ts）
                出すのは「ふだんの何倍か（合計）」。加速しただけで ×2 数えられているので、コンボが付くと ×3 → ×4 → ×6 になる
@@ -720,7 +720,7 @@ onUnmounted(() => {
         <p class="place-card__flash">ここまで来た！</p>
 
         <!-- 結果の記録（何の記録か → 数 → そのほか、の順に読めるよう、大きさを3つに分けている → .mg-result）
-             絵文字は、読み上げでは「旗」「きらきら」と読まれてしまうので隠して、となりの言葉（きょり・木漏れ日）で伝える -->
+             絵文字は、読み上げでは「旗」「きらきら」と読まれてしまうので隠して、となりの言葉（きょり・こもれび）で伝える -->
         <p class="mg-result">
           <span class="mg-result__item">
             <span class="mg-result__icon" aria-hidden="true">🏁</span>
@@ -733,10 +733,10 @@ onUnmounted(() => {
           </span>
           <span class="mg-result__item">
             <span class="mg-result__icon" aria-hidden="true">✨</span>
-            <span class="mg-result__label">木漏れ日</span>
+            <span class="mg-result__label">こもれび</span>
             <b class="mg-result__value">{{ secretPathSunlightCount }}</b>
             <span class="mg-result__unit">こ</span>
-            <!-- 集めた木漏れ日ぶんの距離ボーナス（1つで +5m。1つも取れなかったときは出さない）
+            <!-- 集めたこもれびぶんの距離ボーナス（1つで +5m。1つも取れなかったときは出さない）
                  上の「きょり」には、このボーナスも入っている（🏁 を付けて、距離のことだと分かるようにする） -->
             <span v-if="secretPathSunlightBonusMeters > 0" class="mg-result__bonus">🏁 +{{ secretPathSunlightBonusMeters }}m</span>
             <span v-if="isNewSunlightBest" class="mg-result__new">じこベスト！</span>
@@ -935,7 +935,7 @@ onUnmounted(() => {
   margin-right: 1em;
 }
 
-/* 木漏れ日のボーナスと加速コンボの説明は、記録が伸びるコツなので、金色の文字で目立たせる */
+/* こもれびのボーナスと加速コンボの説明は、記録が伸びるコツなので、金色の文字で目立たせる */
 .mg-rules__bonus {
   color: #8a5a00;
   font-weight: 700;
@@ -1016,10 +1016,10 @@ onUnmounted(() => {
   opacity: 0.92;
 }
 
-/* 結果（「🏁 きょり 123m Lv.4」「✨ 木漏れ日 8こ 🏁 +40m」）
+/* 結果（「🏁 きょり 123m Lv.4」「✨ こもれび 8こ 🏁 +40m」）
 
    ぱっと読めるように、文字の大きさを3つに分けている
-   ・何の記録か（絵文字 ＋ 「きょり」「木漏れ日」）… 小さめ・うすい紫
+   ・何の記録か（絵文字 ＋ 「きょり」「こもれび」）… 小さめ・うすい紫
    ・数（いちばん見せたいもの）                    … いちばん大きく、太く、濃い紫
    ・単位（m・こ）と、そのほかの札（Lv.4・ボーナス・じこベスト！）… 数より小さく
    数字は tabular-nums（どの数字も同じ幅）にして、自己ベストと見くらべやすくしている */
@@ -1041,7 +1041,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 記録の絵文字（🏁・✨）と、何の記録かの言葉（きょり・木漏れ日）
+/* 記録の絵文字（🏁・✨）と、何の記録かの言葉（きょり・こもれび）
    数より小さく・うすくして、大きい数字が先に目に入るようにする */
 .mg-result__icon {
   font-size: 22px;
@@ -1082,7 +1082,7 @@ onUnmounted(() => {
   font-weight: 800;
 }
 
-/* 集めた木漏れ日ぶんの距離ボーナス（「🏁 +40m」。木漏れ日のとなりに、クリーム色の小さな丸で）
+/* 集めたこもれびぶんの距離ボーナス（「🏁 +40m」。こもれびのとなりに、クリーム色の小さな丸で）
    とどいたレベル（.mg-result__level）と同じ形・大きさにして、ならびをそろえている */
 .mg-result__bonus {
   align-self: center;

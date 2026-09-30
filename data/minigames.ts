@@ -36,7 +36,7 @@ export const minigames = [
     icon: '🌿',
     title: 'どこまで行ける？',
     description: '枝をよけて、森の小道をどこまでも進もう！',
-    lockedHint: '公園のどこかに、細い道があるみたい…',
+    lockedHint: '公園のどこかに、秘密の小道があるみたい…',
     formatBest: (savedBest) => {
       const distance = Number(savedBest?.distance) || 0;
       const sunlight = Number(savedBest?.sunlight) || 0;

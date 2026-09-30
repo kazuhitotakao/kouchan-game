@@ -18,7 +18,7 @@ export const secretPathDuration = 15000;
    「小道へ進む」を押して遊ぶ画面に切りかわってから、少しの間（secretPathCountdownLeadIn）と、この長さだけ待ってから始める
    （画面が切りかわってすぐ枝が流れてくると、こうちゃんの位置をたしかめる間もないため）
    ・3つの数字を同じ長さずつ出す（3000 なら、ひとつ1秒。2000・約0.67秒ずつでは速く感じたので、ゆっくりにした）
-   ・このあいだは枝も木漏れ日も出てこない。残り時間も減らない。はやく進むのも効かない
+   ・このあいだは枝もこもれびも出てこない。残り時間も減らない。はやく進むのも効かない
    ・左右の移動だけはできる（始める前に、動かしかたをたしかめられる） */
 export const secretPathCountdownDuration = 3000;
 
@@ -27,7 +27,7 @@ export const secretPathCountdownDuration = 3000;
    押したときの決定音「ポン♪」と、「3」の「ピッ」が続けて鳴って、1つの音のように聞こえないようにする
    ・このあいだは、まだ数字を出さない（「3」の数字と音は、この間のあとに いっしょに出る）
    ・3・2・1 の間隔は、今までどおり secretPathCountdownDuration を3つに分けた長さのまま
-   ・枝も木漏れ日も出てこない、はやく進むのも効かない、左右の移動だけはできる（カウントダウンと同じ）
+   ・枝もこもれびも出てこない、はやく進むのも効かない、左右の移動だけはできる（カウントダウンと同じ）
    ※ 前は、この間を作らずに「3」の音だけを0.12秒うしろへずらしていた
      決定音（0.09秒）のすぐあとに鳴るので、ほとんど重なって聞こえていた */
 export const secretPathCountdownLeadIn = 500;
@@ -36,7 +36,7 @@ export const secretPathCountdownLeadIn = 500;
    このあいだは、もうゲームは動いている（最初の行が こうちゃんの所へ来るより前に消える） */
 export const secretPathStartCueDuration = 600;
 
-/* 1プレイで流れてくる木漏れ日の数（「✨ 木漏れ日 3 / 5」の 5）
+/* 1プレイで流れてくるこもれびの数（「✨ こもれび 3 / 5」の 5）
    下の secretPathSunlightRows の数とそろえること */
 export const secretPathSunlightTotal = 5;
 
@@ -59,9 +59,9 @@ export const secretPathRemoveY = 110;
    （行の数や間隔・速さを変えるときは「最後の行の時間 ＋ 届くまでの約1.3秒」が15秒を超えないようにする）
 
    ・ふつうの行 … 枝を1本。secretPathDoubleBranchChance の割合で2本にして、空いているレーンを1つだけにする
-   ・secretPathSunlightRows の行 … 木漏れ日を1つ。secretPathSunlightBranchChance の割合で、べつのレーンに枝もいっしょ
+   ・secretPathSunlightRows の行 … こもれびを1つ。secretPathSunlightBranchChance の割合で、べつのレーンに枝もいっしょ
        枝が出るときは、さらに secretPathSunlightDoubleBranchChance の割合で枝を2本にして、
-       木漏れ日のレーンしか空いていない行にする（取りそこねると、枝に当たる）
+       こもれびのレーンしか空いていない行にする（取りそこねると、枝に当たる）
    ・secretPathRowJitter … 行ごとに少しだけ時間をずらして、同じリズムになりすぎないようにする
 
    どの行も、少なくとも1つのレーンは空いている（3本とも枝の行は作らない）ので、よけられない形にはならない
@@ -79,7 +79,7 @@ export const secretPathSunlightDoubleBranchChance = 0.4;
 /* 枝に当たったときの「いたっ！」「✨ -1」を出しておく長さ（ミリ秒）
 
    見た目だけの長さで、このあいだも左右にはふつうに動ける
-   （枝のペナルティは「木漏れ日 -1」だけにして、動きは止めない） */
+   （枝のペナルティは「こもれび -1」だけにして、動きは止めない） */
 export const secretPathBumpEffectDuration = 600;
 
 /* 道（レーン）をクリック・タップしたとき、押したレーンを光らせておく長さ（ミリ秒） */
@@ -87,7 +87,7 @@ export const secretPathTapFlashDuration = 200;
 
 /* 「はやく進む」ときの速さ（ゲームの時計を何倍で進めるか）
    ずっと押しっぱなしなら、15秒ぶんが実際には約7.5秒で終わる
-   （早く着けるかわりに、枝や木漏れ日へ反応できる時間も短くなる）
+   （早く着けるかわりに、枝やこもれびへ反応できる時間も短くなる）
    ※ 1コマで進む量が当たり判定の幅をこえないよう、上げるときは
      「50ミリ秒 × この倍率 × secretPathSpeed ÷ 1000」が10（%）より小さいままにする */
 export const secretPathBoostMultiplier = 2;
@@ -112,7 +112,7 @@ export const secretPathHoldBoostDelay = 250;
 export const secretPathMouseSwipeThreshold = 100;
 export const secretPathTouchSwipeThreshold = 32;
 
-/* 木漏れ日を取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
+/* こもれびを取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
 export const secretPathSparkleDuration = 600;
 
 /* 結果が出てから「先へ進む」を受けつけるまでの待ち時間（ミリ秒）
@@ -121,7 +121,7 @@ export const secretPathSparkleDuration = 600;
    結果を読む前に先へ進んでしまわないようにする */
 export const secretPathLeaveGuard = 600;
 
-/* 木漏れ日ボーナス（おでかけポイント）
+/* こもれびボーナス（おでかけポイント）
 
    結果の文章と同じ3段階で、たくさん集めたときだけ少しだけ足す
    ・4〜5個 … +3（いやいやの「ナイス対応」と同じくらい）

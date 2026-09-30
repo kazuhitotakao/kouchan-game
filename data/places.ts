@@ -23,10 +23,10 @@ export const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 
 /* 公園入口の「どこへ行く？」で、それぞれの場所へ入るコマンドが何番目か
 
    画面（template の parkEntrance）と runSelectedCommand() の parkEntrance の並びと同じ
-     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 細い道の先
+     0 すべり台／1 砂場／2 どんぐりの木／3 池／4 芝生広場／5 秘密の小道
    ※ こもれびの広場（secretSpot）と秘密の小道（secretPath）は、
-     どちらも「細い道の先」から入るので、同じ5番にしている
-   ※ そのあとの「ひとやすみ」（restArea）は、細い道の先が出ているかどうかで番号が変わるので、
+     どちらも「秘密の小道」から入るので、同じ5番にしている
+   ※ そのあとの「ひとやすみ」（restArea）は、秘密の小道が出ているかどうかで番号が変わるので、
      ここには書かず pages/index.vue の restCommandIndex で決めている
    ※ 並びを変えるときは、template・runSelectedCommand()・ここ の3か所をそろえること
 */
