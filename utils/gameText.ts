@@ -16,7 +16,7 @@
      （しきい値は data/game.ts、境目の判定は pages/index.vue にある）
    ============================================================ */
 
-/* 公園入口のあいさつ文（3段階で切り替える）
+/* 公園入口のあいさつ文（3段階で切り替える。秘密の小道を見つけたときだけは、その案内）
 
    公園入口には、行動のたびに何度も戻ってくる
    そのため「やってきました」のままだと、2回目からは少しちぐはぐに聞こえる
@@ -30,8 +30,22 @@
    （shouldUseParkBgm2 を使いまわしているので、境目の数字は1か所だけ）
    曲と文言がいっしょに変わることで、
    「午前前半の章 → 午前後半の章」へ進んだ感じが出る
+
+   ■ 秘密の小道の案内（①〜③より先に見る）
+
+     秘密の小道が地図に出ていて、まだ小道の先（こもれびの広場）を見つけていないあいだは、
+     あいさつ文のかわりに、小道を見つけたことを知らせる
+     （前は地図の下に「秘密の小道を見つけた！」のカードを出しっぱなしにしていたが、
+       そのぶん地図が小さくなり、スマホではカードごと出していなかった）
+     広場を見つけたら、ふだんのあいさつ文にもどる
+     地図の上の「秘密の小道」ボタンにも、同じあいだだけ「NEW」の印が付く（→ assets/css/game/park-map.css）
 */
-export function buildParkEntranceText(isJustArrivedAtPark: boolean, isLateMorning: boolean) {
+export function buildParkEntranceText(isJustArrivedAtPark: boolean, isLateMorning: boolean, hasNewSecretPath = false) {
+  // 秘密の小道を見つけたが、まだ先へ進んでいない
+  if (hasNewSecretPath) {
+    return '木々のあいだに、秘密の小道を見つけました！この先には何があるのかな？';
+  }
+
   // ① 着いたばかり
   if (isJustArrivedAtPark) {
     return 'こうちゃんと公園にやってきました。どこへ探検に行こう？';
