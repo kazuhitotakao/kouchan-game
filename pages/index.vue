@@ -4523,8 +4523,10 @@ onUnmounted(() => {
 
                      前は「場所の絵（NO IMAGE）」と、下のコマンド欄の「どこへ行く？」の一覧が別々だったが、
                      公園入口だけは、絵の枠をそのまま地図の土台にして、その上に行き先のボタンを置く
-                     地図の絵は public/images/park/park-map.png（文字は入れず、場所の名前はボタンで重ねる）
-                     絵を差しかえて縦横比が変わったときは、下の NoImage の ratio と park-map.css の --park-map-ratio をそろえる
+                     地図の絵は、PC用 public/images/park/park-map.png（横長）と、スマホ用 park-map-sp.png（3:4）の2枚
+                     （文字は入れず、場所の名前はボタンで重ねる）
+                     ・どちらの絵でも、ボタン・押したときの処理・矢印キーの動きは同じ。ちがうのは、絵とボタンの置き場所だけ
+                     ・絵を差しかえて縦横比が変わったときは、park-map.css の --park-map-ratio（PC用・スマホ用）をそろえる
 
                      ・ボタンそのもの（押したときの処理・番号・バッジ）は、下の一覧にあったころと同じ
                      ・ボタンを park-map__spot の箱で包み、その箱を地図の上に position: absolute で置く
@@ -4541,7 +4543,15 @@ onUnmounted(() => {
                   <!-- 地図の絵と同じ縦横比の板（この板が、行き先を置くときの基準 → assets/css/game/park-map.css の .park-map__canvas）
                        絵とボタンを同じ板に乗せているので、画面の大きさが変わっても、ボタンは絵の同じ場所に乗ったままになる -->
                   <div class="park-map__canvas">
-                    <NoImage class="park-map__base" ratio="1672 / 941" src="/images/park/park-map.png" label="公園の地図" />
+                    <!-- 地図の絵（画面の幅で、PC用・スマホ用を切りかえる）
+
+                         <source media> の幅は、ゲーム全体のスマホ幅のきまり（max-width: 700px）と同じにしてある
+                         （板の縦横比・ボタンの置き場所を切りかえる park-map.css の @media (max-width: 700px) と、絵がずれないようにするため）
+                         場所の名前はボタンで読めるので、絵は飾りとして読みとばす（alt は空） -->
+                    <picture class="park-map__base">
+                      <source media="(max-width: 700px)" srcset="/images/park/park-map-sp.png" />
+                      <img class="park-map__img" src="/images/park/park-map.png" alt="" />
+                    </picture>
 
                     <div class="park-map__spot park-map__spot--slide">
                       <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 0 }" @click="goToPlace('slide')" @mouseenter="selectedCommandIndex = 0" @focus="selectedCommandIndex = 0">
