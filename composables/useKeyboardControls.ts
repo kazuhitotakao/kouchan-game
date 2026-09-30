@@ -28,7 +28,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import type { ComputedRef, Ref } from 'vue';
 
-import { parkMapMoves, parkMapStartPlace } from '~/data/parkMap';
+import { parkMapMoves, parkMapReturnMoves, parkMapStartPlace } from '~/data/parkMap';
 import type { ParkMapDirection, ParkMapSpot } from '~/data/parkMap';
 import type { GameEvent } from '~/types/game';
 
@@ -258,10 +258,18 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     return getPlaceSelectionIndex(spot);
   }
 
+  /* 地図の上で、矢印キーで動く前にいた場所（「来たほうへ戻る」ために使う → data/parkMap.ts の parkMapReturnMoves）
+
+     矢印キーの動きかただけに使う覚え書きなので、ゲームの状態（useGameState）には入れない
+     マウス・タップで選びなおしたあとや、公園入口へ戻ってきたあとは古いままのこともあるが、
+     候補に入っていなければ使わないので、ふつうの動きかたになるだけ */
+  let previousMapSpot: ParkMapSpot | null = null;
+
   /* 公園入口の ↑ ↓ ← →：地図の上で、押した向きにある場所へ動かす
 
      どこへ動くかは data/parkMap.ts の parkMapMoves に書いてある
      候補を前から順に見て、いま地図に出ている最初の場所へ動く
+     ただし parkMapReturnMoves に書いた向きは、候補の中に直前にいた場所があれば、先にそこへ戻る
      どの候補も出ていない・その向きに何もないときは、動かない（はしで止まる） */
   function moveEntranceOnMap(direction: ParkMapDirection) {
     const spots = Object.keys(parkMapMoves) as ParkMapSpot[];
@@ -275,10 +283,17 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    for (const next of parkMapMoves[current][direction] ?? []) {
+    const candidates = parkMapMoves[current][direction] ?? [];
+    const returnsToPrevious = parkMapReturnMoves[current]?.includes(direction) ?? false;
+    const ordered = returnsToPrevious && previousMapSpot && candidates.includes(previousMapSpot)
+      ? [previousMapSpot, ...candidates.filter((spot) => spot !== previousMapSpot)]
+      : candidates;
+
+    for (const next of ordered) {
       const nextIndex = getParkMapSpotIndex(next);
 
       if (nextIndex !== null) {
+        previousMapSpot = current;
         selectedCommandIndex.value = nextIndex;
         return;
       }
