@@ -36,8 +36,8 @@
        例）すべり台を少し右へ … .park-map__spot--slide の --x を大きくする
            池を少し下へ       … .park-map__spot--pond の --y を大きくする
      ・--x / --y は、ボタンのまん中の位置（地図の横はば・高さに対する %）
-     ・PCでは、どのボタンも同じ幅（11em）。スマホ幅（700px以下）と、PCで地図が小さいとき（横はば 600px 未満）は、
-       名前が1行に入るぶんだけの幅
+     ・PCでは、どのボタンも同じ幅（11em）。文字の大きさは、地図の横はば 760px 以上で 18px、それより細いと 16px
+       スマホ幅（700px以下）と、PCで地図が小さいとき（横はば 600px 未満）は、名前が1行に入るぶんだけの幅
      ・スマホ幅では、いちばん下の @media で、いくつかの場所の位置だけ上書きしている
 
    ■ スマホ幅で気をつけること
@@ -53,7 +53,6 @@
    ・横はばは、中央エリアいっぱいまで広げる（ふだんの .stage > * は --stage-width（900px）まで）
    ・高さは中身ぶん（地図の絵の縦横比で決まる）。中央エリアに入りきらないときだけ縮み、
      そのぶん地図（.park-map）が低くなる（地図の絵は、低くなったぶんだけ横はばもちぢめて、形を保つ）
-     PCで「秘密の小道を見つけた！」のカードが下に出ているときも、同じように地図が低くなる
    ・box-sizing: border-box … 横はばの上限を外すと、padding と左の太いふちのぶんだけ
      中央エリアの左右へはみ出してしまうので、幅の中に収める */
 .stage--entrance > .place-card--entrance {
@@ -126,16 +125,21 @@
 /* 地図の上のボタン（PC）
 
    ふだんの .cmd は、コマンド欄のマス目いっぱいに広がる大きなボタン
-   地図の上では、ひとまわり小さいボタンにして、どのボタンも同じ幅にそろえる
+   地図の上では、どのボタンも同じ幅にそろえる
    ・幅は、いちばん長い「こもれびの広場」（7文字）が、左右の余白をふくめて1行に入る 11em
    ・文字はまん中にそろえる
      左の余白は、選択カーソル「▶」の置き場所。右にも同じだけ余白をとって、文字が左右のまん中に来るようにする
+   ・大きさは、地図の板の横はばで3段階に切りかえる
+       760px 以上   … いちばん大きい（ここ。文字 18px）
+       600〜759px   … ひとまわり小さい（文字 16px → すぐ下の @container）
+       600px 未満   … 名前ぶんの幅（→ あとの @container park-map (max-width: 599px)）
+     ボタンの幅は文字の大きさ（em）で決まるので、地図が細いと、はしの すべり台 などが地図からはみ出すため
    絵の上でも読めるよう、ふだんより少し濃い影を付ける（選択中の見た目は .cmd--selected のまま） */
 .park-map .cmd {
   width: 11em;
-  padding: 7px 26px;
+  padding: 10px 30px;
   border-bottom-width: 3px;
-  font-size: 16px;
+  font-size: 18px;
   white-space: nowrap;
   box-shadow: 0 2px 6px rgb(35 57 94 / 28%);
 }
@@ -145,8 +149,21 @@
 }
 
 .park-map .cmd::before {
-  left: 10px;
-  font-size: 10px;
+  left: 12px;
+  font-size: 11px;
+}
+
+@container park-map (max-width: 759px) {
+
+  .park-map .cmd {
+    padding: 7px 26px;
+    font-size: 16px;
+  }
+
+  .park-map .cmd::before {
+    left: 10px;
+    font-size: 10px;
+  }
 }
 
 /* ===== 行き先ごとの置き場所 =====
@@ -204,6 +221,54 @@
 .park-map__spot--goal {
   --x: 50%;
   --y: 92.5%;
+}
+
+/* ===== 見つけたばかりの秘密の小道（NEW の印・ゆっくり光る） =====
+
+   秘密の小道が地図に出てから、小道の先（こもれびの広場）を見つけるまでのあいだだけ付く
+   （pages/index.vue の hasNewSecretPath。あいさつ文も、同じあいだだけ秘密の小道の案内になる）
+   ・.cmd--new … ボタンのまわりを、金色にゆっくり光らせる
+   ・.cmd__new … ボタンの左上の角に重ねる「NEW」の印（右上の角は ✓・★ の印の場所なので、反対がわに置く）
+   選択中は、選択中の見た目（.cmd--selected の影）を優先して、光る動きは止める
+   NEW の印は z-index: 1 で、選択中の水色の枠（.cmd--selected::after。command.css）より手前に出す
+   （::after はボタンの中でいちばんあとに描かれるので、そのままだと印の上に枠がかぶる） */
+.park-map .cmd--new:not(.cmd--selected) {
+  animation: park-map-new-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes park-map-new-glow {
+  0%,
+  100% {
+    box-shadow: 0 2px 6px rgb(35 57 94 / 28%), 0 0 0 0 rgb(255 214 102 / 0%);
+  }
+
+  50% {
+    box-shadow: 0 2px 6px rgb(35 57 94 / 28%), 0 0 0 5px rgb(255 214 102 / 75%);
+  }
+}
+
+.park-map .cmd__new {
+  position: absolute;
+  z-index: 1;
+  top: -9px;
+  left: -6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ffcf4d;
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  color: #5a3b00;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+/* 動きをへらす設定のときは、光らせない（NEW の印だけで知らせる） */
+@media (prefers-reduced-motion: reduce) {
+  .park-map .cmd--new:not(.cmd--selected) {
+    animation: none;
+  }
 }
 
 /* ===== バッジ（探検済み・★ 発見済み） =====
@@ -315,6 +380,13 @@
   .park-map .cmd__badge {
     width: 14px;
     height: 14px;
+    font-size: 8.5px;
+  }
+
+  .park-map .cmd__new {
+    top: -8px;
+    left: -5px;
+    padding: 1px 5px;
     font-size: 8.5px;
   }
 

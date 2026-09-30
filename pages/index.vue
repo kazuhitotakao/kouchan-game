@@ -469,11 +469,19 @@ const isJustArrivedAtPark = computed(() => currentTime.value === '09:00');
    曲と文言がいっしょに変わることで、
    「午前前半の章 → 午前後半の章」へ進んだ感じが出る
 */
-const parkEntranceText = computed(() => buildParkEntranceText(isJustArrivedAtPark.value, shouldUseParkBgm2()));
+const parkEntranceText = computed(() => buildParkEntranceText(isJustArrivedAtPark.value, shouldUseParkBgm2(), hasNewSecretPath.value));
 
 /* ※ 秘密の場所へ行ける条件（canEnterSecretSpot）と、
      こもれびの広場をもう見つけたか（hasDiscoveredSecretSpot）は
      useGameState() から受けとっている（→ このファイルの上のほう） */
+
+/* 秘密の小道が地図に出ていて、まだ小道の先（こもれびの広場）を見つけていないか
+
+   このあいだだけ、公園入口で
+   ・あいさつ文を、秘密の小道を見つけた案内にする（parkEntranceText）
+   ・地図の上の「秘密の小道」ボタンに「NEW」の印を付けて光らせる（.cmd--new → assets/css/game/park-map.css）
+   新しい状態は持たず、今ある2つから決める */
+const hasNewSecretPath = computed(() => canEnterSecretSpot.value && !hasDiscoveredSecretSpot.value);
 
 /* ===== キーボード操作（「どうする？」コマンドボックス）用の計算 ===== */
 
@@ -4546,7 +4554,7 @@ onUnmounted(() => {
                         </span>
                       </button>
                     </div>
-  
+
                     <div class="park-map__spot park-map__spot--sandbox">
                       <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 1 }" @click="goToPlace('sandbox')" @mouseenter="selectedCommandIndex = 1" @focus="selectedCommandIndex = 1">
                         <span class="cmd__text">砂場</span>
@@ -4556,7 +4564,7 @@ onUnmounted(() => {
                         </span>
                       </button>
                     </div>
-  
+
                     <div class="park-map__spot park-map__spot--acorn">
                       <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 2 }" @click="goToPlace('acornArea')" @mouseenter="selectedCommandIndex = 2" @focus="selectedCommandIndex = 2">
                         <span class="cmd__text">どんぐりの木</span>
@@ -4566,7 +4574,7 @@ onUnmounted(() => {
                         </span>
                       </button>
                     </div>
-  
+
                     <div class="park-map__spot park-map__spot--pond">
                       <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 3 }" @click="goToPlace('pond')" @mouseenter="selectedCommandIndex = 3" @focus="selectedCommandIndex = 3">
                         <span class="cmd__text">池</span>
@@ -4576,7 +4584,7 @@ onUnmounted(() => {
                         </span>
                       </button>
                     </div>
-  
+
                     <div class="park-map__spot park-map__spot--grass">
                       <button class="cmd" :class="{ 'cmd--selected': selectedCommandIndex === 4 }" @click="goToPlace('grassArea')" @mouseenter="selectedCommandIndex = 4" @focus="selectedCommandIndex = 4">
                         <span class="cmd__text">芝生広場</span>
@@ -4586,17 +4594,19 @@ onUnmounted(() => {
                         </span>
                       </button>
                     </div>
-  
+
                     <!-- 秘密の小道（見つけているとき＝canEnterSecretSpot のときだけ出る） -->
                     <div v-if="canEnterSecretSpot" class="park-map__spot park-map__spot--secret">
+                      <!-- cmd--new … 見つけたばかりで、まだ小道の先へ進んでいないあいだ（hasNewSecretPath）だけ、
+                                     「NEW」の印を付けて、ボタンをゆっくり光らせる（→ assets/css/game/park-map.css） -->
                       <button
                         class="cmd cmd--secret"
-                        :class="{ 'cmd--selected': selectedCommandIndex === 5 }"
+                        :class="{ 'cmd--selected': selectedCommandIndex === 5, 'cmd--new': hasNewSecretPath }"
                         @click="goToSecretArea"
                         @mouseenter="selectedCommandIndex = 5"
                         @focus="selectedCommandIndex = 5">
-                        <!-- 広場をもう見つけていれば、行き先の名前（こもれびの広場）にする
-                             （下のカードと同じく hasDiscoveredSecretSpot で切り替える） -->
+                        <span v-if="hasNewSecretPath" class="cmd__new">NEW</span>
+                        <!-- 広場をもう見つけていれば、行き先の名前（こもれびの広場）にする（hasDiscoveredSecretSpot で切り替える） -->
                         <span class="cmd__text">{{ hasDiscoveredSecretSpot ? 'こもれびの広場' : '秘密の小道' }}</span>
                         <span v-if="isVisited('secretSpot')" class="cmd__badges">
                           <span class="cmd__badge"><span class="cmd__badgeIcon cmd__badgeIcon--compactOnly" aria-hidden="true">✓</span><span class="cmd__badgeText">探検済み</span></span>
@@ -4604,13 +4614,13 @@ onUnmounted(() => {
                         </span>
                       </button>
                     </div>
-  
+
                     <!-- きゅうけい … 押すと、休憩する／おやつにする を選ぶベンチの画面（ひとやすみ）へ（goToPlace('restArea')）
-  
+
                          休憩・おやつは、どの場所でも同じ効果なので、
                          前は各場所の「どうする？」の中にあった「休憩・おやつ」を、行き先と同じ階層のここへまとめた
                          （遊んで体力が減ったあと、「次の場所を選ぶ」でここへ戻ってきて、そのまま休める）
-  
+
                          番号は、秘密の小道が出ているかどうかで変わるので restCommandIndex を見る（出ていれば 6／なければ 5） -->
                     <div class="park-map__spot park-map__spot--rest">
                       <button
@@ -4622,9 +4632,9 @@ onUnmounted(() => {
                         <span class="cmd__text">きゅうけい</span>
                       </button>
                     </div>
-  
+
                     <!-- おうちへ帰る（地図のいちばん下 ＝ 公園の出口）… 前の「公園の出口へ向かう（ゴール）」のボタン
-  
+
                          地図は「下が公園入口、上が公園の奥」なので、ゴール（公園を出る）は、地図の下の公園入口に置く
                          押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く。openGoalConfirm）
                          番号は、いちばん最後の goalCommandIndex（キーボードで選んで Enter でも同じダイアログが開く） -->
@@ -4642,25 +4652,8 @@ onUnmounted(() => {
                 </nav>
               </article>
 
-              <!-- 秘密の場所は「ポイント20以上」かつ「見つけたもの3種類以上」で解放 -->
-              <article v-if="canEnterSecretSpot" class="place-card place-card--secret">
-                <!-- 広場をもう見つけたかどうかで文言を切り替える
-                     まだ見つけていない → はじめて見つけたときの案内（この先は秘密の小道）
-                     もう見つけた → また行ってみようという案内（そのまま広場へ入る）
-                     ※ 探検済み（isVisited）ではなく hasDiscoveredSecretSpot を見る
-                       広場を見つけて何もせずに出たときも、もう小道はくり返さないため -->
-                <template v-if="hasDiscoveredSecretSpot">
-                  <h2 class="place-card__title">こもれびの広場</h2>
-
-                  <p class="place-card__text">こうちゃんは、木々のあいだの秘密の小道を覚えているようです。また行ってみよう！</p>
-                </template>
-
-                <template v-else>
-                  <h2 class="place-card__title">秘密の小道を見つけた！</h2>
-
-                  <p class="place-card__text">木々のあいだに、秘密の小道があるのを見つけました。この先には何があるのかな？行ってみよう！</p>
-                </template>
-              </article>
+              <!-- 秘密の小道を見つけたことは、地図の下のカードではなく、
+                   上のあいさつ文（parkEntranceText）と、地図の上の「秘密の小道」ボタンの「NEW」の印で知らせる（hasNewSecretPath） -->
             </section>
 
             <!-- 公園入口には、下のコマンド欄（「どこへ行く？」の一覧・ゴール）を出さない
