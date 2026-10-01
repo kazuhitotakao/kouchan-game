@@ -54,7 +54,7 @@ export type RandomEventDraw = {
      3 ねこを見つける        … こうちゃんの機嫌 +5
      4 急に走り出す          … 親の余裕 -6
      5 ちょうちょ            … こうちゃんの機嫌 +4
-     6 落ち葉を踏む          … こうちゃんの機嫌 +5
+     6 ありの行列を見つける  … こうちゃんの機嫌 +5
      7 靴に砂が入る          … 親の余裕 -3
      8 水たまりで大はしゃぎ  … こうちゃんの機嫌 +5 ／ 親の余裕 -3
 
@@ -89,7 +89,7 @@ export function drawRandomEvent(): RandomEventDraw | null {
   // ① 飛行機を見つける
   if (eventNumber === 0) {
     return {
-      text: '「ひこうき！」こうちゃんは、うれしそうに空を見上げています。',
+      text: '「ひこうき！」うれしそうに空を見上げています。',
       effects: [
         { label: 'こうちゃんの機嫌', statName: 'childMood', amount: 5 },
       ],
@@ -99,7 +99,7 @@ export function drawRandomEvent(): RandomEventDraw | null {
   // ② 急に「だっこ！」
   if (eventNumber === 1) {
     return {
-      text: 'こうちゃんが急に「だっこ！」と言い出しました。',
+      text: '「だっこ！」急に言い出しました。',
       effects: [
         { label: '親の体力', statName: 'parentEnergy', amount: -5 },
       ],
@@ -109,7 +109,7 @@ export function drawRandomEvent(): RandomEventDraw | null {
   // ③ ねこを見つける
   if (eventNumber === 2) {
     return {
-      text: '「ねこちゃん！」こうちゃんは、うれしそうに指をさしました。',
+      text: '「ねこちゃん！」うれしそうに指をさしました。',
       effects: [
         { label: 'こうちゃんの機嫌', statName: 'childMood', amount: 5 },
       ],
@@ -119,7 +119,7 @@ export function drawRandomEvent(): RandomEventDraw | null {
   // ④ 急に走り出す
   if (eventNumber === 3) {
     return {
-      text: 'こうちゃんが急に走り出して、ちょっとヒヤッとしました！',
+      text: '急に走り出して、ちょっとヒヤッ！',
       effects: [
         { label: '親の余裕', statName: 'parentCalm', amount: -6 },
       ],
@@ -129,17 +129,18 @@ export function drawRandomEvent(): RandomEventDraw | null {
   // ⑤ ちょうちょ
   if (eventNumber === 4) {
     return {
-      text: '「ちょうちょ！」こうちゃんは、うれしそうに追いかけています。',
+      text: '「ちょうちょ！」うれしそうに追いかけています。',
       effects: [
         { label: 'こうちゃんの機嫌', statName: 'childMood', amount: 4 },
       ],
     };
   }
 
-  // ⑥ 落ち葉を踏む
+  // ⑥ ありの行列を見つける
+  //    （前は「落ち葉を踏む」だったが、こもれびの広場の「落ち葉の上を歩く」と同じ遊びになるので変えた）
   if (eventNumber === 5) {
     return {
-      text: '「カサカサする！」こうちゃんは、何度も落ち葉を踏んでいます。',
+      text: '「ありさん！」しゃがんで、ありの行列をじっと見ています。',
       effects: [
         { label: 'こうちゃんの機嫌', statName: 'childMood', amount: 5 },
       ],
@@ -149,7 +150,7 @@ export function drawRandomEvent(): RandomEventDraw | null {
   // ⑦ 靴に砂が入る
   if (eventNumber === 6) {
     return {
-      text: '「砂はいっちゃった〜」こうちゃんは、くつを見ながら立ち止まりました。',
+      text: '「砂はいっちゃった〜」くつを見ながら立ち止まりました。',
       effects: [
         { label: '親の余裕', statName: 'parentCalm', amount: -3 },
       ],
@@ -160,7 +161,7 @@ export function drawRandomEvent(): RandomEventDraw | null {
   //   ここまでの7つに当てはまらなかった＝eventNumber が 7 のとき
   //   2つステータスが動くので、しるしも2つ並べる
   return {
-    text: '「みずたまり！」こうちゃんは、楽しそうにバシャバシャしています。',
+    text: '「みずたまり！」楽しそうにバシャバシャしています。',
     effects: [
       { label: 'こうちゃんの機嫌', statName: 'childMood', amount: 5 },
       { label: '親の余裕', statName: 'parentCalm', amount: -3 },

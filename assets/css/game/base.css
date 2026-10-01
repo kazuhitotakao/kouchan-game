@@ -383,6 +383,11 @@
 /* タイトル画面の説明（どんなゲームかを伝えるいちばん大事な文章）
    ここを読んでもらってから「きょうのおやつを選ぶ」を押してほしいので、
    本文より大きめの文字にして、行のすき間もゆったりとる
+
+   文字を少なくするため、いまは1文だけ（「9時〜12時の公園を、たくさん探検しよう！」）
+   ・1文なので、真ん中にそろえる
+   ・せまい画面で「探検し／よう」のように言葉のとちゅうで折り返さないよう、
+     読点（、）のところで折り返す（ホーム画面の案内 .install-hint と同じやりかた）
 */
 .title-card__rule {
   display: flex;
@@ -396,7 +401,9 @@
   font-size: 19px;
   font-weight: 700;
   line-height: 1.9;
-  text-align: left;
+  text-align: center;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .title-card__rule p {

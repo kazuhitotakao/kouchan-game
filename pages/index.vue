@@ -1445,7 +1445,7 @@ function checkGameOver() {
   // ① 親の体力が0以下
   if (parentEnergy.value <= 0) {
     gameOverTitle.value = '親の体力が限界！';
-    gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
+    gameOverMessage.value = 'もう動けません……。今日はここで帰ります。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
     stopSecretBgm();
@@ -1465,7 +1465,7 @@ function checkGameOver() {
   // ② 親の余裕が0以下
   if (parentCalm.value <= 0) {
     gameOverTitle.value = '親の余裕がなくなった！';
-    gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
+    gameOverMessage.value = '心の余裕がなくなってしまいました。今日はここでおしまい。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
     stopSecretBgm();
@@ -1485,7 +1485,7 @@ function checkGameOver() {
   // ③ こうちゃんの体力が0以下（強制帰宅エンド）
   if (childEnergy.value <= 0) {
     gameOverTitle.value = 'こうちゃん電池切れ！';
-    gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
+    gameOverMessage.value = 'もうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
     stopSecretBgm();
@@ -4211,13 +4211,7 @@ onUnmounted(() => {
           <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <div class="title-card__rule">
-            <p>冒険の舞台は9時から12時の公園です！</p>
-
-            <p>
-              どんな出会い、冒険があるかな。
-              <br />
-              たくさん探索してみよう！
-            </p>
+            <p>9時〜12時の公園を、たくさん探検しよう！</p>
           </div>
         </div>
       </div>
@@ -4397,9 +4391,9 @@ onUnmounted(() => {
           <h1 class="snack-heading">🍪 きょうのおやつ</h1>
 
           <p class="snack-lead">
-            公園へ持っていくおやつを{{ maxSnackCount }}つ選ぼう！
+            おやつを{{ maxSnackCount }}つ選ぼう！
             <br />
-            もう一度押すと、えらびなおせます。
+            もう一度押すと外せます。
           </p>
         </div>
       </div>
