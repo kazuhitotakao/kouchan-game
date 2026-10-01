@@ -41,7 +41,7 @@ export const snacks: Snack[] = [
   },
   {
     id: 'senbei',
-    name: 'せんべい',
+    name: 'おせんべい',
     icon: '🍘',
     energy: 18,
     mood: 6,
