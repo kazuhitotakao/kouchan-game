@@ -2638,7 +2638,7 @@ function takeCommonBreak() {
   parentCalm.value += 8;
   addMinutes(15);
 
-  resultMessage.value = 'ベンチに座って、親子で少し休憩しました。こうちゃんも少し元気を取り戻したようです。';
+  resultMessage.value = 'ベンチでひと休み。こうちゃんも少し元気が出てきました。';
 
   // finishPlayAction() は呼ばない（上の説明のとおり）
   finishCareAction();
@@ -2687,7 +2687,7 @@ function giveSnackWhileExploring(snackId: SnackId) {
   parentCalm.value += 2;
   addMinutes(snack.minutes);
 
-  resultMessage.value = `ベンチに座って${snack.name}を食べました。こうちゃんはうれしそうにもぐもぐしています。`;
+  resultMessage.value = `「おいしい！」ベンチで${snack.name}をもぐもぐ。`;
 
   // finishPlayAction() は呼ばない（上の説明のとおり）
   finishCareAction();
@@ -5157,10 +5157,9 @@ onUnmounted(() => {
                   <p class="place-card__text">{{ currentTantrumScene }}</p>
                 </template>
 
-                <!-- 理由が決まっていないとき（ふつうは起きない）は、前からの文章を出す -->
-                <p v-else class="place-card__text">
-                  こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
-                </p>
+                <!-- 理由が決まっていないとき（ふつうは起きない）の予備の文
+                     いやいや発生の文（useTantrum.ts の tantrumText）とそろえて、短くしてある -->
+                <p v-else class="place-card__text">「いやー！」その場にぺたんと座りこんでしまいました。</p>
               </article>
 
               <ResultCard

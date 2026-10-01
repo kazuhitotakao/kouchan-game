@@ -534,7 +534,7 @@ export function useTantrum(options: UseTantrumOptions) {
     childMood.value -= 15;
     parentCalm.value -= 12;
 
-    tantrumText.value = 'こうちゃんが「いやー！」と、その場にぺたんと座りこんでしまいました。';
+    tantrumText.value = '「いやー！」その場にぺたんと座りこんでしまいました。';
   }
 
   /* ===== いやいや中（なだめる場面） =====
@@ -633,7 +633,7 @@ export function useTantrum(options: UseTantrumOptions) {
   function applyTantrumFailurePenalty() {
     if (tantrumLevel.value === 3) {
       parentCalm.value -= bigTantrumFailureCalmCost;
-      resultMessage.value += 'こうちゃんは全身でいやいやしたままです。親のほうも、だんだんしんどくなってきました……。';
+      resultMessage.value += '全身でいやいやしたまま。親もだんだんしんどくなってきました……';
       return;
     }
 
@@ -644,11 +644,11 @@ export function useTantrum(options: UseTantrumOptions) {
 
     if (newLevel === 3) {
       parentCalm.value -= bigTantrumEnterCalmCost;
-      resultMessage.value += 'こうちゃんの泣き声がさらに大きくなりました。親もちょっと焦ってきます……。';
+      resultMessage.value += '泣き声がさらに大きく！ 親もちょっと焦ってきます……';
       return;
     }
 
-    resultMessage.value += 'こうちゃんの泣き声が、さっきより大きくなってしまいました……。';
+    resultMessage.value += '泣き声が、さっきより大きくなりました……';
   }
 
   /* いやいや中に選んだ対応を記録する（どの対応も、startStatusChanges() のすぐあとに呼ぶ）
@@ -733,9 +733,9 @@ export function useTantrum(options: UseTantrumOptions) {
     isTantrum.value = false;
 
     if (tantrumLevel.value === 1) {
-      resultMessage.value = 'ぎゅっとだっこすると、こうちゃんは肩にぺたん。少しずつ落ち着いてきました。';
+      resultMessage.value = 'ぎゅっとだっこすると、肩にぺたん。落ち着いてきました。';
     } else {
-      resultMessage.value = '泣いているこうちゃんをぎゅっとだっこ。背中をとんとんすると、少しずつ力がぬけてきました。';
+      resultMessage.value = 'ぎゅっとだっこして、背中をとんとん。力がぬけてきました。';
     }
 
     // 「つかれた」いやいやなら、歩きつかれた足を休ませてあげられた＝ナイス対応
@@ -809,7 +809,7 @@ export function useTantrum(options: UseTantrumOptions) {
       // ぴったり：どんなにはげしく泣いていても、落ち着いてくれる → 解決 ＋ ナイス対応
       isTantrum.value = false;
 
-      resultMessage.value = `${snack.name}を見せると、「……たべる」。もぐもぐするうちに、こうちゃんの涙が止まってきました。`;
+      resultMessage.value = `「……たべる」${snack.name}をもぐもぐ。涙が止まってきました。`;
 
       if (currentTantrumReasonInfo.value) {
         resultMessage.value += currentTantrumReasonInfo.value.greatSnackText;
@@ -821,18 +821,18 @@ export function useTantrum(options: UseTantrumOptions) {
       // ふつう × ぐずぐず：おやつがうれしくて、そのまま落ち着く → 解決
       isTantrum.value = false;
 
-      resultMessage.value = `${snack.name}を見せると、「……たべる」。もぐもぐするうちに、こうちゃんの涙が止まってきました。`;
+      resultMessage.value = `「……たべる」${snack.name}をもぐもぐ。涙が止まってきました。`;
     } else if (fit === 'normal') {
       // ふつう × 大泣き・大いやいや：少し落ち着くが、気持ちまではおさまらない → 1段下がって続く
       decreaseTantrumLevel();
 
-      resultMessage.value = `${snack.name}を食べると、泣き声は少し小さくなりました。でも、まだいやいやは続いています。`;
+      resultMessage.value = `${snack.name}で泣き声は少し小さく。でも、まだいやいや中です。`;
     } else {
       // ずれている：食べてはくれたが、泣いている理由には合っていない → 悪化
       // （同じいやいやが続くだけなので、tantrumCount も tantrumReason も変えない）
       const complaint = currentTantrumReasonInfo.value?.complaint ?? 'いやー！';
 
-      resultMessage.value = `${snack.name}は食べたけれど、「${complaint}」。まだいやいやは続いています。`;
+      resultMessage.value = `${snack.name}は食べたけれど「${complaint}」。`;
 
       applyTantrumFailurePenalty();
     }
@@ -900,13 +900,13 @@ export function useTantrum(options: UseTantrumOptions) {
         // 大いやいや：話は聞こえているが、まず少し落ち着くところから → 1段下がって続く
         decreaseTantrumLevel();
 
-        resultMessage.value = `${words}と話すと、こうちゃんの泣き声が少し小さくなりました。まだ涙は止まりません。`;
+        resultMessage.value = `${words}泣き声は少し小さく。でも、まだ涙は止まりません。`;
       } else {
         // ぐずぐず・大泣き：気持ちを分かってもらえて、解決
         isTantrum.value = false;
 
         resultMessage.value =
-          tantrumReason.value === 'frustrated' ? `${words}と話すと、こうちゃんは涙をふいて、少しずつ落ち着いてきました。` : `${words}と話すと、こうちゃんは「うん…」とうなずいて、少し落ち着きました。`;
+          tantrumReason.value === 'frustrated' ? `${words}涙をふいて、落ち着いてきました。` : `${words}「うん…」とうなずいて、落ち着きました。`;
       }
 
       if (isRepeatedTalk) {
@@ -925,9 +925,9 @@ export function useTantrum(options: UseTantrumOptions) {
       }
 
       if (tantrumReason.value === 'tired') {
-        resultMessage.value = '話しかけてみましたが、「つかれた〜！」。こうちゃんは、まだ動きたくないようです。';
+        resultMessage.value = '「つかれた〜！」まだ動きたくないようです。';
       } else {
-        resultMessage.value = '話しかけてみましたが、「おなかすいた〜！」。こうちゃんは、おなかを押さえたままです。';
+        resultMessage.value = '「おなかすいた〜！」おなかを押さえたままです。';
       }
 
       if (isRepeatedTalk) {
@@ -1057,12 +1057,12 @@ export function useTantrum(options: UseTantrumOptions) {
         // ぐずぐず：落ち着いてくれたので、いやいや終了
         isTantrum.value = false;
 
-        resultMessage.value = 'となりで静かに待っていると、こうちゃんは自分で涙をふいて、少しずつ落ち着いてきました。';
+        resultMessage.value = 'となりで待っていると、自分で涙をふいて落ち着いてきました。';
       } else {
         // 大泣き・大いやいや：少し落ち着くが、まだ続く → 1段下がる
         decreaseTantrumLevel();
 
-        resultMessage.value = 'しばらく待つと、泣き声が少し小さくなりました。でも、まだ涙は止まりません。';
+        resultMessage.value = '待っていると、泣き声は少し小さく。でも、まだ涙は止まりません。';
       }
 
       // 悔しい気持ちを、こうちゃんが自分で立てなおそうとできた＝ナイス対応（1回のいやいやで1回だけ）
@@ -1075,12 +1075,12 @@ export function useTantrum(options: UseTantrumOptions) {
       // ここでは checkTantrum() を呼ばない（新しいいやいやではないので、tantrumCount も tantrumReason も変えない）
       const complaint = currentTantrumReasonInfo.value?.complaint;
 
-      resultMessage.value = complaint ? `しばらく待ってみましたが、こうちゃんは「${complaint}」。まだいやいやしています。` : 'しばらく待ってみましたが、こうちゃんはまだいやいやしています。';
+      resultMessage.value = complaint ? `待ってみたけれど「${complaint}」。` : '待ってみたけれど、まだいやいや中です。';
 
       // 待つを続けていると効きにくくなることを、こうちゃんの様子として伝える
       // （「別の対応を試したほうがよさそう」と気づけるようにするための1文）
       if (repeatedTantrumActionCount.value > 0) {
-        resultMessage.value += 'このまま待っていても、なかなか落ち着かなさそうです。';
+        resultMessage.value += 'このまま待っても、落ち着かなさそう。';
       }
 
       applyTantrumFailurePenalty();
