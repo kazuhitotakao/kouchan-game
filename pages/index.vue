@@ -100,7 +100,7 @@ import type {
    プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { parkMapStartPlace } from '~/data/parkMap';
-import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { itemIcons, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
@@ -3808,7 +3808,7 @@ onUnmounted(() => {
       <!-- ============================================================
            あそびかた画面（B画面から開く説明書）
 
-           B画面の「？ あそびかた」で開き、「← ひとつ前の画面へ戻る」・Escape でB画面へ戻る
+           B画面の「？ あそびかた」で開き、「← 戻る」・Escape でB画面へ戻る
            開いているあいだは、A画面・B画面・おやつ選択画面より優先して出す
            （そのため、この Transition の中でいちばん先に書いてある。
              キー操作の handleKeydown()・フォーカスの handleScreenEnterEnd() も同じ順番で見ている）
@@ -3822,6 +3822,10 @@ onUnmounted(() => {
              ・同じ対応をくり返したときの効きにくさの数字
              ・ナイス対応になる組み合わせ、各行動のステータス増減
              あとから説明を書き足すときも、ここは守ること
+
+           ■ 文字は少なめにする
+             箇条書きは1項目1行、ステータスや対応の説明は「〜する」「〜できるか」の短い言いかたにする
+             （前は5つのセクションで約990字あったが、くり返しを省いて4つ・約460字にした）
 
            ■ 縦に長いので、.title-screen の縦スクロールでそのまま読む
              （スマホ幅では、ページ全体のスクロールになる）
@@ -3875,11 +3879,9 @@ onUnmounted(() => {
             </h2>
 
             <ul class="howto-list">
-              <li>朝9時から12時まで、公園の場所を選んで探検します。</li>
-              <li>選んだ行動によって時間が進み、こうちゃんや親の状態が変わります。</li>
-              <li>つかれたら、公園入口の「ひとやすみ」で休憩したり、おやつを食べたりできます。</li>
-              <li>アイテムを見つけたり、ちょっとした出来事が起きたりすることも。公園には、少し特別な場所もあるみたい。</li>
-              <li>12時になるか、公園の出口へ向かうとおしまい。結果発表があります。</li>
+              <li>朝9時〜12時、公園の場所を選んで探検。行動すると時間が進みます。</li>
+              <li>12時になるか、出口へ向かうと結果発表。</li>
+              <li>公園には、特別な場所もあるみたい。</li>
             </ul>
 
             <!-- 操作は「パソコンでもスマホでも遊べる」と分かる最低限だけ書く
@@ -3887,7 +3889,7 @@ onUnmounted(() => {
                  （秘密の小道の操作は、ミニゲームの画面にそのつど案内が出る） -->
             <p class="howto-note">
               <b class="howto-note__title">操作</b>
-              画面のコマンドを選んで進めます。パソコンはクリックか矢印キーと Enter、スマホはタップで遊べます。
+              クリック・矢印キー＋Enter・タップで遊べます。
             </p>
           </section>
 
@@ -3908,7 +3910,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--child-energy"></span>
                   こうちゃんの体力
                 </dt>
-                <dd>元気に動ける力。少なくなりすぎると、探検を続けにくくなります。</dd>
+                <dd>元気に動ける力</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3916,7 +3918,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--child-mood"></span>
                   こうちゃんの機嫌
                 </dt>
-                <dd>どのくらい楽しい気分か。</dd>
+                <dd>楽しい気分</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3924,7 +3926,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--parent-energy"></span>
                   親の体力
                 </dt>
-                <dd>いっしょに遊んだり、だっこしたりすると減ることがあります。</dd>
+                <dd>遊びやだっこで減る</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3932,7 +3934,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--parent-calm"></span>
                   親の余裕
                 </dt>
-                <dd>親が落ち着いて対応できているか。</dd>
+                <dd>落ち着いて対応できるか</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3940,15 +3942,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--point"></span>
                   おでかけポイント
                 </dt>
-                <dd>いろいろ体験すると増えます。結果にも関係します。</dd>
-              </div>
-
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--time"></span>
-                  時間
-                </dt>
-                <dd>行動すると進みます。</dd>
+                <dd>体験すると増える</dd>
               </div>
             </dl>
 
@@ -3956,7 +3950,7 @@ onUnmounted(() => {
                  （「○○が0なら」のような判定の一覧にはしない） -->
             <p class="howto-note howto-note--caution">
               <b class="howto-note__title">GAME OVER</b>
-              こうちゃんや親が疲れすぎたり、親が落ち着いて対応できなくなったりすると、冒険が途中で終わることがあります。
+              疲れすぎたり、余裕がなくなったりすると、途中で終わることも。
             </p>
           </section>
 
@@ -3972,9 +3966,8 @@ onUnmounted(() => {
             </h2>
 
             <ul class="howto-list">
-              <li>出発前に、{{ snacks.length }}種類から{{ maxSnackCount }}つ選んで持っていきます。</li>
-              <li>体力が回復しやすいもの、機嫌がよくなりやすいものなど、おやつごとに得意なことが少しちがいます。</li>
-              <li>公園入口の「ひとやすみ」や、いやいやタイムで使えます。使うと残りが減ります。</li>
+              <li>出発前に{{ snacks.length }}種類から{{ maxSnackCount }}つ選びます。おやつごとに得意なことがちがいます。</li>
+              <li>ひとやすみと、いやいやタイムで使えます。使うと減ります。</li>
             </ul>
           </section>
 
@@ -3992,52 +3985,36 @@ onUnmounted(() => {
               いやいやタイム
             </h2>
 
-            <p class="howto-text">疲れた・おなかがすいた・うまくできなくて悔しい・まだ遊びたい などの理由で、こうちゃんはいやいやします。理由の答えは画面に出ません。</p>
-
-            <p class="howto-note howto-note--hint">💡 こうちゃんのセリフや様子をよく見て、どうしていやいやしているのか考えてみよう。</p>
+            <p class="howto-note howto-note--hint">💡 セリフや様子から、いやいやの理由を考えよう。</p>
 
             <h3 class="howto-subheading">4つの対応</h3>
 
             <dl class="howto-terms">
               <div class="howto-terms__row">
                 <dt>お話してみる</dt>
-                <dd>理由によって、うまくいきやすさが変わります。</dd>
+                <dd>理由によって効きめが変わる</dd>
               </div>
 
               <div class="howto-terms__row">
                 <dt>だっこする</dt>
-                <dd>落ち着かせやすいけれど、親の体力を使います。</dd>
+                <dd>親の体力を使う</dd>
               </div>
 
               <div class="howto-terms__row">
                 <dt>おやつをあげる</dt>
-                <dd>おやつを1つ使います。そのときのこうちゃんとの相性があります。</dd>
+                <dd>おやつを1つ使う</dd>
               </div>
 
               <div class="howto-terms__row">
                 <dt>少し待ってみる</dt>
-                <dd>落ち着くこともあれば、うまくいかないこともあります。</dd>
+                <dd>落ち着くことも、そうでないことも</dd>
               </div>
             </dl>
 
             <ul class="howto-list">
-              <li>対応が合わないと、いやいやがもっと強くなることがあります。</li>
-              <li>同じ方法ばかり続けるより、別の方法を考えることも大切です。</li>
-              <li>気持ちにぴったり合った対応ができると「ナイス対応」になることも。</li>
-            </ul>
-          </section>
-
-          <!-- 5. ちょっとしたヒント（攻略の答えにはならない、考えかたのヒントだけ） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">
-              <span class="howto-section__num">5</span>
-              ちょっとしたヒント
-            </h2>
-
-            <ul class="howto-list">
-              <li>時間と体力を見ながら探検しよう。</li>
-              <li>おやつは使うと減るので、使いどころも大切。</li>
-              <li>いろいろな場所を探検すると、何か見つかるかも？</li>
+              <li>合わない対応だと、もっと強くなることも。</li>
+              <li>同じ方法ばかりだと、効きにくくなることも。</li>
+              <li>ぴったり合うと「ナイス対応」！</li>
             </ul>
           </section>
 
@@ -5439,19 +5416,17 @@ onUnmounted(() => {
               <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
                    SランクとS+ランクのときだけ、カードがきらきら光る -->
               <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' || endingRank === 'S+ランク' }">
-                <!-- 総合スコア（0〜100点） -->
-                <p class="ending-card__score-label">総合スコア</p>
-
+                <!-- 総合スコア（0〜100点）
+                     「72 / 100」だけで点数と分かるので、「総合スコア」の見出しは読み上げ用だけにしている -->
                 <p class="ending-card__score">
+                  <span class="sr-only">総合スコア</span>
                   <span class="ending-card__score-value">{{ finalScore }}</span>
                   <span class="ending-card__score-max">/ 100</span>
                 </p>
 
                 <!-- 今回のランク
-                     結果のいちばん大事なところなので、
-                     小さなラベル ＋ 大きなバッジ の2段にして目立たせる -->
-                <p class="ending-card__rank-label">今回のランク</p>
-
+                     結果のいちばん大事なところなので、大きなバッジにして目立たせる
+                     （「Aランク」の文字だけで分かるので、「今回のランク」の小さなラベルは付けない） -->
                 <p class="ending-card__rank">{{ endingRank }}</p>
 
                 <h3 class="ending-card__title">{{ endingTitle }}</h3>
@@ -5557,10 +5532,10 @@ onUnmounted(() => {
                 <article class="record-card">
                   <h3 class="record-card__title">見つけたもの</h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
 
                   <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
                   </ul>
                 </article>
               </div>
@@ -5673,10 +5648,10 @@ onUnmounted(() => {
                 <article class="record-card">
                   <h3 class="record-card__title">見つけたもの</h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
 
                   <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
                   </ul>
                 </article>
               </div>

@@ -49,16 +49,6 @@
   text-align: center;
 }
 
-/* 「今回のランク」の小さなラベル
-   総合スコアの「総合スコア」ラベルと、わざと同じ見た目にしてそろえている */
-.ending-card__rank-label {
-  margin: 0 0 6px;
-  color: #a07a2a;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
 /* ランクのバッジ
    ・min-width で、Dランクでも S+ランクでも同じ大きさに見えるようにする
    ・box-sizing: border-box にしているので、padding をふくめた幅が
@@ -98,14 +88,6 @@
 }
 
 /* 総合スコア（エンディングカードのいちばん上に大きく出す） */
-.ending-card__score-label {
-  margin: 0 0 2px;
-  color: #a07a2a;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-}
-
 .ending-card__score {
   display: flex;
   align-items: baseline;
@@ -316,6 +298,17 @@
   color: var(--navy);
   font-size: 16px;
   font-variant-numeric: tabular-nums;
+}
+
+/* 見た目からは消して、読み上げでは読まれる文字（「総合スコア」の見出しなど）
+   display: none にすると読み上げでも読まれなくなるので、1px に縮めて隠す */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .found-list {

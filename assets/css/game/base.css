@@ -702,11 +702,6 @@
   line-height: 1.5;
 }
 
-.howto-text {
-  margin: 0 0 10px;
-  line-height: 1.85;
-}
-
 /* 箇条書き（点は、うすい水色の丸） */
 .howto-list {
   display: grid;
@@ -793,10 +788,6 @@
 
 .howto-dot--point {
   background: var(--gold);
-}
-
-.howto-dot--time {
-  background: var(--navy);
 }
 
 /* 目立たせたい一文（操作・GAME OVER・基本のヒント）
