@@ -5637,6 +5637,19 @@ onUnmounted(() => {
     flex: 1 1 auto;
   }
 
+  /* スマホ・タブレット（指で操作する画面）では、サウンドの枠をのばさない
+
+     指で操作する画面では音量バーを出さず、ミュートボタンだけにしている（→ components/game/SoundControl.vue）
+     のばしたままだと、ボタン1つの枠だけが横に長くなり、🔊 が「← 戻る」のすぐ右に来てしまう
+     のばさなければ、上の margin-left: auto で、ミュートボタンが右はしに寄る（タイトル画面（B画面）と同じ形）
+     ※ マウスで操作する細い窓（パソコン）では音量バーが出るので、今までどおり のばす
+       （見分けかたは utils/touchDevice.ts・sound-control.css と同じ） */
+  @media (hover: none) and (pointer: coarse) {
+    .st-toolbar .sound-control {
+      flex: none;
+    }
+  }
+
   .st-playall {
     padding: 10px 12px 12px;
   }
