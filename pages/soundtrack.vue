@@ -10,8 +10,11 @@ import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
 /* 曲の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { cancelElementPause, keepAudioContextAwake, pauseElement, pauseElementThen, setElementVolume } from '~/utils/elementVolume';
+import { cancelElementPause, keepAudioContextAwake, pauseElement, pauseElementThen, releaseElement, setElementVolume } from '~/utils/elementVolume';
 import { isTouchOnlyDevice } from '~/utils/touchDevice';
+
+/* 音の作業台（AudioContext）。ゲーム本編と同じ1つを使い回す（→ getEffectAudioContext()） */
+import { getSharedAudioContext } from '~/utils/audioContext';
 
 /* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
    タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
@@ -779,37 +782,14 @@ function toggleRepeat() {
      （トラック番号・リピート・サウンドON・戻る、どれを押しても鳴らない）
    ============================================================ */
 
-/* 音を作る作業台
+/* 作業台を返す（初めて必要になったときだけ作る）
 
-   null は「まだ作っていない」という意味
-   作るのが重たいので、1個だけ作って、このページにいるあいだ使い回す
-   （ここで new しないのは、サーバー側には AudioContext が無いため） */
-let effectAudioContext: AudioContext | null = null;
-
-/* 作業台を用意して返す（初めて必要になったときだけ作る） */
+   作業台は、ゲーム本編と同じ1つを使い回す（→ utils/audioContext.ts）
+   このページだけで作ると、ページを行き来するたびに作業台が増えていくうえ、
+   iPhone では、作るたびに音がとぎれて「プツプツ」と鳴ってしまうため
+   ページを離れるときは、作業台は閉じずに、曲を作業台から外すだけにする（→ onUnmounted） */
 function getEffectAudioContext() {
-  if (!import.meta.client) {
-    return null;
-  }
-
-  try {
-    if (!effectAudioContext) {
-      effectAudioContext = new AudioContext();
-    }
-
-    /* ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがあり、
-       そのとき作業台は suspended（お休み中）になっている
-       resume() で起こすが、await はしない
-       ここで待たせると、画面の切り替わりが音のせいで遅れてしまう */
-    if (effectAudioContext.state === 'suspended') {
-      effectAudioContext.resume().catch(() => {});
-    }
-
-    return effectAudioContext;
-  } catch {
-    // 音が使えない環境でも、ページはふつうに使えるようにする
-    return null;
-  }
+  return getSharedAudioContext();
 }
 
 /* ============================================================
@@ -1293,7 +1273,7 @@ function getSoundtrackAudio() {
    ちがうのは、鳴っている曲を「すっと」止めてから差しかえること
    iPhone・iPad では、いきなり止めると「ぶつっ」と雑音が出るので、
    音量を一瞬で下げきってから止めて、そのあとで差しかえる（→ utils/elementVolume.ts の pauseElementThen()）
-   ・差しかえが遅れるのは、iPhone・iPad で曲が鳴っている最中だけ（約0.08秒。耳ではほぼ分からない）
+   ・差しかえが遅れるのは、iPhone・iPad で曲が鳴っている最中だけ（約0.1秒。耳ではほぼ分からない）
    ・止まっているとき・曲が終わって次へ進むとき・パソコンでは、今までどおり その場で差しかわる
    ・止めている途中に連打されたときは、いちばん最後に押した曲だけへ差しかわる
 
@@ -3562,6 +3542,9 @@ onUnmounted(() => {
     soundtrackAudio.removeEventListener('ended', handleTrackEnded);
     soundtrackAudio.removeEventListener('timeupdate', handleTimeUpdate);
     soundtrackAudio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+
+    // 作業台から外す（上の stopSoundtrack() で音量を下げている途中なら、止め終わってから外れる）
+    releaseElement(soundtrackAudio);
   }
 
   soundtrackAudio = null;
