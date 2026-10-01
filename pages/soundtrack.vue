@@ -10,7 +10,7 @@ import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
 /* 曲の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { keepAudioContextAwake, setElementVolume } from '~/utils/elementVolume';
+import { cancelElementPause, keepAudioContextAwake, pauseElement, pauseElementThen, setElementVolume } from '~/utils/elementVolume';
 
 /* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
    タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
@@ -577,7 +577,7 @@ function pauseForSoundOff() {
   }
 
   try {
-    soundtrackAudio.pause();
+    pauseElement(soundtrackAudio);
   } catch {
     // 止められなくても、表示だけはそろえる
   }
@@ -1286,6 +1286,33 @@ function getSoundtrackAudio() {
   }
 }
 
+/* いまの曲を止めて、track へ差しかえ、先頭から鳴らす（ちがう曲へ切りかえるとき）
+
+   「止める → 差しかえる → 鳴らす」の順番は今までと同じ
+   ちがうのは、鳴っている曲を「すっと」止めてから差しかえること
+   iPhone・iPad では、いきなり止めると「ぶつっ」と雑音が出るので、
+   音量を一瞬で下げきってから止めて、そのあとで差しかえる（→ utils/elementVolume.ts の pauseElementThen()）
+   ・差しかえが遅れるのは、iPhone・iPad で曲が鳴っている最中だけ（約0.08秒。耳ではほぼ分からない）
+   ・止まっているとき・曲が終わって次へ進むとき・パソコンでは、今までどおり その場で差しかわる
+   ・止めている途中に連打されたときは、いちばん最後に押した曲だけへ差しかわる
+
+   Audioは1つだけを使いまわしているので、この順番を守れば、2曲が同時に鳴ることは起こらない */
+function switchTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
+  pauseElementThen(audio, () => {
+    try {
+      audio.src = track.src;
+      setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
+      audio.currentTime = 0; // 新しい曲を先頭から鳴らす
+    } catch {
+      // 何もしない
+    }
+
+    /* 新しい曲を鳴らす
+       （リピートの設定もここで入るので、1曲リピート中なら、新しい曲がくりかえしになる） */
+    playTrackAudio(audio, track);
+  });
+}
+
 /* 曲を鳴らしはじめる（再生できなかったときは、表示を停止中へ戻す） */
 function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   /* いまのリピートの設定を入れておく
@@ -1306,6 +1333,9 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   isPlaying.value = true;
 
   try {
+    // 止めている途中（音量を下げている最中）なら、その予約を取り消してから鳴らす
+    cancelElementPause(audio);
+
     audio.play().catch(() => {
       /* 再生できなかったとき（対応していない形式など）は、表示を元に戻す
 
@@ -1343,8 +1373,7 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
 function stopSoundtrack() {
   if (soundtrackAudio) {
     try {
-      soundtrackAudio.pause();
-      soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+      pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
     } catch {
       // 止められなくても、表示だけはそろえる
     }
@@ -1419,8 +1448,7 @@ function stopAudioForNavigation() {
   }
 
   try {
-    soundtrackAudio.pause();
-    soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+    pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
   } catch {
     // 止められなくても、このあとページごと消えるので何もしない
   }
@@ -2028,27 +2056,12 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 
   const firstTrack = playlistTracks.value[playlistIndex.value];
 
-  // いまの再生をいったん止めて、再生バーもリセットする
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
+  // 再生バーをリセットする
   currentTime.value = 0;
   duration.value = 0;
 
-  // 1周の1曲目を設定する
-  try {
-    audio.src = firstTrack.src;
-    setElementVolume(audio, getTrackVolume(firstTrack), getEffectAudioContext);
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
-  playTrackAudio(audio, firstTrack);
+  // いまの再生を止めて、1周の1曲目へ差しかえて鳴らす
+  switchTrackAudio(audio, firstTrack);
 
   /* 再生を始めると、押した「▶ 全曲再生／🔀 シャッフル再生」は画面から消えて、
      同じ場所に「⏸ 一時停止」が出てくる（→ テンプレートの st-playall__transport）
@@ -2112,8 +2125,7 @@ function startShufflePlaylist() {
 function finishPlaylist() {
   if (soundtrackAudio) {
     try {
-      soundtrackAudio.pause();
-      soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+      pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
     } catch {
       // 止められなくても、表示だけはそろえる
     }
@@ -2264,33 +2276,12 @@ function playPlaylistTrackAt(index: number) {
   currentTime.value = 0;
   duration.value = 0;
 
-  /* いまの曲を完全に止める（＝その場で終了）
+  /* いまの曲を完全に止めて（＝その場で終了）、行き先の曲へ差しかえて先頭から鳴らす
 
-     currentTime を 0 に戻すので、どこまで聴いたかは覚えない
-     あとでその曲へ戻ってきても「続きから」ではなく、先頭から鳴る */
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
-  /* 鳴らすファイルを行き先の曲へ差しかえる
-
-     Audioは1つだけを使いまわしているので、
-     「止める → 差しかえる → 鳴らす」の順番を守れば、
-     2曲が同時に鳴ることは仕組みのうえで起こらない（連打しても同じ） */
-  try {
-    audio.src = track.src;
-    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
-    audio.currentTime = 0; // 行き先の曲も先頭から
-  } catch {
-    // 何もしない
-  }
-
-  /* 行き先の曲を鳴らす（一時停止中に押したときも、ここで自動的に鳴りはじめる）
-     1曲リピートの設定も playTrackAudio の中で入るので、移った曲がくりかえしになる */
-  playTrackAudio(audio, track);
+     差しかえるとファイルが変わるので、どこまで聴いたかは覚えない
+     あとでその曲へ戻ってきても「続きから」ではなく、先頭から鳴る
+     一時停止中に押したときも、ここで自動的に鳴りはじめる */
+  switchTrackAudio(audio, track);
 }
 
 /* 「▶ 再生」「⏸ 一時停止」を押したときの処理
@@ -2327,7 +2318,7 @@ function toggleTrack(track: SoundtrackTrack) {
     if (isPlaying.value) {
       // 再生中 → 一時停止
       try {
-        audio.pause();
+        pauseElement(audio);
       } catch {
         // 何もしない
       }
@@ -2357,9 +2348,8 @@ function toggleTrack(track: SoundtrackTrack) {
 
    やることは、いつも同じ順番
    ① 全曲再生モードから抜ける（もともと個別再生なら、false のまま変わらない）
-   ② いまの曲を完全に止める
-   ③ 再生バーの表示を最初に戻す
-   ④ 新しい曲を差しかえて、先頭から鳴らす
+   ② 再生バーの表示を最初に戻す
+   ③ いまの曲を止めて、新しい曲を差しかえて、先頭から鳴らす（→ switchTrackAudio）
 
    Audioは1つだけを使いまわしているので、「止める → 差しかえる → 鳴らす」の順番を守れば、
    2曲が重なって鳴ることは起こらない（連打しても同じ）
@@ -2382,15 +2372,7 @@ function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrac
   isPlaylistPlaying.value = false;
   isShufflePlaying.value = false;
 
-  // ② まず、いまの曲を完全に止める
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
-  /* ③ 再生バーの表示も、いったん最初の状態に戻す
+  /* ② 再生バーの表示を、いったん最初の状態に戻す
 
      曲の長さ（duration）は、新しいmp3を読み込むまで分からない
      前の曲の長さが残っていると、バーの目盛りがずれてしまうので 0 に戻し、
@@ -2398,18 +2380,8 @@ function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrac
   currentTime.value = 0;
   duration.value = 0;
 
-  // ④ 新しい曲を設定する
-  try {
-    audio.src = track.src;
-    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
-    audio.currentTime = 0; // 新しい曲を先頭から鳴らす
-  } catch {
-    // 何もしない
-  }
-
-  /* 新しい曲を鳴らす
-     （リピートの設定もここで入るので、1曲リピート中なら、新しい曲がくりかえしになる） */
-  playTrackAudio(audio, track);
+  // ③ いまの曲を止めて、新しい曲へ差しかえ、先頭から鳴らす
+  switchTrackAudio(audio, track);
 }
 
 /* ============================================================
