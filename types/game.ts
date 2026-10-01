@@ -93,7 +93,6 @@ export type SnackId = 'gummy' | 'chocolate' | 'senbei' | 'biscuit' | 'banana' | 
    energy      … 食べたときに回復する、こうちゃんの体力
    mood        … 食べたときに回復する、こうちゃんの機嫌
    minutes     … 食べるのにかかる時間（分）
-   description … どんなおやつかの説明文
 
    ※ energy / mood / minutes は、ゲーム中におやつを食べたときの
      「こうちゃんの体力・機嫌がどれだけ回復するか」「何分かかるか」としてそのまま使う
@@ -109,7 +108,6 @@ export type Snack = {
   energy: number;
   mood: number;
   minutes: number;
-  description: string;
 };
 
 /* どの場面からおやつバッグを開いたか

@@ -18,6 +18,12 @@
      音が鳴っている画面（B画面・おやつ選択・あそびかた・ゲーム本編・ミニゲーム・
      サウンドトラック）では、これまでどおり2つとも出す
 
+   ■ スマホ・タブレットでは、どの画面でもスライダーを出さない（ミュートボタンだけ）
+     スマホでは、音量は本体の音量ボタンで変えるもの
+     スライダーを出すのはパソコン（マウスで操作する画面）だけにしてある
+     （見分けかたは utils/touchDevice.ts。開いた一瞬に見えないよう、CSSでもかくしている → sound-control.css）
+     キーボードの行き来は、A画面と同じく「スライダーが無いとき」の動きになる
+
    ■ このコンポーネントは「いまの状態を出して、押されたことを親へ伝えるだけ」
      音を鳴らす・止める・音量を変える処理は、ぜんぶ親（pages/index.vue）にある
      BGM・効果音・localStorage も、今までどおり親のまま
@@ -32,7 +38,9 @@
      （大きさ・置き場所の指定は assets/css/game/sound.css・sound-control.css）
    ============================================================ */
 
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
+
+import { isTouchOnlyDevice } from '~/utils/touchDevice';
 
 withDefaults(
   defineProps<{
@@ -73,6 +81,17 @@ const toggleButton = ref<HTMLButtonElement | null>(null);
 const volumeSlider = ref<HTMLInputElement | null>(null);
 
 defineExpose({ toggleButton, volumeSlider });
+
+/* スマホ・タブレット（指で操作する画面）か（→ 先頭の「スマホ・タブレットでは」の説明）
+
+   サーバー側では画面が分からないので、はじめは false（パソコンと同じ）にしておき、
+   ブラウザで動きはじめてから見分ける
+   （true になると、スライダーが消えて volumeSlider も null になる） */
+const isTouchOnly = ref(false);
+
+onMounted(() => {
+  isTouchOnly.value = isTouchOnlyDevice();
+});
 </script>
 
 <template>
@@ -106,9 +125,10 @@ defineExpose({ toggleButton, volumeSlider });
 
     <!-- 音量のスライダー（BGMも効果音も、まとめて変わる）
 
-         showVolume が false のとき（A画面）は、まるごと出さない
-         まだ音が鳴っていない画面では、動かしても何も聞こえないため
-         （→ このファイルの先頭の「showVolume」の説明）
+         つぎのときは、まるごと出さない
+         ・showVolume が false のとき（A画面）… まだ音が鳴っていない画面では、動かしても何も聞こえないため
+         ・スマホ・タブレットのとき … 音量は本体の音量ボタンで変えるため
+         （→ このファイルの先頭の「showVolume」「スマホ・タブレットでは」の説明）
 
          吹き出しは input の中には置けないので、外側の span でかこって、そこに出している
          :style で渡している --volume-progress は、レールの「塗ったところ」の境目の位置
@@ -116,7 +136,7 @@ defineExpose({ toggleButton, volumeSlider });
 
          0%まで下げるとミュート、そこから上げるとミュート解除になる
          （スピーカーのアイコンも、いっしょに切りかわる） -->
-    <span v-if="showVolume" class="sound-control__sliderWrap">
+    <span v-if="showVolume && !isTouchOnly" class="sound-control__sliderWrap">
       <input
         ref="volumeSlider"
         type="range"

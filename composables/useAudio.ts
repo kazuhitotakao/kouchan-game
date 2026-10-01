@@ -38,7 +38,10 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
 /* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { keepAudioContextAwake, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
+import { cancelElementPause, keepAudioContextAwake, pauseElement, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
+
+/* スマホ・タブレット（指で操作する画面）か（音量スライダーが無いので、前回の音量を戻さない → restoreSoundSettings()） */
+import { isTouchOnlyDevice } from '~/utils/touchDevice';
 
 /* 音のほうから「いま画面はどうなっているか」を見るための値
 
@@ -1489,6 +1492,7 @@ export function useAudio(options: UseAudioOptions) {
       startBgmFadeIn(bgm, getCurrentParkBgmVolume());
       // play() は「再生できたかどうか」をあとから知らせる形（Promise）になっている
       // 自動再生をブラウザに止められることがあるので、失敗しても何もしないでおく
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // BGMが鳴らなくても、ゲームは止めない
@@ -1587,6 +1591,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // 何もしない
@@ -1603,7 +1608,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      bgm.pause();
+      pauseElement(bgm);
     } catch {
       // 何もしない
     }
@@ -1640,8 +1645,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      bgm.pause();
-      bgm.currentTime = 0;
+      pauseElement(bgm, { rewind: true });
     } catch {
       // 何もしない
     }
@@ -1797,6 +1801,7 @@ export function useAudio(options: UseAudioOptions) {
       // （フェードインするのは公園BGMだけ）
       setElementVolume(bgm, getSoundVolume(titleBgmVolume), getAudioContext);
 
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // BGMが鳴らなくても、ゲームは止めない
@@ -1869,6 +1874,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // 何もしない
@@ -1885,7 +1891,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      titleBgm.pause();
+      pauseElement(titleBgm);
     } catch {
       // 何もしない
     }
@@ -1901,8 +1907,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      titleBgm.pause();
-      titleBgm.currentTime = 0;
+      pauseElement(titleBgm, { rewind: true });
     } catch {
       // 何もしない
     }
@@ -2001,6 +2006,7 @@ export function useAudio(options: UseAudioOptions) {
            startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
       startBgmFadeIn(bgm, tantrumBgmVolume);
 
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // BGMが鳴らなくても、ゲームは止めない
@@ -2024,6 +2030,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // 何もしない
@@ -2041,7 +2048,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      tantrumBgm.pause();
+      pauseElement(tantrumBgm);
     } catch {
       // 何もしない
     }
@@ -2064,8 +2071,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      tantrumBgm.pause();
-      tantrumBgm.currentTime = 0;
+      pauseElement(tantrumBgm, { rewind: true });
     } catch {
       // 何もしない
     }
@@ -2192,6 +2198,7 @@ export function useAudio(options: UseAudioOptions) {
            startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
       startBgmFadeIn(bgm, resultBgmVolume);
 
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // BGMが鳴らなくても、ゲームは止めない
@@ -2310,6 +2317,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // 何もしない
@@ -2328,7 +2336,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      resultBgm.pause();
+      pauseElement(resultBgm);
     } catch {
       // 何もしない
     }
@@ -2353,8 +2361,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      resultBgm.pause();
-      resultBgm.currentTime = 0;
+      pauseElement(resultBgm, { rewind: true });
     } catch {
       // 何もしない
     }
@@ -2469,6 +2476,7 @@ export function useAudio(options: UseAudioOptions) {
            startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
       startBgmFadeIn(bgm, gameOverBgmVolume);
 
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // BGMが鳴らなくても、ゲームは止めない
@@ -2559,6 +2567,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // 何もしない
@@ -2584,7 +2593,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      gameOverBgm.pause();
+      pauseElement(gameOverBgm);
     } catch {
       // 何もしない
     }
@@ -2609,8 +2618,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      gameOverBgm.pause();
-      gameOverBgm.currentTime = 0; // 次のGAME OVERでは、また曲の先頭から
+      pauseElement(gameOverBgm, { rewind: true }); // 次のGAME OVERでは、また曲の先頭から
 
       // 音量も、決めてある大きさへ戻しておく
       // （フェードインの途中で止めると、小さい音量のまま残ることがあるため）
@@ -2763,6 +2771,7 @@ export function useAudio(options: UseAudioOptions) {
            startBgmFadeIn() の中で前のフェードを取り消してから始めるため */
       startBgmFadeIn(bgm, secretBgmVolume);
 
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // BGMが鳴らなくても、ゲームは止めない
@@ -2850,6 +2859,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
+      cancelElementPause(bgm);
       bgm.play().catch(() => {});
     } catch {
       // 何もしない
@@ -2872,7 +2882,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      secretBgm.pause();
+      pauseElement(secretBgm);
     } catch {
       // 何もしない
     }
@@ -2901,8 +2911,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      secretBgm.pause();
-      secretBgm.currentTime = 0; // 次に入ったときは、また曲の先頭から
+      pauseElement(secretBgm, { rewind: true }); // 次に入ったときは、また曲の先頭から
 
       /* 速さも ふつう（1）へ戻す
 
@@ -3090,6 +3099,16 @@ export function useAudio(options: UseAudioOptions) {
         if (Number.isFinite(percent) && percent >= 0 && percent <= 100) {
           soundVolumePercent.value = Math.round(percent);
         }
+
+        /* スマホ・タブレットでは、途中の音量（1〜99%）は戻さず、100%で始める
+
+           スマホには音量スライダーが無い（ミュートボタンだけ。→ SoundControl.vue）ので、
+           前にスライダーで下げた音量が残っていると、もう上げられなくなってしまう
+           音量は本体の音量ボタンで変えてもらう
+           ※ 0%（ミュート）は、ミュートボタンで解除できるので、そのまま戻す */
+        if (isTouchOnlyDevice() && soundVolumePercent.value > 0) {
+          soundVolumePercent.value = 100;
+        }
       }
     } catch {
       // 読み込めなくても、初期値の100%で普通に遊べる
@@ -3133,6 +3152,10 @@ export function useAudio(options: UseAudioOptions) {
        pages/index.vue 側の後片づけ（いやいやの予約・秘密の小道の停止）と
        前後の順番がずれないようにするため
      ============================================================ */
+  /* ページを離れてから、作業台を閉じるまでの待ち時間（ミリ秒）
+     曲の音量を下げ終わって止まる（約0.08秒）より、少し長くしてある */
+  const audioContextCloseDelay = 200;
+
   function cleanupAudio() {
     // さわるたびに作業台を起こす受付をやめる（→ restoreSoundSettings()）
     stopWakingAudioContext?.();
@@ -3168,9 +3191,19 @@ export function useAudio(options: UseAudioOptions) {
        音の流れがくずれて、効果音がまとめて鳴ったり途切れたりする
 
        この作業台につないでいるのは、このページで作った音だけなので、閉じても ほかのページに影響しない
-       （また必要になったときは getAudioContext() が作りなおす） */
-    if (audioContext && audioContext.state !== 'closed') {
-      audioContext.close().catch(() => {});
+       （また必要になったときは getAudioContext() が作りなおす）
+
+       ※ 閉じるのは、少し待ってから
+         iPhone では、上で止めた曲は「音量を0まで下げてから止まる」（→ utils/elementVolume.ts の pauseElement()）
+         下げ終わる前に閉じると、そこで音がとぎれて「ぶつっ」と雑音が出てしまう */
+    const closingContext = audioContext;
+
+    if (closingContext && closingContext.state !== 'closed') {
+      setTimeout(() => {
+        if (closingContext.state !== 'closed') {
+          closingContext.close().catch(() => {});
+        }
+      }, audioContextCloseDelay);
     }
 
     audioContext = null;
