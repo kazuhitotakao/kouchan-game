@@ -276,7 +276,7 @@
      結果が出たあとは、説明はもう読みおわっているので、名前だけ残して場所をゆずる
      （結果の「← もどる」などで結果が消えると、説明もまた出る）
 
-     .game-screen--has-result は pages/index.vue が、結果が出ているあいだだけ付ける
+     .scene--has-result は pages/index.vue が、結果が出ているあいだだけ、場面（.scene）に付ける（→ sceneClass）
      ※ 秘密の小道は、中の作りがちがうので対象にしない */
   /* ===== 秘密の小道で遊んでいる最中 =====
 
@@ -305,11 +305,11 @@
     margin: 0 4px;
   }
 
-  .game-screen--has-result .stage:not(.stage--secret-path) > .place-card .place-card__text {
+  .scene--has-result .stage:not(.stage--secret-path) > .place-card .place-card__text {
     display: none;
   }
 
-  .game-screen--has-result .stage:not(.stage--secret-path) > .place-card .place-card__title {
+  .scene--has-result .stage:not(.stage--secret-path) > .place-card .place-card__title {
     margin-bottom: 0;
   }
 
