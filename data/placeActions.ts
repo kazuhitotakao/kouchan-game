@@ -76,7 +76,7 @@ export const placeActions = {
     parentEnergy: -8,
     parentCalm: -9,
     minutes: 15,
-    message: '「みててー！」こうちゃんはてっぺんから手をふっています。下でハラハラしながら見守りました。',
+    message: '「みててー！」てっぺんで手をふる姿に、下でハラハラ。',
   },
 
   /* ===== 砂場 ===== */
@@ -106,7 +106,7 @@ export const placeActions = {
     parentEnergy: -7,
     parentCalm: -2,
     minutes: 15,
-    message: 'こうちゃんと一緒に砂のトンネルを作りました。向こう側から手が見えると、こうちゃんは大よろこびです！',
+    message: '「みえたー！」トンネルの向こうで、手と手がタッチ。',
   },
 
   /* ===== どんぐりの木 ===== */
@@ -136,7 +136,7 @@ export const placeActions = {
     parentEnergy: -5,
     parentCalm: -2,
     minutes: 15,
-    message: '拾ったどんぐりを坂になった地面からころがして遊びました。こうちゃんは何度も追いかけています！',
+    message: '「まてまてー！」ころがるどんぐりを何度も追いかけています。',
   },
 
   /* ===== 池 ===== */
@@ -162,7 +162,7 @@ export const placeActions = {
     parentEnergy: -5,
     parentCalm: -4,
     minutes: 15,
-    message: 'コイに餌をあげました。たくさんのコイが集まってきて、バシャンと水しぶきをたてながら餌を食べています。こうちゃんは大喜びです。',
+    message: '「おさかな いっぱい！」コイがバシャンと集まってきました。',
   },
 
   /* ===== 芝生広場 ===== */
@@ -176,7 +176,7 @@ export const placeActions = {
     parentEnergy: -15,
     parentCalm: -8,
     minutes: 25,
-    message: '芝生広場で、こうちゃんと元気いっぱい追いかけっこをしました。こうちゃんは笑いながら走り回っています！',
+    message: '「きゃははっ！」芝生の上を、笑いながら走り回っています。',
   },
 
   /* ② シャボン玉で遊ぶ
@@ -193,13 +193,13 @@ export const placeActions = {
     parentEnergy: -6,
     parentCalm: -3,
     minutes: 20,
-    message: '芝生の上でシャボン玉を飛ばしました。ふわふわ飛んでいくシャボン玉を、こうちゃんは楽しそうに追いかけています。',
+    message: '「ふわふわー！」飛んでいくシャボン玉を追いかけています。',
   },
 
   /* ===== こもれびの広場 ===== */
 
-  /* ① こもれびの中を探検する */
-  exploreSunlight: {
+  /* ① 落ち葉の上を歩く（落ち葉の音で遊ぶ。たくさん歩くので、②より体力も時間も使う） */
+  walkOnLeaves: {
     place: 'secretSpot',
     childEnergy: -16,
     childMood: 10,
@@ -207,10 +207,10 @@ export const placeActions = {
     parentEnergy: -14,
     parentCalm: -4,
     minutes: 25,
-    message: 'こもれびの中を歩いてみました。足元には小さな花や、きれいな葉っぱが落ちています。こうちゃんは宝物を探すように、夢中であたりを見ています。',
+    message: '「はっぱ、カサカサ！」わざと落ち葉の上を歩いて、音を楽しんでいます。',
   },
 
-  /* ② 広場の奥を見てみる
+  /* ② こもれびをつかまえる（光で遊ぶ。手をのばすくらいの軽い遊び）
 
      ※ 文章で「枝を見つけた」と書かないこと
        アイテム（ふしぎな形の枝）が見つかるかどうかは抽選なので、
@@ -219,7 +219,7 @@ export const placeActions = {
        という食いちがいが起きてしまう
        見つけたことを伝えるのは、結果カードの「★ アイテム発見！」の役目
        （ほかの5か所の文章も、アイテムには触れずに遊びの様子だけを書いている） */
-  exploreClearingDepths: {
+  catchSunlight: {
     place: 'secretSpot',
     childEnergy: -10,
     childMood: 5,
@@ -227,6 +227,6 @@ export const placeActions = {
     parentEnergy: -8,
     parentCalm: -4,
     minutes: 20,
-    message: '広場の奥へ進んでみました。こうちゃんは木の根元をのぞきながら、「なにかあるかなー？」とわくわくしています。',
+    message: '「つかまえた！」手のひらにうつった光を、じっと見ています。',
   },
 } satisfies Record<string, PlaceActionDefinition>;

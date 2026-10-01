@@ -2727,7 +2727,7 @@ function lookForAmbulance() {
   parentEnergy.value -= 2;
   addMinutes(10);
 
-  resultMessage.value = 'しばらく探していると、道路の向こうを救急車が走っていきました。こうちゃんは「いた！」と大喜びです！';
+  resultMessage.value = '「いた！」道路の向こうを救急車が走っていきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2746,7 +2746,7 @@ function listenToSiren() {
   childMood.value += 4;
   addMinutes(5);
 
-  resultMessage.value = '二人で耳をすませていると、ピーポーの音がだんだん遠ざかっていきました。こうちゃんは最後まで「ピーポー」とまねをしています。';
+  resultMessage.value = '「ピーポー！」遠ざかる音を、最後までまねしています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2762,7 +2762,7 @@ function walkOnFromSiren() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  resultMessage.value = '「またこんど見ようね」と声をかけて、遊びに戻りました。こうちゃんは何度か後ろをふりかえっています。';
+  resultMessage.value = '「またこんど見ようね」遊びに戻っても、何度もふりかえっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2784,7 +2784,7 @@ function watchLadybug() {
   outingPoint.value += 4;
   addMinutes(10);
 
-  resultMessage.value = '二人でしゃがんで、じっくり見つめました。こうちゃんは「てちてち歩いている、かわいい」と満足げです。';
+  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2804,7 +2804,7 @@ function holdLadybug() {
   outingPoint.value += 5;
   addMinutes(10);
 
-  resultMessage.value = 'そっと手を近づけると、テントウムシが指にちょこんと乗りました。「のった！」こうちゃんはうれしそうに見ています。';
+  resultMessage.value = '「のった！」テントウムシが指にちょこんと乗りました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2823,7 +2823,7 @@ function seeOffLadybug() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = 'テントウムシがぱっと飛び立ちました。「ばいばーい！」こうちゃんは空に向かって手をふっています。';
+  resultMessage.value = '「ばいばーい！」空に向かって手をふっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2846,7 +2846,7 @@ function watchDogClose() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = '飼い主さんに聞いて、近くで見せてもらいました。「わんわん、かわいいね！」こうちゃんは大喜びです。';
+  resultMessage.value = '「わんわん、かわいいね！」近くで見せてもらいました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2867,7 +2867,7 @@ function watchDogBehindParent() {
   parentEnergy.value -= 2;
   addMinutes(5);
 
-  resultMessage.value = 'だっこで少し離れて見ていると、こうちゃんは「わんわん、こっち見た！」とうれしそうです。';
+  resultMessage.value = '「わんわん、こっち見た！」だっこで少し離れて見ています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2885,7 +2885,7 @@ function keepDistanceFromDog() {
 
   addMinutes(5);
 
-  resultMessage.value = '手をつないで道をあけると、犬はそのまま歩いていきました。「わんわん、ばいばーい！」こうちゃんは手をふっています。';
+  resultMessage.value = '「わんわん、ばいばーい！」犬はそのまま歩いていきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2939,7 +2939,7 @@ function hugAfterFall() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = 'すぐにかけよってぎゅっとだっこ。こうちゃんは肩にぺたんと顔をつけて、少しずつ落ち着いてきました。';
+  resultMessage.value = 'ぎゅっとだっこ。肩に顔をつけて、少しずつ落ち着いてきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2969,7 +2969,7 @@ function blowPainAway() {
   parentCalm.value -= 5;
   addMinutes(5);
 
-  resultMessage.value = 'ひざをそっとなでながら「いたいのいたいの、とんでいけ〜！」。こうちゃんは空を見上げて、「とんでった！」とにっこりしました。';
+  resultMessage.value = '「とんでった！」ひざをなでてもらって、にっこり。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2992,7 +2992,7 @@ function watchAfterFall() {
   parentCalm.value -= 8;
   addMinutes(5);
 
-  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは「だいじょうぶ」と言って、自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっています。';
+  resultMessage.value = '「だいじょうぶ」自分でよいしょと立ち上がりました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3016,7 +3016,7 @@ function goCloseToFountain() {
   parentEnergy.value -= 5;
   addMinutes(10);
 
-  resultMessage.value = '手をつないで噴水のすぐそばまで行きました。こうちゃんは水しぶきに向かって、きゃーっと走りまわっています！';
+  resultMessage.value = '「きゃーっ！」水しぶきに向かって走りまわっています！';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3036,7 +3036,7 @@ function watchFountainFar() {
   outingPoint.value += 2;
   addMinutes(5);
 
-  resultMessage.value = '少し離れた場所から、二人でながめました。水の音を聞きながら、こうちゃんは指をさして笑っています。';
+  resultMessage.value = '水の音を聞きながら、指をさして笑っています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3052,7 +3052,7 @@ function walkOnFromFountain() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  resultMessage.value = '「またあとで見ようね」と声をかけて、遊びに戻りました。こうちゃんは何度か噴水を振り返っています。';
+  resultMessage.value = '「またあとで見ようね」遊びに戻っても、何度も噴水をふりかえっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3530,13 +3530,13 @@ function runSelectedCommand() {
       break;
 
     /* こもれびの広場
-       0 こもれびの中を探検する／1 広場の奥を見てみる
+       0 落ち葉の上を歩く／1 こもれびをつかまえる
        （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
-        runPlaceAction(placeActions.exploreSunlight);
+        runPlaceAction(placeActions.walkOnLeaves);
       } else if (index === 1) {
-        runPlaceAction(placeActions.exploreClearingDepths);
+        runPlaceAction(placeActions.catchSunlight);
       }
       break;
 
@@ -5105,12 +5105,12 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: 'こもれびの中を探検する' }, { label: '広場の奥を見てみる' }]"
+                  :commands="[{ label: '落ち葉の上を歩く' }, { label: 'こもれびをつかまえる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => runPlaceAction([placeActions.exploreSunlight, placeActions.exploreClearingDepths][index])"
+                  @select="index => runPlaceAction([placeActions.walkOnLeaves, placeActions.catchSunlight][index])"
                   @leave="goToNextPlace"
                   @next="goToNextPlace" />
               </div>
