@@ -39,13 +39,17 @@
        navigator.audioSession.type = 'playback'
      こうすると、画面が見えなくなっても Web Audio を止めずに、鳴らしつづけてくれる
      （→ keepAudioContextAwake() の backgroundPlayback。ページを離れるときに 'auto' へ戻す）
-     ・ゲーム本編・ミニゲームでは伝えない（画面を消したら、今までどおり音も止まる）
+     ・ゲーム本編・ミニゲームは、画面が見えているあいだだけ伝える（マナーモードでも鳴らすため）
+       画面が見えなくなったら、すぐ元へ戻すので、画面を消したら今までどおり音も止まる（→ playThroughSilentModeWhileVisible()）
      ・navigator.audioSession があるのは iOS 16.4 から。鳴りつづけるのは iOS 17.5 から
        （それより前の iOS では、今までどおり止まる）
      ・'playback' にすると、ほかのアプリの音楽は止まる・マナーモードでも鳴る
        音量つまみを通す前の mp3 の音（HTMLAudioElement）も同じあつかいだったので、前と同じ
      ・音量つまみを使わないブラウザ（パソコン・Android など）では、何もしない
    ============================================================ */
+
+/* iPhone・iPad で、ゲームの BGM・mp3 の効果音を鳴らす係（→ createGameAudio()） */
+import { BufferedAudio } from '~/utils/bufferedAudio';
 
 /* iPhone・iPad（iPod touch もふくむ）かどうか
 
@@ -103,6 +107,24 @@ export function usesWebAudioVolume() {
   return !canSetElementVolume();
 }
 
+/* ゲームの BGM・mp3 の効果音の入れもの
+
+   ・パソコン・Android など … ふつうの mp3 の音（HTMLAudioElement）
+   ・iPhone・iPad          … 最後まで読みこんでから Web Audio だけで鳴らす係（BufferedAudio）
+   どちらも同じように使えるので、ゲーム側は どちらかを気にしなくてよい
+   このファイルの関数（setElementVolume() など）も、どちらでも使える */
+export type GameAudio = HTMLAudioElement | BufferedAudio;
+
+/* ゲームの BGM・mp3 の効果音を作る（new Audio(src) のかわりに使う）
+
+   iPhone・iPad では、BufferedAudio で作る（なぜかは utils/bufferedAudio.ts の先頭）
+   getContext … 作業台を返す関数（setElementVolume() に渡すものと同じ。音OFFのときは読みこみも始めない）
+   ※ サウンドトラック（pages/soundtrack.vue）は、ロック画面で操作したり、画面を消しても鳴らしつづけたりするので、
+     これを使わず new Audio() のまま */
+export function createGameAudio(src: string, getContext: () => AudioContext | null): GameAudio {
+  return usesWebAudioVolume() ? new BufferedAudio(src, getContext) : new Audio(src);
+}
+
 /* navigator.audioSession の種類を type にする（バックグラウンド再生のため。くわしくは、このファイルの先頭）
 
    ・'playback' … 「このページは音楽を再生するもの」と伝える（画面を消しても鳴りつづける）
@@ -128,17 +150,17 @@ function setAudioSessionType(type: 'playback' | 'auto') {
    createMediaElementSource() は、1つのAudioに1回しか呼べない
    なので、2回目からは、ここに残してあるつまみを回すだけにする
    （WeakMap なので、作業台から外したAudioは、つまみごと自然に片づく → releaseElement()） */
-const gainNodes = new WeakMap<HTMLAudioElement, GainNode>();
+const gainNodes = new WeakMap<GameAudio, GainNode>();
 
 /* つまみに通したAudioの、音の入り口（作業台から外すときに使う → releaseElement()） */
-const sourceNodes = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
+const sourceNodes = new WeakMap<GameAudio, MediaElementAudioSourceNode>();
 
 /* それぞれのAudioに「ほんとうは、この大きさで鳴らしたい」と言われた音量
 
    止める前に音量つまみを0まで下げる（→ pauseElement()）ので、
    止め終わったあとに、ここに覚えておいた大きさへ戻す
    （戻さないと、次に play() したとき無音のままになる） */
-const targetVolumes = new WeakMap<HTMLAudioElement, number>();
+const targetVolumes = new WeakMap<GameAudio, number>();
 
 /* 音量つまみを動かすときの「なめらかさ」（秒）
 
@@ -200,12 +222,12 @@ function holdGainAt(param: AudioParam, now: number) {
 /* audio の音量を volume（0〜1）にする
 
    getContext … 音量つまみを作るための作業台（AudioContext）を返す関数
-                ゲーム本編とサウンドトラックは、それぞれ自分の作業台を渡す
+                ゲーム本編もサウンドトラックも、サイト全体で1つの作業台を返す関数を渡す（→ utils/audioContext.ts）
                 null が返ってきたとき（音OFFなど）は、つまみを作らずに終わる */
-export function setElementVolume(audio: HTMLAudioElement, volume: number, getContext: () => AudioContext | null) {
+export function setElementVolume(audio: GameAudio, volume: number, getContext: () => AudioContext | null) {
   const safeVolume = Math.min(1, Math.max(0, volume));
 
-  if (canSetElementVolume()) {
+  if (canSetElementVolume() && !(audio instanceof BufferedAudio)) {
     audio.volume = safeVolume;
     return;
   }
@@ -214,23 +236,16 @@ export function setElementVolume(audio: HTMLAudioElement, volume: number, getCon
      作業台がお休み中（suspended）なら、呼ぶだけで起こしてくれるので、
      つまみに通した音が、無音のまま止まってしまうのを防げる */
   const context = getContext();
-  let gain = gainNodes.get(audio);
+  let gain: GainNode | null | undefined = getGainNode(audio);
 
   if (!gain) {
     if (!context) {
       return;
     }
 
-    try {
-      const source = context.createMediaElementSource(audio);
+    gain = connectToContext(audio, context);
 
-      gain = context.createGain();
-      source.connect(gain);
-      gain.connect(context.destination);
-      gainNodes.set(audio, gain);
-      sourceNodes.set(audio, source);
-    } catch {
-      // 通せなかったときは、今までどおり（音量は変わらないが、音は鳴る）
+    if (!gain) {
       return;
     }
   }
@@ -245,6 +260,54 @@ export function setElementVolume(audio: HTMLAudioElement, volume: number, getCon
   }
 
   setGainValue(gain, safeVolume, !audio.paused);
+}
+
+/* audio を作業台につないで、音量つまみを返す（つなげなかったときは null）
+
+   ・mp3 の音（HTMLAudioElement）… mp3 の音 → 音量つまみ → スピーカー とつなぐ
+   ・BufferedAudio              … 自分で音量つまみを作ってつなぐので、それをもらう */
+function connectToContext(audio: GameAudio, context: AudioContext) {
+  try {
+    if (audio instanceof BufferedAudio) {
+      const gain = audio.connect(context);
+
+      gainNodes.set(audio, gain);
+      return gain;
+    }
+
+    const source = context.createMediaElementSource(audio);
+    const gain = context.createGain();
+
+    source.connect(gain);
+    gain.connect(context.destination);
+    gainNodes.set(audio, gain);
+    sourceNodes.set(audio, source);
+
+    return gain;
+  } catch {
+    // 通せなかったときは、今までどおり（音量は変わらないが、音は鳴る）
+    return null;
+  }
+}
+
+/* audio の音量つまみ（まだ無いときは undefined）
+
+   BufferedAudio は、音量を入れる前に play() されると、自分で音量つまみを作ってつなぐ
+   そのときも、止めるときに音量を下げられるように、ここで拾っておく */
+function getGainNode(audio: GameAudio) {
+  const gain = gainNodes.get(audio);
+
+  if (gain || !(audio instanceof BufferedAudio)) {
+    return gain;
+  }
+
+  const ownGain = audio.volumeNode;
+
+  if (ownGain) {
+    gainNodes.set(audio, ownGain);
+  }
+
+  return ownGain ?? undefined;
 }
 
 /* ============================================================
@@ -291,13 +354,13 @@ type PendingPause = {
   release: boolean;
 };
 
-const pendingPauses = new WeakMap<HTMLAudioElement, PendingPause>();
+const pendingPauses = new WeakMap<GameAudio, PendingPause>();
 
 /* 止める（rewind: true なら、止めたあと曲の先頭へ戻す）
 
    止まるのは、音量を下げ終わった少しあと（iPhone・iPad のとき）
    それ以外のときは、今までどおり その場で止まる */
-export function pauseElement(audio: HTMLAudioElement, { rewind = false } = {}) {
+export function pauseElement(audio: GameAudio, { rewind = false } = {}) {
   const pending = pendingPauses.get(audio);
 
   /* もう止めている途中なら、予約はそのまま（先頭へ戻すかどうかだけ足す）
@@ -318,7 +381,7 @@ export function pauseElement(audio: HTMLAudioElement, { rewind = false } = {}) {
    ・iPhone・iPad で鳴っている最中 … 音量を下げ終わった少しあと
    ・それ以外                      … その場ですぐ（今までと同じ）
    止めている途中にまた呼ばれたときは、いちばん新しい onPaused だけを呼ぶ（連打しても1回だけ差しかわる） */
-export function pauseElementThen(audio: HTMLAudioElement, onPaused: () => void) {
+export function pauseElementThen(audio: GameAudio, onPaused: () => void) {
   const pending = pendingPauses.get(audio);
 
   if (pending) {
@@ -330,8 +393,8 @@ export function pauseElementThen(audio: HTMLAudioElement, onPaused: () => void) 
 }
 
 /* pauseElement() と pauseElementThen() の中身 */
-function fadeOutAndPause(audio: HTMLAudioElement, rewind: boolean, onPaused: (() => void) | null) {
-  const gain = gainNodes.get(audio);
+function fadeOutAndPause(audio: GameAudio, rewind: boolean, onPaused: (() => void) | null) {
+  const gain = getGainNode(audio);
 
   /* その場で止めるとき
      ・audio.volume が効くブラウザ（つまみを使っていない）
@@ -384,7 +447,7 @@ function fadeOutAndPause(audio: HTMLAudioElement, rewind: boolean, onPaused: (()
 }
 
 /* その場で止める（rewind: true なら、曲の先頭へ戻す） */
-function pauseNow(audio: HTMLAudioElement, rewind: boolean) {
+function pauseNow(audio: GameAudio, rewind: boolean) {
   try {
     audio.pause();
 
@@ -400,7 +463,7 @@ function pauseNow(audio: HTMLAudioElement, rewind: boolean) {
 
    止めている途中（音量を0へ下げている最中）の曲は、まだ pause() していないが、
    もう止まることが決まっているので「鳴っていない」とみなす */
-export function isElementPlaying(audio: HTMLAudioElement) {
+export function isElementPlaying(audio: GameAudio) {
   return !audio.paused && !pendingPauses.has(audio);
 }
 
@@ -408,7 +471,7 @@ export function isElementPlaying(audio: HTMLAudioElement) {
 
    play() の直前に呼ぶ
    止める予約が無いときは、何もしない */
-export function cancelElementPause(audio: HTMLAudioElement) {
+export function cancelElementPause(audio: GameAudio) {
   const pending = pendingPauses.get(audio);
 
   if (!pending) {
@@ -418,7 +481,7 @@ export function cancelElementPause(audio: HTMLAudioElement) {
   clearTimeout(pending.timer);
   pendingPauses.delete(audio);
 
-  const gain = gainNodes.get(audio);
+  const gain = getGainNode(audio);
 
   // 0へ下げかけていた音量を、ほんとうの大きさへ なめらかに戻す
   if (gain) {
@@ -437,7 +500,7 @@ export function cancelElementPause(audio: HTMLAudioElement) {
    ・外したAudioは、もう鳴らせない（createMediaElementSource() は1つのAudioに1回しか呼べないため）
      ページを離れるときの後始末で、もう使わないAudioにだけ使う
    ・つまみに通していないAudio（パソコン・Android など）は、何もしない */
-export function releaseElement(audio: HTMLAudioElement) {
+export function releaseElement(audio: GameAudio) {
   const pending = pendingPauses.get(audio);
 
   if (pending) {
@@ -450,10 +513,15 @@ export function releaseElement(audio: HTMLAudioElement) {
 }
 
 /* releaseElement() の中身（その場で外す） */
-function disconnectElement(audio: HTMLAudioElement) {
+function disconnectElement(audio: GameAudio) {
   try {
     sourceNodes.get(audio)?.disconnect();
     gainNodes.get(audio)?.disconnect();
+
+    // BufferedAudio は、鳴らしている音と音量つまみを自分で片づける
+    if (audio instanceof BufferedAudio) {
+      audio.release();
+    }
   } catch {
     // 何もしない
   }
@@ -461,6 +529,42 @@ function disconnectElement(audio: HTMLAudioElement) {
   sourceNodes.delete(audio);
   gainNodes.delete(audio);
   targetVolumes.delete(audio);
+}
+
+/* ゲームの画面が見えているあいだだけ、マナーモードでも音を鳴らす（iPhone・iPad だけ）
+
+   ■ なぜいるのか
+     iPhone・iPad のゲームの音は、Web Audio だけで鳴らしている（→ utils/bufferedAudio.ts）
+     Web Audio だけの音は、ふだんはマナーモード（消音スイッチ）で鳴らなくなる
+     （mp3 の音（HTMLAudioElement）で鳴らしていたころは、マナーモードでも鳴っていた）
+     そこで、navigator.audioSession を 'playback'（音楽を再生するページ）にして、今までどおりマナーモードでも鳴らす
+     ・ほかのアプリの音楽は止まる（これも mp3 の音で鳴らしていたころと同じ）
+
+   ■ 見えているあいだだけにする理由
+     'playback' のままにしておくと、ロックしたあとも音が鳴りつづけてしまう（サウンドトラックは、わざとそうしている）
+     ゲームは、ロックしたら音も止まってほしいので、
+     画面が見えなくなったら（ロック・ほかのアプリへ切りかえ）、すぐに 'auto' へ戻す
+     見えるようになったら、また 'playback' にする
+
+   ・navigator.audioSession が無いブラウザ（iOS 16.3 まで）では、何もしない（マナーモードでは鳴らない）
+   ・audio.volume が効くブラウザ（パソコン・Android など）では、何もしない
+   返す関数を呼ぶと、やめて 'auto' へ戻す（ページを離れるときの後始末用。サウンドトラックへ移ったときに残らないように） */
+export function playThroughSilentModeWhileVisible() {
+  if (!import.meta.client || canSetElementVolume()) {
+    return () => {};
+  }
+
+  function applyAudioSessionType() {
+    setAudioSessionType(document.visibilityState === 'visible' ? 'playback' : 'auto');
+  }
+
+  applyAudioSessionType();
+  document.addEventListener('visibilitychange', applyAudioSessionType);
+
+  return () => {
+    document.removeEventListener('visibilitychange', applyAudioSessionType);
+    setAudioSessionType('auto');
+  };
 }
 
 /* 指でさわる・クリックする・キーを押すたびに、作業台（AudioContext）を起こしておく

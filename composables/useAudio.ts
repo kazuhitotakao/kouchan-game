@@ -38,9 +38,9 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
 /* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { cancelElementPause, isElementPlaying, keepAudioContextAwake, pauseElement, releaseElement, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
+import { cancelElementPause, createGameAudio, isElementPlaying, keepAudioContextAwake, pauseElement, playThroughSilentModeWhileVisible, releaseElement, setElementVolume, usesWebAudioVolume, type GameAudio } from '~/utils/elementVolume';
 
-/* ロック画面・コントロールセンターの ▶／⏸ を受け取る（ゲームでは押しても何もしない → startIgnoringMediaControls()） */
+/* ロック画面・メディアキーの ▶／⏸ を受け取る（パソコンなどのゲームでは押しても何もしない → startIgnoringMediaControls()） */
 import { startMediaSession } from '~/utils/mediaSession';
 
 /* 音の作業台（AudioContext）。サイト全体で1つを使い回す（くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
@@ -921,10 +921,10 @@ export function useAudio(options: UseAudioOptions) {
      ・噴水の音         … 水しぶきが何千粒も重なっている音
 
      そこで、この3つだけは録音済みの音声ファイルを鳴らす
-     ＝ BGMと同じ HTMLAudioElement（new Audio）を使う
+     ＝ BGMと同じく、録音を鳴らす部品を使う（→ createGameAudio()）
 
      ・計算して作る音（①〜⑧）… Web Audio API（音声ファイルは不要）
-     ・録音を鳴らす音（この3つ・BGM）… HTMLAudioElement
+     ・録音を鳴らす音（この3つ・BGM）… パソコン・Android は HTMLAudioElement（new Audio）、iPhone・iPad は BufferedAudio（→ utils/bufferedAudio.ts）
 
      ※ 効果音なので、BGMとちがって loop はしない（1回鳴って終わり）
      ============================================================ */
@@ -976,9 +976,9 @@ export function useAudio(options: UseAudioOptions) {
        サーバーには Audio が無いのでエラーになってしまう
        （BGMの parkBgm などと、まったく同じ理由）
   */
-  let ambulanceSirenSe: HTMLAudioElement | null = null;
-  let dogBarkSe: HTMLAudioElement | null = null;
-  let fountainSe: HTMLAudioElement | null = null;
+  let ambulanceSirenSe: GameAudio | null = null;
+  let dogBarkSe: GameAudio | null = null;
+  let fountainSe: GameAudio | null = null;
 
   /* 「あとで鳴らす」の予約票
 
@@ -1037,7 +1037,7 @@ export function useAudio(options: UseAudioOptions) {
          呼んだ側へ箱を返すのは「待ち時間のあと」ではできないため
          （待っているあいだに mp3 の読み込みが進むので、鳴りだしも速くなる）
   */
-  function playFileSound(src: string, baseVolume: number, cached: HTMLAudioElement | null) {
+  function playFileSound(src: string, baseVolume: number, cached: GameAudio | null) {
     // サーバー側には Audio が無いので、ここで終わり
     if (!import.meta.client) {
       return cached;
@@ -1059,7 +1059,7 @@ export function useAudio(options: UseAudioOptions) {
 
     try {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
-      const sound = cached ?? new Audio(src);
+      const sound = cached ?? createGameAudio(src, getAudioContext);
 
       // 前の予約が残っていたら取り消す（二重に鳴らさないため）
       cancelFileSound();
@@ -1164,6 +1164,9 @@ export function useAudio(options: UseAudioOptions) {
 
      曲を再生するだけなら、音声ファイルを鳴らす専用の部品
      HTMLAudioElement（new Audio）を使うのがいちばん簡単
+     ※ iPhone・iPad だけは、最後まで読みこんでから Web Audio で鳴らす係（BufferedAudio）を使う
+       （読みこみながら鳴らすと、とぎれて「プツプツ」と鳴るため。くわしくは utils/bufferedAudio.ts）
+       作るのは createGameAudio()（どちらで作るかは、そこが決める）。使いかたは new Audio() と同じ
      ============================================================ */
 
   /* BGMの音量（0＝無音、1＝そのままの大きさ）
@@ -1222,7 +1225,7 @@ export function useAudio(options: UseAudioOptions) {
        Nuxtはサーバー側でも一度このコードを読むが、
        サーバーには Audio が無いのでエラーになってしまう
   */
-  let parkBgm: HTMLAudioElement | null = null;
+  let parkBgm: GameAudio | null = null;
 
   /* 公園BGMを用意して返す（初めて必要になったときだけ作る）
 
@@ -1241,7 +1244,7 @@ export function useAudio(options: UseAudioOptions) {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!parkBgm) {
         // public/audio/park-bgm.mp3 は、URLでは /audio/park-bgm.mp3 になる
-        parkBgm = new Audio('/audio/park-bgm.mp3');
+        parkBgm = createGameAudio('/audio/park-bgm.mp3', getAudioContext);
 
         // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
         parkBgm.loop = true;
@@ -1262,7 +1265,7 @@ export function useAudio(options: UseAudioOptions) {
      つくりは上の公園BGM（parkBgm）とまったく同じで、鳴らす曲だけがちがう
      null は「まだ作っていない」という意味
   */
-  let parkBgm2: HTMLAudioElement | null = null;
+  let parkBgm2: GameAudio | null = null;
 
   /* 午前後半の公園BGMを用意して返す（初めて必要になったときだけ作る）
 
@@ -1280,7 +1283,7 @@ export function useAudio(options: UseAudioOptions) {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!parkBgm2) {
         // public/audio/park-bgm2.mp3 は、URLでは /audio/park-bgm2.mp3 になる
-        parkBgm2 = new Audio('/audio/park-bgm2.mp3');
+        parkBgm2 = createGameAudio('/audio/park-bgm2.mp3', getAudioContext);
 
         // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
         parkBgm2.loop = true;
@@ -1346,7 +1349,7 @@ export function useAudio(options: UseAudioOptions) {
      ・すでにBGM2     → 何もしない（押すたびに曲が頭から鳴りなおさない）
      を見わけられる
   */
-  let activeParkBgm: HTMLAudioElement | null = null;
+  let activeParkBgm: GameAudio | null = null;
 
   /* BGMがフェードインしきるまでの長さ（ミリ秒）
      1000 で1秒かけて、無音から ふだんの音量まで上がる
@@ -1358,7 +1361,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* いまフェードインの最中にある曲（していないときは null）
      途中でやめたときに「どの曲の音量を戻すか」が分かるように覚えておく */
-  let fadingBgm: HTMLAudioElement | null = null;
+  let fadingBgm: GameAudio | null = null;
 
   /* その曲の「曲ごとの音量」（＝どこまで上げたら終わりか、のもとの数字）
 
@@ -1383,7 +1386,7 @@ export function useAudio(options: UseAudioOptions) {
      bgm          … フェードインさせたい曲
      targetVolume … 上がりきったときの音量（曲ごとにちがう）
   */
-  function startBgmFadeIn(bgm: HTMLAudioElement, targetVolume: number) {
+  function startBgmFadeIn(bgm: GameAudio, targetVolume: number) {
     // 前のフェードが残っていたら止める（音量の取り合いにならないように）
     cancelBgmFade();
 
@@ -1598,7 +1601,7 @@ export function useAudio(options: UseAudioOptions) {
 
      まだ作っていない（null＝一度も鳴らしていない）曲には、何もしなくてよい
   */
-  function pauseOneParkBgm(bgm: HTMLAudioElement | null) {
+  function pauseOneParkBgm(bgm: GameAudio | null) {
     if (!bgm) {
       return;
     }
@@ -1635,7 +1638,7 @@ export function useAudio(options: UseAudioOptions) {
 
      まだ作っていない（null＝一度も鳴らしていない）曲には、何もしなくてよい
   */
-  function stopOneParkBgm(bgm: HTMLAudioElement | null) {
+  function stopOneParkBgm(bgm: GameAudio | null) {
     if (!bgm) {
       return;
     }
@@ -1741,7 +1744,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* タイトルBGMを入れておく箱
      公園BGMと同じく、サーバー側では作れないので null から始める */
-  let titleBgm: HTMLAudioElement | null = null;
+  let titleBgm: GameAudio | null = null;
 
   /* タイトルBGMを用意して返す（初めて必要になったときだけ作る）
 
@@ -1758,7 +1761,7 @@ export function useAudio(options: UseAudioOptions) {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!titleBgm) {
         // public/audio/title-bgm.mp3 は、URLでは /audio/title-bgm.mp3 になる
-        titleBgm = new Audio('/audio/title-bgm.mp3');
+        titleBgm = createGameAudio('/audio/title-bgm.mp3', getAudioContext);
 
         // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
         titleBgm.loop = true;
@@ -1935,7 +1938,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* いやいやBGMを入れておく箱
      ほかの2曲と同じく、サーバー側では作れないので null から始める */
-  let tantrumBgm: HTMLAudioElement | null = null;
+  let tantrumBgm: GameAudio | null = null;
 
   /* いやいやBGMを用意して返す（初めて必要になったときだけ作る）
 
@@ -1952,7 +1955,7 @@ export function useAudio(options: UseAudioOptions) {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!tantrumBgm) {
         // public/audio/tantrum-bgm.mp3 は、URLでは /audio/tantrum-bgm.mp3 になる
-        tantrumBgm = new Audio('/audio/tantrum-bgm.mp3');
+        tantrumBgm = createGameAudio('/audio/tantrum-bgm.mp3', getAudioContext);
 
         // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
         // （いやいやが何回続いても、音が途切れないようにするため）
@@ -2101,7 +2104,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* リザルトBGMを入れておく箱
      ほかの3曲と同じく、サーバー側では作れないので null から始める */
-  let resultBgm: HTMLAudioElement | null = null;
+  let resultBgm: GameAudio | null = null;
 
   /* 通常のリザルトBGMの音源（Sランク以下と、特殊エンドで流す）
      public/audio/result-bgm.mp3 は、URLでは /audio/result-bgm.mp3 になる
@@ -2136,7 +2139,7 @@ export function useAudio(options: UseAudioOptions) {
 
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!resultBgm) {
-        resultBgm = new Audio(src);
+        resultBgm = createGameAudio(src, getAudioContext);
 
         // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
         // （結果をゆっくり読んでいても、曲が途切れないようにするため）
@@ -2225,7 +2228,7 @@ export function useAudio(options: UseAudioOptions) {
      ・muted のまま、すぐ pause() するので、音は出ない
      ・すぐ止めるので play() の約束（Promise）は取り消しで終わるが、それは無視してよい
      ・すでに鳴っている Audio は止めてしまわないように、さわらない */
-  function unlockAudioElement(audio: HTMLAudioElement) {
+  function unlockAudioElement(audio: GameAudio) {
     if (!audio.paused) {
       return;
     }
@@ -2400,7 +2403,7 @@ export function useAudio(options: UseAudioOptions) {
        サーバーには Audio が無いので、ここで作るとエラーになってしまう
        そこで箱だけ用意しておき、ブラウザで必要になったとき
        （getGameOverBgm() が初めて呼ばれたとき）に作る */
-  let gameOverBgm: HTMLAudioElement | null = null;
+  let gameOverBgm: GameAudio | null = null;
 
   /* GAME OVER BGMを用意して返す（初めて必要になったときだけ作る）
 
@@ -2417,7 +2420,7 @@ export function useAudio(options: UseAudioOptions) {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!gameOverBgm) {
         // public/audio/game-over-bgm.mp3 は、URLでは /audio/game-over-bgm.mp3 になる
-        gameOverBgm = new Audio('/audio/game-over-bgm.mp3');
+        gameOverBgm = createGameAudio('/audio/game-over-bgm.mp3', getAudioContext);
 
         /* loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
 
@@ -2649,7 +2652,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* こもれびの広場BGMを入れておく箱
      ほかの4曲と同じく、サーバー側では作れないので null から始める */
-  let secretBgm: HTMLAudioElement | null = null;
+  let secretBgm: GameAudio | null = null;
 
   /* こもれびの広場BGMの再生の速さ（1 ＝ ふつう）
 
@@ -2680,9 +2683,9 @@ export function useAudio(options: UseAudioOptions) {
      preservesPitch … 速くしても、音の高さは変えない（テンポだけが上がる）
      webkitPreservesPitch … 古い Safari 用の、同じ指定
      速さを入れる直前に、毎回そろえておく（作ったときに入れただけだと、ブラウザによっては戻っていることがある） */
-  function applyBgmPlaybackRate(bgm: HTMLAudioElement, rate: number) {
+  function applyBgmPlaybackRate(bgm: GameAudio, rate: number) {
     try {
-      const media = bgm as HTMLAudioElement & { webkitPreservesPitch?: boolean };
+      const media = bgm as GameAudio & { webkitPreservesPitch?: boolean };
 
       media.preservesPitch = true;
       media.webkitPreservesPitch = true;
@@ -2716,7 +2719,7 @@ export function useAudio(options: UseAudioOptions) {
       // まだ無いときだけ作る（2回目からは、この行は通らない）
       if (!secretBgm) {
         // public/audio/secret-bgm.mp3 は、URLでは /audio/secret-bgm.mp3 になる
-        secretBgm = new Audio('/audio/secret-bgm.mp3');
+        secretBgm = createGameAudio('/audio/secret-bgm.mp3', getAudioContext);
 
         // loop … 曲が最後まで進んだら、自動で最初へ戻ってくり返す
         // （秘密の場所で何回も遊んで長くいても、曲が途切れないようにするため）
@@ -2950,7 +2953,7 @@ export function useAudio(options: UseAudioOptions) {
   function applySoundVolume() {
     /* 曲と「曲ごとの音量」の組み合わせ
        新しいBGMを足したときは、ここにも1行足す */
-    const bgmList: [HTMLAudioElement | null, number][] = [
+    const bgmList: [GameAudio | null, number][] = [
       [parkBgm, parkBgmVolume],
       [parkBgm2, parkBgm2Volume],
       [titleBgm, titleBgmVolume],
@@ -3053,26 +3056,34 @@ export function useAudio(options: UseAudioOptions) {
   let stopWakingAudioContext: (() => void) | null = null;
 
   /* ============================================================
-     ロックしたとき・ほかのアプリへ切りかえたときのBGM
+     ロックしたとき・ほかのアプリへ切りかえたときの音
 
      ■ 何が起きていたか
-       BGMは mp3 の音（HTMLAudioElement）なので、iPhone は「音楽を再生中」とみなして、
+       BGMを mp3 の音（HTMLAudioElement）で鳴らしていたころは、iPhone が「音楽を再生中」とみなして、
        ロックすると、ロック画面に音楽アプリのような ▶／⏸ を出していた
        ・ロックすると作業台（AudioContext）が止まるので、音は止まっているのに、BGMは「再生中」のままだった
        ・ロック画面のボタンを押すと、ゲームを通さずに BGM が直接 鳴る・止まるので、
          ゲームの「いまどの曲を鳴らしているか」とずれてしまう
 
+     ■ ロック画面に ▶ が出るのは
+       ・ページが mp3 の音（HTMLAudioElement）を鳴らしている
+       ・ページが、ロック画面のボタンを受け取る登録（Media Session）をしている
+       のどちらかのとき
+       いまの iPhone・iPad では、ゲームの音を Web Audio だけで鳴らしているので（→ utils/bufferedAudio.ts）、
+       ゲームのページでは どちらもしない（ロック画面に出す手がかりを作らない）
+
      ■ どうしているか
        ・画面が見えなくなったら、鳴っているBGMを止めて、どの曲を止めたかを覚えておく
          画面が見えるようになったら、覚えておいた曲を、止めたところから鳴らしなおす
-       ・ロック画面・コントロールセンターのボタンは、押しても何もしない（→ startIgnoringMediaControls()）
-       ※ ロック画面の表示そのものを出さないようにはできない（出すかどうかは iPhone が決める）
-         止めたあとも、しばらく ▶ が残ることがあるが、押しても何も起きない
-       ※ サウンドトラック（pages/soundtrack.vue）は、ロックしても鳴りつづけるページなので、ここは使わない
+       ・マナーモードでも鳴らすための「音楽を再生するページ」の設定は、画面が見えているあいだだけにする
+         （→ utils/elementVolume.ts の playThroughSilentModeWhileVisible()。ロック中に鳴りつづけないように）
+       ・パソコン・Android など（BGMが mp3 の音のまま）では、ロック画面・メディアキーのボタンを押しても何もしないようにする
+         （→ startIgnoringMediaControls()）
+       ※ サウンドトラック（pages/soundtrack.vue）は、ロックしても鳴りつづけて、ロック画面から操作できるページなので、ここは使わない
      ============================================================ */
 
   /* 画面が見えなくなったときに止めた曲（見えるようになったら、鳴らしなおす） */
-  let bgmsPausedWhileHidden: HTMLAudioElement[] = [];
+  let bgmsPausedWhileHidden: GameAudio[] = [];
 
   function handleVisibilityChangeForBgm() {
     if (document.visibilityState === 'hidden') {
@@ -3138,14 +3149,25 @@ export function useAudio(options: UseAudioOptions) {
     };
   }
 
-  /* ロック画面・コントロールセンター・イヤホンのボタンを、押しても何もしないようにする
+  /* ロック画面・メディアキーなどのボタンを、押しても何もしないようにする（BGMが mp3 の音のときだけ）
 
-     受け取る関数を何も登録しないと、iPhone はボタンが押されたときに BGM を直接 鳴らす・止める
-     何もしない関数を登録しておくと、iPhone はそちらを呼ぶだけになり、BGM にはさわらない
-     （サウンドトラックでは、ここで曲を鳴らす・止める関数を登録している → utils/mediaSession.ts） */
+     受け取る関数を何も登録しないと、ブラウザはボタンが押されたときに BGM（mp3 の音）を直接 鳴らす・止める
+     何もしない関数を登録しておくと、ブラウザはそちらを呼ぶだけになり、BGM にはさわらない
+     （サウンドトラックでは、ここで曲を鳴らす・止める関数を登録している → utils/mediaSession.ts）
+
+     ※ iPhone・iPad では登録しない
+       ゲームの音は Web Audio だけで鳴らしているので、ボタンで直接 鳴る・止まる mp3 の音が無い
+       登録すると、かえって「ロック画面で操作できるページ」とみなされて、▶ を出す手がかりになりうるため */
   let stopIgnoringMediaControls: (() => void) | null = null;
 
+  /* マナーモードでも鳴らす設定を、やめるための関数（→ utils/elementVolume.ts の playThroughSilentModeWhileVisible()） */
+  let stopPlayingThroughSilentMode: (() => void) | null = null;
+
   function startIgnoringMediaControls() {
+    if (usesWebAudioVolume()) {
+      return () => {};
+    }
+
     const ignore = () => {};
 
     return startMediaSession({ play: ignore, pause: ignore, stop: ignore, previousTrack: ignore, nextTrack: ignore });
@@ -3163,6 +3185,10 @@ export function useAudio(options: UseAudioOptions) {
     stopWatchingVisibility = startWatchingVisibility();
     stopIgnoringMediaControls?.();
     stopIgnoringMediaControls = startIgnoringMediaControls();
+
+    // 画面が見えているあいだだけ、マナーモードでも鳴らす（iPhone・iPad だけ。cleanupAudio() でやめる）
+    stopPlayingThroughSilentMode?.();
+    stopPlayingThroughSilentMode = playThroughSilentModeWhileVisible();
 
     /* 前回のサウンドの設定を思い出す
 
@@ -3265,6 +3291,10 @@ export function useAudio(options: UseAudioOptions) {
     stopWatchingVisibility = null;
     stopIgnoringMediaControls?.();
     stopIgnoringMediaControls = null;
+
+    // マナーモードでも鳴らす設定もやめる（サウンドトラックへ移ったときに、あちらの設定とぶつからないように）
+    stopPlayingThroughSilentMode?.();
+    stopPlayingThroughSilentMode = null;
 
     // 別のページへ移ったあともBGMが鳴り続けないように、ぜんぶの曲を止めておく
     // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
