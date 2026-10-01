@@ -246,7 +246,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
     return {
       rank: '特殊エンド',
       title: 'いやいや大爆発！',
-      message: 'いやいやが' + input.tantrumCount + '回もありました。ほっぺをふくらませたこうちゃんをだっこして、いっしょにおうちへ帰ります。それはそれで、わすれられない1日になりました。',
+      message: 'いやいやが' + input.tantrumCount + '回も！ だっこで帰る道も、わすれられない1日に。',
     };
   }
 
@@ -254,7 +254,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
     return {
       rank: 'S+ランク',
       title: '伝説の公園大冒険！',
-      message: 'たくさん探検して、こうちゃんも親も大満足！ずっとわすれられない大冒険になりました！',
+      message: 'こうちゃんも親も大満足！ わすれられない大冒険になりました！',
     };
   }
 
@@ -262,7 +262,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
     return {
       rank: 'Sランク',
       title: '公園探検マスター！',
-      message: 'たくさんの場所を探検して、楽しい思い出をいっぱい作れました！',
+      message: 'たくさん探検して、楽しい思い出がいっぱい！',
     };
   }
 
@@ -271,14 +271,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
       return {
         rank: 'Aランク',
         title: 'いい探検、でもおつかれ気味',
-        message: 'いろいろな場所を回れました！ただ、こうちゃんは最後すこしぐずり気味。次は休みやおやつをはさみながら回ってみよう！',
+        message: '最後はすこしぐずり気味。次は休みやおやつをはさんでみよう！',
       };
     }
 
     return {
       rank: 'Aランク',
       title: '楽しいおでかけ！',
-      message: 'いろいろな場所を回って、こうちゃんも楽しそう。とてもいいおでかけになりました！',
+      message: 'こうちゃんも楽しそう。いいおでかけになりました！',
     };
   }
 
@@ -287,7 +287,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
       return {
         rank: 'Bランク',
         title: '夢中でお昼すぎ！',
-        message: 'たくさん探検できました！でも、夢中になっているうちにお昼をすぎてしまいました。次はもう少し早めに切りあげてみよう！',
+        message: '夢中になって、お昼をすぎちゃった。次は少し早めに帰ってみよう！',
       };
     }
 
@@ -295,14 +295,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
       return {
         rank: 'Bランク',
         title: '楽しい公園探検！',
-        message: '楽しく公園を探検できました。次はちがう場所にも行ってみよう！',
+        message: '楽しく探検できました。次はちがう場所にも行ってみよう！',
       };
     }
 
     return {
       rank: 'Bランク',
       title: '公園ぜんぶ制覇！',
-      message: '公園をぜんぶ回って、時間内に帰ってこられました！次はこうちゃんの機嫌や、見つけたものの数も気にしてみよう！',
+      message: 'ぜんぶ回って、時間内に帰れました！ 次は機嫌や見つけたものも気にしてみよう！',
     };
   }
 
@@ -312,7 +312,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
         return {
           rank: 'Cランク',
           title: 'ちょっと遊びすぎた！',
-          message: 'ちょっと疲れたけれど、それも今日の思い出。次はもう少し余裕をもって探検してみよう！',
+          message: '疲れたけれど、それも思い出。次は余裕をもって探検しよう！',
         };
       }
 
@@ -320,7 +320,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
         return {
           rank: 'Cランク',
           title: 'ちょっとバタバタ探検！',
-          message: 'いろいろな場所を回れたけれど、ちょっとバタバタした1日でした。次は機嫌や時間も見ながら、ゆったり回ってみよう！',
+          message: 'いろいろ回れたけれど、バタバタした1日。次は機嫌や時間も見ながら回ろう！',
         };
       }
 
@@ -328,7 +328,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
         return {
           rank: 'Cランク',
           title: 'お気に入りでたっぷり！',
-          message: 'お気に入りの場所で、たっぷり遊べました！そのぶん少しおつかれです。次はちがう場所にも行ってみよう！',
+          message: 'お気に入りの場所でたっぷり！ 次はちがう場所にも行ってみよう！',
         };
       }
 
@@ -336,14 +336,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
         return {
           rank: 'Cランク',
           title: '今日はちょっと大変…',
-          message: 'あまり探検できないうちに、どっと疲れてしまいました。次は元気なうちに、どんどん先へ進んでみよう！',
+          message: 'あまり探検できないうちに、どっと疲れちゃった。次は元気なうちに進もう！',
         };
       }
 
       return {
         rank: 'Cランク',
         title: 'ちょっとバタバタ公園さんぽ',
-        message: 'あまり探検できないうちに、ちょっとバタバタしてしまいました。次は機嫌や余裕も見ながら、どんどん先へ進んでみよう！',
+        message: 'あまり探検できないうちに、バタバタ。次は機嫌や余裕も見ながら進もう！',
       };
     }
 
@@ -351,14 +351,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
       return {
         rank: 'Cランク',
         title: 'のんびりマイペース！',
-        message: 'あわてず、のんびり遊びました。二人ともまだまだ元気です！次はもう少し思いきり遊んで、おでかけポイントもためてみよう！',
+        message: '二人ともまだまだ元気！ 次は思いきり遊んで、ポイントもためてみよう！',
       };
     }
 
     return {
       rank: 'Cランク',
       title: 'あっさり公園さんぽ',
-      message: '二人ともまだまだ元気なまま、おうちへ帰ってきました。次はもう少し公園の中を探検してみよう！',
+      message: '二人とも元気なまま帰ってきました。次はもっと探検してみよう！',
     };
   }
 
@@ -367,7 +367,7 @@ export function judgeEnding(input: EndingInput): EndingResult {
       return {
         rank: 'Dランク',
         title: '今日は大変だった……',
-        message: '今日はちょっと大変な公園探検でした。次は無理せず、休みながら遊んでみよう！',
+        message: 'ちょっと大変な探検でした。次は休みながら遊んでみよう！',
       };
     }
 
@@ -376,14 +376,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
         return {
           rank: 'Dランク',
           title: '遊びこんでへとへと…',
-          message: 'お気に入りの場所で遊びこんで、二人ともへとへとになりました。次はいろいろな場所も探検してみよう！',
+          message: 'お気に入りの場所で遊びこんで、へとへと。次はいろいろな場所へ行こう！',
         };
       }
 
       return {
         rank: 'Dランク',
         title: 'お気に入りでバタバタ…',
-        message: 'お気に入りの場所で遊んでいるうちに、ちょっとバタバタしてしまいました。次はいろいろな場所も探検してみよう！',
+        message: 'お気に入りの場所で、ちょっとバタバタ。次はいろいろな場所へ行こう！',
       };
     }
 
@@ -391,14 +391,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
       return {
         rank: 'Dランク',
         title: '今日は大変だった……',
-        message: 'あまり遊べないうちに、二人ともへとへとになってしまいました。次は元気なうちに探検してみよう！',
+        message: 'あまり遊べないうちに、へとへと。次は元気なうちに探検しよう！',
       };
     }
 
     return {
       rank: 'Dランク',
       title: '今日はバタバタだった……',
-      message: 'あまり遊べないうちに、ちょっとバタバタしてしまいました。次は機嫌や余裕も見ながら、元気なうちに探検してみよう！',
+      message: 'あまり遊べないうちに、バタバタ。次は機嫌や余裕も見ながら探検しよう！',
     };
   }
 
@@ -406,14 +406,14 @@ export function judgeEnding(input: EndingInput): EndingResult {
     return {
       rank: 'Dランク',
       title: 'のんびり公園さんぽ',
-      message: 'のんびり遊んで、二人ともまだまだ元気なまま帰ってきました。次はもっと思いきり遊んで、おでかけポイントをためてみよう！',
+      message: 'のんびり遊んで、まだまだ元気。次は思いきり遊んで、ポイントをためよう！',
     };
   }
 
   return {
     rank: 'Dランク',
     title: 'ちょっとだけ公園',
-    message: '公園に着いたばかりなのに、もう帰り道。こうちゃんはまだ遊びたそうです。次はもっと探検してみよう！',
+    message: '着いたばかりなのに、もう帰り道。次はもっと探検してみよう！',
   };
 }
 

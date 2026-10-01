@@ -100,7 +100,7 @@ import type {
    プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { parkMapStartPlace } from '~/data/parkMap';
-import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { itemIcons, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
@@ -948,7 +948,7 @@ function restoreEntranceCursor() {
   pauseCommandPointer();
 }
 
-/* ===== 「公園の出口へ向かう？」の確認ダイアログ =====
+/* ===== 「出口へ向かう？」の確認ダイアログ =====
 
    公園の出口へ向かうと、その日のおでかけはおしまい（結果発表へ進み、公園へは戻れない）
    ボタンを押しまちがえたり、キーを押しすぎたりして、うっかり終わってしまわないように、
@@ -1445,7 +1445,7 @@ function checkGameOver() {
   // ① 親の体力が0以下
   if (parentEnergy.value <= 0) {
     gameOverTitle.value = '親の体力が限界！';
-    gameOverMessage.value = 'もうこれ以上は動けません……。こうちゃんを連れて、公園から撤退しました。';
+    gameOverMessage.value = 'もう動けません……。今日はここで帰ります。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
     stopSecretBgm();
@@ -1465,7 +1465,7 @@ function checkGameOver() {
   // ② 親の余裕が0以下
   if (parentCalm.value <= 0) {
     gameOverTitle.value = '親の余裕がなくなった！';
-    gameOverMessage.value = '親の心の余裕がなくなってしまいました。今日はここで公園探検を終了します。';
+    gameOverMessage.value = '心の余裕がなくなってしまいました。今日はここでおしまい。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
     stopSecretBgm();
@@ -1485,7 +1485,7 @@ function checkGameOver() {
   // ③ こうちゃんの体力が0以下（強制帰宅エンド）
   if (childEnergy.value <= 0) {
     gameOverTitle.value = 'こうちゃん電池切れ！';
-    gameOverMessage.value = 'たくさん遊んで、こうちゃんはもうクタクタ。だっこで公園をあとにしました。';
+    gameOverMessage.value = 'もうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
     stopParkBgm();
     stopSecretBgm();
@@ -2638,7 +2638,7 @@ function takeCommonBreak() {
   parentCalm.value += 8;
   addMinutes(15);
 
-  resultMessage.value = 'ベンチに座って、親子で少し休憩しました。こうちゃんも少し元気を取り戻したようです。';
+  resultMessage.value = 'ベンチでひと休み。こうちゃんも少し元気が出てきました。';
 
   // finishPlayAction() は呼ばない（上の説明のとおり）
   finishCareAction();
@@ -2687,7 +2687,7 @@ function giveSnackWhileExploring(snackId: SnackId) {
   parentCalm.value += 2;
   addMinutes(snack.minutes);
 
-  resultMessage.value = `ベンチに座って${snack.name}を食べました。こうちゃんはうれしそうにもぐもぐしています。`;
+  resultMessage.value = `「おいしい！」ベンチで${snack.name}をもぐもぐ。`;
 
   // finishPlayAction() は呼ばない（上の説明のとおり）
   finishCareAction();
@@ -2727,7 +2727,7 @@ function lookForAmbulance() {
   parentEnergy.value -= 2;
   addMinutes(10);
 
-  resultMessage.value = 'しばらく探していると、道路の向こうを救急車が走っていきました。こうちゃんは「いた！」と大喜びです！';
+  resultMessage.value = '「いた！」道路の向こうを救急車が走っていきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2746,7 +2746,7 @@ function listenToSiren() {
   childMood.value += 4;
   addMinutes(5);
 
-  resultMessage.value = '二人で耳をすませていると、ピーポーの音がだんだん遠ざかっていきました。こうちゃんは最後まで「ピーポー」とまねをしています。';
+  resultMessage.value = '「ピーポー！」遠ざかる音を、最後までまねしています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2762,7 +2762,7 @@ function walkOnFromSiren() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  resultMessage.value = '「またこんど見ようね」と声をかけて、遊びに戻りました。こうちゃんは何度か後ろをふりかえっています。';
+  resultMessage.value = '「またこんど見ようね」遊びに戻っても、何度もふりかえっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2784,7 +2784,7 @@ function watchLadybug() {
   outingPoint.value += 4;
   addMinutes(10);
 
-  resultMessage.value = '二人でしゃがんで、じっくり見つめました。こうちゃんは「てちてち歩いている、かわいい」と満足げです。';
+  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2804,7 +2804,7 @@ function holdLadybug() {
   outingPoint.value += 5;
   addMinutes(10);
 
-  resultMessage.value = 'そっと手を近づけると、テントウムシが指にちょこんと乗りました。「のった！」こうちゃんはうれしそうに見ています。';
+  resultMessage.value = '「のった！」テントウムシが指にちょこんと乗りました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2823,7 +2823,7 @@ function seeOffLadybug() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = 'テントウムシがぱっと飛び立ちました。「ばいばーい！」こうちゃんは空に向かって手をふっています。';
+  resultMessage.value = '「ばいばーい！」空に向かって手をふっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2846,7 +2846,7 @@ function watchDogClose() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = '飼い主さんに聞いて、近くで見せてもらいました。「わんわん、かわいいね！」こうちゃんは大喜びです。';
+  resultMessage.value = '「わんわん、かわいいね！」近くで見せてもらいました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2867,7 +2867,7 @@ function watchDogBehindParent() {
   parentEnergy.value -= 2;
   addMinutes(5);
 
-  resultMessage.value = 'だっこで少し離れて見ていると、こうちゃんは「わんわん、こっち見た！」とうれしそうです。';
+  resultMessage.value = '「わんわん、こっち見た！」だっこで少し離れて見ています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2885,7 +2885,7 @@ function keepDistanceFromDog() {
 
   addMinutes(5);
 
-  resultMessage.value = '手をつないで道をあけると、犬はそのまま歩いていきました。「わんわん、ばいばーい！」こうちゃんは手をふっています。';
+  resultMessage.value = '「わんわん、ばいばーい！」犬はそのまま歩いていきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2939,7 +2939,7 @@ function hugAfterFall() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = 'すぐにかけよってぎゅっとだっこ。こうちゃんは肩にぺたんと顔をつけて、少しずつ落ち着いてきました。';
+  resultMessage.value = 'ぎゅっとだっこ。肩に顔をつけて、少しずつ落ち着いてきました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2969,7 +2969,7 @@ function blowPainAway() {
   parentCalm.value -= 5;
   addMinutes(5);
 
-  resultMessage.value = 'ひざをそっとなでながら「いたいのいたいの、とんでいけ〜！」。こうちゃんは空を見上げて、「とんでった！」とにっこりしました。';
+  resultMessage.value = '「とんでった！」ひざをなでてもらって、にっこり。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -2992,7 +2992,7 @@ function watchAfterFall() {
   parentCalm.value -= 8;
   addMinutes(5);
 
-  resultMessage.value = '「大丈夫？」と声をかけて待っていると、こうちゃんは「だいじょうぶ」と言って、自分でよいしょと立ち上がりました。ひざの砂をぱんぱんとはらっています。';
+  resultMessage.value = '「だいじょうぶ」自分でよいしょと立ち上がりました。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3016,7 +3016,7 @@ function goCloseToFountain() {
   parentEnergy.value -= 5;
   addMinutes(10);
 
-  resultMessage.value = '手をつないで噴水のすぐそばまで行きました。こうちゃんは水しぶきに向かって、きゃーっと走りまわっています！';
+  resultMessage.value = '「きゃーっ！」水しぶきに向かって走りまわっています！';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3036,7 +3036,7 @@ function watchFountainFar() {
   outingPoint.value += 2;
   addMinutes(5);
 
-  resultMessage.value = '少し離れた場所から、二人でながめました。水の音を聞きながら、こうちゃんは指をさして笑っています。';
+  resultMessage.value = '水の音を聞きながら、指をさして笑っています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3052,7 +3052,7 @@ function walkOnFromFountain() {
   // 行動する前のステータスを控えておく
   startStatusChanges();
 
-  resultMessage.value = '「またあとで見ようね」と声をかけて、遊びに戻りました。こうちゃんは何度か噴水を振り返っています。';
+  resultMessage.value = '「またあとで見ようね」遊びに戻っても、何度も噴水をふりかえっています。';
 
   // 今回の変化量を記録してから、0〜100に丸める
   saveStatusChanges();
@@ -3130,7 +3130,7 @@ function goToGoal() {
 
 /* 公園入口の「公園の出口へ向かう（ゴール）」を選んだとき
 
-   すぐにはゴールへ向かわず、「公園の出口へ向かう？」の確認ダイアログを開く
+   すぐにはゴールへ向かわず、「出口へ向かう？」の確認ダイアログを開く
    （クリックでも Enter / Space でも、ここを通る） */
 function openGoalConfirm() {
   // 決定音「ポン♪」（押せたことが分かるように。ひとやすみを開くときと同じ）
@@ -3287,7 +3287,7 @@ function resetGame() {
   // （前回のプレイで開いたままGAME OVERになっていることがあるため）
   closeSnackMenu();
 
-  // 「公園の出口へ向かう？」の確認ダイアログも閉じておく（念のため）
+  // 「出口へ向かう？」の確認ダイアログも閉じておく（念のため）
   closeGoalConfirm();
 
   /* 通常の行動1回ぶんの結果（結果の文章・今回の変化・行動前の控え・見つけたもの・
@@ -3530,13 +3530,13 @@ function runSelectedCommand() {
       break;
 
     /* こもれびの広場
-       0 こもれびの中を探検する／1 広場の奥を見てみる
+       0 落ち葉の上を歩く／1 こもれびをつかまえる
        （2 ← 場所選びにもどる は、この switch の前で受け取っている） */
     case 'secretSpot':
       if (index === 0) {
-        runPlaceAction(placeActions.exploreSunlight);
+        runPlaceAction(placeActions.walkOnLeaves);
       } else if (index === 1) {
-        runPlaceAction(placeActions.exploreClearingDepths);
+        runPlaceAction(placeActions.catchSunlight);
       }
       break;
 
@@ -3808,7 +3808,7 @@ onUnmounted(() => {
       <!-- ============================================================
            あそびかた画面（B画面から開く説明書）
 
-           B画面の「？ あそびかた」で開き、「← ひとつ前の画面へ戻る」・Escape でB画面へ戻る
+           B画面の「？ あそびかた」で開き、「← 戻る」・Escape でB画面へ戻る
            開いているあいだは、A画面・B画面・おやつ選択画面より優先して出す
            （そのため、この Transition の中でいちばん先に書いてある。
              キー操作の handleKeydown()・フォーカスの handleScreenEnterEnd() も同じ順番で見ている）
@@ -3823,6 +3823,10 @@ onUnmounted(() => {
              ・ナイス対応になる組み合わせ、各行動のステータス増減
              あとから説明を書き足すときも、ここは守ること
 
+           ■ 文字は少なめにする
+             箇条書きは1項目1行、ステータスや対応の説明は「〜する」「〜できるか」の短い言いかたにする
+             （前は5つのセクションで約990字あったが、くり返しを省いて4つ・約460字にした）
+
            ■ 縦に長いので、.title-screen の縦スクロールでそのまま読む
              （スマホ幅では、ページ全体のスクロールになる）
              ↑↓キーもふつうのスクロールとして使えるよう、キー操作では横取りしない
@@ -3834,14 +3838,12 @@ onUnmounted(() => {
                右：サウンドON/OFF（ほかの画面と同じ soundEnabled / toggleSound() をそのまま使う）
 
                ※ この画面は、見た目の順番とHTMLの順番が同じ
-                 Tabは「← ひとつ前の画面へ戻る → サウンド → いちばん下の ← ひとつ前の画面へ戻る」と上から順に進む -->
+                 Tabは「← 戻る → サウンド → いちばん下の ← 戻る」と上から順に進む -->
           <div class="title-card__tools">
-            <!-- スマホ幅では「← ひとつ前の画面へ戻る」を「← 戻る」の短い表示に入れかえる
-                 （B画面・おやつ選択画面の戻るボタンと同じ出しかた・同じクラス。→ base.css の .title-card__backText--〜）
-                 どちらの表示でも、読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
+            <!-- 見た目は、PCでもスマホでも「← 戻る」だけ（文字を少なくするため。B画面・おやつ選択画面と同じ）
+                 読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
             <button ref="howToBackButtonRef" type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
-              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
@@ -3877,11 +3879,9 @@ onUnmounted(() => {
             </h2>
 
             <ul class="howto-list">
-              <li>朝9時から12時まで、公園の場所を選んで探検します。</li>
-              <li>選んだ行動によって時間が進み、こうちゃんや親の状態が変わります。</li>
-              <li>つかれたら、公園入口の「ひとやすみ」で休憩したり、おやつを食べたりできます。</li>
-              <li>アイテムを見つけたり、ちょっとした出来事が起きたりすることも。公園には、少し特別な場所もあるみたい。</li>
-              <li>12時になるか、公園の出口へ向かうとおしまい。結果発表があります。</li>
+              <li>朝9時〜12時、公園の場所を選んで探検。行動すると時間が進みます。</li>
+              <li>12時になるか、出口へ向かうと結果発表。</li>
+              <li>公園には、特別な場所もあるみたい。</li>
             </ul>
 
             <!-- 操作は「パソコンでもスマホでも遊べる」と分かる最低限だけ書く
@@ -3889,7 +3889,7 @@ onUnmounted(() => {
                  （秘密の小道の操作は、ミニゲームの画面にそのつど案内が出る） -->
             <p class="howto-note">
               <b class="howto-note__title">操作</b>
-              画面のコマンドを選んで進めます。パソコンはクリックか矢印キーと Enter、スマホはタップで遊べます。
+              クリック・矢印キー＋Enter・タップで遊べます。
             </p>
           </section>
 
@@ -3910,7 +3910,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--child-energy"></span>
                   こうちゃんの体力
                 </dt>
-                <dd>元気に動ける力。少なくなりすぎると、探検を続けにくくなります。</dd>
+                <dd>元気に動ける力</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3918,7 +3918,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--child-mood"></span>
                   こうちゃんの機嫌
                 </dt>
-                <dd>どのくらい楽しい気分か。</dd>
+                <dd>楽しい気分</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3926,7 +3926,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--parent-energy"></span>
                   親の体力
                 </dt>
-                <dd>いっしょに遊んだり、だっこしたりすると減ることがあります。</dd>
+                <dd>遊びやだっこで減る</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3934,7 +3934,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--parent-calm"></span>
                   親の余裕
                 </dt>
-                <dd>親が落ち着いて対応できているか。</dd>
+                <dd>落ち着いて対応できるか</dd>
               </div>
 
               <div class="howto-terms__row">
@@ -3942,15 +3942,7 @@ onUnmounted(() => {
                   <span class="howto-dot howto-dot--point"></span>
                   おでかけポイント
                 </dt>
-                <dd>いろいろ体験すると増えます。結果にも関係します。</dd>
-              </div>
-
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--time"></span>
-                  時間
-                </dt>
-                <dd>行動すると進みます。</dd>
+                <dd>体験すると増える</dd>
               </div>
             </dl>
 
@@ -3958,7 +3950,7 @@ onUnmounted(() => {
                  （「○○が0なら」のような判定の一覧にはしない） -->
             <p class="howto-note howto-note--caution">
               <b class="howto-note__title">GAME OVER</b>
-              こうちゃんや親が疲れすぎたり、親が落ち着いて対応できなくなったりすると、冒険が途中で終わることがあります。
+              疲れすぎたり、余裕がなくなったりすると、途中で終わることも。
             </p>
           </section>
 
@@ -3974,9 +3966,8 @@ onUnmounted(() => {
             </h2>
 
             <ul class="howto-list">
-              <li>出発前に、{{ snacks.length }}種類から{{ maxSnackCount }}つ選んで持っていきます。</li>
-              <li>体力が回復しやすいもの、機嫌がよくなりやすいものなど、おやつごとに得意なことが少しちがいます。</li>
-              <li>公園入口の「ひとやすみ」や、いやいやタイムで使えます。使うと残りが減ります。</li>
+              <li>出発前に{{ snacks.length }}種類から{{ maxSnackCount }}つ選びます。おやつごとに得意なことがちがいます。</li>
+              <li>ひとやすみと、いやいやタイムで使えます。使うと減ります。</li>
             </ul>
           </section>
 
@@ -3994,62 +3985,44 @@ onUnmounted(() => {
               いやいやタイム
             </h2>
 
-            <p class="howto-text">疲れた・おなかがすいた・うまくできなくて悔しい・まだ遊びたい などの理由で、こうちゃんはいやいやします。理由の答えは画面に出ません。</p>
-
-            <p class="howto-note howto-note--hint">💡 こうちゃんのセリフや様子をよく見て、どうしていやいやしているのか考えてみよう。</p>
+            <p class="howto-note howto-note--hint">💡 セリフや様子から、いやいやの理由を考えよう。</p>
 
             <h3 class="howto-subheading">4つの対応</h3>
 
             <dl class="howto-terms">
               <div class="howto-terms__row">
                 <dt>お話してみる</dt>
-                <dd>理由によって、うまくいきやすさが変わります。</dd>
+                <dd>理由によって効きめが変わる</dd>
               </div>
 
               <div class="howto-terms__row">
                 <dt>だっこする</dt>
-                <dd>落ち着かせやすいけれど、親の体力を使います。</dd>
+                <dd>親の体力を使う</dd>
               </div>
 
               <div class="howto-terms__row">
                 <dt>おやつをあげる</dt>
-                <dd>おやつを1つ使います。そのときのこうちゃんとの相性があります。</dd>
+                <dd>おやつを1つ使う</dd>
               </div>
 
               <div class="howto-terms__row">
                 <dt>少し待ってみる</dt>
-                <dd>落ち着くこともあれば、うまくいかないこともあります。</dd>
+                <dd>落ち着くことも、そうでないことも</dd>
               </div>
             </dl>
 
             <ul class="howto-list">
-              <li>対応が合わないと、いやいやがもっと強くなることがあります。</li>
-              <li>同じ方法ばかり続けるより、別の方法を考えることも大切です。</li>
-              <li>気持ちにぴったり合った対応ができると「ナイス対応」になることも。</li>
-            </ul>
-          </section>
-
-          <!-- 5. ちょっとしたヒント（攻略の答えにはならない、考えかたのヒントだけ） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">
-              <span class="howto-section__num">5</span>
-              ちょっとしたヒント
-            </h2>
-
-            <ul class="howto-list">
-              <li>時間と体力を見ながら探検しよう。</li>
-              <li>おやつは使うと減るので、使いどころも大切。</li>
-              <li>いろいろな場所を探検すると、何か見つかるかも？</li>
+              <li>合わない対応だと、もっと強くなることも。</li>
+              <li>同じ方法ばかりだと、効きにくくなることも。</li>
+              <li>ぴったり合うと「ナイス対応」！</li>
             </ul>
           </section>
 
           <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるようにする
-               （押したときの処理は、上の「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()）
-               スマホ幅の「← 戻る」の出しかたも、上のボタンと同じ -->
+               （押したときの処理も見た目も、上の「← 戻る」と同じ closeHowToPlay()） -->
           <div class="howto-footer">
             <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
-              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
           </div>
         </div>
@@ -4152,14 +4125,14 @@ onUnmounted(() => {
                ・調べおわる前（null）も出さない（→ isStandalone）
                ・パソコンでは、CSS でかくしている（指でさわる画面のときだけ出す → base.css の .install-hint）
 
+               文字を少なくするため、1文だけにしている
+               （前は iPhone・Android それぞれの手順も書いていたが、
+                 どちらも「ホーム画面に追加」という名前のメニューを選ぶので、その名前だけ伝える）
+
                見た目の位置は、カードのいちばん下（「はじめる」の下）
                A画面のカードは中身が少なく、下に余白があるので、
                案内を足してもカードの高さは変わらない（B画面と高さがそろったまま） -->
-          <p v-if="isStandalone === false" class="install-hint">
-            <span class="install-hint__lead">📱 ホーム画面に追加すると、アプリみたいに遊べるよ！</span>
-            <span>iPhone：共有 → ホーム画面に追加</span>
-            <span>Android：メニュー → ホーム画面に追加</span>
-          </p>
+          <p v-if="isStandalone === false" class="install-hint">📱 「ホーム画面に追加」で、アプリみたいに遊べるよ</p>
         </div>
       </div>
 
@@ -4195,13 +4168,11 @@ onUnmounted(() => {
                    handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
                    ようにしているため（ボタン側で止める必要はない）
 
-                 スマホ幅では「はじめの画面へ戻る」を「← 戻る」の短い表示に入れかえて、
-                 右上の「?」とサウンドのコントロールと、横1行に収まるようにしている
-                 どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
-                 （「あそびかた」を「?」だけにするのと同じ考えかた） -->
+                 見た目は、PCでもスマホでも「← 戻る」だけ（文字を少なくするため）
+                 短いので、スマホ幅でも右上の「?」とサウンドのコントロールと横1行に収まる
+                 読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
             <button ref="backToBootButtonRef" type="button" class="title-card__back" aria-label="はじめの画面へ戻る" @click="goBackToBoot">
-              <span class="title-card__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
 
             <!-- 右上のまとまり（？ あそびかた ＋ サウンドON/OFF）
@@ -4240,13 +4211,7 @@ onUnmounted(() => {
           <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <div class="title-card__rule">
-            <p>冒険の舞台は9時から12時の公園です！</p>
-
-            <p>
-              どんな出会い、冒険があるかな。
-              <br />
-              たくさん探索してみよう！
-            </p>
+            <p>9時〜12時の公園を、たくさん探検しよう！</p>
           </div>
         </div>
       </div>
@@ -4400,12 +4365,10 @@ onUnmounted(() => {
                  押しても選んだおやつは消さない（B画面 → もう一度おやつ選択で、
                  さっき選んだおやつがそのまま入っている）
 
-                 スマホ幅では「← ひとつ前の画面へ戻る」を「← 戻る」の短い表示に入れかえる
-                 （B画面の戻るボタンと同じ出しかた・同じクラス。→ base.css の .title-card__backText--〜）
-                 どちらの表示でも、読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
+                 見た目は、PCでもスマホでも「← 戻る」だけ（B画面の戻るボタンと同じ）
+                 読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
             <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeSnackSelection">
-              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
@@ -4428,9 +4391,9 @@ onUnmounted(() => {
           <h1 class="snack-heading">🍪 きょうのおやつ</h1>
 
           <p class="snack-lead">
-            公園へ持っていくおやつを{{ maxSnackCount }}つ選ぼう！
+            おやつを{{ maxSnackCount }}つ選ぼう！
             <br />
-            もう一度押すと、えらびなおせます。
+            もう一度押すと外せます。
           </p>
         </div>
       </div>
@@ -4646,7 +4609,7 @@ onUnmounted(() => {
                     <!-- おうちへ帰る（地図のいちばん下 ＝ 公園の出口）… 前の「公園の出口へ向かう（ゴール）」のボタン
 
                          地図は「下が公園入口、上が公園の奥」なので、ゴール（公園を出る）は、地図の下の公園入口に置く
-                         押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く。openGoalConfirm）
+                         押しても、すぐにはゴールへ向かわない（「出口へ向かう？」の確認ダイアログが開く。openGoalConfirm）
                          番号は、いちばん最後の goalCommandIndex（キーボードで選んで Enter でも同じダイアログが開く） -->
                     <div class="park-map__spot park-map__spot--goal">
                       <button
@@ -4690,7 +4653,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">ひとやすみ</h2>
 
-                <p class="place-card__text">ベンチに座って、親子でひと息つこう。休憩する？ それとも、おやつにする？</p>
+                <p class="place-card__text">ベンチでひと息。休憩する？ おやつにする？</p>
               </article>
 
               <!-- 休憩・おやつの結果（通常の場所とおなじ形） -->
@@ -4739,11 +4702,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">
-                  すべり台を見つけると、「すべるー！」とおおはしゃぎ。
-                  <br />
-                  小さな手で手すりをぎゅっとつかんで、とてとて階段をのぼりはじめました。
-                </p>
+                <p class="place-card__text">「すべるー！」小さな手で、とてとて階段をのぼりはじめました。</p>
               </article>
 
               <!-- 結果が出たあと -->
@@ -4867,7 +4826,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">池</h2>
 
-                <p class="place-card__text">池には白鳥が泳ぎ、コイもたくさん集まっています。こうちゃんは指をさして大はしゃぎです。</p>
+                <p class="place-card__text">「とりさん！」白鳥とコイを指さして大はしゃぎ。</p>
               </article>
 
               <ResultCard
@@ -4908,7 +4867,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">やわらかい芝生が広がっています。思いきり走り回れそうです。</p>
+                <p class="place-card__text">やわらかい芝生。思いきり走り回れそう！</p>
               </article>
 
               <ResultCard
@@ -4956,7 +4915,7 @@ onUnmounted(() => {
                 <h2 class="place-card__title">🌿 秘密の小道</h2>
 
                 <!-- secret-path-intro … スマホ幅では出さない（→ assets/css/game/responsive.css） -->
-                <p class="place-card__text secret-path-intro">木々のあいだの秘密の小道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
+                <p class="place-card__text secret-path-intro">葉っぱのすき間から、光がちらちら。そっと小道へ。</p>
 
                 <p class="secret-path-lead">
                   えだをよけながら
@@ -5081,10 +5040,9 @@ onUnmounted(() => {
                     <span class="command-box__text">小道へ進む</span>
                   </button>
 
-                  <!-- スマホ幅では「← 場所選びにもどる」を「場所選びへ」の短い表示に入れかえて、
-                       横にならんだ「小道へ進む」と同じく、1行に収まるようにしている
-                       どちらの表示でも、読み上げ用の名前は aria-label の「場所選びにもどる」
-                       （リザルト画面の「はじめの画面へ戻る」と同じ考えかた） -->
+                  <!-- 見た目は、PCでもスマホでも短い「場所選びへ」（文字を少なくするため）
+                       5文字なので、スマホ幅で「小道へ進む」と横にならべても1行に収まる
+                       読み上げ用の名前は aria-label の「場所選びにもどる」 -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
@@ -5092,10 +5050,7 @@ onUnmounted(() => {
                     @click="leaveSecretPathToEntrance"
                     @mouseenter="selectedCommandIndex = 1"
                     @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">
-                      <span class="command-box__leaveText--full" aria-hidden="true">← 場所選びにもどる</span>
-                      <span class="command-box__leaveText--short" aria-hidden="true">場所選びへ</span>
-                    </span>
+                    <span class="command-box__text" aria-hidden="true">場所選びへ</span>
                   </button>
                 </template>
 
@@ -5123,9 +5078,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">こもれびの広場</h2>
 
-                <p class="place-card__text">
-                  木々のあいだの秘密の小道を、こうちゃんと葉っぱをかき分けながら進むと、やわらかなこもれびが差しこむ小さな広場に出ました。風がそっと吹いて、葉っぱがきらきら揺れています。「きれいー！」こうちゃんは、目をかがやかせています。
-                </p>
+                <p class="place-card__text">「きれいー！」こもれびが差しこむ、小さな広場に出ました。</p>
               </article>
 
               <ResultCard
@@ -5146,12 +5099,12 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: 'こもれびの中を探検する' }, { label: '広場の奥を見てみる' }]"
+                  :commands="[{ label: '落ち葉の上を歩く' }, { label: 'こもれびをつかまえる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => runPlaceAction([placeActions.exploreSunlight, placeActions.exploreClearingDepths][index])"
+                  @select="index => runPlaceAction([placeActions.walkOnLeaves, placeActions.catchSunlight][index])"
                   @leave="goToNextPlace"
                   @next="goToNextPlace" />
               </div>
@@ -5198,10 +5151,9 @@ onUnmounted(() => {
                   <p class="place-card__text">{{ currentTantrumScene }}</p>
                 </template>
 
-                <!-- 理由が決まっていないとき（ふつうは起きない）は、前からの文章を出す -->
-                <p v-else class="place-card__text">
-                  こうちゃんがほっぺをふくらませて、その場にぺたんと座りこんでしまいました。 なにを言っても「いや！」のいってんばりですが、ときどきこちらをちらっと見ています。
-                </p>
+                <!-- 理由が決まっていないとき（ふつうは起きない）の予備の文
+                     いやいや発生の文（useTantrum.ts の tantrumText）とそろえて、短くしてある -->
+                <p v-else class="place-card__text">「いやー！」その場にぺたんと座りこんでしまいました。</p>
               </article>
 
               <ResultCard
@@ -5258,7 +5210,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
-                <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。「きゅうきゅうしゃ、どこ？」こうちゃんは辺りを見回しています。</p>
+                <p class="place-card__text">「きゅうきゅうしゃ、どこ？」遠くからピーポーピーポー。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5298,7 +5250,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-                <p class="place-card__text">葉っぱの上にテントウムシがいました。こうちゃんは「てんとうむし！」とうれしそうにしゃがみこみました。</p>
+                <p class="place-card__text">「てんとうむし！」葉っぱの前にしゃがみこみました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5338,11 +5290,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
 
-                <p class="place-card__text">
-                  散歩中の犬が、しっぽをふりながら近づいてきました。
-                  <br />
-                  「わんわん！」こうちゃんは、うれしそうに指をさしています。
-                </p>
+                <p class="place-card__text">「わんわん！」散歩中の犬が、しっぽをふってやってきました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5382,7 +5330,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
-                <p class="place-card__text">走っていたこうちゃんがつまずいて、ころんでしまいました。「いたい……」と、ひざを見ています。</p>
+                <p class="place-card__text">「いたい……」つまずいて、ひざを見ています。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5422,7 +5370,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">⛲ 噴水が出た！</h2>
 
-                <p class="place-card__text">突然、噴水から勢いよく水が飛び出しました。こうちゃんは「わあ！」と大喜びです。</p>
+                <p class="place-card__text">「わあ！」噴水から勢いよく水が飛び出しました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5461,19 +5409,17 @@ onUnmounted(() => {
               <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
                    SランクとS+ランクのときだけ、カードがきらきら光る -->
               <article class="ending-card" :class="{ 'ending-card--s': endingRank === 'Sランク' || endingRank === 'S+ランク' }">
-                <!-- 総合スコア（0〜100点） -->
-                <p class="ending-card__score-label">総合スコア</p>
-
+                <!-- 総合スコア（0〜100点）
+                     「72 / 100」だけで点数と分かるので、「総合スコア」の見出しは読み上げ用だけにしている -->
                 <p class="ending-card__score">
+                  <span class="sr-only">総合スコア</span>
                   <span class="ending-card__score-value">{{ finalScore }}</span>
                   <span class="ending-card__score-max">/ 100</span>
                 </p>
 
                 <!-- 今回のランク
-                     結果のいちばん大事なところなので、
-                     小さなラベル ＋ 大きなバッジ の2段にして目立たせる -->
-                <p class="ending-card__rank-label">今回のランク</p>
-
+                     結果のいちばん大事なところなので、大きなバッジにして目立たせる
+                     （「Aランク」の文字だけで分かるので、「今回のランク」の小さなラベルは付けない） -->
                 <p class="ending-card__rank">{{ endingRank }}</p>
 
                 <h3 class="ending-card__title">{{ endingTitle }}</h3>
@@ -5579,10 +5525,10 @@ onUnmounted(() => {
                 <article class="record-card">
                   <h3 class="record-card__title">見つけたもの</h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
 
                   <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
                   </ul>
                 </article>
               </div>
@@ -5611,10 +5557,8 @@ onUnmounted(() => {
                      「選んでいるコマンド」まで実行されてしまうのを止める
                      矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
 
-                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
-                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
-                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
-                   （B画面の「← 戻る」と同じ考えかた） -->
+                   見た目は、PCでもスマホでも短い「はじめに戻る」（文字を少なくするため）
+                   読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
@@ -5624,10 +5568,7 @@ onUnmounted(() => {
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">
-                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
-                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
-                </span>
+                <span class="cmd__text" aria-hidden="true">はじめに戻る</span>
               </button>
             </nav>
           </div>
@@ -5700,10 +5641,10 @@ onUnmounted(() => {
                 <article class="record-card">
                   <h3 class="record-card__title">見つけたもの</h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">見つけたもの：なし</p>
+                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
 
                   <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item">{{ item }}</li>
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
                   </ul>
                 </article>
               </div>
@@ -5732,10 +5673,8 @@ onUnmounted(() => {
                      「選んでいるコマンド」まで実行されてしまうのを止める
                      矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
 
-                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
-                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
-                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
-                   （B画面の「← 戻る」と同じ考えかた） -->
+                   見た目は、PCでもスマホでも短い「はじめに戻る」（文字を少なくするため）
+                   読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
@@ -5745,10 +5684,7 @@ onUnmounted(() => {
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">
-                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
-                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
-                </span>
+                <span class="cmd__text" aria-hidden="true">はじめに戻る</span>
               </button>
             </nav>
           </div>
@@ -5773,7 +5709,7 @@ onUnmounted(() => {
     </div>
 
     <!-- ============================================================
-         「公園の出口へ向かう？」の確認ダイアログ
+         「出口へ向かう？」の確認ダイアログ
 
          公園入口で「公園の出口へ向かう（ゴール）」を選んだときだけ出す
          ・もう少し遊ぶ … 閉じて、公園入口に戻る（開いたときは、こちらが選ばれている）
@@ -5788,13 +5724,9 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="isGoalConfirmVisible" class="goal-confirm" @click.self="cancelGoalConfirm">
       <div class="goal-confirm__content" role="alertdialog" aria-modal="true" aria-labelledby="goal-confirm-title" aria-describedby="goal-confirm-text">
-        <p id="goal-confirm-title" class="goal-confirm__title">公園の出口へ向かう？</p>
+        <p id="goal-confirm-title" class="goal-confirm__title">出口へ向かう？</p>
 
-        <p id="goal-confirm-text" class="goal-confirm__text">
-          出口へ向かうと、今日のおでかけはおしまいです。
-          <br />
-          結果発表へ進みます。
-        </p>
+        <p id="goal-confirm-text" class="goal-confirm__text">おでかけを終えて、結果発表へ。</p>
 
         <p class="goal-confirm__time">{{ goalConfirmTimeText }}</p>
 

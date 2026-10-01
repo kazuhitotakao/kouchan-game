@@ -352,14 +352,13 @@
 .install-hint {
   display: none;
   order: 5;
-  flex-direction: column;
-  gap: 2px;
   margin: 18px 0 0;
   padding: 10px 14px;
   border-radius: 14px;
   background: #f2f6fb;
-  color: var(--ink);
+  color: var(--navy);
   font-size: 13px;
+  font-weight: 700;
   line-height: 1.6;
 
   /* 細い画面（320px）で「追／加」「アプ／リ」のように言葉のとちゅうで折り返さないよう、
@@ -371,14 +370,8 @@
 
 @media (hover: none) and (pointer: coarse) {
   .install-hint {
-    display: flex;
+    display: block;
   }
-}
-
-.install-hint__lead {
-  color: var(--navy);
-  font-size: 14px;
-  font-weight: 700;
 }
 
 .title-card__lead {
@@ -390,6 +383,11 @@
 /* タイトル画面の説明（どんなゲームかを伝えるいちばん大事な文章）
    ここを読んでもらってから「きょうのおやつを選ぶ」を押してほしいので、
    本文より大きめの文字にして、行のすき間もゆったりとる
+
+   文字を少なくするため、いまは1文だけ（「9時〜12時の公園を、たくさん探検しよう！」）
+   ・1文なので、真ん中にそろえる
+   ・せまい画面で「探検し／よう」のように言葉のとちゅうで折り返さないよう、
+     読点（、）のところで折り返す（ホーム画面の案内 .install-hint と同じやりかた）
 */
 .title-card__rule {
   display: flex;
@@ -403,7 +401,9 @@
   font-size: 19px;
   font-weight: 700;
   line-height: 1.9;
-  text-align: left;
+  text-align: center;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 .title-card__rule p {
@@ -452,7 +452,7 @@
   border-radius: 999px;
   font-size: 15px;
   line-height: 1.2;
-  white-space: nowrap; /* 「← はじめの画面へ戻る」を2行に折り返させない */
+  white-space: nowrap; /* ボタンの文字を2行に折り返させない */
 }
 
 /* 左側の補助リンク（A：♪ サウンドトラック・🌿 ミニゲーム / B：← はじめの画面へ戻る）
@@ -532,7 +532,7 @@
 
 /* 短いほうの文字（「サントラ」）は、ふだんは出さない
    細い画面（389px以下）でだけ、長いほうと入れかわる
-   （B画面の「← はじめの画面へ戻る」→「← 戻る」と同じやりかた。→ .title-card__backText--〜） */
+   （ミニゲーム画面の戻るボタンの .mg-back__textFull / .mg-back__textShort と同じやりかた） */
 .title-card__soundtrackText--short {
   display: none;
 }
@@ -581,12 +581,6 @@
   align-items: center;
   gap: 8px;
   margin-left: auto;
-}
-
-/* B画面の「はじめの画面へ戻る」の短い表示（「← 戻る」）
-   ふだんは長いほうだけを出して、スマホ幅のときだけ入れかえる（→ @media (max-width: 700px)） */
-.title-card__backText--short {
-  display: none;
 }
 
 /* 「？ あそびかた」の「?」を紺色の丸に入れて、説明書のボタンだと分かりやすくする
@@ -715,11 +709,6 @@
   line-height: 1.5;
 }
 
-.howto-text {
-  margin: 0 0 10px;
-  line-height: 1.85;
-}
-
 /* 箇条書き（点は、うすい水色の丸） */
 .howto-list {
   display: grid;
@@ -806,10 +795,6 @@
 
 .howto-dot--point {
   background: var(--gold);
-}
-
-.howto-dot--time {
-  background: var(--navy);
 }
 
 /* 目立たせたい一文（操作・GAME OVER・基本のヒント）
@@ -1763,7 +1748,7 @@
   text-align: center;
 }
 
-/* 「公園の出口へ向かう？」 */
+/* 「出口へ向かう？」 */
 .goal-confirm__title {
   margin: 0 0 10px;
   color: #2f7d4f;
@@ -1778,7 +1763,7 @@
   line-height: 1.8;
 }
 
-/* 「お昼（12:00）まで、あと○分あります。」の札 */
+/* 「お昼まで あと○分」の札 */
 .goal-confirm__time {
   display: inline-block;
   margin: 12px 0 0;
@@ -2190,21 +2175,6 @@
      （下の「← 戻る」とあわせて、3つが1行に収まる） */
   .title-card__howtoText {
     display: none;
-  }
-
-  /* B画面の「はじめの画面へ戻る」も、スマホでは「← 戻る」の短い表示にする
-     （「あそびかた」を「?」だけにするのと同じ考えかた。読み上げ用の名前は aria-label にある）
-     長いままだと「?」とサウンドを合わせた3つが1行に入りきらず、
-     サウンドのコントロールが下の行へ落ちてしまう
-
-     おやつ選択画面・あそびかた画面（上と下の2つ）の「← ひとつ前の画面へ戻る」も、
-     同じクラスで「← 戻る」にしている（B画面と見た目をそろえるため） */
-  .title-card__backText--full {
-    display: none;
-  }
-
-  .title-card__backText--short {
-    display: inline;
   }
 
   .title-card__name {
