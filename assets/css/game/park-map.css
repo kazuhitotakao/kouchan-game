@@ -1,7 +1,7 @@
 /* ============================================================
    公園入口の地図
 
-   公園入口だけは、カードの中に公園の地図の絵（PC用 public/images/park/park-map.png／スマホ用 park-map-sp.png）を出し、
+   公園入口だけは、カードの中に公園の地図の絵（PC用 public/images/park/park-map.webp／スマホ用 park-map-sp.webp）を出し、
    その上に行き先のボタン（すべり台・砂場 …）とゴール（おうちへ帰る）を重ねて置いている
    （前は、絵の枠と、下のコマンド欄の「どこへ行く？」の一覧が別々だった）
    絵には文字を入れていない。場所の名前は、ぜんぶボタンの文字
@@ -72,8 +72,8 @@
      中央エリアの高さが足りないときは、カードといっしょに縮む（flex-shrink）
      ボタン5段ぶん（約230px）より低くはしない（min-height）
    ・container-type: size … わくの高さ（cqh）を、中の板（.park-map__canvas）の大きさを決めるのに使う
-   ・--park-map-ratio … 地図の絵（PC用 public/images/park/park-map.png）の 横 ÷ 縦
-     スマホ幅では、スマホ用の絵（park-map-sp.png）の縦横比に上書きする（→ いちばん下の @media (max-width: 700px)）
+   ・--park-map-ratio … 地図の絵（PC用 public/images/park/park-map.webp）の 横 ÷ 縦
+     スマホ幅では、スマホ用の絵（park-map-sp.webp）の縦横比に上書きする（→ いちばん下の @media (max-width: 700px)）
      絵を差しかえて縦横比が変わったときは、ここの値をそろえる */
 .park-map {
   --park-map-ratio: calc(1672 / 941);
@@ -345,7 +345,7 @@
 
 /* スマホ幅（700px以下）：スマホ用の縦長の地図（3:4）
 
-   <picture> の <source media="(max-width: 700px)"> で、絵が park-map-sp.png に切りかわる（→ pages/index.vue）
+   <picture> の <source media="(max-width: 700px)"> で、絵が park-map-sp.webp に切りかわる（→ pages/index.vue）
    ここでは、同じ幅で、板の縦横比・ボタンの大きさ・ボタンの置き場所を、スマホ用の絵に合わせて切りかえる
    （場所・押したときの処理・矢印キーの動き（data/parkMap.ts）はPCと同じ。ちがうのは見た目の置き場所だけ）
 
