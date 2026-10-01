@@ -38,7 +38,13 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
 /* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { cancelElementPause, keepAudioContextAwake, pauseElement, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
+import { cancelElementPause, isElementPlaying, keepAudioContextAwake, pauseElement, releaseElement, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
+
+/* ロック画面・コントロールセンターの ▶／⏸ を受け取る（ゲームでは押しても何もしない → startIgnoringMediaControls()） */
+import { startMediaSession } from '~/utils/mediaSession';
+
+/* 音の作業台（AudioContext）。サイト全体で1つを使い回す（くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
+import { getSharedAudioContext } from '~/utils/audioContext';
 
 /* スマホ・タブレット（指で操作する画面）か（音量スライダーが無いので、前回の音量を戻さない → restoreSoundSettings()） */
 import { isTouchOnlyDevice } from '~/utils/touchDevice';
@@ -292,17 +298,10 @@ export function useAudio(options: UseAudioOptions) {
     }
   }
 
-  /* 作業台（AudioContext）を入れておく箱
+  /* 作業台（AudioContext）を返す（初めて音を鳴らすときだけ作る）
 
-     null は「まだ作っていない」という意味
-     AudioContext は作るのが重たいので、1個だけ作って、ずっと使い回す
-     ※ ここで new AudioContext() をしないのが大事
-       Nuxtはサーバー側でも一度このコードを読むが、
-       サーバーには window も AudioContext も無いのでエラーになってしまう
-  */
-  let audioContext: AudioContext | null = null;
-
-  /* 作業台を用意して返す（初めて音を鳴らすときだけ作る）
+     作業台そのものは、サイト全体で1つを使い回している（→ utils/audioContext.ts）
+     ページを移るたびに作る・閉じると、iPhone で音が「プツプツ」ととぎれるため
 
      音が出せないときは null を返すので、
      呼んだ側は「null なら何もしない」だけで済む
@@ -316,34 +315,29 @@ export function useAudio(options: UseAudioOptions) {
        ゲーム処理のあちこちに if (soundEnabled.value) を書く必要はない
 
        効果音OFFのときは AudioContext も作らない
-       （下の new AudioContext() の行まで、そもそもたどり着かない）
+       （下の getSharedAudioContext() まで、そもそもたどり着かない）
     */
     if (!import.meta.client || !soundEnabled.value) {
       return null;
     }
 
-    try {
-      /* まだ無いときだけ作る（2回目からは、この行は通らない）
+    return getSharedAudioContext();
+  }
 
-         閉じたあと（cleanupAudio() のあと）に呼ばれたときも、作りなおす
-         閉じた作業台は、もう音を鳴らせないため */
-      if (!audioContext || audioContext.state === 'closed') {
-        audioContext = new AudioContext();
-      }
+  /* 効果音を鳴らしはじめる時刻を、ほんの少しだけ先にする（秒）
 
-      /* ブラウザは「ユーザーが操作する前」に音を鳴らすのを止めることがあり、
-         そのとき作業台は suspended（お休み中）になっている
-         resume() で起こすが、await はしない
-         ここでゲームを待たせると、画面の切り替わりが音のせいで遅れてしまう */
-      if (audioContext.state === 'suspended') {
-        audioContext.resume().catch(() => {});
-      }
+     作業台の時計（context.currentTime）は、実際に音を作っているところより少し遅れて見えている
+     画面を切りかえる最中は、ほかの処理で手間どって、その遅れがさらに大きくなる
+     「いま」の時刻で予約すると、作業台がそれを受けとったときには、もう鳴りはじめの
+     「すっと大きくする」ところ（→ playTone() の②）を過ぎていて、いきなり大きな音で始まり「プツッ」と鳴る
+     少し先の時刻で予約して、鳴りはじめを取りこぼさないようにする（耳には分からない短さ）
 
-      return audioContext;
-    } catch {
-      // 音が使えない環境でも、ゲームは続けられるようにする
-      return null;
-    }
+     効果音を鳴らす時刻は、かならず getToneStartTime() から決める */
+  const toneScheduleLead = 0.03;
+
+  /* 効果音を鳴らしはじめる時刻（作業台の時計で、いま ＋ toneScheduleLead ＋ delay） */
+  function getToneStartTime(context: AudioContext, delay = 0) {
+    return context.currentTime + toneScheduleLead + delay;
   }
 
   /* ============================================================
@@ -484,7 +478,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    playTone(700, context.currentTime, 0.09, 0.06, 'triangle');
+    playTone(700, getToneStartTime(context), 0.09, 0.06, 'triangle');
   }
 
   /* ② アイテム発見音「キラリン♪」
@@ -500,7 +494,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    const start = context.currentTime + 0.06;
+    const start = getToneStartTime(context, 0.06);
 
     playTone(880, start, 0.12, 0.05, 'sine');
     playTone(1174.7, start + 0.07, 0.12, 0.05, 'sine');
@@ -520,7 +514,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    playTone(320, context.currentTime + 0.12, 0.28, 0.07, 'triangle', 170);
+    playTone(320, getToneStartTime(context, 0.12), 0.28, 0.07, 'triangle', 170);
   }
 
   /* ④ ゴール音「タタターン♪」
@@ -536,7 +530,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    const start = context.currentTime;
+    const start = getToneStartTime(context);
 
     playTone(783.99, start, 0.18, 0.08, 'sine'); // ソ
     playTone(1046.5, start + 0.12, 0.18, 0.08, 'sine'); // 高いド
@@ -556,7 +550,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    const start = context.currentTime;
+    const start = getToneStartTime(context);
 
     playTone(1318.5, start, 0.08, 0.04, 'sine'); // 高いミ
     playTone(1760, start + 0.06, 0.12, 0.04, 'sine'); // 高いラ
@@ -574,7 +568,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    playTone(300, context.currentTime, 0.12, 0.05, 'triangle', 190);
+    playTone(300, getToneStartTime(context), 0.12, 0.05, 'triangle', 190);
   }
 
   /* ⑥-2 カウントダウンの音「ピッ」（ミニゲーム「秘密の小道」の「3」「2」「1」用）
@@ -589,7 +583,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    playTone(880, context.currentTime + delay, 0.08, 0.05, 'triangle'); // ラ
+    playTone(880, getToneStartTime(context, delay), 0.08, 0.05, 'triangle'); // ラ
   }
 
   /* ⑥-3 スタートの音「ピーン♪」（ミニゲーム「秘密の小道」の「スタート！」用）
@@ -603,7 +597,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    playTone(1760, context.currentTime, 0.3, 0.05, 'triangle'); // 高いラ
+    playTone(1760, getToneStartTime(context), 0.3, 0.05, 'triangle'); // 高いラ
   }
 
   /* ⑥-4 はやく進みはじめた音「ヒュッ」（ミニゲーム「どこまで行ける？」の加速用）
@@ -640,7 +634,7 @@ export function useAudio(options: UseAudioOptions) {
     }
 
     try {
-      const startTime = context.currentTime;
+      const startTime = getToneStartTime(context);
       const duration = 0.22;
 
       // ① でたらめな数字の列（ホワイトノイズ）を作る（くわしくは playRustleNoise()）
@@ -721,7 +715,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    const start = context.currentTime + fallDownSoundDelay;
+    const start = getToneStartTime(context, fallDownSoundDelay);
 
     playTone(260, start, 0.1, 0.12, 'triangle', 150); // ① ヒュッ
     playTone(120, start + 0.11, 0.15, 0.18, 'triangle', 70); // ② ポテッ
@@ -884,7 +878,7 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
-    const start = context.currentTime + ladybugRustleDelay;
+    const start = getToneStartTime(context, ladybugRustleDelay);
 
     /* 「ササッ」も「ガサッ」も、1回の音ではなく小さな音の集まりにしている
 
@@ -3058,11 +3052,117 @@ export function useAudio(options: UseAudioOptions) {
      （iPhone でBGMが無音にならないようにするため。くわしくは utils/elementVolume.ts） */
   let stopWakingAudioContext: (() => void) | null = null;
 
+  /* ============================================================
+     ロックしたとき・ほかのアプリへ切りかえたときのBGM
+
+     ■ 何が起きていたか
+       BGMは mp3 の音（HTMLAudioElement）なので、iPhone は「音楽を再生中」とみなして、
+       ロックすると、ロック画面に音楽アプリのような ▶／⏸ を出していた
+       ・ロックすると作業台（AudioContext）が止まるので、音は止まっているのに、BGMは「再生中」のままだった
+       ・ロック画面のボタンを押すと、ゲームを通さずに BGM が直接 鳴る・止まるので、
+         ゲームの「いまどの曲を鳴らしているか」とずれてしまう
+
+     ■ どうしているか
+       ・画面が見えなくなったら、鳴っているBGMを止めて、どの曲を止めたかを覚えておく
+         画面が見えるようになったら、覚えておいた曲を、止めたところから鳴らしなおす
+       ・ロック画面・コントロールセンターのボタンは、押しても何もしない（→ startIgnoringMediaControls()）
+       ※ ロック画面の表示そのものを出さないようにはできない（出すかどうかは iPhone が決める）
+         止めたあとも、しばらく ▶ が残ることがあるが、押しても何も起きない
+       ※ サウンドトラック（pages/soundtrack.vue）は、ロックしても鳴りつづけるページなので、ここは使わない
+     ============================================================ */
+
+  /* 画面が見えなくなったときに止めた曲（見えるようになったら、鳴らしなおす） */
+  let bgmsPausedWhileHidden: HTMLAudioElement[] = [];
+
+  function handleVisibilityChangeForBgm() {
+    if (document.visibilityState === 'hidden') {
+      pauseBgmWhileHidden();
+      return;
+    }
+
+    resumeBgmAfterHidden();
+  }
+
+  /* 鳴っているBGMを止めて、覚えておく */
+  function pauseBgmWhileHidden() {
+    // フェードインの途中なら、そこでやめて音量をふだんの大きさへ戻す（戻ってきたとき、小さい音のままにならないように）
+    cancelBgmFade();
+
+    const bgmList = [titleBgm, parkBgm, parkBgm2, secretBgm, tantrumBgm, resultBgm, gameOverBgm];
+
+    for (const bgm of bgmList) {
+      // まだ作っていない曲・止まっている曲・止めている途中の曲は、さわらない
+      if (!bgm || !isElementPlaying(bgm)) {
+        continue;
+      }
+
+      try {
+        pauseElement(bgm);
+        bgmsPausedWhileHidden.push(bgm);
+      } catch {
+        // 何もしない
+      }
+    }
+  }
+
+  /* 覚えておいた曲を、止めたところから鳴らしなおす */
+  function resumeBgmAfterHidden() {
+    const bgmList = bgmsPausedWhileHidden;
+
+    bgmsPausedWhileHidden = [];
+
+    // 見えなくなっているあいだにサウンドをOFFにされていたら、鳴らさない
+    if (!soundEnabled.value) {
+      return;
+    }
+
+    for (const bgm of bgmList) {
+      try {
+        cancelElementPause(bgm);
+        bgm.play().catch(() => {});
+      } catch {
+        // 何もしない
+      }
+    }
+  }
+
+  /* 画面の見え・かくれを見張るのを、やめるための関数（見張っていないときは null） */
+  let stopWatchingVisibility: (() => void) | null = null;
+
+  function startWatchingVisibility() {
+    document.addEventListener('visibilitychange', handleVisibilityChangeForBgm);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChangeForBgm);
+      bgmsPausedWhileHidden = [];
+    };
+  }
+
+  /* ロック画面・コントロールセンター・イヤホンのボタンを、押しても何もしないようにする
+
+     受け取る関数を何も登録しないと、iPhone はボタンが押されたときに BGM を直接 鳴らす・止める
+     何もしない関数を登録しておくと、iPhone はそちらを呼ぶだけになり、BGM にはさわらない
+     （サウンドトラックでは、ここで曲を鳴らす・止める関数を登録している → utils/mediaSession.ts） */
+  let stopIgnoringMediaControls: (() => void) | null = null;
+
+  function startIgnoringMediaControls() {
+    const ignore = () => {};
+
+    return startMediaSession({ play: ignore, pause: ignore, stop: ignore, previousTrack: ignore, nextTrack: ignore });
+  }
+
   function restoreSoundSettings() {
     /* さわるたびに作業台（AudioContext）を起こす受付を始める
        この関数は onMounted から1回だけ呼ばれるので、ここで始めて、cleanupAudio() でやめる */
     stopWakingAudioContext?.();
     stopWakingAudioContext = keepAudioContextAwake(getAudioContext);
+
+    /* ロックしたとき・ほかのアプリへ切りかえたときにBGMを止める見張りと、
+       ロック画面のボタンを無視する受付も、ここで始めて、cleanupAudio() でやめる */
+    stopWatchingVisibility?.();
+    stopWatchingVisibility = startWatchingVisibility();
+    stopIgnoringMediaControls?.();
+    stopIgnoringMediaControls = startIgnoringMediaControls();
 
     /* 前回のサウンドの設定を思い出す
 
@@ -3154,14 +3254,17 @@ export function useAudio(options: UseAudioOptions) {
        pages/index.vue 側の後片づけ（いやいやの予約・秘密の小道の停止）と
        前後の順番がずれないようにするため
      ============================================================ */
-  /* ページを離れてから、作業台を閉じるまでの待ち時間（ミリ秒）
-     曲の音量を下げ終わって止まる（約0.08秒）より、少し長くしてある */
-  const audioContextCloseDelay = 200;
-
   function cleanupAudio() {
     // さわるたびに作業台を起こす受付をやめる（→ restoreSoundSettings()）
     stopWakingAudioContext?.();
     stopWakingAudioContext = null;
+
+    // ロックしたときにBGMを止める見張りと、ロック画面のボタンを無視する受付もやめる（→ restoreSoundSettings()）
+    // （サウンドトラックへ移ったときに、あちらのボタンの受付とぶつからないように）
+    stopWatchingVisibility?.();
+    stopWatchingVisibility = null;
+    stopIgnoringMediaControls?.();
+    stopIgnoringMediaControls = null;
 
     // 別のページへ移ったあともBGMが鳴り続けないように、ぜんぶの曲を止めておく
     // （pauseParkBgm() は、公園BGM1・BGM2の両方をまとめて止めてくれる）
@@ -3184,31 +3287,39 @@ export function useAudio(options: UseAudioOptions) {
     cancelFileSound();
     cancelBgmFade();
 
-    /* 効果音の作業台（AudioContext）も閉じる
+    /* このページの mp3 の音を、作業台（AudioContext）から外す
 
-       ページを移るたびに useAudio() は作りなおされ、そのたびに新しい作業台ができる
-       閉じずに離れると、前のページの作業台がそのまま残り、
-       ミニゲームの一覧 ⇄ ミニゲーム を行き来するほど、動いたままの作業台が増えていく
-       増えすぎると、iPhone では新しく作れなくなって音が出なくなったり、
-       音の流れがくずれて、効果音がまとめて鳴ったり途切れたりする
+       作業台はサイト全体で1つを使い回していて、閉じない（→ utils/audioContext.ts）
+       前は、ページを離れるたびに作業台を閉じていたが、
+       iPhone では、作業台を作る・閉じるたびに音がとぎれて「プツプツ」と鳴っていた
 
-       この作業台につないでいるのは、このページで作った音だけなので、閉じても ほかのページに影響しない
-       （また必要になったときは getAudioContext() が作りなおす）
+       そのかわり、このページで作った mp3 の音を作業台から外しておく
+       外さないと、ミニゲームの一覧 ⇄ ミニゲーム を行き来するほど、作業台につながった音が増えていく
+       ・BGM … 上で止めた（音量を0まで下げている途中の）曲は、止め終わってから外れる
+       ・救急車・犬・噴水 … 鳴っている途中のこともあるので、ここで止めてから外す
+       （計算して作る効果音は、鳴り終わると自然に片づくので、何もしなくてよい） */
+    const fileSounds = [ambulanceSirenSe, dogBarkSe, fountainSe];
 
-       ※ 閉じるのは、少し待ってから
-         iPhone では、上で止めた曲は「音量を0まで下げてから止まる」（→ utils/elementVolume.ts の pauseElement()）
-         下げ終わる前に閉じると、そこで音がとぎれて「ぶつっ」と雑音が出てしまう */
-    const closingContext = audioContext;
+    for (const sound of fileSounds) {
+      if (!sound) {
+        continue;
+      }
 
-    if (closingContext && closingContext.state !== 'closed') {
-      setTimeout(() => {
-        if (closingContext.state !== 'closed') {
-          closingContext.close().catch(() => {});
-        }
-      }, audioContextCloseDelay);
+      try {
+        pauseElement(sound);
+      } catch {
+        // 何もしない
+      }
     }
 
-    audioContext = null;
+    const pageAudios = [titleBgm, parkBgm, parkBgm2, secretBgm, tantrumBgm, resultBgm, gameOverBgm, ...fileSounds];
+
+    for (const audio of pageAudios) {
+      if (audio) {
+        releaseElement(audio);
+      }
+    }
+
     stalledToneStartedAt = 0;
   }
 

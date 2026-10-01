@@ -127,8 +127,11 @@ function setAudioSessionType(type: 'playback' | 'auto') {
 
    createMediaElementSource() は、1つのAudioに1回しか呼べない
    なので、2回目からは、ここに残してあるつまみを回すだけにする
-   （WeakMap なので、使わなくなったAudioは、つまみごと自然に片づく） */
+   （WeakMap なので、作業台から外したAudioは、つまみごと自然に片づく → releaseElement()） */
 const gainNodes = new WeakMap<HTMLAudioElement, GainNode>();
+
+/* つまみに通したAudioの、音の入り口（作業台から外すときに使う → releaseElement()） */
+const sourceNodes = new WeakMap<HTMLAudioElement, MediaElementAudioSourceNode>();
 
 /* それぞれのAudioに「ほんとうは、この大きさで鳴らしたい」と言われた音量
 
@@ -225,6 +228,7 @@ export function setElementVolume(audio: HTMLAudioElement, volume: number, getCon
       source.connect(gain);
       gain.connect(context.destination);
       gainNodes.set(audio, gain);
+      sourceNodes.set(audio, source);
     } catch {
       // 通せなかったときは、今までどおり（音量は変わらないが、音は鳴る）
       return;
@@ -265,14 +269,26 @@ export function setElementVolume(audio: HTMLAudioElement, volume: number, getCon
    ============================================================ */
 const pauseFadeSeconds = 0.06;
 
+/* 音量を下げはじめるのを、ほんの少しだけ先にする（秒）
+
+   作業台の時計（currentTime）は、実際に音を作っているところより少し遅れて見えている
+   画面を切りかえる最中は、ほかの処理で手間どって、その遅れがさらに大きくなる
+   「いま」から下げはじめる予約をすると、作業台がそれを受けとったときには もう途中まで進んでいて、
+   いきなり音量が落ちる（＝ぶつっと鳴る）ことがある
+   そこで、少し先の時刻から下げはじめるように予約して、下げはじめを取りこぼさないようにする
+   （耳には分からない短さ。計算して作る効果音も同じ理由でずらしている → useAudio.ts の toneScheduleLead） */
+const pauseFadeLeadSeconds = 0.03;
+
 /* 止める予約（Audioごと）
    timer    … 下げ終わったあとに pause() する予約の番号
    rewind   … 止めたあとに、曲の先頭へ戻すか
-   onPaused … 止めたあとに呼ぶ処理（別の曲への差しかえなど。無いときは null） */
+   onPaused … 止めたあとに呼ぶ処理（別の曲への差しかえなど。無いときは null）
+   release  … 止めたあとに、作業台から外すか（→ releaseElement()） */
 type PendingPause = {
   timer: ReturnType<typeof setTimeout>;
   rewind: boolean;
   onPaused: (() => void) | null;
+  release: boolean;
 };
 
 const pendingPauses = new WeakMap<HTMLAudioElement, PendingPause>();
@@ -329,10 +345,10 @@ function fadeOutAndPause(audio: HTMLAudioElement, rewind: boolean, onPaused: (()
 
   try {
     const param = gain.gain;
-    const now = gain.context.currentTime;
+    const fadeStart = gain.context.currentTime + pauseFadeLeadSeconds;
 
-    holdGainAt(param, now);
-    param.linearRampToValueAtTime(0, now + pauseFadeSeconds);
+    holdGainAt(param, fadeStart);
+    param.linearRampToValueAtTime(0, fadeStart + pauseFadeSeconds);
   } catch {
     pauseNow(audio, rewind);
     onPaused?.();
@@ -346,15 +362,22 @@ function fadeOutAndPause(audio: HTMLAudioElement, rewind: boolean, onPaused: (()
         pendingPauses.delete(audio);
         pauseNow(audio, pending.rewind);
 
+        // ページを離れるときは、止め終わったところで作業台から外して終わり
+        if (pending.release) {
+          disconnectElement(audio);
+          return;
+        }
+
         // 止め終わったので、音量つまみを「ほんとうの大きさ」へ戻しておく（次に play() したときのため）
         setGainValue(gain, targetVolumes.get(audio) ?? 1, false);
 
         pending.onPaused?.();
       },
-      pauseFadeSeconds * 1000 + 20
+      (pauseFadeLeadSeconds + pauseFadeSeconds) * 1000 + 20
     ),
     rewind,
     onPaused,
+    release: false,
   };
 
   pendingPauses.set(audio, pending);
@@ -371,6 +394,14 @@ function pauseNow(audio: HTMLAudioElement, rewind: boolean) {
   } catch {
     // 何もしない
   }
+}
+
+/* audio が鳴っているか
+
+   止めている途中（音量を0へ下げている最中）の曲は、まだ pause() していないが、
+   もう止まることが決まっているので「鳴っていない」とみなす */
+export function isElementPlaying(audio: HTMLAudioElement) {
+  return !audio.paused && !pendingPauses.has(audio);
 }
 
 /* 止める予約を取り消す（止めている途中の曲を、また鳴らすとき）
@@ -393,6 +424,43 @@ export function cancelElementPause(audio: HTMLAudioElement) {
   if (gain) {
     setGainValue(gain, targetVolumes.get(audio) ?? 1, true);
   }
+}
+
+/* ページを離れるときに、audio を作業台（AudioContext）から外す
+
+   作業台はサイト全体で1つを使い回していて、閉じない（→ utils/audioContext.ts）
+   つないだままにすると、離れたページの mp3 の音が作業台に残りつづけ、
+   ページを行き来するほど、作業台の仕事（と使うメモリ）が増えていってしまう
+
+   ・かならず pauseElement() のあとに呼ぶ
+     音量を下げている途中なら、止め終わってから外す（途中で外すと「ぶつっ」と鳴る）
+   ・外したAudioは、もう鳴らせない（createMediaElementSource() は1つのAudioに1回しか呼べないため）
+     ページを離れるときの後始末で、もう使わないAudioにだけ使う
+   ・つまみに通していないAudio（パソコン・Android など）は、何もしない */
+export function releaseElement(audio: HTMLAudioElement) {
+  const pending = pendingPauses.get(audio);
+
+  if (pending) {
+    pending.release = true;
+    pending.onPaused = null;
+    return;
+  }
+
+  disconnectElement(audio);
+}
+
+/* releaseElement() の中身（その場で外す） */
+function disconnectElement(audio: HTMLAudioElement) {
+  try {
+    sourceNodes.get(audio)?.disconnect();
+    gainNodes.get(audio)?.disconnect();
+  } catch {
+    // 何もしない
+  }
+
+  sourceNodes.delete(audio);
+  gainNodes.delete(audio);
+  targetVolumes.delete(audio);
 }
 
 /* 指でさわる・クリックする・キーを押すたびに、作業台（AudioContext）を起こしておく
