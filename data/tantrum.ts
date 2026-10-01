@@ -14,8 +14,8 @@ import type { SnackId, TantrumLevel, TantrumLevelInfo, TantrumReason, TantrumRea
    理由ごとの様子（tantrumReasonInfo の scene）を出すため */
 export const tantrumLevelInfo: Record<TantrumLevel, TantrumLevelInfo> = {
   1: { icon: '😫', title: 'いやいやタイム', scene: null },
-  2: { icon: '😭', title: 'いやいやタイム！', scene: 'こうちゃんは涙をぽろぽろ流しながら、大きな声で泣いています。' },
-  3: { icon: '😭💥', title: '大いやいやタイム！', scene: 'こうちゃんは地面にごろん！ 涙をぽろぽろ流しながら、全身でいやいやしています。' },
+  2: { icon: '😭', title: 'いやいやタイム！', scene: '涙をぽろぽろ流して、大声で泣いています。' },
+  3: { icon: '😭💥', title: '大いやいやタイム！', scene: '地面にごろん！ 全身でいやいやしています。' },
 };
 
 /* 理由ごとに、画面や結果の文章に出すことば */
