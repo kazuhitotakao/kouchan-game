@@ -91,7 +91,7 @@ const hasAnyUnlocked = computed(() => unlockedIds.value.length > 0);
    （どちらの行き先も、この isLeavingPage ひとつで1回きりにしている）
 
    決定音「ポン♪」を鳴らすのは、ミニゲームのカードを選んだときだけ
-   「← はじめの画面へ戻る」では鳴らさない（引き返すだけのボタンなので）
+   「← 戻る」では鳴らさない（引き返すだけのボタンなので）
    ============================================================ */
 let isLeavingPage = false;
 
@@ -108,7 +108,7 @@ async function goTo(path: string) {
   await navigateTo(path);
 }
 
-/* 「← はじめの画面へ戻る」（上部ツールバーの左のボタン）
+/* 「← 戻る」（上部ツールバーの左のボタン）
 
    やることは goTo() と同じで、決定音を鳴らさないところだけがちがう
    （ゲーム本編のA画面・B画面の「戻る」、それぞれのミニゲームの「戻る」とそろえている） */
@@ -197,7 +197,7 @@ onUnmounted(() => {
 <template>
   <MinigameLayout
     ref="layoutRef"
-    back-label="← はじめの画面へ戻る"
+    back-label="← 戻る"
     back-aria-label="はじめの画面へ戻る"
     variant="menu"
     :sound-enabled="soundEnabled"
@@ -205,7 +205,7 @@ onUnmounted(() => {
     @back="goBackToTitle"
     @toggle-sound="toggleSound"
     @volume-change="changeSoundVolume">
-    <!-- 外枠（背景 ＋ 上部ツールバー「← はじめの画面へ戻る ／ サウンド」）は、それぞれのミニゲームと同じ部品
+    <!-- 外枠（背景 ＋ 上部ツールバー「← 戻る ／ サウンド」）は、それぞれのミニゲームと同じ部品
 
          ※ このコメントを <MinigameLayout> の外（template のすぐ下）に書かないこと
            開発中（nuxt dev）はコメントも残るので、ページのいちばん外の要素が2つ（コメント ＋ 部品）になり、
