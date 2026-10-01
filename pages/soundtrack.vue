@@ -473,9 +473,7 @@ function getTrackVolume(track: SoundtrackTrack) {
 /* ============================================================
    サウンドON/OFF（このページの音を、まとめて切り替える）
 
-   切り替わるのは、このページで鳴る音のぜんぶ
-   ・曲（mp3）
-   ・効果音「ポン♪」
+   切り替わるのは、このページで鳴る音のぜんぶ（曲（mp3）だけ）
 
    ゲーム本編（pages/index.vue）にも同じ形のボタンがあるが、
    覚えておく場所（localStorageのキー）はわざと別にしてある
@@ -549,10 +547,7 @@ function toggleSound() {
   if (soundEnabled.value) {
     /* ② ONに戻したとき
 
-       まず「ポン♪」を鳴らす
-       止めていた曲が無いときは、これが「音が戻った」ことの唯一の知らせになる
-       （効果音は soundEnabled を見ているので、ONにしたあとに呼ぶ） */
-    playDecisionSound();
+       決定音「ポン♪」は鳴らさない（サントラでは、曲以外の音は出さない） */
 
     // OFFのせいで止めた曲があれば、その続きから鳴らしなおす
     if (pausedBySoundOff) {
@@ -759,10 +754,8 @@ function saveRepeatSetting() {
    （% は「わり算のあまり」。いちばん後ろの次が、先頭（0）に戻る）
 */
 function toggleRepeat() {
-  /* 決定音「ポン♪」（押しても曲は鳴りはじめないボタンなので、合図を鳴らす）
-     トラック番号を押したときと同じ考えかた */
-  playDecisionSound();
-
+  /* 決定音「ポン♪」は鳴らさない（サントラでは、曲以外の音は出さない）
+     切りかわったことは、ボタンの表示で分かる */
   const currentIndex = repeatOrder.indexOf(repeatMode.value);
 
   repeatMode.value = repeatOrder[(currentIndex + 1) % repeatOrder.length];
@@ -775,20 +768,14 @@ function toggleRepeat() {
 }
 
 /* ============================================================
-   効果音「ポン♪」（ボタンを押したときの合図）
+   音の作業台（AudioContext）
 
-   ゲーム本編（pages/index.vue）の決定音とまったく同じ音を、
-   同じ作りかたで鳴らす
-   ・音のファイルは使わず、その場で音を作って鳴らす（AudioContext）
-   ・700Hzの丸い音を0.09秒だけ。鋭くならないよう triangle（三角の波）にしている
+   曲の音量調整（setElementVolume）と、
+   バックグラウンドで音が止まらないようにする処理（keepAudioContextAwake）で使う
 
-   鳴らすのは、押しても曲が鳴りはじめない2つのボタンだけ
-   ① トラック番号（全曲再生の開始曲を選ぶ）… 押しても音が出ないと、
-      選べたのかどうか分かりにくいため
-   ② ← 戻る
-
-   「▶ 再生」「▶ 全曲再生」などでは鳴らさない
-   （すぐ曲そのものが鳴りはじめるので、合図の音はかえってじゃまになる）
+   ※ ボタンを押したときの決定音「ポン♪」は鳴らさない
+     このページは曲を聴くためのページなので、曲以外の余計な音は出さない
+     （トラック番号・リピート・サウンドON・戻る、どれを押しても鳴らない）
    ============================================================ */
 
 /* 音を作る作業台
@@ -821,61 +808,6 @@ function getEffectAudioContext() {
   } catch {
     // 音が使えない環境でも、ページはふつうに使えるようにする
     return null;
-  }
-}
-
-/* 効果音「ポン♪」を鳴らす
-
-   大きさは、上の音量スライダー（masterVolume）に合わせる
-   曲だけ小さくして効果音がそのまま、ということが起きないようにするため
-   0%にしているときは、そもそも鳴らさない */
-function playDecisionSound() {
-  // サウンドOFFのときは、効果音も鳴らさない（曲と同じスイッチでまとめて切り替える）
-  if (!soundEnabled.value) {
-    return;
-  }
-
-  const volume = 0.06 * masterVolume.value;
-
-  if (volume <= 0) {
-    return;
-  }
-
-  const context = getEffectAudioContext();
-
-  if (!context) {
-    return;
-  }
-
-  try {
-    const startTime = context.currentTime;
-    const duration = 0.09;
-
-    const oscillator = context.createOscillator(); // 音の発生源
-    const gain = context.createGain(); // 音量つまみ
-
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(700, startTime);
-
-    /* 音量の動き（これが無いと、鳴りはじめと鳴り終わりに「ブツッ」と雑音が入る）
-       ① ほぼ無音からはじめる
-       ② 0.015秒かけて、すっと目的の音量まで上げる
-       ③ そのあと、鳴り終わりに向かってゆっくり下げる
-
-       ※ 下げる先を 0 ではなく 0.001 にしているのは、
-         exponentialRampToValueAtTime() が 0 を受け取れないため */
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-    // 発生源 → 音量つまみ → スピーカー の順につなぐ
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-
-    oscillator.start(startTime);
-    oscillator.stop(startTime + duration + 0.02);
-  } catch {
-    // 効果音が鳴らなくても、曲の再生には影響させない
   }
 }
 
@@ -1922,8 +1854,7 @@ watch(isPlaying, (playing) => {
    実際に鳴らすのは「▶ 全曲再生」を押したとき
 */
 function selectStartTrack(track: SoundtrackTrack) {
-  // 決定音「ポン♪」（押して選べたことが分かるように）
-  playDecisionSound();
+  // 決定音「ポン♪」は鳴らさない（選べたことは、トラック番号の表示で分かる）
 
   selectedStartTrackId.value = track.id;
 }
@@ -3732,7 +3663,7 @@ onUnmounted(() => {
            ============================================================ -->
       <div class="st-toolbar" @keydown="handleToolbarKeydown">
         <!-- 押したときの処理は、前に一覧の下にあったボタンと同じ goToTitle()
-             （決定音「ポン♪」 → 曲の音だけ止める → はじめの画面へ。連打しても移動は1回だけ）
+             （曲の音だけ止める → はじめの画面へ。連打しても移動は1回だけ）
              ref … 矢印キーで「▶ 全曲再生」から↑で戻る先、サウンドから←で移る先
 
              見た目は、PCでもスマホでも「← 戻る」だけ（タイトル画面（B画面）の戻るボタンと同じ）
