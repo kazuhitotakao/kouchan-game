@@ -4682,7 +4682,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">ひとやすみ</h2>
 
-                <p class="place-card__text">ベンチに座って、親子でひと息つこう。休憩する？ それとも、おやつにする？</p>
+                <p class="place-card__text">ベンチでひと息。休憩する？ おやつにする？</p>
               </article>
 
               <!-- 休憩・おやつの結果（通常の場所とおなじ形） -->
@@ -4731,11 +4731,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">
-                  すべり台を見つけると、「すべるー！」とおおはしゃぎ。
-                  <br />
-                  小さな手で手すりをぎゅっとつかんで、とてとて階段をのぼりはじめました。
-                </p>
+                <p class="place-card__text">「すべるー！」小さな手で、とてとて階段をのぼりはじめました。</p>
               </article>
 
               <!-- 結果が出たあと -->
@@ -4859,7 +4855,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">池</h2>
 
-                <p class="place-card__text">池には白鳥が泳ぎ、コイもたくさん集まっています。こうちゃんは指をさして大はしゃぎです。</p>
+                <p class="place-card__text">「とりさん！」白鳥とコイを指さして大はしゃぎ。</p>
               </article>
 
               <ResultCard
@@ -4900,7 +4896,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">やわらかい芝生が広がっています。思いきり走り回れそうです。</p>
+                <p class="place-card__text">やわらかい芝生。思いきり走り回れそう！</p>
               </article>
 
               <ResultCard
@@ -4948,7 +4944,7 @@ onUnmounted(() => {
                 <h2 class="place-card__title">🌿 秘密の小道</h2>
 
                 <!-- secret-path-intro … スマホ幅では出さない（→ assets/css/game/responsive.css） -->
-                <p class="place-card__text secret-path-intro">木々のあいだの秘密の小道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
+                <p class="place-card__text secret-path-intro">葉っぱのすき間から、光がちらちら。そっと小道へ。</p>
 
                 <p class="secret-path-lead">
                   えだをよけながら
@@ -5111,9 +5107,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">こもれびの広場</h2>
 
-                <p class="place-card__text">
-                  木々のあいだの秘密の小道を、こうちゃんと葉っぱをかき分けながら進むと、やわらかなこもれびが差しこむ小さな広場に出ました。風がそっと吹いて、葉っぱがきらきら揺れています。「きれいー！」こうちゃんは、目をかがやかせています。
-                </p>
+                <p class="place-card__text">「きれいー！」こもれびが差しこむ、小さな広場に出ました。</p>
               </article>
 
               <ResultCard
@@ -5246,7 +5240,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
-                <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。「きゅうきゅうしゃ、どこ？」こうちゃんは辺りを見回しています。</p>
+                <p class="place-card__text">「きゅうきゅうしゃ、どこ？」遠くからピーポーピーポー。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5286,7 +5280,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-                <p class="place-card__text">葉っぱの上にテントウムシがいました。こうちゃんは「てんとうむし！」とうれしそうにしゃがみこみました。</p>
+                <p class="place-card__text">「てんとうむし！」葉っぱの前にしゃがみこみました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5326,11 +5320,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
 
-                <p class="place-card__text">
-                  散歩中の犬が、しっぽをふりながら近づいてきました。
-                  <br />
-                  「わんわん！」こうちゃんは、うれしそうに指をさしています。
-                </p>
+                <p class="place-card__text">「わんわん！」散歩中の犬が、しっぽをふってやってきました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5370,7 +5360,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
-                <p class="place-card__text">走っていたこうちゃんがつまずいて、ころんでしまいました。「いたい……」と、ひざを見ています。</p>
+                <p class="place-card__text">「いたい……」つまずいて、ひざを見ています。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5410,7 +5400,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">⛲ 噴水が出た！</h2>
 
-                <p class="place-card__text">突然、噴水から勢いよく水が飛び出しました。こうちゃんは「わあ！」と大喜びです。</p>
+                <p class="place-card__text">「わあ！」噴水から勢いよく水が飛び出しました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
