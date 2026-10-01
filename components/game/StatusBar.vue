@@ -339,9 +339,17 @@ onBeforeUnmount(closeFoundTooltip);
       </span>
     </p>
 
+    <!-- おでかけポイント／おやつ残り
+
+         ・PC・タブレット … 「おでかけポイント 12」「おやつ残り 2個」と文字で出す
+         ・スマホ（700px以下）… 「⭐ 12」「🎒 2」と絵文字＋数字だけにして、いちばん上の段（時計とミュートのあいだ）に入れる
+           文字（__label）と「個」は、見た目からは消して読み上げ用に残す（切りかえは status.css）
+           🎒 は、おやつを選ぶ画面の「🎒 おやつバッグ」と同じ絵文字
+           （🍪 はおやつの1つ（クッキー）の絵文字なので使わない） -->
     <div class="status-pills">
       <span class="pill pill--point">
-        おでかけポイント
+        <span class="pill__icon" aria-hidden="true">⭐</span>
+        <span class="pill__label">おでかけポイント</span>
         <b>{{ outingPoint }}</b>
         <span class="pill__change">
           <span v-if="statusChanges && statusChanges.outingPoint !== 0" class="status-change" :class="changeClass('outingPoint', statusChanges.outingPoint)">
@@ -351,7 +359,8 @@ onBeforeUnmount(closeFoundTooltip);
       </span>
 
       <span class="pill pill--snack">
-        おやつ残り
+        <span class="pill__icon" aria-hidden="true">🎒</span>
+        <span class="pill__label">おやつ残り</span>
         <b>{{ snackLeft }}</b>
 
         <!-- 「個」も、上のおでかけポイントの増減表示と同じ幅の置き場所に入れる
