@@ -1381,13 +1381,13 @@
    PCでは結果カードが縮んで中身だけがスクロールする作りなので（result.css の .stage > .result-card）、
    バナーが残っていると、1280×800 の画面で結果の本文が3〜4行ぶんしか見えなくなる
    スマホでも、説明文をたたむ（responsive.css）のと同じ理由で、結果に場所をゆずる
-   .game-screen--has-result は pages/index.vue が、結果が出ているあいだだけ付ける
+   .scene--has-result は pages/index.vue が、結果が出ているあいだだけ、場面（.scene）に付ける（→ sceneClass）
 
    ※ いやいやタイム（.place-card--tantrum）だけは、結果が出ていても隠さない
      いやいやが強くなる（レベル1→2→3）のは、対応がうまくいかずに結果が出ているときなので、
      隠してしまうと、レベルごとに変わる絵が見えなくなるため
      （そのぶんスマホでは、結果を読むのに少しスクロールが要る） */
-.game-screen--has-result .stage > .place-card:not(.place-card--tantrum) .place-card__banner {
+.scene--has-result .stage > .place-card:not(.place-card--tantrum) .place-card__banner {
   display: none;
 }
 

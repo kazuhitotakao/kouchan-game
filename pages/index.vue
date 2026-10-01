@@ -868,6 +868,19 @@ const nextPlaceCommandLabel = computed(() => {
   return '次の場所を選ぶ';
 });
 
+/* 場面（.scene）に付けるクラス
+
+   scene--has-result … 結果カードが出ているあいだだけ付ける
+   場所の絵をたたむ・スマホ幅で場所の説明をたたむ、の目印（→ assets/css/game/base.css・responsive.css）
+
+   ■ なぜ、外側のゲーム画面（.game-screen）ではなく、場面ごとに付けるのか
+     前は .game-screen に付けていたが、「次の場所を選ぶ」を押すと、
+     結果の文章（resultMessage）を空にした瞬間に、このクラスも外れていた
+     場面は <Transition> ですっと消えていくが、そのあいだも外側のクラスは効くので、
+     消えていく途中の場面に、場所の絵と説明が戻ってきて、結果を出す前の画面が一瞬ちらっと見えていた
+     場面の要素に付けておけば、消えていく場面は描きなおされないので、消える直前の見た目のまま消えていく */
+const sceneClass = computed(() => ({ 'scene--has-result': !!resultMessage.value }));
+
 /* 公園入口の「ひとやすみ」が何番目になるか
    行き先（すべり台〜芝生広場、見つけていれば秘密の小道）のすぐあと
    秘密の場所が出ていれば7番目（＝6）
@@ -4415,14 +4428,14 @@ onUnmounted(() => {
            スマホ幅で、上部ステータスを いちばん上の行（時計 ＋ サウンド）だけにたたみ（→ assets/css/game/status.css）、
            入りきらないぶんはフィールドを縮めて、ほかの場面と同じく1画面に収めるため（→ assets/css/game/responsive.css）
            （はじまる前／小道をぬけたあとは付けない。上部ステータスは全部出る）
-           game-screen--has-result … 結果カードが出ているあいだだけ付ける
-           スマホ幅で、上の場所の説明をたたんで、結果を読む場所を広くするため（→ assets/css/game/responsive.css） -->
+           ※ 結果が出ているあいだの目印（scene--has-result）は、ここではなく場面（.scene）ごとに付けている（→ sceneClass）
+             ここに付けると、「次の場所を選ぶ」で消えていく途中の場面に、結果を出す前の見た目が一瞬戻ってしまうため -->
       <div
         v-else
         key="game"
         ref="gameScreenRef"
         class="game-screen"
-        :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' && secretPathPhase === 'playing', 'game-screen--has-result': !!resultMessage }">
+        :class="{ 'game-screen--secret-path': currentEvent === 'secretPath' && secretPathPhase === 'playing' }">
         <!-- ==========================================================
              【上部】常時表示のステータスエリア
              ========================================================== -->
@@ -4479,7 +4492,7 @@ onUnmounted(() => {
              mode="out-in" ＝ 前が消えきってから次を出す（重ならないので位置がずれない） -->
         <Transition name="scene" mode="out-in">
           <!-- 公園入口 -->
-          <div v-if="currentEvent === 'parkEntrance'" class="scene" key="parkEntrance">
+          <div v-if="currentEvent === 'parkEntrance'" class="scene" :class="sceneClass" key="parkEntrance">
             <!-- stage--entrance … スマホ幅で、公園入口を1画面に収めるための目印
                                    （中央エリアの高さの下限を外す → assets/css/game/responsive.css） -->
             <section class="stage stage--entrance">
@@ -4653,7 +4666,7 @@ onUnmounted(() => {
                遊ぶ場所ではないので、探検済み・アイテム・ちょっとしたできごと・いやいや・とつぜんのできごとは起きない
                （休憩・おやつは finishPlayAction() を通らず、finishCareAction() だけを通るため）
                BGMも公園BGMのまま -->
-          <div v-else-if="currentEvent === 'restArea'" class="scene" key="restArea">
+          <div v-else-if="currentEvent === 'restArea'" class="scene" :class="sceneClass" key="restArea">
             <section class="stage">
               <article class="place-card place-card--rest">
                 <!-- 場所の絵（カードのいちばん上に出すバナー）
@@ -4705,7 +4718,7 @@ onUnmounted(() => {
           </div>
 
           <!-- すべり台 -->
-          <div v-else-if="currentEvent === 'slide'" class="scene" key="slide">
+          <div v-else-if="currentEvent === 'slide'" class="scene" :class="sceneClass" key="slide">
             <section class="stage">
               <article class="place-card">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="すべり台" />
@@ -4747,7 +4760,7 @@ onUnmounted(() => {
           </div>
 
           <!-- 砂場 -->
-          <div v-else-if="currentEvent === 'sandbox'" class="scene" key="sandbox">
+          <div v-else-if="currentEvent === 'sandbox'" class="scene" :class="sceneClass" key="sandbox">
             <section class="stage">
               <article class="place-card">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="砂場" />
@@ -4788,7 +4801,7 @@ onUnmounted(() => {
           </div>
 
           <!-- どんぐりの木 -->
-          <div v-else-if="currentEvent === 'acornArea'" class="scene" key="acornArea">
+          <div v-else-if="currentEvent === 'acornArea'" class="scene" :class="sceneClass" key="acornArea">
             <section class="stage">
               <article class="place-card">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="どんぐりの木" />
@@ -4829,7 +4842,7 @@ onUnmounted(() => {
           </div>
 
           <!-- 池 -->
-          <div v-else-if="currentEvent === 'pond'" class="scene" key="pond">
+          <div v-else-if="currentEvent === 'pond'" class="scene" :class="sceneClass" key="pond">
             <section class="stage">
               <article class="place-card">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="池" />
@@ -4870,7 +4883,7 @@ onUnmounted(() => {
           </div>
 
           <!-- 芝生広場 -->
-          <div v-else-if="currentEvent === 'grassArea'" class="scene" key="grassArea">
+          <div v-else-if="currentEvent === 'grassArea'" class="scene" :class="sceneClass" key="grassArea">
             <section class="stage">
               <article class="place-card">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="芝生広場" />
@@ -4917,7 +4930,7 @@ onUnmounted(() => {
                ・ready    … 説明と「小道へ進む」「← 場所選びにもどる」（まだ何も動かない）
                ・playing  … 3レーンのフィールドと「道をクリック・タップして動こう」の案内
                ・finished … 結果の文章と「先へ進む」（押すと こもれびの広場へ） -->
-          <div v-else-if="currentEvent === 'secretPath'" class="scene" key="secretPath">
+          <div v-else-if="currentEvent === 'secretPath'" class="scene" :class="sceneClass" key="secretPath">
             <!-- stage--secret-path … スマホ幅で、カードとコマンドボックスを横にはみ出させないための目印 -->
             <section class="stage stage--secret-path">
               <!-- はじまる前 -->
@@ -5081,7 +5094,7 @@ onUnmounted(() => {
           </div>
 
           <!-- 秘密の場所 -->
-          <div v-else-if="currentEvent === 'secretSpot'" class="scene" key="secretSpot">
+          <div v-else-if="currentEvent === 'secretSpot'" class="scene" :class="sceneClass" key="secretSpot">
             <section class="stage">
               <article class="place-card place-card--secret">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="こもれびの広場" />
@@ -5122,7 +5135,7 @@ onUnmounted(() => {
           </div>
 
           <!-- いやいや中 -->
-          <div v-else-if="currentEvent === 'tantrum'" class="scene" key="tantrum">
+          <div v-else-if="currentEvent === 'tantrum'" class="scene" :class="sceneClass" key="tantrum">
             <section class="stage">
               <!-- いやいやタイムのカード
                    place-card--tantrum        … 赤っぽい見た目（いつも付ける）
@@ -5211,7 +5224,7 @@ onUnmounted(() => {
           </div>
 
           <!-- とつぜんのできごと：救急車のサイレン！ -->
-          <div v-else-if="currentEvent === 'emergencySiren'" class="scene" key="emergencySiren">
+          <div v-else-if="currentEvent === 'emergencySiren'" class="scene" :class="sceneClass" key="emergencySiren">
             <section class="stage">
               <article class="place-card place-card--sudden">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="救急車" />
@@ -5251,7 +5264,7 @@ onUnmounted(() => {
           </div>
 
           <!-- とつぜんのできごと：テントウムシ発見！ -->
-          <div v-else-if="currentEvent === 'ladybug'" class="scene" key="ladybug">
+          <div v-else-if="currentEvent === 'ladybug'" class="scene" :class="sceneClass" key="ladybug">
             <section class="stage">
               <article class="place-card place-card--sudden">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="テントウムシ" />
@@ -5291,7 +5304,7 @@ onUnmounted(() => {
           </div>
 
           <!-- とつぜんのできごと：犬が近づいてきた！ -->
-          <div v-else-if="currentEvent === 'dog'" class="scene" key="dog">
+          <div v-else-if="currentEvent === 'dog'" class="scene" :class="sceneClass" key="dog">
             <section class="stage">
               <article class="place-card place-card--sudden">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="犬" />
@@ -5331,7 +5344,7 @@ onUnmounted(() => {
           </div>
 
           <!-- とつぜんのできごと：こうちゃんがころんだ！ -->
-          <div v-else-if="currentEvent === 'fallDown'" class="scene" key="fallDown">
+          <div v-else-if="currentEvent === 'fallDown'" class="scene" :class="sceneClass" key="fallDown">
             <section class="stage">
               <article class="place-card place-card--sudden">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="ころんだ" />
@@ -5371,7 +5384,7 @@ onUnmounted(() => {
           </div>
 
           <!-- とつぜんのできごと：噴水が出た！ -->
-          <div v-else-if="currentEvent === 'fountain'" class="scene" key="fountain">
+          <div v-else-if="currentEvent === 'fountain'" class="scene" :class="sceneClass" key="fountain">
             <section class="stage">
               <article class="place-card place-card--sudden">
                 <NoImage class="place-card__banner" ratio="3 / 1" label="噴水" />
@@ -5414,7 +5427,7 @@ onUnmounted(() => {
           <!-- scene--result … リザルト画面だけの見た目の調整に使う目印
                （小さいスマホで「1画面に押しこまない・自然にスクロールさせる」ため。
                  ゲームの中身には関係しない、CSS専用のクラス） -->
-          <div v-else-if="currentEvent === 'goal'" class="scene scene--result" key="goal">
+          <div v-else-if="currentEvent === 'goal'" class="scene scene--result" :class="sceneClass" key="goal">
             <section class="stage">
               <!-- 総合スコア ＋ ランク ＋ 結果メッセージ
                    SランクとS+ランクのときだけ、カードがきらきら光る -->
@@ -5585,7 +5598,7 @@ onUnmounted(() => {
 
           <!-- GAME OVER（限界をむかえて途中で終わったとき）
                自分で出口へ帰ったときとちがい、S+〜Dランクの判定はしない -->
-          <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" key="gameOver">
+          <div v-else-if="currentEvent === 'gameOver'" class="scene scene--gameover" :class="sceneClass" key="gameOver">
             <section class="stage">
               <article class="gameover-card">
                 <p class="gameover-card__label">GAME OVER</p>
