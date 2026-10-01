@@ -354,8 +354,12 @@ export class BufferedAudio {
     this.context = null;
   }
 
-  /* 作ったとき・差しかえたときに、鳴らす前から読みこみを始めておく（音OFFのときは読みこまない） */
-  private preload() {
+  /* 鳴らす前から、読みこみを始めておく（音OFFのときは読みこまない）
+     ・作ったとき・差しかえたときに、自分で呼ぶ
+     ・「少し待ってから鳴らす」曲の待ちはじめにも呼ばれる（→ utils/elementVolume.ts の preloadGameAudio()）
+       ほどいた音をもう捨てていても（→ trimDecodedEntries()）、ここで読みこみなおしが始まる
+     ・もう読みこみ済み・読みこみ中なら、何もしない（最後に使った順番だけ新しくする） */
+  preload() {
     const context = this.getContext();
 
     if (context) {
