@@ -4211,7 +4211,9 @@ onUnmounted(() => {
           <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <div class="title-card__rule">
-            <p>9時〜12時の公園を、たくさん探検しよう！</p>
+            <p>
+              <span class="title-card__phrase">9時〜12時の公園を、</span><span class="title-card__phrase">たくさん探検しよう！</span>
+            </p>
           </div>
         </div>
       </div>
