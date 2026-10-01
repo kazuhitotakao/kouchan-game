@@ -38,7 +38,7 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
 /* mp3 の音（BGM・mp3 の効果音）の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { cancelElementPause, createGameAudio, isElementPlaying, keepAudioContextAwake, pauseElement, playThroughSilentModeWhileVisible, releaseElement, setElementVolume, usesWebAudioVolume, type GameAudio } from '~/utils/elementVolume';
+import { cancelElementPause, createGameAudio, isElementPlaying, keepAudioContextAwake, pauseElement, playThroughSilentModeWhileVisible, preloadGameAudio, releaseElement, setElementVolume, usesWebAudioVolume, type GameAudio } from '~/utils/elementVolume';
 
 /* ロック画面・メディアキーの ▶／⏸ を受け取る（パソコンなどのゲームでは押しても何もしない → startIgnoringMediaControls()） */
 import { startMediaSession } from '~/utils/mediaSession';
@@ -1353,7 +1353,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* BGMがフェードインしきるまでの長さ（ミリ秒）
      1000 で1秒かけて、無音から ふだんの音量まで上がる
-     タイトルBGMと公園BGMで同じ値を使う */
+     どのBGMも同じ値を使う */
   const bgmFadeInDuration = 1000;
 
   /* フェードインの途中経過を進める係の番号（していないときは null） */
@@ -1499,8 +1499,14 @@ export function useAudio(options: UseAudioOptions) {
   }
 
   /* 公園BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
-     1000 で1秒。ここだけ書きかえれば、間の長さを調整できる */
-  const parkBgmStartDelay = 700;
+     1000 で1秒。ここだけ書きかえれば、間の長さを調整できる
+
+     0.5秒にしているのは、新しい画面が出きったころに曲が始まるようにするため
+     ・場面の切りかわりは、前の場面が消える 0.15秒 ＋ 次の場面が出る 0.24秒 で、約0.4秒
+       （画面全体の切りかわりは 0.18秒 ＋ 0.18秒 → assets/css/game/base.css）
+     ・決定音「ポン♪」（0.09秒）とも重ならない
+     タイトルBGM・GAME OVER BGM・こもれびの広場BGMも、同じ 0.5秒 にそろえてある */
+  const parkBgmStartDelay = 500;
 
   /* 「あとで鳴らす」の予約票
 
@@ -1509,6 +1515,28 @@ export function useAudio(options: UseAudioOptions) {
      （あとで「やっぱり鳴らさない」と取り消すのに必要）
   */
   let parkBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /* 「少し待ってから鳴らす」曲の読みこみを、待ちはじめに始めておく
+
+     iPhone・iPad では、曲を最後まで読みこんでほどいてから鳴らす（→ utils/bufferedAudio.ts）
+     待ち時間が終わってから読みこみはじめると、はじめて鳴らす曲は
+     「待ち時間 ＋ 読みこみの時間」だけ遅れて鳴りはじめてしまう
+     待ちはじめに読みこみも始めておけば、待っているあいだに読みこみが進むので、決めた待ち時間に近いタイミングで鳴る
+
+     getBgm … その曲を用意して返す関数（getTitleBgm など。まだ作っていなければ、ここで作る）
+     ※ サウンドOFFのときは、作らない・読みこまない（OFFのあいだは mp3 の読みこみを起こさない決まりのため）
+     ※ リザルトBGMは、待つ前に「あとから鳴らせる」状態にするときに作っているので（→ playResultBgmSoon()）、これは使わない */
+  function preloadBgmWhileWaiting(getBgm: () => GameAudio | null) {
+    if (!soundEnabled.value) {
+      return;
+    }
+
+    const bgm = getBgm();
+
+    if (bgm) {
+      preloadGameAudio(bgm);
+    }
+  }
 
   /* 公園BGMを「少し待ってから」最初から鳴らす
 
@@ -1520,7 +1548,7 @@ export function useAudio(options: UseAudioOptions) {
      ※ 待たせるのは「音を鳴らすこと」だけ
        画面の切り替えやゲームの処理は、いつもどおりすぐ進む
 
-     ※ BGM1とBGM2のどちらを鳴らすかは、待ち時間が終わったとき（700ms後）に決まる
+     ※ BGM1とBGM2のどちらを鳴らすかは、待ち時間が終わったとき（500ms後）に決まる
        実際に鳴らす playParkBgm() が、そのときの時計を見て選ぶため
        たとえば、いやいやが終わったのが10:40なら、BGM1ではなくBGM2から始まる
   */
@@ -1532,6 +1560,11 @@ export function useAudio(options: UseAudioOptions) {
     if (!import.meta.client) {
       return;
     }
+
+    /* 待っているあいだに、曲の読みこみを始めておく（→ preloadBgmWhileWaiting()）
+       BGM1・BGM2のどちらを鳴らすかは待ち時間のあとに決まるが、
+       ゲームの時計は行動したときにしか進まないので、待っているあいだに曲が変わることはない */
+    preloadBgmWhileWaiting(getCurrentParkBgm);
 
     parkBgmTimer = setTimeout(() => {
       parkBgmTimer = null;
@@ -1713,7 +1746,7 @@ export function useAudio(options: UseAudioOptions) {
     /* BGM1を止めて、少し間を空けてからBGM2を最初から鳴らす
 
        ① stopParkBgm()     … BGM1をその場で止める（いったん無音になる）
-       ② playParkBgmSoon() … 700ms待ってから、いまの時間に合う曲＝BGM2を
+       ② playParkBgmSoon() … 500ms待ってから、いまの時間に合う曲＝BGM2を
                              先頭からフェードインで鳴らしはじめる
 
        ②で playParkBgm() を直接呼ばず「Soon」のほうを使うのがポイント
@@ -1723,7 +1756,7 @@ export function useAudio(options: UseAudioOptions) {
          まったく同じ聞こえかたにそろう
 
        ※ ①を先にやるのが大事
-         先に止めておかないと、待っている700msのあいだBGM1が鳴り続けて、
+         先に止めておかないと、待っている500msのあいだBGM1が鳴り続けて、
          そのあと急にぶつ切りになってしまう
 
        （今回はこみいったクロスフェードまではせず、ふわっと入ってくれば十分） */
@@ -1796,9 +1829,10 @@ export function useAudio(options: UseAudioOptions) {
     try {
       bgm.currentTime = 0; // 曲の先頭へ戻す
 
-      // タイトルBGMはフェードインさせず、そのまま鳴らす
-      // （フェードインするのは公園BGMだけ）
-      setElementVolume(bgm, getSoundVolume(titleBgmVolume), getAudioContext);
+      /* ほかの曲と同じく、無音から少しずつ大きくしていく
+         前はフェードインさせずに そのまま鳴らしていたが、
+         「もう一度あそぶ」でタイトルへ戻ったときなどに、いきなり ふだんの音量で始まって唐突だったため */
+      startBgmFadeIn(bgm, titleBgmVolume);
 
       cancelElementPause(bgm);
       bgm.play().catch(() => {});
@@ -1809,7 +1843,7 @@ export function useAudio(options: UseAudioOptions) {
 
   /* タイトルBGMを鳴らしはじめるまでの待ち時間（ミリ秒）
      1000 で1秒。ここだけ書きかえれば、間の長さを調整できる */
-  const titleBgmStartDelay = 700;
+  const titleBgmStartDelay = 500;
 
   /* 「あとで鳴らす」の予約票（公園BGMのものと同じ仕組み）
 
@@ -1835,6 +1869,9 @@ export function useAudio(options: UseAudioOptions) {
     if (!import.meta.client) {
       return;
     }
+
+    // 待っているあいだに、曲の読みこみを始めておく（→ preloadBgmWhileWaiting()）
+    preloadBgmWhileWaiting(getTitleBgm);
 
     titleBgmTimer = setTimeout(() => {
       titleBgmTimer = null;
@@ -2012,6 +2049,55 @@ export function useAudio(options: UseAudioOptions) {
     }
   }
 
+  /* いやいやBGMを鳴らしはじめるまでの待ち時間（ミリ秒）
+
+     いやいやタイムの場面が出きったころ（前の場面が消える 0.15秒 ＋ 次の場面が出る 0.24秒）に鳴りはじめる長さ
+     ・前は待たずに鳴らしていたので、前の場面が消えている途中から曲が始まっていた
+     ・ほかのBGM（0.5秒）より少しだけ短いのは、いやいやは「すぐ なだめに行く」場面なので、
+       画面が出たら間を置かずに曲が入るほうが合うため */
+  const tantrumBgmStartDelay = 400;
+
+  /* 「あとで鳴らす」の予約票（公園BGM・タイトルBGMのものと同じ仕組み。null は「予約していない」） */
+  let tantrumBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /* いやいやBGMを「少し待ってから」最初から鳴らす（いやいやタイムへ入ったとき用）
+
+     ※ 待たせるのは「音を鳴らすこと」だけ
+       いやいやタイムの画面は、いつもどおりすぐ切りかわる */
+  function playTantrumBgmSoon() {
+    // 前の予約が残っていたら取り消す（二重に鳴らさないため）
+    cancelTantrumBgmStart();
+
+    // サーバー側では音を鳴らさないので、予約もしない
+    if (!import.meta.client) {
+      return;
+    }
+
+    // 待っているあいだに、曲の読みこみを始めておく（→ preloadBgmWhileWaiting()）
+    preloadBgmWhileWaiting(getTantrumBgm);
+
+    tantrumBgmTimer = setTimeout(() => {
+      tantrumBgmTimer = null;
+
+      // 待っているあいだに、いやいやタイムの画面から出ていたら、もう鳴らさない
+      if (currentEvent.value !== 'tantrum') {
+        return;
+      }
+
+      playTantrumBgm();
+    }, tantrumBgmStartDelay);
+  }
+
+  /* 「あとで鳴らす」の予約を取り消す */
+  function cancelTantrumBgmStart() {
+    if (tantrumBgmTimer === null) {
+      return;
+    }
+
+    clearTimeout(tantrumBgmTimer);
+    tantrumBgmTimer = null;
+  }
+
   /* いやいやBGMを「続きから」再生する（サウンドをONに戻したとき用）
 
      playTantrumBgm() とのちがいは currentTime を 0 に戻さないこと
@@ -2062,6 +2148,9 @@ export function useAudio(options: UseAudioOptions) {
      次のいやいやが「前のいやいやの続き」から鳴りださないようにするため
   */
   function stopTantrumBgm() {
+    // 「あとで鳴らす」の予約も取り消す（予約だけして、まだ鳴らしていないことがあるため）
+    cancelTantrumBgmStart();
+
     // フェードインの途中で止めることもあるので、音量も戻しておく
     cancelBgmFade();
 
@@ -2264,7 +2353,7 @@ export function useAudio(options: UseAudioOptions) {
 
        iPhone のブラウザ（Safari・Chrome）では、ボタンを押してから1秒以上たったあとに
        新しい Audio を play() しても、止められて鳴らない
-       待ち時間（1.5秒）は、ほかのBGM（0.7秒）とちがって1秒をこえるので、
+       待ち時間（1.5秒）は、ほかのBGM（0.5秒）とちがって1秒をこえるので、
        ここでしておかないと、ブラウザで遊んだときだけエンディングの曲が鳴らなかった
        ※ この関数は、ゴールのボタンを押した流れ（goToGoal()）の中から、待たずに呼ばれている */
     if (soundEnabled.value) {
@@ -2387,8 +2476,8 @@ export function useAudio(options: UseAudioOptions) {
        ① checkGameOver() で GAME OVER が決まる
           → 画面はその場でGAME OVER画面へ切りかわる
           → それまで鳴っていた曲（公園・秘密の場所・いやいや・リザルト）を止める
-       ② playGameOverBgmSoon() で「0.7秒あとに鳴らす」予約をする
-       ③ 0.7秒の無音のあと、playGameOverBgm() が曲の先頭からフェードインで鳴らす
+       ② playGameOverBgmSoon() で「0.5秒あとに鳴らす」予約をする
+       ③ 0.5秒の無音のあと、playGameOverBgm() が曲の先頭からフェードインで鳴らす
 
      ※ GAME OVER専用の短い効果音は付けていない
        「少し無音 → GAME OVER BGM」という、しずかな切りかわりにしている
@@ -2483,7 +2572,7 @@ export function useAudio(options: UseAudioOptions) {
   }
 
   /* GAME OVER BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
-     700 で0.7秒。ここだけ書きかえれば、間の長さを調整できる
+     500 で0.5秒。ここだけ書きかえれば、間の長さを調整できる
 
      待つ理由は2つ
      ・GAME OVERになる直前の決定音「ポン♪」や、いやいや発生の音などが、
@@ -2493,7 +2582,7 @@ export function useAudio(options: UseAudioOptions) {
 
      ※ 待たせるのは「音」だけ
        GAME OVER画面そのものは、この待ち時間とは関係なく、すぐに表示される */
-  const gameOverBgmStartDelay = 700;
+  const gameOverBgmStartDelay = 500;
 
   /* 「あとで鳴らす」の予約票（リザルトBGMのものと同じ仕組み）
 
@@ -2506,12 +2595,12 @@ export function useAudio(options: UseAudioOptions) {
   /* GAME OVER BGMを「少し待ってから」最初から鳴らす（checkGameOver() から呼ぶ）
 
      ■ 最初に、前の予約を取り消す理由
-       予約が2つ残っていると、0.7秒後に「先頭から鳴らす」が2回はたらき、
+       予約が2つ残っていると、0.5秒後に「先頭から鳴らす」が2回はたらき、
        鳴りはじめた曲が頭からやりなおしになってしまう
        先に cancelGameOverBgmStart() で消しておけば、予約はいつも1つだけになる
 
      ■ 鳴らす直前に、まだGAME OVER画面にいるかを確かめる理由
-       0.7秒待っているあいだに「もう一度あそぶ」などを押して、画面が変わっていることがある
+       0.5秒待っているあいだに「もう一度あそぶ」などを押して、画面が変わっていることがある
        確かめずに鳴らすと、タイトル画面でGAME OVERの曲が流れてしまう
   */
   function playGameOverBgmSoon() {
@@ -2522,6 +2611,9 @@ export function useAudio(options: UseAudioOptions) {
     if (!import.meta.client) {
       return;
     }
+
+    // 待っているあいだに、曲の読みこみを始めておく（→ preloadBgmWhileWaiting()）
+    preloadBgmWhileWaiting(getGameOverBgm);
 
     gameOverBgmTimer = setTimeout(() => {
       gameOverBgmTimer = null;
@@ -2604,7 +2696,7 @@ export function useAudio(options: UseAudioOptions) {
     /* 「あとで鳴らす」の予約も取り消す
 
        ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
-         GAME OVERになってすぐ（0.7秒待っている最中に）「もう一度あそぶ」を押すと、
+         GAME OVERになってすぐ（0.5秒待っている最中に）「もう一度あそぶ」を押すと、
          予約だけして、まだ曲を作っていない状態のことがあるため
          あとに置くと、取り消せずに タイトル画面で鳴りだしてしまう */
     cancelGameOverBgmStart();
@@ -2778,15 +2870,15 @@ export function useAudio(options: UseAudioOptions) {
   }
 
   /* こもれびの広場BGMを鳴らしはじめるまでの待ち時間（ミリ秒）
-     700 で0.7秒。ここだけ書きかえれば、間の長さを調整できる
+     500 で0.5秒。ここだけ書きかえれば、間の長さを調整できる
 
      待つ理由は2つ
      ・「秘密の場所へ行く」の決定音「ポン♪」が、曲の鳴りはじめにかき消されないため
      ・公園BGMが止まったあと、いったん静かな時間を作るため
        この「しん」とする一瞬があることで、
        「いつもの公園から、特別な場所へ入った」という感じが出る
-     （公園BGM・タイトルBGMと同じ 700ms にそろえてある） */
-  const secretBgmStartDelay = 700;
+     （公園BGM・タイトルBGMと同じ 500ms にそろえてある） */
+  const secretBgmStartDelay = 500;
 
   /* 「あとで鳴らす」の予約票（ほかの曲のものと同じ仕組み）
 
@@ -2810,10 +2902,13 @@ export function useAudio(options: UseAudioOptions) {
       return;
     }
 
+    // 待っているあいだに、曲の読みこみを始めておく（→ preloadBgmWhileWaiting()）
+    preloadBgmWhileWaiting(getSecretBgm);
+
     secretBgmTimer = setTimeout(() => {
       secretBgmTimer = null;
 
-      /* 待っている0.7秒のあいだに画面が変わっていたら、もう鳴らさない
+      /* 待っている0.5秒のあいだに画面が変わっていたら、もう鳴らさない
          （秘密の場所を出た、いやいやになった、GAME OVERになった、
            ゴールした、「もう一度あそぶ」でタイトルへ戻った、などの場合）
 
@@ -2896,7 +2991,7 @@ export function useAudio(options: UseAudioOptions) {
     /* 「あとで鳴らす」の予約も取り消す
 
        ※ かならず下の「まだ作っていないなら終わり」より前に置くこと
-         秘密の場所へ入った直後（＝まだ0.7秒待っている最中）に
+         秘密の場所へ入った直後（＝まだ0.5秒待っている最中）に
          すぐ出る・いやいやになる・GAME OVERになることがあり、
          そのときは予約だけして、まだ曲を作っていない状態になっている
          あとに置くと、取り消せずに別の画面で鳴りだしてしまう */
@@ -3307,13 +3402,14 @@ export function useAudio(options: UseAudioOptions) {
 
     // 「あとで鳴らす」の予約と、フェードインの途中経過も止める
     // 残っていると、ページを離れたあとも動きつづけてしまう
-    // （GAME OVER BGMの0.7秒の予約が残っていると、別のページで鳴りだしてしまう）
+    // （GAME OVER BGMの0.5秒の予約が残っていると、別のページで鳴りだしてしまう）
     // （cancelFileSound() は、救急車・犬・噴水の0.45秒の予約のぶん）
     cancelTitleBgmStart();
     cancelParkBgmStart();
     cancelSecretBgmStart();
     cancelResultBgmStart();
     cancelGameOverBgmStart();
+    cancelTantrumBgmStart();
     cancelFileSound();
     cancelBgmFade();
 
@@ -3387,7 +3483,7 @@ export function useAudio(options: UseAudioOptions) {
     resumeTitleBgm, // ミニゲームの一覧で、ページを開いたときに鳴らせなかった曲を、はじめて さわったときに鳴らす
 
     /* ===== いやいやタイムのBGM ===== */
-    playTantrumBgm,
+    playTantrumBgmSoon,
     stopTantrumBgm,
 
     /* ===== リザルト画面のBGM ===== */

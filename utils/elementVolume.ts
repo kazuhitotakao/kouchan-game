@@ -125,6 +125,17 @@ export function createGameAudio(src: string, getContext: () => AudioContext | nu
   return usesWebAudioVolume() ? new BufferedAudio(src, getContext) : new Audio(src);
 }
 
+/* 鳴らす前から、曲の読みこみを始めておく（「少し待ってから鳴らす」曲の待ちはじめに呼ぶ）
+
+   ・BufferedAudio（iPhone・iPad）… 最後まで読みこんでほどくのを、いまから始める
+     もう読みこみ済みなら何もしない。ほどいた音を捨てていたら（→ utils/bufferedAudio.ts）、読みこみなおす
+   ・mp3 の音（HTMLAudioElement）… 何もしない（new Audio(src) で作った時点で、ブラウザが読みこみを始めている） */
+export function preloadGameAudio(audio: GameAudio) {
+  if (audio instanceof BufferedAudio) {
+    audio.preload();
+  }
+}
+
 /* navigator.audioSession の種類を type にする（バックグラウンド再生のため。くわしくは、このファイルの先頭）
 
    ・'playback' … 「このページは音楽を再生するもの」と伝える（画面を消しても鳴りつづける）
@@ -499,7 +510,8 @@ export function cancelElementPause(audio: GameAudio) {
      音量を下げている途中なら、止め終わってから外す（途中で外すと「ぶつっ」と鳴る）
    ・外したAudioは、もう鳴らせない（createMediaElementSource() は1つのAudioに1回しか呼べないため）
      ページを離れるときの後始末で、もう使わないAudioにだけ使う
-   ・つまみに通していないAudio（パソコン・Android など）は、何もしない */
+   ・mp3 の音（HTMLAudioElement）は、止め終わったあとに曲も外して空にする（→ unloadMediaElement()）
+     つまみに通していないAudio（パソコン・Android など）も、曲は外す */
 export function releaseElement(audio: GameAudio) {
   const pending = pendingPauses.get(audio);
 
@@ -521,6 +533,8 @@ function disconnectElement(audio: GameAudio) {
     // BufferedAudio は、鳴らしている音と音量つまみを自分で片づける
     if (audio instanceof BufferedAudio) {
       audio.release();
+    } else {
+      unloadMediaElement(audio);
     }
   } catch {
     // 何もしない
@@ -529,6 +543,23 @@ function disconnectElement(audio: GameAudio) {
   sourceNodes.delete(audio);
   gainNodes.delete(audio);
   targetVolumes.delete(audio);
+}
+
+/* mp3 の音（HTMLAudioElement）から曲を外して、空にする
+
+   ■ なぜいるのか
+     iPhone は、一度鳴らした mp3 の音が曲を持ったまま残っていると、止まっていても「再生中の曲」とみなして、
+     ロックしたときに、ロック画面に ▶ を出しつづける
+     サウンドトラックからゲームへ戻ったあとも、サウンドトラックの曲が残っていて、ゲームでロックしても ▶ が出ていた
+     （ページを離れたあと、使わなくなったAudioが いつ片づくかは、ブラウザしだいで決まらない）
+     曲を外して空にすると、「再生中の曲」ではなくなるので、ロック画面に出なくなる
+
+   ・src を外してから load() すると、何も読みこんでいない、作ったばかりの状態に戻る
+     （src に '' を入れると「読みこめない曲」になってエラーが起きるので、属性ごと外す）
+   ・使っていたメモリ（読みこんだ曲のデータ）も、すぐに手放せる */
+function unloadMediaElement(audio: HTMLAudioElement) {
+  audio.removeAttribute('src');
+  audio.load();
 }
 
 /* ゲームの画面が見えているあいだだけ、マナーモードでも音を鳴らす（iPhone・iPad だけ）
