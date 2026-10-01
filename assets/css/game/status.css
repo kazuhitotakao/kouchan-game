@@ -526,6 +526,11 @@
   color: #ffe1b0;
 }
 
+/* 絵文字（⭐ 🎒）は、スマホ（700px以下）で文字のかわりに出すときだけ使う（→ @media (max-width: 700px)） */
+.pill__icon {
+  display: none;
+}
+
 /* 見つけたもの（横1列のチップ） */
 .status-found {
   display: flex;
@@ -859,12 +864,15 @@
     top: 0;
     z-index: 2;
     grid-template-areas:
-      'clock clock'
-      'gauges gauges'
-      'legend legend'
-      'pills pills'
-      'found found';
-    grid-template-columns: 1fr 1fr;
+      'clock pills sound'
+      'gauges gauges gauges'
+      'found found found';
+
+    /* まんなかの列（ポイント類）は 1fr（＝ minmax(auto, 1fr)）
+       中身より細くはならないので、⭐ と 🎒 がつぶれて重なることはない
+       入りきらないときは、右の列（サウンド）が縮む
+       （音量スライダーが出ている細いパソコンの窓では、スライダーが最低48pxまで短くなる → sound-control.css） */
+    grid-template-columns: auto 1fr auto;
     gap: 3px 10px;
     padding: 6px 12px 8px;
   }
@@ -876,22 +884,30 @@
        2段目 … 時計（右寄せ） */
   /* ===== スマホ用コンパクトHUD =====
      PC版を縦に積むのではなく、高さを最小にしたスマホ専用の並びにする
-       1段目：時計（左）＋サウンド（右）
+       1段目：時計（左）＋おでかけポイント・おやつ残り（まんなか）＋サウンド（右）
        2〜3段目：こうちゃん／親（名前は左、体力・機嫌／体力・余裕を横2列）
-       凡例：あぶない／ぐずり を1行
-       4段目：おでかけポイント／おやつ残り（横1列）
-       5段目：見つけたもの（1行） */
+       4段目：見つけたもの（1行）
+       （目もりの説明「あぶないライン／ぐずりだすライン」は出さない → 下の .gauge-legend）
 
-  /* 1段目：時計を左・サウンドを右の横1列に戻す
-     ゲーム中はタイトル（.status-area__title）を隠して、そのぶんを時計とサウンドに使う */
+     ■ おでかけポイント・おやつ残りを1段目に入れている理由
+       スマホでは音量スライダーを出さず、ミュートボタンだけにした（→ SoundControl.vue）
+       そのぶん1段目のまんなかが空いたので、前は4段目だった おでかけポイント・おやつ残りを
+       「⭐ 12」「🎒 2」の絵文字＋数字にして入れ、上部ステータスを1段（約22px）低くしている
+       （スマホでも、とても細いパソコンの窓ではスライダーが出るが、そのときはスライダーが縮んで場所をゆずる） */
+
+  /* 1段目：時計・ポイント類・サウンドを、同じ grid の1段目に横にならべる
+
+     時計とサウンドは、HTML では .status-area__head の中にいっしょに入っている
+     display: contents で、この入れもの自体は無かったことにして、
+     中の時計（.status-clock）とサウンドの行（.status-area__titleRow）を、
+     .status-area の grid に直接ならべる（→ 上の grid-template-areas の 'clock pills sound'）
+     ゲーム中はタイトル（.status-area__title）を隠して、そのぶんを時計とポイント類に使う */
   .status-area__head {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    width: 100%;
-    padding-right: 0;
-    border-right: none;
+    display: contents;
+  }
+
+  .status-clock {
+    grid-area: clock;
   }
 
   /* ゲーム中の上部バーだけタイトルを隠す（タイトル画面のタイトルは消さない） */
@@ -899,15 +915,15 @@
     display: none;
   }
 
-  /* タイトルを隠したので、この行の中身はサウンドだけ。右側に置く */
+  /* タイトルを隠したので、この行の中身はサウンドだけ。いちばん右の列に置く */
   .status-area__titleRow {
+    grid-area: sound;
     width: auto;
     gap: 8px;
   }
 
-  /* 時計を左端へ（サウンドは右端） */
+  /* 時計は左寄せ（サウンドは右端） */
   .status-clock {
-    order: -1;
     text-align: left;
   }
 
@@ -941,22 +957,14 @@
 
   /* --- ゲーム中の上部ステータス：サウンドを右はしに寄せる ---
 
-     この行は「時計（左）… サウンド（右）」の両はし寄せ
+     サウンドは、1段目のいちばん右の列（sound）に置く
+     スライダーが出ているとき（とても細いパソコンの窓）は、決めた長さ（--sound-slider-width）のまま
 
-     前は、あいている幅いっぱいまでスライダーをのばしていたが、
-     それだとサウンドの枠が時計のすぐ右から始まり、画面のまんなかまで来てしまっていた
-     （375px幅でスライダーが約170px、700px幅では約490pxにもなっていた）
-     いまは、スライダーを決めた長さ（--sound-slider-width）にして、右はしに置いている
-     時計とのあいだに空きはできるが、そのほうがサウンドの設定だと分かりやすい
-
-     ・.status-area__titleRow に flex: 1 … あまっている幅を、この行がぜんぶ受け取る
-     ・justify-content: flex-end         … その中で、サウンドを右はしに寄せる
-
-     ※ min-width: 0 … flex の箱は、ふつう中身より小さくならない
+     ・justify-content: flex-end … 列の中で、サウンドを右はしに寄せる
+     ・min-width: 0 … grid の列は、ふつう中身より小さくならない
        これが無いと、時計に「+25分」が出たときに、行が横にはみ出してしまう
-       （そのときは、スライダーが縮んで場所をゆずる） */
+       （スライダーが出ているときは、スライダーが縮んで場所をゆずる） */
   .status-area__titleRow {
-    flex: 1;
     justify-content: flex-end;
     min-width: 0;
   }
@@ -1073,37 +1081,99 @@
     display: block;
   }
 
-  /* 凡例：あぶない／ぐずり を折り返さず1行（高さ約18px）。線の意味は残す */
+  /* 目もりの説明（あぶないライン／ぐずりだすライン）は、スマホでは出さない
+
+     ■ 理由
+       スマホでは、上部ステータスが高いぶんだけ、まんなかのエリア（できごと・コマンド）がせまくなる
+       説明の1行（約18px）を消して、そのぶんを まんなかのエリアに回す
+     ■ 消しても困らないわけ
+       ゲージの目もり（線）そのものは残る
+       線を下回ると、ラベルとゲージがオレンジ（ぐずりだす）・赤（あぶない）になり ⚠ も出るので、
+       説明を読まなくても、色で気づける
+       （PC・タブレットでは、今までどおり説明を出す）
+
+     ■ 説明を隠したぶん、その行（legend）を grid から外してある（→ 上の .status-area の grid-template-areas）
+       grid の空の行にも、行と行のすき間（row-gap）が付いてしまい、
+       何も出ていないのに、ステータスの中に空白ができてしまうため */
   .gauge-legend {
-    flex-wrap: nowrap;
-    gap: 4px 12px;
-    font-size: 11px;
-    line-height: 1.35;
+    display: none;
   }
 
-  .gauge-legend__mark {
-    height: 11px;
-  }
-
-  /* 4段目：おでかけポイント／おやつ残り を横1列に戻す（320pxでも収まるよう小さめ） */
+  /* 1段目のまんなか：おでかけポイント／おやつ残り を「⭐ 12」「🎒 2」の絵文字＋数字で横にならべる
+     時計とサウンドのあいだの、あいている幅のまんなかに置く
+     ※ min-width: 0 は付けない（付けると、入りきらないときに中身より細くなって ⭐ と 🎒 が重なる） */
   .status-pills {
     flex-direction: row;
+    justify-content: center;
     gap: 5px;
     padding-left: 0;
     border-left: none;
   }
 
   .pill {
-    flex: 1;
-    padding: 2px 8px;
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    padding: 1px 7px;
     font-size: 12px;
     line-height: 1.35;
     text-align: left;
   }
 
-  .pill__change,
+  /* 絵文字は、見つけたものの絵文字（.status-found__icon）と同じく、絵文字のフォントを先に書いて上下をそろえる */
+  .pill__icon {
+    display: block;
+    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+    font-size: 14px;
+    line-height: 1;
+  }
+
+  /* 文字（おでかけポイント・おやつ残り）と「個」は、見た目からは消して、読み上げ用に残す
+     （display: none にすると、読み上げでも読まれなくなってしまうため。見つけたものの名前と同じやりかた） */
+  .pill__label,
   .pill__unit {
-    width: 22px;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* 増減（+3）の置き場所は、出ているときだけの幅にする（数字のすぐ右に出る） */
+  .pill__change {
+    width: auto;
+  }
+
+  .pill .status-change {
+    margin-left: 4px;
+  }
+
+  /* --- とても細いスマホ（374px以下。320px の iPhone SE など）---
+
+     1段目に「時計＋増減（+25分）」と「⭐ ポイント＋増減（+12）」が同時に出ると、
+     時計・ポイント類・ミュートボタンが横1行に入りきらず、重なってしまう
+     ・ポイント類の余白と、列のすき間を少しつめる
+     ・時計の増減が出ているあいだだけ、「／ 12:00」を隠す
+       （増減が消えたら、また出る。12:00 が近いことは、11:30からの時計のオレンジ色でも分かる）
+     ※ :has() が使えない古いブラウザでは「／ 12:00」が隠れないが、
+       そのときも、ポイント類はつぶれずに、右のミュートボタンのほうへ はみ出すだけ */
+  @media (max-width: 374px) {
+    .status-area {
+      column-gap: 6px;
+    }
+
+    .status-pills {
+      gap: 4px;
+    }
+
+    .pill {
+      padding: 1px 5px;
+    }
+
+    .status-clock:has(.status-clock__change .status-change) .status-clock__limit {
+      display: none;
+    }
   }
 
   /* 5段目：見つけたもの は1行のコンパクト表示
@@ -1157,9 +1227,10 @@
     display: none;
   }
 
-  /* 隠した段の行と、行と行のすき間（gap）が残らないよう、並べかたも1段だけにする */
+  /* 隠した段の行と、行と行のすき間（gap）が残らないよう、並べかたも1段だけにする
+     （1段目のまんなかのポイント類も隠れるので、時計とサウンドの両はしだけになる） */
   .game-screen--secret-path .status-area {
-    grid-template-areas: 'clock clock';
+    grid-template-areas: 'clock pills sound';
   }
 
   .pill b {
@@ -1192,6 +1263,13 @@
 }
 
 @media (max-width: 700px) and (max-height: 620px) {
+
+  /* ===== とても背の低いスマホ（375×548 の Safari・320×568 など）=====
+
+     公園入口の「どこへ行く？」を1画面に収めるために、上部ステータスのすき間と余白をつめる
+     （コマンド欄・中央エリアのほうの調整は command.css・responsive.css の同じ @media）
+     ※ 目もりの説明（.gauge-legend）は、前はこの高さのときだけ隠していたが、
+       いまはスマホ幅ぜんぶで隠している（→ 上の @media (max-width: 700px) の .gauge-legend） */
   .status-area {
     gap: 4px 10px;
     padding: 6px 10px 7px;
@@ -1199,32 +1277,6 @@
 
   .status-found {
     max-height: 34px;
-  }
-
-  /* ===== とても背の低いスマホ（375×548 の Safari・320×568 など）=====
-
-     公園入口の「どこへ行く？」を1画面に収めるために、上部ステータスを約25px低くする
-     （コマンド欄・中央エリアのほうの調整は command.css・responsive.css の同じ @media）
-
-     ■ 目もりの説明（.gauge-legend）を隠す
-       上の (max-height: 800px) では「隠さずに小さくして残す」ようにしてあり、
-       ふつうのスマホ・PCでは今までどおり出している
-       ただ、この高さでは説明の1行（約19px）を残すと、公園入口がどうしても1画面に収まらない
-       ゲージの目もり自体は残るので、ここでは「1画面で遊べる」ほうを選んで、説明だけ隠している
-
-     ■ 説明を隠したぶん、その行（legend）を grid から外す
-       grid の空の行にも、行と行のすき間（row-gap）が付いてしまい、
-       何も出ていないのに、ステータスの中に空白ができてしまうため */
-  .gauge-legend {
-    display: none;
-  }
-
-  .status-area {
-    grid-template-areas:
-      'clock clock'
-      'gauges gauges'
-      'pills pills'
-      'found found';
   }
 }
 

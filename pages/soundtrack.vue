@@ -10,7 +10,8 @@ import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
 /* 曲の音量を入れる関数
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
-import { keepAudioContextAwake, setElementVolume } from '~/utils/elementVolume';
+import { cancelElementPause, keepAudioContextAwake, pauseElement, pauseElementThen, setElementVolume } from '~/utils/elementVolume';
+import { isTouchOnlyDevice } from '~/utils/touchDevice';
 
 /* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
    タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
@@ -473,9 +474,7 @@ function getTrackVolume(track: SoundtrackTrack) {
 /* ============================================================
    サウンドON/OFF（このページの音を、まとめて切り替える）
 
-   切り替わるのは、このページで鳴る音のぜんぶ
-   ・曲（mp3）
-   ・効果音「ポン♪」
+   切り替わるのは、このページで鳴る音のぜんぶ（曲（mp3）だけ）
 
    ゲーム本編（pages/index.vue）にも同じ形のボタンがあるが、
    覚えておく場所（localStorageのキー）はわざと別にしてある
@@ -549,10 +548,7 @@ function toggleSound() {
   if (soundEnabled.value) {
     /* ② ONに戻したとき
 
-       まず「ポン♪」を鳴らす
-       止めていた曲が無いときは、これが「音が戻った」ことの唯一の知らせになる
-       （効果音は soundEnabled を見ているので、ONにしたあとに呼ぶ） */
-    playDecisionSound();
+       決定音「ポン♪」は鳴らさない（サントラでは、曲以外の音は出さない） */
 
     // OFFのせいで止めた曲があれば、その続きから鳴らしなおす
     if (pausedBySoundOff) {
@@ -582,7 +578,7 @@ function pauseForSoundOff() {
   }
 
   try {
-    soundtrackAudio.pause();
+    pauseElement(soundtrackAudio);
   } catch {
     // 止められなくても、表示だけはそろえる
   }
@@ -759,10 +755,8 @@ function saveRepeatSetting() {
    （% は「わり算のあまり」。いちばん後ろの次が、先頭（0）に戻る）
 */
 function toggleRepeat() {
-  /* 決定音「ポン♪」（押しても曲は鳴りはじめないボタンなので、合図を鳴らす）
-     トラック番号を押したときと同じ考えかた */
-  playDecisionSound();
-
+  /* 決定音「ポン♪」は鳴らさない（サントラでは、曲以外の音は出さない）
+     切りかわったことは、ボタンの表示で分かる */
   const currentIndex = repeatOrder.indexOf(repeatMode.value);
 
   repeatMode.value = repeatOrder[(currentIndex + 1) % repeatOrder.length];
@@ -775,20 +769,14 @@ function toggleRepeat() {
 }
 
 /* ============================================================
-   効果音「ポン♪」（ボタンを押したときの合図）
+   音の作業台（AudioContext）
 
-   ゲーム本編（pages/index.vue）の決定音とまったく同じ音を、
-   同じ作りかたで鳴らす
-   ・音のファイルは使わず、その場で音を作って鳴らす（AudioContext）
-   ・700Hzの丸い音を0.09秒だけ。鋭くならないよう triangle（三角の波）にしている
+   曲の音量調整（setElementVolume）と、
+   バックグラウンドで音が止まらないようにする処理（keepAudioContextAwake）で使う
 
-   鳴らすのは、押しても曲が鳴りはじめない2つのボタンだけ
-   ① トラック番号（全曲再生の開始曲を選ぶ）… 押しても音が出ないと、
-      選べたのかどうか分かりにくいため
-   ② ← 戻る
-
-   「▶ 再生」「▶ 全曲再生」などでは鳴らさない
-   （すぐ曲そのものが鳴りはじめるので、合図の音はかえってじゃまになる）
+   ※ ボタンを押したときの決定音「ポン♪」は鳴らさない
+     このページは曲を聴くためのページなので、曲以外の余計な音は出さない
+     （トラック番号・リピート・サウンドON・戻る、どれを押しても鳴らない）
    ============================================================ */
 
 /* 音を作る作業台
@@ -821,61 +809,6 @@ function getEffectAudioContext() {
   } catch {
     // 音が使えない環境でも、ページはふつうに使えるようにする
     return null;
-  }
-}
-
-/* 効果音「ポン♪」を鳴らす
-
-   大きさは、上の音量スライダー（masterVolume）に合わせる
-   曲だけ小さくして効果音がそのまま、ということが起きないようにするため
-   0%にしているときは、そもそも鳴らさない */
-function playDecisionSound() {
-  // サウンドOFFのときは、効果音も鳴らさない（曲と同じスイッチでまとめて切り替える）
-  if (!soundEnabled.value) {
-    return;
-  }
-
-  const volume = 0.06 * masterVolume.value;
-
-  if (volume <= 0) {
-    return;
-  }
-
-  const context = getEffectAudioContext();
-
-  if (!context) {
-    return;
-  }
-
-  try {
-    const startTime = context.currentTime;
-    const duration = 0.09;
-
-    const oscillator = context.createOscillator(); // 音の発生源
-    const gain = context.createGain(); // 音量つまみ
-
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(700, startTime);
-
-    /* 音量の動き（これが無いと、鳴りはじめと鳴り終わりに「ブツッ」と雑音が入る）
-       ① ほぼ無音からはじめる
-       ② 0.015秒かけて、すっと目的の音量まで上げる
-       ③ そのあと、鳴り終わりに向かってゆっくり下げる
-
-       ※ 下げる先を 0 ではなく 0.001 にしているのは、
-         exponentialRampToValueAtTime() が 0 を受け取れないため */
-    gain.gain.setValueAtTime(0.0001, startTime);
-    gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
-    gain.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
-
-    // 発生源 → 音量つまみ → スピーカー の順につなぐ
-    oscillator.connect(gain);
-    gain.connect(context.destination);
-
-    oscillator.start(startTime);
-    oscillator.stop(startTime + duration + 0.02);
-  } catch {
-    // 効果音が鳴らなくても、曲の再生には影響させない
   }
 }
 
@@ -1354,6 +1287,33 @@ function getSoundtrackAudio() {
   }
 }
 
+/* いまの曲を止めて、track へ差しかえ、先頭から鳴らす（ちがう曲へ切りかえるとき）
+
+   「止める → 差しかえる → 鳴らす」の順番は今までと同じ
+   ちがうのは、鳴っている曲を「すっと」止めてから差しかえること
+   iPhone・iPad では、いきなり止めると「ぶつっ」と雑音が出るので、
+   音量を一瞬で下げきってから止めて、そのあとで差しかえる（→ utils/elementVolume.ts の pauseElementThen()）
+   ・差しかえが遅れるのは、iPhone・iPad で曲が鳴っている最中だけ（約0.08秒。耳ではほぼ分からない）
+   ・止まっているとき・曲が終わって次へ進むとき・パソコンでは、今までどおり その場で差しかわる
+   ・止めている途中に連打されたときは、いちばん最後に押した曲だけへ差しかわる
+
+   Audioは1つだけを使いまわしているので、この順番を守れば、2曲が同時に鳴ることは起こらない */
+function switchTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
+  pauseElementThen(audio, () => {
+    try {
+      audio.src = track.src;
+      setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
+      audio.currentTime = 0; // 新しい曲を先頭から鳴らす
+    } catch {
+      // 何もしない
+    }
+
+    /* 新しい曲を鳴らす
+       （リピートの設定もここで入るので、1曲リピート中なら、新しい曲がくりかえしになる） */
+    playTrackAudio(audio, track);
+  });
+}
+
 /* 曲を鳴らしはじめる（再生できなかったときは、表示を停止中へ戻す） */
 function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   /* いまのリピートの設定を入れておく
@@ -1374,6 +1334,9 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   isPlaying.value = true;
 
   try {
+    // 止めている途中（音量を下げている最中）なら、その予約を取り消してから鳴らす
+    cancelElementPause(audio);
+
     audio.play().catch(() => {
       /* 再生できなかったとき（対応していない形式など）は、表示を元に戻す
 
@@ -1411,8 +1374,7 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
 function stopSoundtrack() {
   if (soundtrackAudio) {
     try {
-      soundtrackAudio.pause();
-      soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+      pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
     } catch {
       // 止められなくても、表示だけはそろえる
     }
@@ -1487,8 +1449,7 @@ function stopAudioForNavigation() {
   }
 
   try {
-    soundtrackAudio.pause();
-    soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+    pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
   } catch {
     // 止められなくても、このあとページごと消えるので何もしない
   }
@@ -1922,8 +1883,7 @@ watch(isPlaying, (playing) => {
    実際に鳴らすのは「▶ 全曲再生」を押したとき
 */
 function selectStartTrack(track: SoundtrackTrack) {
-  // 決定音「ポン♪」（押して選べたことが分かるように）
-  playDecisionSound();
+  // 決定音「ポン♪」は鳴らさない（選べたことは、トラック番号の表示で分かる）
 
   selectedStartTrackId.value = track.id;
 }
@@ -2097,27 +2057,12 @@ function beginPlaylist(orderedTracks: SoundtrackTrack[], shuffled: boolean) {
 
   const firstTrack = playlistTracks.value[playlistIndex.value];
 
-  // いまの再生をいったん止めて、再生バーもリセットする
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
+  // 再生バーをリセットする
   currentTime.value = 0;
   duration.value = 0;
 
-  // 1周の1曲目を設定する
-  try {
-    audio.src = firstTrack.src;
-    setElementVolume(audio, getTrackVolume(firstTrack), getEffectAudioContext);
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
-  playTrackAudio(audio, firstTrack);
+  // いまの再生を止めて、1周の1曲目へ差しかえて鳴らす
+  switchTrackAudio(audio, firstTrack);
 
   /* 再生を始めると、押した「▶ 全曲再生／🔀 シャッフル再生」は画面から消えて、
      同じ場所に「⏸ 一時停止」が出てくる（→ テンプレートの st-playall__transport）
@@ -2181,8 +2126,7 @@ function startShufflePlaylist() {
 function finishPlaylist() {
   if (soundtrackAudio) {
     try {
-      soundtrackAudio.pause();
-      soundtrackAudio.currentTime = 0; // 曲の先頭へ戻す
+      pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
     } catch {
       // 止められなくても、表示だけはそろえる
     }
@@ -2333,33 +2277,12 @@ function playPlaylistTrackAt(index: number) {
   currentTime.value = 0;
   duration.value = 0;
 
-  /* いまの曲を完全に止める（＝その場で終了）
+  /* いまの曲を完全に止めて（＝その場で終了）、行き先の曲へ差しかえて先頭から鳴らす
 
-     currentTime を 0 に戻すので、どこまで聴いたかは覚えない
-     あとでその曲へ戻ってきても「続きから」ではなく、先頭から鳴る */
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
-  /* 鳴らすファイルを行き先の曲へ差しかえる
-
-     Audioは1つだけを使いまわしているので、
-     「止める → 差しかえる → 鳴らす」の順番を守れば、
-     2曲が同時に鳴ることは仕組みのうえで起こらない（連打しても同じ） */
-  try {
-    audio.src = track.src;
-    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
-    audio.currentTime = 0; // 行き先の曲も先頭から
-  } catch {
-    // 何もしない
-  }
-
-  /* 行き先の曲を鳴らす（一時停止中に押したときも、ここで自動的に鳴りはじめる）
-     1曲リピートの設定も playTrackAudio の中で入るので、移った曲がくりかえしになる */
-  playTrackAudio(audio, track);
+     差しかえるとファイルが変わるので、どこまで聴いたかは覚えない
+     あとでその曲へ戻ってきても「続きから」ではなく、先頭から鳴る
+     一時停止中に押したときも、ここで自動的に鳴りはじめる */
+  switchTrackAudio(audio, track);
 }
 
 /* 「▶ 再生」「⏸ 一時停止」を押したときの処理
@@ -2396,7 +2319,7 @@ function toggleTrack(track: SoundtrackTrack) {
     if (isPlaying.value) {
       // 再生中 → 一時停止
       try {
-        audio.pause();
+        pauseElement(audio);
       } catch {
         // 何もしない
       }
@@ -2426,9 +2349,8 @@ function toggleTrack(track: SoundtrackTrack) {
 
    やることは、いつも同じ順番
    ① 全曲再生モードから抜ける（もともと個別再生なら、false のまま変わらない）
-   ② いまの曲を完全に止める
-   ③ 再生バーの表示を最初に戻す
-   ④ 新しい曲を差しかえて、先頭から鳴らす
+   ② 再生バーの表示を最初に戻す
+   ③ いまの曲を止めて、新しい曲を差しかえて、先頭から鳴らす（→ switchTrackAudio）
 
    Audioは1つだけを使いまわしているので、「止める → 差しかえる → 鳴らす」の順番を守れば、
    2曲が重なって鳴ることは起こらない（連打しても同じ）
@@ -2451,15 +2373,7 @@ function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrac
   isPlaylistPlaying.value = false;
   isShufflePlaying.value = false;
 
-  // ② まず、いまの曲を完全に止める
-  try {
-    audio.pause();
-    audio.currentTime = 0;
-  } catch {
-    // 何もしない
-  }
-
-  /* ③ 再生バーの表示も、いったん最初の状態に戻す
+  /* ② 再生バーの表示を、いったん最初の状態に戻す
 
      曲の長さ（duration）は、新しいmp3を読み込むまで分からない
      前の曲の長さが残っていると、バーの目盛りがずれてしまうので 0 に戻し、
@@ -2467,18 +2381,8 @@ function playSingleTrackFromStart(audio: HTMLAudioElement, track: SoundtrackTrac
   currentTime.value = 0;
   duration.value = 0;
 
-  // ④ 新しい曲を設定する
-  try {
-    audio.src = track.src;
-    setElementVolume(audio, getTrackVolume(track), getEffectAudioContext);
-    audio.currentTime = 0; // 新しい曲を先頭から鳴らす
-  } catch {
-    // 何もしない
-  }
-
-  /* 新しい曲を鳴らす
-     （リピートの設定もここで入るので、1曲リピート中なら、新しい曲がくりかえしになる） */
-  playTrackAudio(audio, track);
+  // ③ いまの曲を止めて、新しい曲へ差しかえ、先頭から鳴らす
+  switchTrackAudio(audio, track);
 }
 
 /* ============================================================
@@ -3558,7 +3462,13 @@ onMounted(() => {
     if (savedVolume !== null && Number.isFinite(savedPercent)) {
       const percent = Math.min(100, Math.max(0, Math.round(savedPercent)));
 
-      masterVolume.value = percent / 100;
+      /* スマホ・タブレットでは、前回の音量は戻さず、いつも100%で始める
+         スマホには音量スライダーが無い（ミュートボタンだけ。→ SoundControl.vue）ので、
+         前にスライダーで下げた音量が残っていると、もう上げられなくなってしまうため
+         ※ 0% も戻さない
+           このページでは、0% にしてもミュート（soundEnabled）にはならず、ミュートボタンでは音量が戻らないため
+           （音を消しておきたいときは、ミュートボタンのON/OFFのほうが保存されている） */
+      masterVolume.value = isTouchOnlyDevice() ? 1 : percent / 100;
     }
   } catch {
     // 読み込めなくても、初期値の100％でふつうに聴ける
@@ -3732,7 +3642,7 @@ onUnmounted(() => {
            ============================================================ -->
       <div class="st-toolbar" @keydown="handleToolbarKeydown">
         <!-- 押したときの処理は、前に一覧の下にあったボタンと同じ goToTitle()
-             （決定音「ポン♪」 → 曲の音だけ止める → はじめの画面へ。連打しても移動は1回だけ）
+             （曲の音だけ止める → はじめの画面へ。連打しても移動は1回だけ）
              ref … 矢印キーで「▶ 全曲再生」から↑で戻る先、サウンドから←で移る先
 
              見た目は、PCでもスマホでも「← 戻る」だけ（タイトル画面（B画面）の戻るボタンと同じ）

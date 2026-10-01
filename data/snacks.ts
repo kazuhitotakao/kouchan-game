@@ -30,7 +30,6 @@ export const snacks: Snack[] = [
     energy: 5,
     mood: 20,
     minutes: 5,
-    description: 'こうちゃんの大好物。機嫌が大きく回復',
   },
   {
     id: 'chocolate',
@@ -39,16 +38,14 @@ export const snacks: Snack[] = [
     energy: 10,
     mood: 14,
     minutes: 5,
-    description: '体力と機嫌をバランスよく回復',
   },
   {
     id: 'senbei',
-    name: 'せんべい',
+    name: 'おせんべい',
     icon: '🍘',
     energy: 18,
     mood: 6,
     minutes: 10,
-    description: 'おなかがいっぱいになって体力が回復',
   },
   {
     id: 'biscuit',
@@ -57,7 +54,6 @@ export const snacks: Snack[] = [
     energy: 12,
     mood: 10,
     minutes: 5,
-    description: '体力と機嫌をほどよく回復',
   },
   {
     id: 'banana',
@@ -66,7 +62,6 @@ export const snacks: Snack[] = [
     energy: 24,
     mood: 4,
     minutes: 10,
-    description: '体力をしっかり回復',
   },
   {
     id: 'jelly',
@@ -75,7 +70,6 @@ export const snacks: Snack[] = [
     energy: 7,
     mood: 15,
     minutes: 5,
-    description: 'つるんと食べやすく、機嫌が回復',
   },
 ];
 

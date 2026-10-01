@@ -130,6 +130,70 @@ function setAudioSessionType(type: 'playback' | 'auto') {
    （WeakMap なので、使わなくなったAudioは、つまみごと自然に片づく） */
 const gainNodes = new WeakMap<HTMLAudioElement, GainNode>();
 
+/* それぞれのAudioに「ほんとうは、この大きさで鳴らしたい」と言われた音量
+
+   止める前に音量つまみを0まで下げる（→ pauseElement()）ので、
+   止め終わったあとに、ここに覚えておいた大きさへ戻す
+   （戻さないと、次に play() したとき無音のままになる） */
+const targetVolumes = new WeakMap<HTMLAudioElement, number>();
+
+/* 音量つまみを動かすときの「なめらかさ」（秒）
+
+   ■ なぜ、なめらかに動かすのか
+     音量つまみ（GainNode）の値を gain.value = 〜 でいきなり変えると、
+     音の波がその瞬間に段差になって「プツッ」という雑音が出る
+     BGMのフェードイン（0.05秒ごとに少しずつ上げる）では、それが1秒間に20回続くので、
+     曲の入りに「カタカタ」と打鍵音のような音が入っていた（iPhone のホーム画面アプリで目立つ）
+
+   ■ どうしているか
+     setTargetAtTime() で、目標の大きさへ「すっと」近づける
+     0.015 は「約0.015秒で 6割、0.05秒で ほぼ目標」くらいの速さ
+     耳には一瞬で変わったように聞こえるが、波に段差はできない */
+const volumeSmoothingSeconds = 0.015;
+
+/* 音量つまみを volume にする
+
+   鳴っている最中だけ、なめらかに動かす（→ volumeSmoothingSeconds）
+   止まっているときや、作業台が動いていないときは、そのまま入れる
+   （鳴っていないので雑音は出ないし、作業台が止まっていると時計が進まず、なめらかに動かせないため） */
+function setGainValue(gain: GainNode, volume: number, smooth: boolean) {
+  const param = gain.gain;
+
+  try {
+    const now = gain.context.currentTime;
+
+    if (smooth && gain.context.state === 'running') {
+      // いまの大きさを起点にして、目標へ近づける
+      holdGainAt(param, now);
+      param.setTargetAtTime(volume, now, volumeSmoothingSeconds);
+      return;
+    }
+
+    // 前に予約した動き（フェードの途中など）を取り消してから、そのまま入れる
+    param.cancelScheduledValues(now);
+    param.setValueAtTime(volume, now);
+  } catch {
+    param.value = volume;
+  }
+}
+
+/* 前に予約した動きを取り消して、いま（now）の大きさのところで止めておく
+
+   cancelAndHoldAtTime() は「いま鳴っている大きさ」をそのまま残してくれる
+   無い古いブラウザでは、取り消してから param.value を入れなおす
+   （動いている途中の値が読めないブラウザでは少しずれるが、取り消すだけよりは段差が小さい） */
+function holdGainAt(param: AudioParam, now: number) {
+  if (typeof param.cancelAndHoldAtTime === 'function') {
+    param.cancelAndHoldAtTime(now);
+    return;
+  }
+
+  const value = param.value;
+
+  param.cancelScheduledValues(now);
+  param.setValueAtTime(value, now);
+}
+
 /* audio の音量を volume（0〜1）にする
 
    getContext … 音量つまみを作るための作業台（AudioContext）を返す関数
@@ -167,7 +231,168 @@ export function setElementVolume(audio: HTMLAudioElement, volume: number, getCon
     }
   }
 
-  gain.gain.value = safeVolume;
+  targetVolumes.set(audio, safeVolume);
+
+  /* 止めている途中（音量つまみを0へ下げている最中）なら、つまみはさわらない
+     ここで上げてしまうと、止まる直前に音が戻ってしまう
+     覚えておいた大きさは、止め終わったあとに入る（→ pauseElement()） */
+  if (pendingPauses.has(audio)) {
+    return;
+  }
+
+  setGainValue(gain, safeVolume, !audio.paused);
+}
+
+/* ============================================================
+   曲を止めるときの「ぶつっ」を防ぐ（iPhone・iPad だけ）
+
+   ■ 何が起きていたか
+     鳴っている曲を pause() すると、音の波がその場でとぎれるので「ぶつっ」と雑音が出る
+     音量つまみ（GainNode）に通している iPhone・iPad では、これがはっきり聞こえる
+     （曲の途中で画面を切りかえるボタンを押したとき、など）
+
+   ■ どうしているか
+     pause() の前に、音量つまみを pauseFadeSeconds 秒かけて0まで下げて、
+     下げ終わってから pause() する
+     耳には「すぐ止まった」ように聞こえる短さにしてある
+
+     ・ただ止めるとき             … pauseElement()
+     ・止めてから別の曲へ差しかえるとき … pauseElementThen()（止め終わったら、差しかえの処理を呼ぶ）
+     ・止めている途中に、また play() するときは、
+       かならず先に cancelElementPause() を呼ぶ（止める予約を取り消して、音量を戻す）
+       呼ばないと、鳴らしはじめた直後に止まってしまう
+     ・audio.volume が効くブラウザ（パソコン・Android など）は、今までどおり その場で止める
+   ============================================================ */
+const pauseFadeSeconds = 0.06;
+
+/* 止める予約（Audioごと）
+   timer    … 下げ終わったあとに pause() する予約の番号
+   rewind   … 止めたあとに、曲の先頭へ戻すか
+   onPaused … 止めたあとに呼ぶ処理（別の曲への差しかえなど。無いときは null） */
+type PendingPause = {
+  timer: ReturnType<typeof setTimeout>;
+  rewind: boolean;
+  onPaused: (() => void) | null;
+};
+
+const pendingPauses = new WeakMap<HTMLAudioElement, PendingPause>();
+
+/* 止める（rewind: true なら、止めたあと曲の先頭へ戻す）
+
+   止まるのは、音量を下げ終わった少しあと（iPhone・iPad のとき）
+   それ以外のときは、今までどおり その場で止まる */
+export function pauseElement(audio: HTMLAudioElement, { rewind = false } = {}) {
+  const pending = pendingPauses.get(audio);
+
+  /* もう止めている途中なら、予約はそのまま（先頭へ戻すかどうかだけ足す）
+     別の曲へ差しかえる途中（pauseElementThen()）だったときは、差しかえもやめる
+     （「次の曲へ」を押した直後に「■ 停止」を押したなら、止まってほしいので） */
+  if (pending) {
+    pending.rewind = pending.rewind || rewind;
+    pending.onPaused = null;
+    return;
+  }
+
+  fadeOutAndPause(audio, rewind, null);
+}
+
+/* 止めてから onPaused を呼ぶ（いまの曲をすっと止めて、別の曲へ差しかえるとき用）
+
+   onPaused が呼ばれるのは、止め終わったあと
+   ・iPhone・iPad で鳴っている最中 … 音量を下げ終わった少しあと
+   ・それ以外                      … その場ですぐ（今までと同じ）
+   止めている途中にまた呼ばれたときは、いちばん新しい onPaused だけを呼ぶ（連打しても1回だけ差しかわる） */
+export function pauseElementThen(audio: HTMLAudioElement, onPaused: () => void) {
+  const pending = pendingPauses.get(audio);
+
+  if (pending) {
+    pending.onPaused = onPaused;
+    return;
+  }
+
+  fadeOutAndPause(audio, false, onPaused);
+}
+
+/* pauseElement() と pauseElementThen() の中身 */
+function fadeOutAndPause(audio: HTMLAudioElement, rewind: boolean, onPaused: (() => void) | null) {
+  const gain = gainNodes.get(audio);
+
+  /* その場で止めるとき
+     ・audio.volume が効くブラウザ（つまみを使っていない）
+     ・もう止まっている（雑音は出ない）
+     ・作業台が動いていない（時計が止まっていて、音量を下げられない。音も出ていない） */
+  if (!gain || audio.paused || gain.context.state !== 'running') {
+    pauseNow(audio, rewind);
+    onPaused?.();
+    return;
+  }
+
+  try {
+    const param = gain.gain;
+    const now = gain.context.currentTime;
+
+    holdGainAt(param, now);
+    param.linearRampToValueAtTime(0, now + pauseFadeSeconds);
+  } catch {
+    pauseNow(audio, rewind);
+    onPaused?.();
+    return;
+  }
+
+  // 下げ終わるのを少しだけ待ってから止める（待ち時間ぴったりだと、下げきる前に止まることがある）
+  const pending: PendingPause = {
+    timer: setTimeout(
+      () => {
+        pendingPauses.delete(audio);
+        pauseNow(audio, pending.rewind);
+
+        // 止め終わったので、音量つまみを「ほんとうの大きさ」へ戻しておく（次に play() したときのため）
+        setGainValue(gain, targetVolumes.get(audio) ?? 1, false);
+
+        pending.onPaused?.();
+      },
+      pauseFadeSeconds * 1000 + 20
+    ),
+    rewind,
+    onPaused,
+  };
+
+  pendingPauses.set(audio, pending);
+}
+
+/* その場で止める（rewind: true なら、曲の先頭へ戻す） */
+function pauseNow(audio: HTMLAudioElement, rewind: boolean) {
+  try {
+    audio.pause();
+
+    if (rewind) {
+      audio.currentTime = 0;
+    }
+  } catch {
+    // 何もしない
+  }
+}
+
+/* 止める予約を取り消す（止めている途中の曲を、また鳴らすとき）
+
+   play() の直前に呼ぶ
+   止める予約が無いときは、何もしない */
+export function cancelElementPause(audio: HTMLAudioElement) {
+  const pending = pendingPauses.get(audio);
+
+  if (!pending) {
+    return;
+  }
+
+  clearTimeout(pending.timer);
+  pendingPauses.delete(audio);
+
+  const gain = gainNodes.get(audio);
+
+  // 0へ下げかけていた音量を、ほんとうの大きさへ なめらかに戻す
+  if (gain) {
+    setGainValue(gain, targetVolumes.get(audio) ?? 1, true);
+  }
 }
 
 /* 指でさわる・クリックする・キーを押すたびに、作業台（AudioContext）を起こしておく

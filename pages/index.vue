@@ -4211,7 +4211,9 @@ onUnmounted(() => {
           <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <div class="title-card__rule">
-            <p>9時〜12時の公園を、たくさん探検しよう！</p>
+            <p>
+              <span class="title-card__phrase">9時〜12時の公園を、</span><span class="title-card__phrase">たくさん探検しよう！</span>
+            </p>
           </div>
         </div>
       </div>
@@ -4296,14 +4298,16 @@ onUnmounted(() => {
                 <span class="snack-option__name">{{ snack.name }}</span>
               </span>
 
-              <span class="snack-option__text">{{ snack.description }}</span>
-
               <!-- おやつごとの回復量（次の実装でそのままゲームに使う数）
 
                    数字はこれからバランスを調整するので、
                    ここが変わってもカードの形がくずれないようにしている
 
-                   3つを1つずつ span で包んであるのは、折り返しの都合
+                   食べるのにかかる時間（5分・10分）は、カードには出さない
+                   スマホで1画面に収めるため。食べたときにゲーム中の時計の「+10分」で分かる
+                   （時間の数そのものは data/snacks.ts の minutes に残っていて、ゲームではそのまま使う）
+
+                   2つを1つずつ span で包んであるのは、折り返しの都合
                    ひとつづきの文章にしてしまうと、カードの幅が足りないときに
                    「体力 +1」「8」のように数字の途中で切れてしまう
                    包んでおけば、切れるのはかならず項目のあいだになる
@@ -4311,7 +4315,6 @@ onUnmounted(() => {
               <span class="snack-option__effect">
                 <span class="snack-option__stat">体力 +{{ snack.energy }}</span>
                 <span class="snack-option__stat">機嫌 +{{ snack.mood }}</span>
-                <span class="snack-option__stat">{{ snack.minutes }}分</span>
               </span>
 
               <!-- ※ 「✓ 選択中」の札は置いていない
@@ -4331,7 +4334,9 @@ onUnmounted(() => {
           <!-- おやつバッグ（いま選んでいる2個が分かるところ） -->
           <div class="snack-bag">
             <p class="snack-bag__head">
-              <span class="snack-bag__title">🎒 おやつバッグ</span>
+              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して 🎒 だけにする（読み上げ用には残す）
+                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css） -->
+              <span class="snack-bag__title">🎒 <span class="snack-bag__titleText">おやつバッグ</span></span>
 
               <!-- 「1 / 2」の数え方も maxSnackCount を見ている
                    （持っていける数を3つに変えても、ここは直さなくてよい） -->
@@ -4390,10 +4395,15 @@ onUnmounted(() => {
 
           <h1 class="snack-heading">🍪 きょうのおやつ</h1>
 
+          <!-- 2文目（もう一度押すと外せます。）は、スマホでは出さない
+               スマホでおやつ選択を1画面に収めるため（→ base.css の .snack-lead__sub）
+               選んだカードをもう一度押すと外れることは、押してみればすぐ分かる -->
           <p class="snack-lead">
             おやつを{{ maxSnackCount }}つ選ぼう！
-            <br />
-            もう一度押すと外せます。
+            <span class="snack-lead__sub">
+              <br />
+              もう一度押すと外せます。
+            </span>
           </p>
         </div>
       </div>
