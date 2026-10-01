@@ -11,6 +11,7 @@ import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
    audio.volume = 〜 と直接書くと、iPhone では音量が変わらないので、かならずこれを通す
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
 import { cancelElementPause, keepAudioContextAwake, pauseElement, pauseElementThen, setElementVolume } from '~/utils/elementVolume';
+import { isTouchOnlyDevice } from '~/utils/touchDevice';
 
 /* 上部ツールバーのサウンド（🔊 ミュートボタン ＋ 音量バー）
    タイトル画面（B画面）と同じ部品を使って、見た目と操作をそろえる */
@@ -3461,7 +3462,13 @@ onMounted(() => {
     if (savedVolume !== null && Number.isFinite(savedPercent)) {
       const percent = Math.min(100, Math.max(0, Math.round(savedPercent)));
 
-      masterVolume.value = percent / 100;
+      /* スマホ・タブレットでは、前回の音量は戻さず、いつも100%で始める
+         スマホには音量スライダーが無い（ミュートボタンだけ。→ SoundControl.vue）ので、
+         前にスライダーで下げた音量が残っていると、もう上げられなくなってしまうため
+         ※ 0% も戻さない
+           このページでは、0% にしてもミュート（soundEnabled）にはならず、ミュートボタンでは音量が戻らないため
+           （音を消しておきたいときは、ミュートボタンのON/OFFのほうが保存されている） */
+      masterVolume.value = isTouchOnlyDevice() ? 1 : percent / 100;
     }
   } catch {
     // 読み込めなくても、初期値の100％でふつうに聴ける

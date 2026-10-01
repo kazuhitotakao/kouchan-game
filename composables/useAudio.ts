@@ -40,6 +40,9 @@ import { sPlusSongSrc } from '~/utils/sPlusSong';
    （くわしい理由は、読みこむ先のファイルの先頭に書いてある） */
 import { cancelElementPause, keepAudioContextAwake, pauseElement, setElementVolume, usesWebAudioVolume } from '~/utils/elementVolume';
 
+/* スマホ・タブレット（指で操作する画面）か（音量スライダーが無いので、前回の音量を戻さない → restoreSoundSettings()） */
+import { isTouchOnlyDevice } from '~/utils/touchDevice';
+
 /* 音のほうから「いま画面はどうなっているか」を見るための値
 
    どれも読むだけで、このファイルからは1つも書きかえない
@@ -3095,6 +3098,16 @@ export function useAudio(options: UseAudioOptions) {
 
         if (Number.isFinite(percent) && percent >= 0 && percent <= 100) {
           soundVolumePercent.value = Math.round(percent);
+        }
+
+        /* スマホ・タブレットでは、途中の音量（1〜99%）は戻さず、100%で始める
+
+           スマホには音量スライダーが無い（ミュートボタンだけ。→ SoundControl.vue）ので、
+           前にスライダーで下げた音量が残っていると、もう上げられなくなってしまう
+           音量は本体の音量ボタンで変えてもらう
+           ※ 0%（ミュート）は、ミュートボタンで解除できるので、そのまま戻す */
+        if (isTouchOnlyDevice() && soundVolumePercent.value > 0) {
+          soundVolumePercent.value = 100;
         }
       }
     } catch {
