@@ -948,7 +948,7 @@ function restoreEntranceCursor() {
   pauseCommandPointer();
 }
 
-/* ===== 「公園の出口へ向かう？」の確認ダイアログ =====
+/* ===== 「出口へ向かう？」の確認ダイアログ =====
 
    公園の出口へ向かうと、その日のおでかけはおしまい（結果発表へ進み、公園へは戻れない）
    ボタンを押しまちがえたり、キーを押しすぎたりして、うっかり終わってしまわないように、
@@ -3130,7 +3130,7 @@ function goToGoal() {
 
 /* 公園入口の「公園の出口へ向かう（ゴール）」を選んだとき
 
-   すぐにはゴールへ向かわず、「公園の出口へ向かう？」の確認ダイアログを開く
+   すぐにはゴールへ向かわず、「出口へ向かう？」の確認ダイアログを開く
    （クリックでも Enter / Space でも、ここを通る） */
 function openGoalConfirm() {
   // 決定音「ポン♪」（押せたことが分かるように。ひとやすみを開くときと同じ）
@@ -3287,7 +3287,7 @@ function resetGame() {
   // （前回のプレイで開いたままGAME OVERになっていることがあるため）
   closeSnackMenu();
 
-  // 「公園の出口へ向かう？」の確認ダイアログも閉じておく（念のため）
+  // 「出口へ向かう？」の確認ダイアログも閉じておく（念のため）
   closeGoalConfirm();
 
   /* 通常の行動1回ぶんの結果（結果の文章・今回の変化・行動前の控え・見つけたもの・
@@ -3834,14 +3834,12 @@ onUnmounted(() => {
                右：サウンドON/OFF（ほかの画面と同じ soundEnabled / toggleSound() をそのまま使う）
 
                ※ この画面は、見た目の順番とHTMLの順番が同じ
-                 Tabは「← ひとつ前の画面へ戻る → サウンド → いちばん下の ← ひとつ前の画面へ戻る」と上から順に進む -->
+                 Tabは「← 戻る → サウンド → いちばん下の ← 戻る」と上から順に進む -->
           <div class="title-card__tools">
-            <!-- スマホ幅では「← ひとつ前の画面へ戻る」を「← 戻る」の短い表示に入れかえる
-                 （B画面・おやつ選択画面の戻るボタンと同じ出しかた・同じクラス。→ base.css の .title-card__backText--〜）
-                 どちらの表示でも、読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
+            <!-- 見た目は、PCでもスマホでも「← 戻る」だけ（文字を少なくするため。B画面・おやつ選択画面と同じ）
+                 読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
             <button ref="howToBackButtonRef" type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
-              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
@@ -4044,12 +4042,10 @@ onUnmounted(() => {
           </section>
 
           <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるようにする
-               （押したときの処理は、上の「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()）
-               スマホ幅の「← 戻る」の出しかたも、上のボタンと同じ -->
+               （押したときの処理も見た目も、上の「← 戻る」と同じ closeHowToPlay()） -->
           <div class="howto-footer">
             <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
-              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
           </div>
         </div>
@@ -4152,14 +4148,14 @@ onUnmounted(() => {
                ・調べおわる前（null）も出さない（→ isStandalone）
                ・パソコンでは、CSS でかくしている（指でさわる画面のときだけ出す → base.css の .install-hint）
 
+               文字を少なくするため、1文だけにしている
+               （前は iPhone・Android それぞれの手順も書いていたが、
+                 どちらも「ホーム画面に追加」という名前のメニューを選ぶので、その名前だけ伝える）
+
                見た目の位置は、カードのいちばん下（「はじめる」の下）
                A画面のカードは中身が少なく、下に余白があるので、
                案内を足してもカードの高さは変わらない（B画面と高さがそろったまま） -->
-          <p v-if="isStandalone === false" class="install-hint">
-            <span class="install-hint__lead">📱 ホーム画面に追加すると、アプリみたいに遊べるよ！</span>
-            <span>iPhone：共有 → ホーム画面に追加</span>
-            <span>Android：メニュー → ホーム画面に追加</span>
-          </p>
+          <p v-if="isStandalone === false" class="install-hint">📱 「ホーム画面に追加」で、アプリみたいに遊べるよ</p>
         </div>
       </div>
 
@@ -4195,13 +4191,11 @@ onUnmounted(() => {
                    handleTitleKeydown() が「ボタンにフォーカスがあるときは何もしない」
                    ようにしているため（ボタン側で止める必要はない）
 
-                 スマホ幅では「はじめの画面へ戻る」を「← 戻る」の短い表示に入れかえて、
-                 右上の「?」とサウンドのコントロールと、横1行に収まるようにしている
-                 どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
-                 （「あそびかた」を「?」だけにするのと同じ考えかた） -->
+                 見た目は、PCでもスマホでも「← 戻る」だけ（文字を少なくするため）
+                 短いので、スマホ幅でも右上の「?」とサウンドのコントロールと横1行に収まる
+                 読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
             <button ref="backToBootButtonRef" type="button" class="title-card__back" aria-label="はじめの画面へ戻る" @click="goBackToBoot">
-              <span class="title-card__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
 
             <!-- 右上のまとまり（？ あそびかた ＋ サウンドON/OFF）
@@ -4400,12 +4394,10 @@ onUnmounted(() => {
                  押しても選んだおやつは消さない（B画面 → もう一度おやつ選択で、
                  さっき選んだおやつがそのまま入っている）
 
-                 スマホ幅では「← ひとつ前の画面へ戻る」を「← 戻る」の短い表示に入れかえる
-                 （B画面の戻るボタンと同じ出しかた・同じクラス。→ base.css の .title-card__backText--〜）
-                 どちらの表示でも、読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
+                 見た目は、PCでもスマホでも「← 戻る」だけ（B画面の戻るボタンと同じ）
+                 読み上げ用の名前は aria-label の「ひとつ前の画面へ戻る」 -->
             <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeSnackSelection">
-              <span class="title-card__backText--full" aria-hidden="true">← ひとつ前の画面へ戻る</span>
-              <span class="title-card__backText--short" aria-hidden="true">← 戻る</span>
+              <span aria-hidden="true">← 戻る</span>
             </button>
 
             <!-- サウンドのコントロール（ミュートボタン ＋ 音量スライダー）
@@ -4646,7 +4638,7 @@ onUnmounted(() => {
                     <!-- おうちへ帰る（地図のいちばん下 ＝ 公園の出口）… 前の「公園の出口へ向かう（ゴール）」のボタン
 
                          地図は「下が公園入口、上が公園の奥」なので、ゴール（公園を出る）は、地図の下の公園入口に置く
-                         押しても、すぐにはゴールへ向かわない（「公園の出口へ向かう？」の確認ダイアログが開く。openGoalConfirm）
+                         押しても、すぐにはゴールへ向かわない（「出口へ向かう？」の確認ダイアログが開く。openGoalConfirm）
                          番号は、いちばん最後の goalCommandIndex（キーボードで選んで Enter でも同じダイアログが開く） -->
                     <div class="park-map__spot park-map__spot--goal">
                       <button
@@ -4690,7 +4682,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">ひとやすみ</h2>
 
-                <p class="place-card__text">ベンチに座って、親子でひと息つこう。休憩する？ それとも、おやつにする？</p>
+                <p class="place-card__text">ベンチでひと息。休憩する？ おやつにする？</p>
               </article>
 
               <!-- 休憩・おやつの結果（通常の場所とおなじ形） -->
@@ -4739,11 +4731,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">
-                  すべり台を見つけると、「すべるー！」とおおはしゃぎ。
-                  <br />
-                  小さな手で手すりをぎゅっとつかんで、とてとて階段をのぼりはじめました。
-                </p>
+                <p class="place-card__text">「すべるー！」小さな手で、とてとて階段をのぼりはじめました。</p>
               </article>
 
               <!-- 結果が出たあと -->
@@ -4867,7 +4855,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">池</h2>
 
-                <p class="place-card__text">池には白鳥が泳ぎ、コイもたくさん集まっています。こうちゃんは指をさして大はしゃぎです。</p>
+                <p class="place-card__text">「とりさん！」白鳥とコイを指さして大はしゃぎ。</p>
               </article>
 
               <ResultCard
@@ -4908,7 +4896,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">やわらかい芝生が広がっています。思いきり走り回れそうです。</p>
+                <p class="place-card__text">やわらかい芝生。思いきり走り回れそう！</p>
               </article>
 
               <ResultCard
@@ -4956,7 +4944,7 @@ onUnmounted(() => {
                 <h2 class="place-card__title">🌿 秘密の小道</h2>
 
                 <!-- secret-path-intro … スマホ幅では出さない（→ assets/css/game/responsive.css） -->
-                <p class="place-card__text secret-path-intro">木々のあいだの秘密の小道に、そっと足をふみ入れました。葉っぱのすき間から、光がちらちら差しこんでいます。</p>
+                <p class="place-card__text secret-path-intro">葉っぱのすき間から、光がちらちら。そっと小道へ。</p>
 
                 <p class="secret-path-lead">
                   えだをよけながら
@@ -5081,10 +5069,9 @@ onUnmounted(() => {
                     <span class="command-box__text">小道へ進む</span>
                   </button>
 
-                  <!-- スマホ幅では「← 場所選びにもどる」を「場所選びへ」の短い表示に入れかえて、
-                       横にならんだ「小道へ進む」と同じく、1行に収まるようにしている
-                       どちらの表示でも、読み上げ用の名前は aria-label の「場所選びにもどる」
-                       （リザルト画面の「はじめの画面へ戻る」と同じ考えかた） -->
+                  <!-- 見た目は、PCでもスマホでも短い「場所選びへ」（文字を少なくするため）
+                       5文字なので、スマホ幅で「小道へ進む」と横にならべても1行に収まる
+                       読み上げ用の名前は aria-label の「場所選びにもどる」 -->
                   <button
                     class="command-box__item"
                     :class="{ 'command-box__item--selected': selectedCommandIndex === 1 }"
@@ -5092,10 +5079,7 @@ onUnmounted(() => {
                     @click="leaveSecretPathToEntrance"
                     @mouseenter="selectedCommandIndex = 1"
                     @focus="selectedCommandIndex = 1">
-                    <span class="command-box__text">
-                      <span class="command-box__leaveText--full" aria-hidden="true">← 場所選びにもどる</span>
-                      <span class="command-box__leaveText--short" aria-hidden="true">場所選びへ</span>
-                    </span>
+                    <span class="command-box__text" aria-hidden="true">場所選びへ</span>
                   </button>
                 </template>
 
@@ -5123,9 +5107,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">こもれびの広場</h2>
 
-                <p class="place-card__text">
-                  木々のあいだの秘密の小道を、こうちゃんと葉っぱをかき分けながら進むと、やわらかなこもれびが差しこむ小さな広場に出ました。風がそっと吹いて、葉っぱがきらきら揺れています。「きれいー！」こうちゃんは、目をかがやかせています。
-                </p>
+                <p class="place-card__text">「きれいー！」こもれびが差しこむ、小さな広場に出ました。</p>
               </article>
 
               <ResultCard
@@ -5258,7 +5240,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
-                <p class="place-card__text">遠くからピーポーピーポーと音が聞こえてきました。「きゅうきゅうしゃ、どこ？」こうちゃんは辺りを見回しています。</p>
+                <p class="place-card__text">「きゅうきゅうしゃ、どこ？」遠くからピーポーピーポー。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5298,7 +5280,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-                <p class="place-card__text">葉っぱの上にテントウムシがいました。こうちゃんは「てんとうむし！」とうれしそうにしゃがみこみました。</p>
+                <p class="place-card__text">「てんとうむし！」葉っぱの前にしゃがみこみました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5338,11 +5320,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐕 犬が近づいてきた！</h2>
 
-                <p class="place-card__text">
-                  散歩中の犬が、しっぽをふりながら近づいてきました。
-                  <br />
-                  「わんわん！」こうちゃんは、うれしそうに指をさしています。
-                </p>
+                <p class="place-card__text">「わんわん！」散歩中の犬が、しっぽをふってやってきました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5382,7 +5360,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
-                <p class="place-card__text">走っていたこうちゃんがつまずいて、ころんでしまいました。「いたい……」と、ひざを見ています。</p>
+                <p class="place-card__text">「いたい……」つまずいて、ひざを見ています。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5422,7 +5400,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">⛲ 噴水が出た！</h2>
 
-                <p class="place-card__text">突然、噴水から勢いよく水が飛び出しました。こうちゃんは「わあ！」と大喜びです。</p>
+                <p class="place-card__text">「わあ！」噴水から勢いよく水が飛び出しました。</p>
               </article>
 
               <!-- 選んだあとの結果（通常の場所とおなじ形） -->
@@ -5611,10 +5589,8 @@ onUnmounted(() => {
                      「選んでいるコマンド」まで実行されてしまうのを止める
                      矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
 
-                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
-                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
-                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
-                   （B画面の「← 戻る」と同じ考えかた） -->
+                   見た目は、PCでもスマホでも短い「はじめに戻る」（文字を少なくするため）
+                   読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
@@ -5624,10 +5600,7 @@ onUnmounted(() => {
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">
-                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
-                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
-                </span>
+                <span class="cmd__text" aria-hidden="true">はじめに戻る</span>
               </button>
             </nav>
           </div>
@@ -5732,10 +5705,8 @@ onUnmounted(() => {
                      「選んでいるコマンド」まで実行されてしまうのを止める
                      矢印キーは止めないので、フォーカスが当たっていても選択やスクロールは動かせる
 
-                   スマホ幅では「はじめの画面へ戻る」を「はじめに戻る」の短い表示に入れかえて、
-                   横にならんだ「もう一度あそぶ」と同じく、1行に収まるようにしている
-                   どちらの表示でも、読み上げ用の名前は aria-label の「はじめの画面へ戻る」
-                   （B画面の「← 戻る」と同じ考えかた） -->
+                   見た目は、PCでもスマホでも短い「はじめに戻る」（文字を少なくするため）
+                   読み上げ用の名前は aria-label の「はじめの画面へ戻る」 -->
               <button
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
@@ -5745,10 +5716,7 @@ onUnmounted(() => {
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
                 @keydown.space.stop>
-                <span class="cmd__text">
-                  <span class="cmd__backText--full" aria-hidden="true">はじめの画面へ戻る</span>
-                  <span class="cmd__backText--short" aria-hidden="true">はじめに戻る</span>
-                </span>
+                <span class="cmd__text" aria-hidden="true">はじめに戻る</span>
               </button>
             </nav>
           </div>
@@ -5773,7 +5741,7 @@ onUnmounted(() => {
     </div>
 
     <!-- ============================================================
-         「公園の出口へ向かう？」の確認ダイアログ
+         「出口へ向かう？」の確認ダイアログ
 
          公園入口で「公園の出口へ向かう（ゴール）」を選んだときだけ出す
          ・もう少し遊ぶ … 閉じて、公園入口に戻る（開いたときは、こちらが選ばれている）
@@ -5788,13 +5756,9 @@ onUnmounted(() => {
          ============================================================ -->
     <div v-if="isGoalConfirmVisible" class="goal-confirm" @click.self="cancelGoalConfirm">
       <div class="goal-confirm__content" role="alertdialog" aria-modal="true" aria-labelledby="goal-confirm-title" aria-describedby="goal-confirm-text">
-        <p id="goal-confirm-title" class="goal-confirm__title">公園の出口へ向かう？</p>
+        <p id="goal-confirm-title" class="goal-confirm__title">出口へ向かう？</p>
 
-        <p id="goal-confirm-text" class="goal-confirm__text">
-          出口へ向かうと、今日のおでかけはおしまいです。
-          <br />
-          結果発表へ進みます。
-        </p>
+        <p id="goal-confirm-text" class="goal-confirm__text">おでかけを終えて、結果発表へ。</p>
 
         <p class="goal-confirm__time">{{ goalConfirmTimeText }}</p>
 

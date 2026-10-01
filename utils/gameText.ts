@@ -63,13 +63,14 @@ export function buildParkEntranceText(isJustArrivedAtPark: boolean, isLateMornin
 /* ダイアログに出す「お昼まで、あとどれくらいか」の文
 
    まだ遊ぶ時間が残っているかを見て決められるように、残り時間を出しておく
-   例）10:40 なら「お昼（12:00）まで、あと1時間20分あります。」 */
+   例）10:40 なら「お昼まで あと1時間20分」
+   （文字を少なくするため、短い札の形にしている。時刻はステータスの時計に出ているので書かない） */
 export function buildGoalConfirmTimeText(currentMinutes: number) {
   const minutesLeft = 12 * 60 - currentMinutes;
 
   // ふつうは、12:00を過ぎると自動でゴールへ向かうので、ここへは来ない（念のため）
   if (minutesLeft <= 0) {
-    return 'もうお昼の時間です。';
+    return 'もうお昼です';
   }
 
   const hours = Math.floor(minutesLeft / 60);
@@ -81,5 +82,5 @@ export function buildGoalConfirmTimeText(currentMinutes: number) {
     timeLeft = minutes > 0 ? `${hours}時間${minutes}分` : `${hours}時間`;
   }
 
-  return `お昼（12:00）まで、あと${timeLeft}あります。`;
+  return `お昼まで あと${timeLeft}`;
 }
