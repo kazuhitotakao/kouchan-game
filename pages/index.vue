@@ -4486,7 +4486,7 @@ onUnmounted(() => {
 
                      前は「場所の絵（NO IMAGE）」と、下のコマンド欄の「どこへ行く？」の一覧が別々だったが、
                      公園入口だけは、絵の枠をそのまま地図の土台にして、その上に行き先のボタンを置く
-                     地図の絵は、PC用 public/images/park/park-map.png（横長）と、スマホ用 park-map-sp.png（3:4）の2枚
+                     地図の絵は、PC用 public/images/park/park-map.webp（横長）と、スマホ用 park-map-sp.webp（3:4）の2枚
                      （文字は入れず、場所の名前はボタンで重ねる）
                      ・どちらの絵でも、ボタン・押したときの処理・矢印キーの動きは同じ。ちがうのは、絵とボタンの置き場所だけ
                      ・絵を差しかえて縦横比が変わったときは、park-map.css の --park-map-ratio（PC用・スマホ用）をそろえる
@@ -4512,8 +4512,8 @@ onUnmounted(() => {
                          （板の縦横比・ボタンの置き場所を切りかえる park-map.css の @media (max-width: 700px) と、絵がずれないようにするため）
                          場所の名前はボタンで読めるので、絵は飾りとして読みとばす（alt は空） -->
                     <picture class="park-map__base">
-                      <source media="(max-width: 700px)" srcset="/images/park/park-map-sp.png" />
-                      <img class="park-map__img" src="/images/park/park-map.png" alt="" />
+                      <source media="(max-width: 700px)" srcset="/images/park/park-map-sp.webp" />
+                      <img class="park-map__img" src="/images/park/park-map.webp" alt="" />
                     </picture>
 
                     <div class="park-map__spot park-map__spot--slide">
