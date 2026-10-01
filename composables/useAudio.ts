@@ -524,8 +524,10 @@ export function useAudio(options: UseAudioOptions) {
   }
 
   /* ④ ゴール音「タタターン♪」
-     ド → ミ → ソ → 高いド と上がっていく、短い明るいファンファーレ
-     最後の「高いド」だけ長めに伸ばして、締めくくりらしくする
+     ソ → 高いド → 高いレ → 高いソ と上がっていく、短い明るいファンファーレ
+     最後の「高いソ」だけ長めに伸ばして、締めくくりらしくする
+     やわらかく聞こえるよう、波の形は triangle より丸い sine にして、
+     1音ずつを少し長くし、前の音の終わりと次の音の始まりを重ねている
   */
   function playGoalSound() {
     const context = getAudioContext();
@@ -536,10 +538,10 @@ export function useAudio(options: UseAudioOptions) {
 
     const start = context.currentTime;
 
-    playTone(523.25, start, 0.14, 0.08, 'triangle'); // ド
-    playTone(659.25, start + 0.12, 0.14, 0.08, 'triangle'); // ミ
-    playTone(783.99, start + 0.24, 0.14, 0.08, 'triangle'); // ソ
-    playTone(1046.5, start + 0.38, 0.42, 0.09, 'triangle'); // 高いド
+    playTone(783.99, start, 0.18, 0.08, 'sine'); // ソ
+    playTone(1046.5, start + 0.12, 0.18, 0.08, 'sine'); // 高いド
+    playTone(1174.7, start + 0.24, 0.18, 0.08, 'sine'); // 高いレ
+    playTone(1568, start + 0.38, 0.6, 0.09, 'sine'); // 高いソ
   }
 
   /* ⑤ こもれびを取った音「ピコッ♪」（ミニゲーム「秘密の小道」用）
