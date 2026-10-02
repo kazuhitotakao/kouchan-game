@@ -27,6 +27,7 @@
        休憩・おやつはどの場所でも同じ効果なので、公園入口の「ひとやすみ」（rest）へまとめた
    ============================================================ */
 
+import { snackBagImage } from '~/data/snacks';
 import type { SceneVariant, Snack } from '~/types/game';
 
 withDefaults(
@@ -191,7 +192,13 @@ defineEmits<{
            ならべるのはバッグに残っているおやつ（selectedSnacks）だけで、食べたおやつはここからも消える
            「← もどる」・Escape で、休憩する／おやつにする に戻る -->
       <template v-if="isSnackMenuVisible">
-        <p class="command-box__label">🎒 どのおやつにする？</p>
+        <!-- 見出しの左のリュックの絵は data/snacks.ts の snackBagImage（前は 🎒 の絵文字。くわしくは command-box.css の .snack-menu__labelIcon） -->
+        <p class="command-box__label snack-menu__label">
+          <span class="snack-menu__labelIcon">
+            <img class="snack-menu__labelImage" :src="snackBagImage" alt="" decoding="async" />
+          </span>
+          どのおやつにする？
+        </p>
 
         <button
           v-for="(snack, index) in selectedSnacks"
@@ -201,7 +208,12 @@ defineEmits<{
           @click="$emit('eatSnack', snack.id)"
           @mouseenter="snackIndex = index"
           @focus="snackIndex = index">
-          <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+          <!-- おやつの絵（おやつ選択画面のカードと同じ画像。くわしくは assets/css/game/command-box.css の .snack-menu__icon）
+               alt="" … となりに名前の文字があるので、絵はかざりとして読ませない（「グミ グミ」と2回読まれないように） -->
+          <span class="snack-menu__icon">
+            <img class="snack-menu__image" :src="snack.image" alt="" decoding="async" />
+          </span>
+          <span class="snack-menu__name">{{ snack.name }}</span>
           <span class="command-box__badge snack-menu__effects">
             <span>体力 +{{ snack.energy }}</span>
             <span>機嫌 +{{ snack.mood }}</span>
@@ -280,7 +292,13 @@ defineEmits<{
            いやいやのコマンドと入れかえて、同じ枠の中に出す
            「← もどる」・Escape で、お話／だっこ／おやつ／待つ に戻る -->
       <template v-if="isSnackMenuVisible">
-        <p class="command-box__label">🎒 どのおやつをあげる？</p>
+        <!-- 見出しの左のリュックの絵は、ひとやすみのおやつバッグと同じ（data/snacks.ts の snackBagImage） -->
+        <p class="command-box__label snack-menu__label">
+          <span class="snack-menu__labelIcon">
+            <img class="snack-menu__labelImage" :src="snackBagImage" alt="" decoding="async" />
+          </span>
+          どのおやつをあげる？
+        </p>
 
         <button
           v-for="(snack, index) in selectedSnacks"
@@ -290,7 +308,12 @@ defineEmits<{
           @click="$emit('eatSnack', snack.id)"
           @mouseenter="snackIndex = index"
           @focus="snackIndex = index">
-          <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+          <!-- おやつの絵（おやつ選択画面のカードと同じ画像。くわしくは assets/css/game/command-box.css の .snack-menu__icon）
+               alt="" … となりに名前の文字があるので、絵はかざりとして読ませない（「グミ グミ」と2回読まれないように） -->
+          <span class="snack-menu__icon">
+            <img class="snack-menu__image" :src="snack.image" alt="" decoding="async" />
+          </span>
+          <span class="snack-menu__name">{{ snack.name }}</span>
           <span class="command-box__badge snack-menu__effects">
             <span>体力 +{{ snack.energy }}</span>
             <span>機嫌 +{{ snack.mood }}</span>

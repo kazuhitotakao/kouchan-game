@@ -104,7 +104,7 @@ import { itemIcons, normalPlaceEvents, placeItems, placeSelectionIndexes } from 
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
-import { maxSnackCount, snacks } from '~/data/snacks';
+import { maxSnackCount, snackBagImage, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
@@ -4302,15 +4302,22 @@ onUnmounted(() => {
               :aria-pressed="isSnackSelected(snack.id)"
               @click="toggleSnackSelection(snack.id, $event)"
               @mouseenter="moveSnackSelectionToHovered">
-              <!-- 絵文字と名前は、1行にならべる（「🍇 グミ」の形）
+              <!-- おやつの絵と名前は、1行にならべる（［グミの絵］グミ の形）
 
                    たてに積むより1行ぶん背が低くなるので、
                    おやつ6枚をならべてもカードが画面からはみ出しにくい
-                   2列にして1枚が横に広くなったぶん、
-                   横にならべても のびのび置ける
-                   （おやつバッグの「🍇 グミ」とも同じ見た目になる） -->
+                   （スマホでは、6枚・バッグ・出発ボタンを1画面に収めているので、
+                     絵を名前の上に積むと、背の低い画面で入りきらなくなる）
+
+                   ・絵は前は絵文字（🍇）だったが、おやつごとの画像にした（data/snacks.ts の image）
+                     おやつバッグの札は、今までどおり絵文字（🍇 グミ）のまま
+                   ・alt="" … となりに名前の文字があり、ボタンの読み上げは「グミ」になる
+                     alt にも名前を入れると「グミ グミ」と2回読まれるので、絵はかざりとして読ませない
+                   ・大きさ・余白の切り落とし・背景のなじませかたは CSS（assets/css/game/base.css の .snack-option__icon） -->
               <span class="snack-option__head">
-                <span class="snack-option__icon">{{ snack.icon }}</span>
+                <span class="snack-option__icon">
+                  <img class="snack-option__image" :src="snack.image" alt="" decoding="async" />
+                </span>
                 <span class="snack-option__name">{{ snack.name }}</span>
               </span>
 
@@ -4339,7 +4346,7 @@ onUnmounted(() => {
                    （.snack-option--selected … ふちが紺の二重線になり、背景が水色になる）
 
                    札を出すと、その置き場所のぶんだけカードが縦に大きくなる
-                   下の「🎒 おやつバッグ」に、選んだおやつの名前が出るので、
+                   下の「おやつバッグ」に、選んだおやつの名前が出るので、
                    何を選んでいるかはそちらでも確かめられる
 
                    読み上げソフトには、上の :aria-pressed が
@@ -4350,9 +4357,17 @@ onUnmounted(() => {
           <!-- おやつバッグ（いま選んでいる2個が分かるところ） -->
           <div class="snack-bag">
             <p class="snack-bag__head">
-              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して 🎒 だけにする（読み上げ用には残す）
-                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css） -->
-              <span class="snack-bag__title">🎒 <span class="snack-bag__titleText">おやつバッグ</span></span>
+              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して リュックの絵だけにする（読み上げ用には残す）
+                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css）
+
+                   リュックの絵は data/snacks.ts の snackBagImage（前は 🎒 の絵文字だった）
+                   alt="" … となりに「おやつバッグ」の文字があるので、絵はかざりとして読ませない -->
+              <span class="snack-bag__title">
+                <span class="snack-bag__titleIcon">
+                  <img class="snack-bag__titleImage" :src="snackBagImage" alt="" decoding="async" />
+                </span>
+                <span class="snack-bag__titleText">おやつバッグ</span>
+              </span>
 
               <!-- 「1 / 2」の数え方も maxSnackCount を見ている
                    （持っていける数を3つに変えても、ここは直さなくてよい） -->
@@ -4360,10 +4375,21 @@ onUnmounted(() => {
             </p>
 
             <!-- 選んだおやつの名前をならべる
-                 名札（selectedSnackIds）ではなく、絵文字と名前を持っている
-                 selectedSnacks のほうを使う -->
+                 名札（selectedSnackIds）ではなく、絵と名前を持っている
+                 selectedSnacks のほうを使う
+
+                 札の絵は、上のカードと同じ おやつの画像（data/snacks.ts の image）
+                 alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
+
+                 名前を span で包んでいるのは、細いスマホ（389px以下）で札を絵だけにするため
+                 （名前は見た目から消すが、読み上げ用には残す → assets/css/game/base.css の @media (max-width: 389px)） -->
             <ul v-if="selectedSnacks.length > 0" class="snack-bag__list">
-              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">{{ snack.icon }} {{ snack.name }}</li>
+              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">
+                <span class="snack-bag__icon">
+                  <img class="snack-bag__image" :src="snack.image" alt="" decoding="async" />
+                </span>
+                <span class="snack-bag__name">{{ snack.name }}</span>
+              </li>
             </ul>
 
             <p v-else class="snack-bag__empty">まだ選んでいません</p>
@@ -4409,7 +4435,8 @@ onUnmounted(() => {
               @volume-change="changeSoundVolume" />
           </div>
 
-          <h1 class="snack-heading">🍪 きょうのおやつ</h1>
+          <!-- 見出しの絵文字（🍪）は付けない。おやつのカードに おやつごとの絵があるので、見出しは文字だけにする -->
+          <h1 class="snack-heading">きょうのおやつ</h1>
 
           <!-- 2文目（もう一度押すと外せます。）は、スマホでは出さない
                スマホでおやつ選択を1画面に収めるため（→ base.css の .snack-lead__sub）

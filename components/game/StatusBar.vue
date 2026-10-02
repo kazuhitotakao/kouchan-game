@@ -19,6 +19,7 @@
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 
 import { itemIcons } from '~/data/places';
+import { snackBagImage } from '~/data/snacks';
 import type { StatusChanges } from '~/types/game';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
@@ -342,9 +343,9 @@ onBeforeUnmount(closeFoundTooltip);
     <!-- おでかけポイント／おやつ残り
 
          ・PC・タブレット … 「おでかけポイント 12」「おやつ残り 2個」と文字で出す
-         ・スマホ（700px以下）… 「⭐ 12」「🎒 2」と絵文字＋数字だけにして、いちばん上の段（時計とミュートのあいだ）に入れる
+         ・スマホ（700px以下）… 「⭐ 12」「［リュックの絵］ 2」と絵＋数字だけにして、いちばん上の段（時計とミュートのあいだ）に入れる
            文字（__label）と「個」は、見た目からは消して読み上げ用に残す（切りかえは status.css）
-           🎒 は、おやつを選ぶ画面の「🎒 おやつバッグ」と同じ絵文字
+           リュックの絵は、おやつを選ぶ画面の「おやつバッグ」と同じ絵（data/snacks.ts の snackBagImage。前は 🎒 の絵文字だった）
            （🍪 はおやつの1つ（クッキー）の絵文字なので使わない） -->
     <div class="status-pills">
       <span class="pill pill--point">
@@ -359,7 +360,9 @@ onBeforeUnmount(closeFoundTooltip);
       </span>
 
       <span class="pill pill--snack">
-        <span class="pill__icon" aria-hidden="true">🎒</span>
+        <span class="pill__icon pill__icon--image" aria-hidden="true">
+          <img class="pill__image" :src="snackBagImage" alt="" decoding="async" />
+        </span>
         <span class="pill__label">おやつ残り</span>
         <b>{{ snackLeft }}</b>
 
