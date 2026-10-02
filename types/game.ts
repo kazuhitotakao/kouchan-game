@@ -239,8 +239,8 @@ export type SecretPathLane = 0 | 1 | 2;
 export type SecretPathPhase = 'ready' | 'playing' | 'finished';
 
 /* 上から流れてくるものの種類
-   branch   … 枝 🌿（よけるもの）
-   sunlight … こもれび ✨（集めるもの） */
+   branch   … 枝（よけるもの。前は 🌿 の絵文字。いまは枝の絵 → components/game/SecretPathIcon.vue）
+   sunlight … こもれび（集めるもの。前は ✨ の絵文字。いまは こもれびの絵） */
 export type SecretPathItemKind = 'branch' | 'sunlight';
 
 /* 流れてくるもの1つぶん

@@ -11,19 +11,23 @@
      親が useSecretPathGame() の handleSecretPathPointer〜 へつなぐ
 
    ■ HUD の右上と真ん中は、遊びかたで出すものがちがう
-     ・本編の小道         … 「✨ こもれび 3 / 5」と「あと 12秒」（timeLeft を渡す）
-     ・どこまで行ける？   … 「✨ こもれび 8」「❤❤🤍」「123m」（lives・distance を渡す）
+     ・本編の小道         … 「［こもれびの絵］こもれび 3 / 5」と「あと 12秒」（timeLeft を渡す）
+     ・どこまで行ける？   … 「［こもれびの絵］こもれび 8」「❤❤🤍」「123m」（lives・distance を渡す）
                              加速しているあいだは、距離の右上に「⏩ ×2 → ×3」の札と、次の段までのゲージ
                              （boostTotalMultiplier・nextBoostMultiplier・comboProgress を渡す）
                              自己ベスト（bestDistance）を渡すと、HUD の下の「自己ベストまでのバー」と、
                              フィールドの「自己ベストの線」も出す
                              （こえた瞬間の「🎉 じこベスト更新！」は、使う側のページがフィールドの外に出す）
 
+   ■ 枝・こもれびの絵（前は 🌿・✨ の絵文字）は components/game/SecretPathIcon.vue
+     フィールドを流れてくるものだけでなく、HUD・自己ベスト・「+1」「-1」の札の中の こもれびも、同じ絵を出す
+
    ■ 見た目は assets/css/game/secret-path-field.css
    ============================================================ */
 
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
+import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import { getSecretPathLaneLeft } from '~/composables/useSecretPath';
 import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY } from '~/data/secretPath';
 import type { SecretPathItem, SecretPathLane } from '~/types/game';
@@ -41,14 +45,20 @@ const props = defineProps<{
   countdownNumber: number | null;
   isStartCueVisible: boolean;
 
-  /* 枝に当たった直後か・そのときに出す「✨ -1」「❤ -1」（出さないときは null）・出しなおすための番号 */
+  /* 枝に当たった直後か・そのときに「いたっ！」の下に出す、減ったもの・出しなおすための番号
+     bumpPenalty … 何が1つ減ったか（減ったものが無いときは null。「いたっ！」だけを出す）
+                   ・sunlight … こもれび（本編の小道）。「［こもれびの絵］-1」を出す
+                   ・life     … ❤（どこまで行ける？）。「❤️ -1」を出す
+                   ※ 前は「✨ -1」「❤️ -1」の文字をそのまま受け取っていたが、こもれびを絵にしたので、何が減ったかだけを受け取る */
   isBumped: boolean;
-  bumpPenalty: string | null;
+  bumpPenalty: 'sunlight' | 'life' | null;
   bumpId: number;
 
   /* こもれびを取った直後か・そのときに こうちゃんの上に出す文字・出しなおすための番号
-     sparkleLabel … 本編の小道は「✨ +1」（集めた数が1つ増える）、
-                    「どこまで行ける？」は「✨ +5m」（集めた数のほかに、進んだ距離にもボーナスが付く） */
+     sparkleLabel … こもれびの絵の右に出す文字
+                    本編の小道は「+1」（集めた数が1つ増える）、
+                    「どこまで行ける？」は「+5m」（集めた数のほかに、進んだ距離にもボーナスが付く）
+                    （こもれびの絵は、この部品が文字の左に出す。前は「✨ +1」のように絵文字ごと受け取っていた） */
   isSparkling: boolean;
   sparkleLabel: string;
   sparkleId: number;
@@ -224,7 +234,9 @@ onMounted(() => {
           'secret-path-hud__sunlight--record': isSunlightRecord,
         }"
         aria-live="polite">
-        ✨ <span class="secret-path-hud__sunlightLabel">こもれび</span>
+        <!-- こもれびの絵は、となりに「こもれび」と書いてあるので、読み上げでは読ませない（alt を渡さない）
+             絵と文字は同じ行に書く（行を分けると、Vue があいだの空白を消して、絵と文字がくっついてしまうため） -->
+        <SecretPathIcon kind="sunlight" /> <span class="secret-path-hud__sunlightLabel">こもれび</span>
         <!-- key を数にしておくと、取るたびに数字がぽんっと出なおす -->
         <b :key="sunlightCount" class="secret-path-hud__count">{{ sunlightCount }}</b>
         <!-- 前のすき間（「3 / 5」の3と/のあいだ）も、この中に書いておく
@@ -277,7 +289,7 @@ onMounted(() => {
     </div>
 
     <!-- 自己ベストまでのバー（「どこまで行ける？」で、自己ベストがあるときだけ）
-         ・左 … 「🏁 じこベスト 97m ✨ 8」（こえた記録は金色になる）
+         ・左 … 「🏁 じこベスト 97m ［こもれびの絵］ 8」（こえた記録は金色になる）
          ・まん中 … いまの距離が、自己ベストまでどこまで来たかのバー
          ・右 … 「あと 12m」。こえたら「🎉 更新中！」
          aria-live … 「更新中！」に変わったことを、読み上げでも伝える -->
@@ -285,7 +297,10 @@ onMounted(() => {
       <span class="secret-path-best__label">
         じこベスト
         <b class="secret-path-best__value" :class="{ 'secret-path-best__value--beaten': isDistanceRecord }">🏁 {{ bestDistance }}m</b>
-        <b v-if="bestSunlight !== undefined" class="secret-path-best__value" :class="{ 'secret-path-best__value--beaten': isSunlightRecord }">✨ {{ bestSunlight }}</b>
+        <b v-if="bestSunlight !== undefined" class="secret-path-best__value" :class="{ 'secret-path-best__value--beaten': isSunlightRecord }">
+          <SecretPathIcon kind="sunlight" alt="こもれび" />
+          {{ bestSunlight }}
+        </b>
       </span>
       <span class="secret-path-best__bar" aria-hidden="true">
         <span class="secret-path-best__fill" :style="{ width: `${bestProgress}%` }"></span>
@@ -295,7 +310,7 @@ onMounted(() => {
 
     <!-- フィールド（左・まん中・右の3レーン）
          枝とこもれびの位置は、JavaScript が1コマごとに top を書きかえて動かしている
-         aria-hidden … 流れてくる絵文字を、ひとつずつ読み上げないようにする -->
+         aria-hidden … 流れてくる枝・こもれびを、ひとつずつ読み上げないようにする -->
     <!-- ポインター操作（クリック・タップ・ドラッグ・フリック・長押し）は、フィールド1か所でまとめて受け取り、
          そのまま親へ知らせる（useSecretPathGame() の handleSecretPathPointerDown() を参照）
          ※ 知らせるのは、ブラウザがイベントを届けている最中なので、
@@ -344,17 +359,19 @@ onMounted(() => {
         class="secret-path-item"
         :class="[`secret-path-item--${item.kind}`, { 'secret-path-item--hit': item.hit }]"
         :style="{ left: getSecretPathLaneLeft(item.lane), top: `${item.y}%` }">
-        {{ item.kind === 'branch' ? '🌿' : '✨' }}
+        <SecretPathIcon :kind="item.kind" />
       </span>
 
       <div class="secret-path-player" :style="{ left: getSecretPathLaneLeft(playerLane), top: `${secretPathPlayerY}%` }">
-        <!-- 枝に当たったとき：「いたっ！」と、減ったものがあるときだけ「✨ -1」「❤ -1」
+        <!-- 枝に当たったとき：「いたっ！」と、減ったものがあるときだけ「［こもれびの絵］-1」「❤️ -1」
              key を当たった回数にしておくと、続けて当たったときも出なおす -->
         <span v-if="isBumped" :key="bumpId" class="secret-path-player__bump">
           いたっ！
-          <span v-if="bumpPenalty" class="secret-path-player__minus">{{ bumpPenalty }}</span>
+          <span v-if="bumpPenalty === 'sunlight'" class="secret-path-player__minus"><SecretPathIcon kind="sunlight" /> -1</span>
+          <span v-else-if="bumpPenalty === 'life'" class="secret-path-player__minus">❤️ -1</span>
         </span>
-        <span v-if="isSparkling" :key="sparkleId" class="secret-path-player__plus">{{ sparkleLabel }}</span>
+        <!-- こもれびを取ったとき：「［こもれびの絵］+1」（本編）「［こもれびの絵］+5m」（どこまで行ける？） -->
+        <span v-if="isSparkling" :key="sparkleId" class="secret-path-player__plus"><SecretPathIcon kind="sunlight" /> {{ sparkleLabel }}</span>
         <!-- はやく進んでいるあいだの、風の跡（こうちゃんのすぐ後ろ＝下に、短い線が流れる）
              こうちゃんより後ろは、もう通りすぎた所なので、枝をよけるのに見づらくならない
              加速コンボの倍率が付いたら（「どこまで行ける？」だけ）、HUD の札と同じ金色にする -->

@@ -165,7 +165,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
   /* 直前に枝に当たったとき、こもれびが本当に1つ減ったか
 
-     0個のときに当たっても減らない（0のまま）ので、そのときは「✨ -1」を出さない
+     0個のときに当たっても減らない（0のまま）ので、そのときは「［こもれびの絵］-1」を出さない
      （数が変わっていないのに「-1」と出ると、何が起きたか分かりにくくなるため） */
   const secretPathBumpLost = ref(false);
 
@@ -182,10 +182,10 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      マウスのときだけ使う（指で押したときは「乗せる」が無いので、ここは変えない） */
   const secretPathHoverLane = ref<SecretPathLane | null>(null);
 
-  /* 「✨ +1」を出しておくのは、ゲームの時計が何ミリ秒になるまでか */
+  /* 「［こもれびの絵］+1」を出しておくのは、ゲームの時計が何ミリ秒になるまでか */
   const secretPathSparkleUntil = ref(0);
 
-  /* 「✨ +1」の番号
+  /* 「［こもれびの絵］+1」の番号
      続けてこもれびを取ったときに、ふわっと上がる動きを最初からやりなおすための key */
   const secretPathSparkleId = ref(0);
 
@@ -320,7 +320,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     return Math.min(1, Math.max(0, (secretPathBoostComboTime.value - from) / (to - from)));
   });
 
-  /* 集めたこもれびぶんの、進んだ距離のボーナス（メートル。結果の画面の「✨ 8 +40m」に出す）
+  /* 集めたこもれびぶんの、進んだ距離のボーナス（メートル。結果の画面の「［こもれびの絵］8 +40m」に出す）
      本編の小道では使わない（こもれびは、おでかけポイントのボーナスになる） */
   const secretPathSunlightBonusMeters = computed(() => (isEndless ? secretPathSunlightCount.value * secretPathEndlessSunlightBonusMeters : 0));
 
@@ -331,7 +331,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
        「まだ出しているあいだ」に見えてしまうため（カウントダウン中は、枝もこもれびも来ない） */
   const isSecretPathBumped = computed(() => isSecretPathPlaying.value && !isSecretPathCountingDown.value && secretPathElapsed.value < secretPathBumpUntil.value);
 
-  /* こもれびを取った直後かどうか（「✨ +1」と光を出しているあいだ。カウントダウン中は、上と同じ理由で false） */
+  /* こもれびを取った直後かどうか（「［こもれびの絵］+1」と光を出しているあいだ。カウントダウン中は、上と同じ理由で false） */
   const isSecretPathSparkling = computed(
     () => isSecretPathPlaying.value && !isSecretPathCountingDown.value && secretPathElapsed.value < secretPathSparkleUntil.value,
   );
@@ -605,7 +605,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
         /* 「どこまで行ける？」の距離ボーナス（1つで +5m → data/secretPathEndless.ts）
            ・取りに行く意味を、記録（進んだ距離）にも出すため（こもれびの行は、たいてい枝もいっしょに出る）
            ・加速コンボの倍率は掛けない（いつ取っても同じ +5m のほうが分かりやすい）
-           ・こうちゃんの上には「✨ +5m」と出す（→ pages/minigame/secret-path.vue の sparkle-label）
+           ・こうちゃんの上には「［こもれびの絵］+5m」と出す（→ pages/minigame/secret-path.vue の sparkle-label）
            本編の小道は、今までどおり数を数えるだけ（小道をぬけたときの、おでかけポイントのボーナスになる） */
         if (isEndless) {
           secretPathDistance.value += secretPathEndlessSunlightBonusMeters;
@@ -614,7 +614,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
         secretPathSparkleUntil.value = elapsed + secretPathSparkleDuration;
         secretPathSparkleId.value += 1;
 
-        // 「✨ +1」と「いたっ！」は同じ場所（こうちゃんの上）に出るので、
+        // 「［こもれびの絵］+1」と「いたっ！」は同じ場所（こうちゃんの上）に出るので、
         // 重なって読めなくならないように、あとから起きたほうだけを出す
         secretPathBumpUntil.value = 0;
 
@@ -646,7 +646,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
         secretPathBumpUntil.value = elapsed + secretPathBumpEffectDuration;
         secretPathBumpId.value += 1;
 
-        // こもれびを取った直後の「✨ +1」が残っていたら消す（「いたっ！」と重ならないように、あとから起きたほうだけを出す）
+        // こもれびを取った直後の「［こもれびの絵］+1」が残っていたら消す（「いたっ！」と重ならないように、あとから起きたほうだけを出す）
         secretPathSparkleUntil.value = 0;
 
         playBranchBumpSound();
