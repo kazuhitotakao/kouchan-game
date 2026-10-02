@@ -4427,7 +4427,8 @@ onUnmounted(() => {
               @volume-change="changeSoundVolume" />
           </div>
 
-          <h1 class="snack-heading">🍪 きょうのおやつ</h1>
+          <!-- 見出しの絵文字（🍪）は付けない。おやつのカードに おやつごとの絵があるので、見出しは文字だけにする -->
+          <h1 class="snack-heading">きょうのおやつ</h1>
 
           <!-- 2文目（もう一度押すと外せます。）は、スマホでは出さない
                スマホでおやつ選択を1画面に収めるため（→ base.css の .snack-lead__sub）
