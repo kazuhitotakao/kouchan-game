@@ -127,20 +127,59 @@
 /* おやつ1つぶんの行
 
    ふつうのコマンドは「文字 … 右はしに残り個数」の横ならびだが、
-   おやつは「🍇 グミ」の下に「体力 +5 機嫌 +20 5分」を出したいので、たてならびにする
+   おやつは左におやつの絵、その右に「グミ」と、その下に「体力 +5 機嫌 +20 5分」を出したいので、
+   2列×2段の grid にする
+     ［絵］ グミ
+     ［絵］ 体力 +5 機嫌 +20 5分
+   （絵は2段ぶんの高さを使う。名前と数字の2段の高さに収まる大きさなので、絵文字だったころと行の高さは変わらない）
+   ※ カーソル「▶」と選んでいる行の光（::before / ::after）は position: absolute なので、grid のマスには入らない
 
    うすい線でかこって、ほかのコマンドより少し「カード」らしく見せる
    （線は border ではなく内側の影で引くので、行の大きさは変わらない）
    スマホで指で押しやすいように、カードとカードのあいだも少しあける */
 .snack-menu__item {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1px 10px;
   margin-bottom: 6px;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 28%);
 }
 
-/* おやつの名前（「🍇 グミ」） */
+/* おやつの絵（data/snacks.ts の image。おやつ選択画面のカードと同じ画像）
+
+   ■ 白いタイルにのせて見せる
+     画像は透明ではなく、うしろが白でぬってある
+     おやつ選択画面のカード（白い紙）では、mix-blend-mode で白をカードの色になじませているが（→ base.css の .snack-option__image）、
+     ここは紺色のコマンド欄なので、同じことをすると絵まで暗くなってしまう
+     そこで、画像の白をそのまま生かして、角を丸めた白いタイル（アプリのアイコンのような形）として見せる
+
+   ■ 絵のまわりの余白を切り落とす（base.css の .snack-option__icon と同じしかけ）
+     絵は画像のまんなかの7割ほどなので、わくの中で 125% に広げて、上下左右の白い余白を1割ずつ切り落とす
+     画像の白はほんの少し黄みがかっているので、3%明るくして、タイルの白（#fff）とそろえる
+
+   ・大きさは 40px（名前と数字の2段の高さに収まる）。画面の低いときは下の @media で小さくする
+   ・grid-row: span 2 … 名前と数字の2段にまたがって、左にならべる */
+.snack-menu__icon {
+  display: block;
+  grid-row: span 2;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.snack-menu__image {
+  display: block;
+  width: 125%;
+  height: 125%;
+  margin: -12.5%;
+  object-fit: contain;
+  filter: brightness(1.03);
+}
+
+/* おやつの名前（「グミ」） */
 .snack-menu__name {
   line-height: 1.5;
 }

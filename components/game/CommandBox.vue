@@ -201,7 +201,12 @@ defineEmits<{
           @click="$emit('eatSnack', snack.id)"
           @mouseenter="snackIndex = index"
           @focus="snackIndex = index">
-          <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+          <!-- おやつの絵（おやつ選択画面のカードと同じ画像。くわしくは assets/css/game/command-box.css の .snack-menu__icon）
+               alt="" … となりに名前の文字があるので、絵はかざりとして読ませない（「グミ グミ」と2回読まれないように） -->
+          <span class="snack-menu__icon">
+            <img class="snack-menu__image" :src="snack.image" alt="" decoding="async" />
+          </span>
+          <span class="snack-menu__name">{{ snack.name }}</span>
           <span class="command-box__badge snack-menu__effects">
             <span>体力 +{{ snack.energy }}</span>
             <span>機嫌 +{{ snack.mood }}</span>
@@ -290,7 +295,12 @@ defineEmits<{
           @click="$emit('eatSnack', snack.id)"
           @mouseenter="snackIndex = index"
           @focus="snackIndex = index">
-          <span class="snack-menu__name">{{ snack.icon }} {{ snack.name }}</span>
+          <!-- おやつの絵（おやつ選択画面のカードと同じ画像。くわしくは assets/css/game/command-box.css の .snack-menu__icon）
+               alt="" … となりに名前の文字があるので、絵はかざりとして読ませない（「グミ グミ」と2回読まれないように） -->
+          <span class="snack-menu__icon">
+            <img class="snack-menu__image" :src="snack.image" alt="" decoding="async" />
+          </span>
+          <span class="snack-menu__name">{{ snack.name }}</span>
           <span class="command-box__badge snack-menu__effects">
             <span>体力 +{{ snack.energy }}</span>
             <span>機嫌 +{{ snack.mood }}</span>
