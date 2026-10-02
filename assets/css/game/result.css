@@ -3,7 +3,7 @@
 
    ・ゴールしたあとのリザルト（.ending-card／.score-card／.record-card）
    ・GAME OVER（.gameover-card 〜）
-   ・見つけたもの一覧（.found-list）
+   ・見つけたものの見出しの数（.record-card__count。中身は components/game/FoundItemCollection.vue）
    ・リザルトのときだけ効くレイアウト（.scene--result／.scene--gameover）
    ・結果カードを縮めてよくする .stage > .result-card
      （.stage は pages/index.vue 側の要素なので、ここに残してある）
@@ -311,22 +311,28 @@
   white-space: nowrap;
 }
 
-.found-list {
+/* 「見つけたもの」の見出し（見つけたもの ……… 3 / 6）
+   中身（図鑑のような6つのマス）は components/game/FoundItemCollection.vue
+   前は、見つけたものの札（［絵］名前）を横にならべていた（.found-list） */
+.record-card__title--found {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
 
-.found-list__item {
-  padding: 3px 14px;
-  border: 1px solid #f5e2be;
+/* いくつ見つけたか（「3 / 6」）。6つぜんぶ見つけたら金色の札にする */
+.record-card__count {
+  color: #8a6a20;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-card__count--complete {
+  padding: 1px 10px;
   border-radius: 999px;
-  background: #fff6e0;
-  color: #6a4a10;
-  font-size: 13px;
+  background: #ffe9a8;
+  color: #7a4f00;
 }
 
 /* --- GAME OVER --- */

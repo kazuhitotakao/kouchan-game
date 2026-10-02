@@ -16,8 +16,10 @@ import { addMinutesToTime } from '~/utils/gameTime';
 /* ゲーム画面の部品（どれも表示と、押されたことを伝えるだけ）
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
 import CommandBox from '~/components/game/CommandBox.vue';
+import FoundItemCollection from '~/components/game/FoundItemCollection.vue';
 import ResultCard from '~/components/game/ResultCard.vue';
 import SecretPathField from '~/components/game/SecretPathField.vue';
+import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import SoundControl from '~/components/game/SoundControl.vue';
 
 /* 画像の置き場所（まだ画像が無いあいだは「NO IMAGE」の仮の枠を出す）
@@ -100,11 +102,11 @@ import type {
    プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { parkMapStartPlace } from '~/data/parkMap';
-import { itemIcons, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
-import { maxSnackCount, snacks } from '~/data/snacks';
+import { maxSnackCount, snackBagImage, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
@@ -181,7 +183,7 @@ const isStandalone = ref<boolean | null>(null);
    ・画面が切りかわったとき、メインのボタンへフォーカスを当てる
    ・↑↓←→ で、ボタンをぐるぐる選べるようにする
 
-   A画面  … はじめる／♪ サウンドトラック／🌿 ミニゲーム／サウンドON・OFF
+   A画面  … はじめる／♪ サウンドトラック／🎮 ミニゲーム／サウンドON・OFF
    B画面  … きょうのおやつを選ぶ／はじめの画面へ戻る／？ あそびかた／サウンドON・OFF
    あそびかた画面 … ← ひとつ前の画面へ戻る／サウンドON・OFF
    ※ サウンドON/OFFは、どの画面でも一度に1つしか画面に出ないので、
@@ -189,7 +191,7 @@ const isStandalone = ref<boolean | null>(null);
    ============================================================ */
 const startButtonRef = ref<HTMLButtonElement | null>(null);
 const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
-const minigameButtonRef = ref<HTMLButtonElement | null>(null); // A画面の「🌿 ミニゲーム」（ミニゲームの一覧への入口）
+const minigameButtonRef = ref<HTMLButtonElement | null>(null); // A画面の「🎮 ミニゲーム」（ミニゲームの一覧への入口）
 const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
 const howToPlayButtonRef = ref<HTMLButtonElement | null>(null); // B画面の「？ あそびかた」
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
@@ -1214,6 +1216,10 @@ function addCollectedItem(itemName: string) {
   foundItemsThisAction.value.push(itemName);
 }
 
+/* 見つかるものが、ぜんぶでいくつあるか（リザルトの「見つけたもの 3 / 6」の 6）
+   data/places.ts の placeItems の数なので、見つかるものを増やすと、ここも自動で増える */
+const foundItemTotal = Object.keys(placeItems).length;
+
 /* その場所のアイテムを、もう見つけているかどうか
 
    公園入口の行き先ボタンの「★ 発見済み」バッジで使う
@@ -1733,8 +1739,8 @@ function handleScreenEnterEnd() {
 
    ※ 決定音「ポン♪」はここで鳴らす
      この画面でただ一つ、先へ進むボタンなので、押せたことを音でも返す
-     （となりの ♪ サントラ・🌿 ミニゲームは、ページごと移るだけなので鳴らさない）
-     曲が鳴りだすのは0.5秒あとなので、決定音と重なって聞こえることはない
+     （となりの ♪ サントラ・🎮 ミニゲームは、ページごと移るだけなので鳴らさない）
+     曲が鳴りだすのは0.7秒あとなので、決定音と重なって聞こえることはない
 */
 function enterTitle() {
   // 決定音「ポン♪」（ほかの「先へ進む」ボタンと同じ）
@@ -2091,7 +2097,7 @@ function goToSoundtrack() {
   /* ※ 決定音は鳴らさない
      このボタンを押すと、このあとすぐページごと切りかわる
      切りかわりのとちゅうで「ポン♪」だけが残って聞こえるのを避けている
-     （🌿 ミニゲーム、サウンドトラック・ミニゲームの各ページの「戻る」も同じ） */
+     （🎮 ミニゲーム、サウンドトラック・ミニゲームの各ページの「戻る」も同じ） */
   cancelTitleBgmStart();
   stopTitleBgm();
 
@@ -2107,7 +2113,7 @@ function goToSoundtrack() {
    （小道をぬけた時点で、もう小道のことは分かっているので、広場へ入るのを待たない）
    ミニゲームを増やすときも、本編で解放したいところで unlockMinigame('<id>') を呼ぶ
 
-   ※ A画面の「🌿 ミニゲーム」（一覧への入口）は、解放していなくてもいつも出している
+   ※ A画面の「🎮 ミニゲーム」（一覧への入口）は、解放していなくてもいつも出している
      まだ解放していないミニゲームは、一覧で「？？？」とヒントだけを出すので、中身は先に分からない
    ※ resetGame（もう一度あそぶ）でも、解放は戻さない（S+ランクのうた入りBGMの解放と同じ） */
 watch(hasDiscoveredSecretSpot, (discovered) => {
@@ -2170,7 +2176,7 @@ function goToPlace(place: GameEvent) {
   /* 秘密の場所へ入るときだけ、公園BGMからこもれびの広場BGMへ入れかえる
 
      かならず「公園BGMを止める → こもれびの広場BGMを鳴らす」の順番にする
-     先に止めておかないと、待っている0.5秒のあいだ公園BGMが鳴りつづけ、
+     先に止めておかないと、待っている0.7秒のあいだ公園BGMが鳴りつづけ、
      2曲が重なってどちらもにごって聞こえてしまう
 
      stopParkBgm() は公園BGM1・BGM2の両方を止めてくれるので、
@@ -2305,7 +2311,7 @@ function goToNextPlace() {
        （続きからではなく頭から）
 
        鳴らしかたは playParkBgmSoon()＝「このおやつで公園へ行く！」を押したときと同じ
-       ・少し間（500ms）を空けてから鳴らしはじめる
+       ・少し間（700ms）を空けてから鳴らしはじめる
          → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
        ・そのあと無音からフェードインする
        こうすると「いやいやが終わって、また公園にもどってきた」という
@@ -2353,14 +2359,14 @@ function goToNextPlace() {
 
      鳴らしかたは playParkBgmSoon()＝「このおやつで公園へ行く！」を押したときと同じ
      ・こもれびの広場BGMは、この関数の上のほうですでに止めてある
-     ・少し間（500ms）を空けてから鳴らしはじめる
+     ・少し間（700ms）を空けてから鳴らしはじめる
        → 決定音「ポン♪」が曲の鳴りはじめにかき消されない
        → いったん静かになるので「秘密の場所から出てきた」感じが出る
      ・そのあと無音からフェードインする
 
      ※ どちらの公園BGMへ戻るかは、playParkBgmSoon() にまかせる
        ここで park-bgm.mp3 に決め打ちしてはいけない
-       実際に鳴らす playParkBgm() が、500ms後にそのときの時計を見て
+       実際に鳴らす playParkBgm() が、700ms後にそのときの時計を見て
        ・10:30より前  … park-bgm.mp3  （BGM1）
        ・10:30以降    … park-bgm2.mp3 （BGM2）
        を選んでくれる
@@ -3245,7 +3251,7 @@ function resetGame() {
      GAME OVER BGMも stop で止めて、先頭に戻しておく
      GAME OVER画面から「もう一度あそぶ」を押したときは、ここで曲が止まってからタイトルBGMへ切りかわる
      stopGameOverBgm() は「あとで鳴らす」の予約も取り消すので、
-     GAME OVERになってすぐ（0.5秒の待ち時間のうちに）押しても、
+     GAME OVERになってすぐ（0.7秒の待ち時間のうちに）押しても、
      あとからタイトル画面でGAME OVERの曲が鳴りだすことはない */
   stopParkBgm();
   stopSecretBgm();
@@ -4101,7 +4107,7 @@ onUnmounted(() => {
               <!-- ミニゲームの一覧への入口（押すとミニゲームの一覧へ）
                    まだ1つも解放していなくても、いつも出す
                    一覧では、まだ解放していないミニゲームを「？？？」とヒントだけで出すので、中身は先に分からない -->
-              <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">🌿 ミニゲーム</button>
+              <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">🎮 ミニゲーム</button>
             </div>
 
             <!-- サウンドのコントロール（この画面ではミュートボタンだけ）
@@ -4112,7 +4118,7 @@ onUnmounted(() => {
 
                  ■ ここだけ音量スライダーを出さない（:show-volume="false"）
                    A画面は、まだBGMが鳴っていない画面
-                   （鳴るのは ♪・🌿 を押したときの決定音だけで、押すとすぐ次の画面へ移る）
+                   （鳴るのは ♪・🎮 を押したときの決定音だけで、押すとすぐ次の画面へ移る）
                    スライダーを動かしても、その場では何も聞こえない＝手ごたえがないので出さない
                    「はじめる」を押すとタイトルBGMが鳴りだすので、
                    その前に音を消しておく役目は、ミュートボタンだけで足りる
@@ -4177,7 +4183,7 @@ onUnmounted(() => {
                右：？ あそびかた ＋ サウンドON/OFF（「きょうのおやつを選ぶ」を押すと決定音が鳴るので、その前に消せるようにしておく） -->
           <div class="title-card__tools">
             <!-- はじめの画面へ戻る（左上の補助操作）
-                 A画面の左上（♪・🌿 ミニゲーム）と同じ場所・同じ高さで出るので、
+                 A画面の左上（♪・🎮 ミニゲーム）と同じ場所・同じ高さで出るので、
                  A→B で切り替えても、左上のボタンが入れかわるだけに見える
 
                  ※ Enter/Space で「きょうのおやつを選ぶ」まで動いてしまわないのは、
@@ -4302,15 +4308,22 @@ onUnmounted(() => {
               :aria-pressed="isSnackSelected(snack.id)"
               @click="toggleSnackSelection(snack.id, $event)"
               @mouseenter="moveSnackSelectionToHovered">
-              <!-- 絵文字と名前は、1行にならべる（「🍇 グミ」の形）
+              <!-- おやつの絵と名前は、1行にならべる（［グミの絵］グミ の形）
 
                    たてに積むより1行ぶん背が低くなるので、
                    おやつ6枚をならべてもカードが画面からはみ出しにくい
-                   2列にして1枚が横に広くなったぶん、
-                   横にならべても のびのび置ける
-                   （おやつバッグの「🍇 グミ」とも同じ見た目になる） -->
+                   （スマホでは、6枚・バッグ・出発ボタンを1画面に収めているので、
+                     絵を名前の上に積むと、背の低い画面で入りきらなくなる）
+
+                   ・絵は前は絵文字（🍇）だったが、おやつごとの画像にした（data/snacks.ts の image）
+                     おやつバッグの札は、今までどおり絵文字（🍇 グミ）のまま
+                   ・alt="" … となりに名前の文字があり、ボタンの読み上げは「グミ」になる
+                     alt にも名前を入れると「グミ グミ」と2回読まれるので、絵はかざりとして読ませない
+                   ・大きさ・余白の切り落とし・背景のなじませかたは CSS（assets/css/game/base.css の .snack-option__icon） -->
               <span class="snack-option__head">
-                <span class="snack-option__icon">{{ snack.icon }}</span>
+                <span class="snack-option__icon">
+                  <img class="snack-option__image" :src="snack.image" alt="" decoding="async" />
+                </span>
                 <span class="snack-option__name">{{ snack.name }}</span>
               </span>
 
@@ -4339,7 +4352,7 @@ onUnmounted(() => {
                    （.snack-option--selected … ふちが紺の二重線になり、背景が水色になる）
 
                    札を出すと、その置き場所のぶんだけカードが縦に大きくなる
-                   下の「🎒 おやつバッグ」に、選んだおやつの名前が出るので、
+                   下の「おやつバッグ」に、選んだおやつの名前が出るので、
                    何を選んでいるかはそちらでも確かめられる
 
                    読み上げソフトには、上の :aria-pressed が
@@ -4350,9 +4363,17 @@ onUnmounted(() => {
           <!-- おやつバッグ（いま選んでいる2個が分かるところ） -->
           <div class="snack-bag">
             <p class="snack-bag__head">
-              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して 🎒 だけにする（読み上げ用には残す）
-                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css） -->
-              <span class="snack-bag__title">🎒 <span class="snack-bag__titleText">おやつバッグ</span></span>
+              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して リュックの絵だけにする（読み上げ用には残す）
+                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css）
+
+                   リュックの絵は data/snacks.ts の snackBagImage（前は 🎒 の絵文字だった）
+                   alt="" … となりに「おやつバッグ」の文字があるので、絵はかざりとして読ませない -->
+              <span class="snack-bag__title">
+                <span class="snack-bag__titleIcon">
+                  <img class="snack-bag__titleImage" :src="snackBagImage" alt="" decoding="async" />
+                </span>
+                <span class="snack-bag__titleText">おやつバッグ</span>
+              </span>
 
               <!-- 「1 / 2」の数え方も maxSnackCount を見ている
                    （持っていける数を3つに変えても、ここは直さなくてよい） -->
@@ -4360,10 +4381,21 @@ onUnmounted(() => {
             </p>
 
             <!-- 選んだおやつの名前をならべる
-                 名札（selectedSnackIds）ではなく、絵文字と名前を持っている
-                 selectedSnacks のほうを使う -->
+                 名札（selectedSnackIds）ではなく、絵と名前を持っている
+                 selectedSnacks のほうを使う
+
+                 札の絵は、上のカードと同じ おやつの画像（data/snacks.ts の image）
+                 alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
+
+                 名前を span で包んでいるのは、細いスマホ（389px以下）で札を絵だけにするため
+                 （名前は見た目から消すが、読み上げ用には残す → assets/css/game/base.css の @media (max-width: 389px)） -->
             <ul v-if="selectedSnacks.length > 0" class="snack-bag__list">
-              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">{{ snack.icon }} {{ snack.name }}</li>
+              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">
+                <span class="snack-bag__icon">
+                  <img class="snack-bag__image" :src="snack.image" alt="" decoding="async" />
+                </span>
+                <span class="snack-bag__name">{{ snack.name }}</span>
+              </li>
             </ul>
 
             <p v-else class="snack-bag__empty">まだ選んでいません</p>
@@ -4409,7 +4441,8 @@ onUnmounted(() => {
               @volume-change="changeSoundVolume" />
           </div>
 
-          <h1 class="snack-heading">🍪 きょうのおやつ</h1>
+          <!-- 見出しの絵文字（🍪）は付けない。おやつのカードに おやつごとの絵があるので、見出しは文字だけにする -->
+          <h1 class="snack-heading">きょうのおやつ</h1>
 
           <!-- 2文目（もう一度押すと外せます。）は、スマホでは出さない
                スマホでおやつ選択を1画面に収めるため（→ base.css の .snack-lead__sub）
@@ -4938,7 +4971,7 @@ onUnmounted(() => {
             <section class="stage stage--secret-path">
               <!-- はじまる前 -->
               <article v-if="secretPathPhase === 'ready'" class="place-card place-card--secret">
-                <h2 class="place-card__title">🌿 秘密の小道</h2>
+                <h2 class="place-card__title"><SecretPathIcon kind="sunlight" /> 秘密の小道</h2>
 
                 <!-- secret-path-intro … スマホ幅では出さない（→ assets/css/game/responsive.css） -->
                 <p class="place-card__text secret-path-intro">葉っぱのすき間から、光がちらちら。そっと小道へ。</p>
@@ -4946,7 +4979,7 @@ onUnmounted(() => {
                 <p class="secret-path-lead">
                   えだをよけながら
                   <br />
-                  ✨ こもれびをあつめよう！
+                  <SecretPathIcon kind="sunlight" /> こもれびをあつめよう！
                 </p>
 
                 <ul class="secret-path-rules">
@@ -4966,17 +4999,19 @@ onUnmounted(() => {
                     <span class="secret-path-rules__part">👆 タップ・フリック：左右に移動</span>
                     <span class="secret-path-rules__part">長押し：はやく進む</span>
                   </li>
+                  <!-- 枝・こもれびの絵は、前は 🌿・✨ の絵文字だった（絵は components/game/SecretPathIcon.vue）
+                       「枝」「こもれび」という言葉のかわりに絵を置いているので、読み上げではその名前を読ませる（alt） -->
                   <li>
-                    <span class="secret-path-rules__part">🌿をよけて✨を集めよう！</span>
-                    <span class="secret-path-rules__part">枝に当たると✨が1つへります</span>
+                    <span class="secret-path-rules__part"><SecretPathIcon kind="branch" alt="枝" />をよけて<SecretPathIcon kind="sunlight" alt="こもれび" />を集めよう！</span>
+                    <span class="secret-path-rules__part">枝に当たると<SecretPathIcon kind="sunlight" alt="こもれび" />が1つへります</span>
                   </li>
                 </ul>
               </article>
 
               <!-- 遊んでいる最中（HUD ＋ 3レーンのフィールド。中身は components/game/SecretPathField.vue）
                    ミニゲーム「どこまで行ける？」（pages/minigame/secret-path.vue）と同じ部品を使う
-                   ・bump-penalty … 枝に当たってこもれびが本当に減ったときだけ「✨ -1」を出す
-                   ・sparkle-label … こもれびを取ったときに出す文字（本編は、集めた数が1つ増えるので「✨ +1」）
+                   ・bump-penalty … 枝に当たってこもれびが本当に減ったときだけ「［こもれびの絵］-1」を出す（'sunlight'）
+                   ・sparkle-label … こもれびを取ったときに、こもれびの絵の右に出す文字（本編は、集めた数が1つ増えるので「+1」）
                    ・フィールドのポインター操作は、部品から知らせてもらって useSecretPathGame() の関数へつなぐ -->
               <SecretPathField
                 v-else-if="secretPathPhase === 'playing'"
@@ -4987,10 +5022,10 @@ onUnmounted(() => {
                 :countdown-number="secretPathCountdownNumber"
                 :is-start-cue-visible="isSecretPathStartCueVisible"
                 :is-bumped="isSecretPathBumped"
-                :bump-penalty="secretPathBumpLost ? '✨ -1' : null"
+                :bump-penalty="secretPathBumpLost ? 'sunlight' : null"
                 :bump-id="secretPathBumpId"
                 :is-sparkling="isSecretPathSparkling"
-                sparkle-label="✨ +1"
+                sparkle-label="+1"
                 :sparkle-id="secretPathSparkleId"
                 :sunlight-count="secretPathSunlightCount"
                 :sunlight-total="secretPathSunlightTotal"
@@ -5007,10 +5042,11 @@ onUnmounted(() => {
               <article v-else class="place-card place-card--secret">
                 <p class="place-card__flash">小道をぬけた！</p>
 
-                <h2 class="place-card__title">🌿 秘密の小道</h2>
+                <h2 class="place-card__title"><SecretPathIcon kind="sunlight" /> 秘密の小道</h2>
 
                 <p class="secret-path-result">
-                  ✨ こもれび
+                  <SecretPathIcon kind="sunlight" />
+                  こもれび
                   <b>{{ secretPathSunlightCount }}</b>
                   / {{ secretPathSunlightTotal }}
                 </p>
@@ -5022,7 +5058,7 @@ onUnmounted(() => {
                 <!-- こもれびボーナス（2個以上集めたときだけ）
                      見た目は、いやいやタイムの「✨ ナイス対応！」と同じ緑の枠を使う -->
                 <div v-if="secretPathBonusPoint > 0" class="event-flash event-flash--nice">
-                  <p class="event-flash__label">✨ こもれびボーナス！</p>
+                  <p class="event-flash__label"><SecretPathIcon kind="sunlight" /> こもれびボーナス！</p>
 
                   <ul class="event-flash__list">
                     <li class="event-flash__item">
@@ -5548,14 +5584,17 @@ onUnmounted(() => {
                   </ul>
                 </article>
 
+                <!-- 見つけたもの（図鑑のような6つのマス。中身は components/game/FoundItemCollection.vue）
+                     見出しの右に「3 / 6」と、いくつ見つけたかを出す（6つぜんぶのときは金色 → result.css の .record-card__count--complete） -->
                 <article class="record-card">
-                  <h3 class="record-card__title">見つけたもの</h3>
+                  <h3 class="record-card__title record-card__title--found">
+                    見つけたもの
+                    <span class="record-card__count" :class="{ 'record-card__count--complete': collectedItems.length >= foundItemTotal }">
+                      {{ collectedItems.length }} / {{ foundItemTotal }}
+                    </span>
+                  </h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
-
-                  <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
-                  </ul>
+                  <FoundItemCollection :collected-items="collectedItems" />
                 </article>
               </div>
             </section>
@@ -5664,14 +5703,17 @@ onUnmounted(() => {
                   </ul>
                 </article>
 
+                <!-- 見つけたもの（図鑑のような6つのマス。中身は components/game/FoundItemCollection.vue）
+                     見出しの右に「3 / 6」と、いくつ見つけたかを出す（6つぜんぶのときは金色 → result.css の .record-card__count--complete） -->
                 <article class="record-card">
-                  <h3 class="record-card__title">見つけたもの</h3>
+                  <h3 class="record-card__title record-card__title--found">
+                    見つけたもの
+                    <span class="record-card__count" :class="{ 'record-card__count--complete': collectedItems.length >= foundItemTotal }">
+                      {{ collectedItems.length }} / {{ foundItemTotal }}
+                    </span>
+                  </h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
-
-                  <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
-                  </ul>
+                  <FoundItemCollection :collected-items="collectedItems" />
                 </article>
               </div>
             </section>

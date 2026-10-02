@@ -89,7 +89,8 @@ export type SnackId = 'gummy' | 'chocolate' | 'senbei' | 'biscuit' | 'banana' | 
 
    id          … 名札（上の SnackId）
    name        … 画面に出す名前（「グミ」）
-   icon        … 画面に出す絵文字（「🍇」）
+   icon        … 画面に出す絵文字（「🍇」）。おやつバッグなど、文字の中にならべるところで使う
+   image       … おやつ選択画面のカードに出す絵（public/images/snacks/ の画像。URLでは /images/snacks/〜）
    energy      … 食べたときに回復する、こうちゃんの体力
    mood        … 食べたときに回復する、こうちゃんの機嫌
    minutes     … 食べるのにかかる時間（分）
@@ -105,6 +106,7 @@ export type Snack = {
   id: SnackId;
   name: string;
   icon: string;
+  image: string;
   energy: number;
   mood: number;
   minutes: number;
@@ -237,8 +239,8 @@ export type SecretPathLane = 0 | 1 | 2;
 export type SecretPathPhase = 'ready' | 'playing' | 'finished';
 
 /* 上から流れてくるものの種類
-   branch   … 枝 🌿（よけるもの）
-   sunlight … こもれび ✨（集めるもの） */
+   branch   … 枝（よけるもの。前は 🌿 の絵文字。いまは枝の絵 → components/game/SecretPathIcon.vue）
+   sunlight … こもれび（集めるもの。前は ✨ の絵文字。いまは こもれびの絵） */
 export type SecretPathItemKind = 'branch' | 'sunlight';
 
 /* 流れてくるもの1つぶん

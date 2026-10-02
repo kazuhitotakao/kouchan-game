@@ -6,9 +6,38 @@
    プレイ中に変わるので composables/useSecretPathGame.ts のほうが持っている
    ============================================================ */
 
-import type { SecretPathLane } from '~/types/game';
+import type { SecretPathItemKind, SecretPathLane } from '~/types/game';
 
 export const secretPathLanes: SecretPathLane[] = [0, 1, 2];
+
+/* 流れてくるもの（枝・こもれび）の絵（2つとも public/images/minigames/secret-path/ にある）
+
+   フィールドを流れてくる絵だけでなく、ルールの説明・HUD・記録などの文の中で「枝」「こもれび」を指すところも、この絵を出す
+   （前は 🌿・✨ の絵文字だった。出しかたは components/game/SecretPathIcon.vue）
+   ・どちらも、うしろが透明な画像（土の道・草の上に、そのまま重ねられる）
+   ・絵を差しかえたいときは、ここを書きかえるだけでよい
+     （絵のまわりの透明な余白の切り落としかたは、SecretPathIcon.vue の CSS で絵ごとに決めているので、絵の形が大きく変わるときは そちらも合わせる） */
+export const secretPathItemImages: Record<SecretPathItemKind, string> = {
+  branch: '/images/minigames/secret-path/branch.webp',
+  sunlight: '/images/minigames/secret-path/komorebi-light.webp',
+};
+
+/* こうちゃんの絵（3枚とも public/images/minigames/secret-path/ にある。前は 👦 の絵文字だった）
+
+   normal … ふだん（走っている）
+   hurt   … 枝に当たった直後（「いたっ！」を出しているあいだ）
+   get    … こもれびを取った直後（「［こもれびの絵］+1」を出しているあいだ）
+   どれを出すかは components/game/SecretPathField.vue が、当たった直後か・取った直後か（isBumped・isSparkling）から決める
+   ・絵は見た目だけ。当たり判定・レーン・位置は、絵とは関係なく composables/useSecretPathGame.ts が決めている
+     （hurt・get は手足を広げた絵だが、それで当たり判定が大きくなることはない） */
+export const secretPathPlayerImages = {
+  normal: '/images/minigames/secret-path/player-normal.webp',
+  hurt: '/images/minigames/secret-path/player-hurt.webp',
+  get: '/images/minigames/secret-path/player-get.webp',
+} as const;
+
+/* こうちゃんの見た目の種類（上の secretPathPlayerImages の名前） */
+export type SecretPathPlayerVisual = keyof typeof secretPathPlayerImages;
 
 /* ミニゲームの長さ（ミリ秒）。15000 で15秒 */
 export const secretPathDuration = 15000;
@@ -36,7 +65,7 @@ export const secretPathCountdownLeadIn = 500;
    このあいだは、もうゲームは動いている（最初の行が こうちゃんの所へ来るより前に消える） */
 export const secretPathStartCueDuration = 600;
 
-/* 1プレイで流れてくるこもれびの数（「✨ こもれび 3 / 5」の 5）
+/* 1プレイで流れてくるこもれびの数（「［こもれびの絵］こもれび 3 / 5」の 5）
    下の secretPathSunlightRows の数とそろえること */
 export const secretPathSunlightTotal = 5;
 
@@ -76,7 +105,7 @@ export const secretPathDoubleBranchChance = 0.5;
 export const secretPathSunlightBranchChance = 0.85;
 export const secretPathSunlightDoubleBranchChance = 0.4;
 
-/* 枝に当たったときの「いたっ！」「✨ -1」を出しておく長さ（ミリ秒）
+/* 枝に当たったときの「いたっ！」「［こもれびの絵］-1」を出しておく長さ（ミリ秒）
 
    見た目だけの長さで、このあいだも左右にはふつうに動ける
    （枝のペナルティは「こもれび -1」だけにして、動きは止めない） */
@@ -112,7 +141,7 @@ export const secretPathHoldBoostDelay = 250;
 export const secretPathMouseSwipeThreshold = 100;
 export const secretPathTouchSwipeThreshold = 32;
 
-/* こもれびを取ったときの「✨ +1」と光を出しておく長さ（ミリ秒） */
+/* こもれびを取ったときの「［こもれびの絵］+1」と光を出しておく長さ（ミリ秒） */
 export const secretPathSparkleDuration = 600;
 
 /* 結果が出てから「先へ進む」を受けつけるまでの待ち時間（ミリ秒）

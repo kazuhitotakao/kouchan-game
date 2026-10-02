@@ -526,7 +526,7 @@
   color: #ffe1b0;
 }
 
-/* 絵文字（⭐ 🎒）は、スマホ（700px以下）で文字のかわりに出すときだけ使う（→ @media (max-width: 700px)） */
+/* 絵文字・絵（⭐ とリュックの絵）は、スマホ（700px以下）で文字のかわりに出すときだけ使う（→ @media (max-width: 700px)） */
 .pill__icon {
   display: none;
 }
@@ -571,11 +571,17 @@
   display: flex;
 }
 
-/* チップは <button>（900px以下で、タップすると名前の吹き出しを出すため → StatusBar.vue の toggleFoundTooltip）
+/* チップは <button>（1024px以下で、タップすると名前の吹き出しを出すため → StatusBar.vue の toggleFoundTooltip）
    ボタンの枠線や文字の設定は消して、今までの丸いチップと同じ見た目にしている
-   PC（901px以上）では名前がはじめから出ていて、押しても何も変わらないので、カーソルは矢印のまま */
+   PC（1025px以上）では名前がはじめから出ていて、押しても何も変わらないので、カーソルは矢印のまま
+
+   PC では、絵（__icon）と名前（__name）を横にならべて、たての まんなかをそろえる（［どんぐりの絵］大きなどんぐり）
+   左の余白は、絵のぶん少しつめて、見た目の左右の余白をそろえる（前の結果画面の札と同じ考えかた） */
 .status-found__item {
-  padding: 3px 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px 3px 8px;
   border: none;
   border-radius: 999px;
   background: #fff3cf;
@@ -586,13 +592,48 @@
   cursor: default;
 }
 
-/* 見つけたものの絵文字は、900px以下（スマホ・タブレットくらいの幅）のときだけ出す（→ @media (max-width: 900px)）
-   PCでは今までどおり名前だけ */
+/* 見つけたものの絵（data/places.ts の itemImages）
+
+   ・PC（1025px以上）                … 名前の左に出す
+   ・1024px以下（スマホ・タブレット）… 名前のかわりに、絵だけを出す（→ @media (max-width: 1024px)）
+
+   ■ 大きさ … PC は 20px（名前の文字の行の高さより小さいので、チップの高さは変わらない）
+     1024px以下では 16px にする（チップの高さ 20px に収めるため → @media (max-width: 1024px)）
+
+   ■ おやつバッグの札の絵（base.css の .snack-bag__icon）と同じしかけ
+     ・画像は正方形で、絵はまんなかの 7割ほど。わくの中で 125% に広げて、まわりの白い余白を1割ずつ切り落とす
+     ・画像は透明ではなく、うしろが白でぬってあるので、multiply でチップのクリーム色になじませる
+       （3%明るくして、少し黄みがかった白を まっ白にそろえてから重ねる）
+
+   ■ 絵が登録されていないときの 🔍（StatusBar.vue の v-else）
+     font-family は、絵文字のフォントをいちばん先に書いておく
+     書かないと、行の高さは本文のフォント（ヒラギノなど）で決まり、Mac・iPhone では絵文字だけが上にずれて見える */
 .status-found__icon {
-  display: none;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+  font-size: 14px;
+  line-height: 1;
 }
 
-/* タップした絵文字の名前の吹き出しも、900px以下のときだけ出す（→ @media (max-width: 900px)）
+/* margin の % は、たても横も「わくの幅」をもとに決まる（わくは正方形なので、上下左右に同じだけずれる） */
+.status-found__image {
+  display: block;
+  flex: none;
+  width: 125%;
+  height: 125%;
+  margin: -12.5%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  filter: brightness(1.03);
+}
+
+/* タップした絵の名前の吹き出しも、1024px以下のときだけ出す（→ @media (max-width: 1024px)）
    PCでは名前がはじめから出ているので要らない */
 .status-found__tooltip {
   display: none;
@@ -747,23 +788,34 @@
     padding-left: 0;
     border-left: none;
   }
+}
 
-  /* 見つけたものは、名前のかわりに絵文字だけを出す（🌲 🪨 🌰 …）
+/* ===== 見つけたもの：1024px以下では、名前のかわりに絵だけを出す =====
+
+   上部ステータスの並べかた（上の @media (max-width: 900px)）とは、切りかわる幅を分けてある
+   PC の並べかたのままでも、1024px 以下では 6個ぜんぶ見つけたときに「絵＋名前」が1行に入りきらないため
+
+   ■ 1024px にした理由
+     名前の文字は、画面の幅が 1238px より せまいと 13px（clamp の いちばん小さい値）
+     6個ぶんの「絵＋名前」のチップ・すき間・「見つけたもの」の見出し・箱と上部ステータスの左右の余白を足すと、
+     1行に収めるには 画面の幅が およそ 970px いる
+     それより せまいと2行に折り返し、箱の高さの上限（.status-found の max-height: 64px）をこえて、中がスクロールしてしまう
+     少しゆとりを持たせて、iPad を横にしたときの幅（1024px）までは絵だけにしている
+     （その幅の画面はタッチで使うことが多く、タップで名前の吹き出しを出す出しかたとも合う） */
+@media (max-width: 1024px) {
+  /* 見つけたものは、名前のかわりに絵だけを出す（松ぼっくり・石・どんぐり …）
 
      名前のままだと「ちいさな松ぼっくり」「水色のガラス玉」のように長く、
      スマホでは3個目あたりから1行に入りきらず、横スクロールになっていた
      タブレットくらいの幅でも、「見つけたもの」は画面の右半分しか使えないので、同じ出しかたにしている
-     絵文字の一覧は data/places.ts の itemIcons
+     絵の一覧は data/places.ts の itemImages（前は絵文字だった）
 
      ・左右の余白は 5px につめて、丸いチップにする
      ・名前は見た目からは消して、読み上げ用に残す
        （display: none にすると、読み上げでも読まれなくなってしまうため）
 
-     ■ 絵文字をチップの上下まんなかに置く
-       文字の行（line-height）のまま置くと、絵文字は行の上のほうに寄ってしまい、
-       チップの上のふちにくっついて見える
-       そこで、チップを flex にして高さを決め、絵文字の箱（line-height: 1）を
-       align-items: center で上下まんなかにそろえている */
+     ■ 絵をチップの上下まんなかに置く
+       チップを flex にして高さを決め、絵の箱を align-items: center で上下まんなかにそろえている */
   .status-found__item {
     display: inline-flex;
     box-sizing: border-box;
@@ -775,25 +827,19 @@
     white-space: nowrap;
   }
 
-  /* 絵文字どうしのすき間も、スマホと同じ 3px にする
+  /* 絵どうしのすき間も、スマホと同じ 3px にする
      ※ タブレットくらいの幅では、入りきらないときは横スクロールではなく2行に折り返す
        （折り返さない指定は、スマホ幅の @media (max-width: 700px) だけ） */
   .status-found__list {
     gap: 3px;
   }
 
-  /* font-family は、絵文字のフォントをいちばん先に書いておく
-
-     書かないと、行の高さや文字の基準線（baseline）は本文のフォント（ヒラギノなど）で決まり、
-     絵文字だけが別のフォントから借りてきて描かれる
-     2つのフォントは上下の寸法がちがうので、Mac・iPhone では
-     箱は上下まんなかでも、絵文字の絵だけが上にずれて、チップの上のふちにくっついて見えた
-     絵文字のフォントを先に書くと、寸法も絵文字のフォントのものになるので、絵がまんなかに来る */
+  /* 絵は 16px にする（PC の 20px のままだと、チップの高さ 20px からはみ出す）
+     6個ぜんぶ見つけても、320px の画面で1行に収まる（→ @media (max-width: 700px) の .status-found）
+     絵のしかけ（余白の切り落とし・multiply）は、PC と同じ（→ このファイルの上のほうの .status-found__icon） */
   .status-found__icon {
-    display: block;
-    font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
-    font-size: 14px;
-    line-height: 1;
+    width: 16px;
+    height: 16px;
   }
 
   .status-found__name {
@@ -805,8 +851,8 @@
     white-space: nowrap;
   }
 
-  /* 絵文字をタップすると、すぐ下に名前の吹き出しを出す（🌰 → 「大きなどんぐり」）
-     何を見つけたのか、絵文字だけでは分かりにくいため
+  /* 絵をタップすると、すぐ下に名前の吹き出しを出す（どんぐりの絵 → 「大きなどんぐり」）
+     何を見つけたのか、絵だけでは分かりにくいため
      開け閉め・置き場所の計算は StatusBar.vue の toggleFoundTooltip
      吹き出しが出ているチップには、ふちどりを付けて「どれの名前か」が分かるようにする */
   .status-found__item {
@@ -869,7 +915,7 @@
       'found found found';
 
     /* まんなかの列（ポイント類）は 1fr（＝ minmax(auto, 1fr)）
-       中身より細くはならないので、⭐ と 🎒 がつぶれて重なることはない
+       中身より細くはならないので、⭐ とリュックの絵がつぶれて重なることはない
        入りきらないときは、右の列（サウンド）が縮む
        （音量スライダーが出ている細いパソコンの窓では、スライダーが最低48pxまで短くなる → sound-control.css） */
     grid-template-columns: auto 1fr auto;
@@ -892,7 +938,7 @@
      ■ おでかけポイント・おやつ残りを1段目に入れている理由
        スマホでは音量スライダーを出さず、ミュートボタンだけにした（→ SoundControl.vue）
        そのぶん1段目のまんなかが空いたので、前は4段目だった おでかけポイント・おやつ残りを
-       「⭐ 12」「🎒 2」の絵文字＋数字にして入れ、上部ステータスを1段（約22px）低くしている
+       「⭐ 12」「［リュック］ 2」の絵＋数字にして入れ、上部ステータスを1段（約22px）低くしている
        （スマホでも、とても細いパソコンの窓ではスライダーが出るが、そのときはスライダーが縮んで場所をゆずる） */
 
   /* 1段目：時計・ポイント類・サウンドを、同じ grid の1段目に横にならべる
@@ -1099,9 +1145,9 @@
     display: none;
   }
 
-  /* 1段目のまんなか：おでかけポイント／おやつ残り を「⭐ 12」「🎒 2」の絵文字＋数字で横にならべる
+  /* 1段目のまんなか：おでかけポイント／おやつ残り を「⭐ 12」「［リュック］ 2」の絵＋数字で横にならべる
      時計とサウンドのあいだの、あいている幅のまんなかに置く
-     ※ min-width: 0 は付けない（付けると、入りきらないときに中身より細くなって ⭐ と 🎒 が重なる） */
+     ※ min-width: 0 は付けない（付けると、入りきらないときに中身より細くなって ⭐ とリュックの絵が重なる） */
   .status-pills {
     flex-direction: row;
     justify-content: center;
@@ -1120,12 +1166,33 @@
     text-align: left;
   }
 
-  /* 絵文字は、見つけたものの絵文字（.status-found__icon）と同じく、絵文字のフォントを先に書いて上下をそろえる */
+  /* 絵文字（⭐）は、見つけたものの 🔍（.status-found__icon）と同じく、絵文字のフォントを先に書いて上下をそろえる */
   .pill__icon {
     display: block;
     font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
     font-size: 14px;
     line-height: 1;
+  }
+
+  /* おやつの残りのリュックの絵（data/snacks.ts の snackBagImage。前は 🎒 の絵文字）
+
+     上部ステータスは紺色なので、背景になじませず、角を丸めたタイルとして見せる
+     （ゲーム中のおやつのメニューの見出しと同じ見せかた → command-box.css の .snack-menu__labelIcon）
+     ・大きさは 16px（数字の行の高さとほぼ同じ。札の高さが変わらないように）
+     ・リュックは たてにほぼいっぱいに描いてあるので、110% に広げて上下左右を5%ずつ切り落とす */
+  .pill__icon--image {
+    width: 16px;
+    height: 16px;
+    overflow: hidden;
+    border-radius: 4px;
+  }
+
+  .pill__image {
+    display: block;
+    width: 110%;
+    height: 110%;
+    margin: -5%;
+    object-fit: contain;
   }
 
   /* 文字（おでかけポイント・おやつ残り）と「個」は、見た目からは消して、読み上げ用に残す
@@ -1177,7 +1244,7 @@
   }
 
   /* 5段目：見つけたもの は1行のコンパクト表示
-     名前のかわりに絵文字だけを並べるので、6個ぜんぶ見つけても320pxの画面で1行に収まる
+     名前のかわりに絵だけを並べるので、6個ぜんぶ見つけても320pxの画面で1行に収まる
      （下の .status-found__icon／__name）
      overflow-x: auto は、万一入りきらなかったときの保険
      （そのときも、ページ全体ではなく、この箱の中だけが横スクロールする） */
@@ -1198,7 +1265,7 @@
     font-size: 12.5px;
   }
 
-  /* 見つけたものを絵文字だけで出す指定は、この上の @media (max-width: 900px) にある
+  /* 見つけたものを絵だけで出す指定は、この上の @media (max-width: 1024px) にある
      （タブレットくらいの幅でも同じ出しかたにするため） */
   .status-found__list {
     flex-wrap: nowrap;
