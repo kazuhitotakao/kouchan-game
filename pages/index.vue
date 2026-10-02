@@ -38,7 +38,7 @@ import { useTantrum } from '~/composables/useTantrum';
 import { useGameResult } from '~/composables/useGameResult';
 
 /* 通常の行動1回ぶんの結果（中身は composables/useActionResult.ts）
-   結果の文章・今回の変化・見つけたもの・ちょっとしたできごとを持っておくところ
+   結果の文章・今回の変化・見つけたものを持っておくところ
    行動の中身（ステータスの増減・アイテム取得・抽選）は、このファイルに残してある */
 import { useActionResult } from '~/composables/useActionResult';
 
@@ -54,7 +54,6 @@ import { useSecretPathGame } from '~/composables/useSecretPathGame';
 
 /* ランダムイベントの抽選だけを取り出したもの
    「起こるか」「何が起きるか」を決めて返す（ステータスは動かさない） */
-import { drawRandomEvent } from '~/composables/useRandomEvent';
 
 /* 場所のアイテムが見つかるかの判定だけを取り出したもの
    見つかったアイテムの名前を返す（持ちものは書きかえない） */
@@ -285,12 +284,12 @@ const {
 
    中身は composables/useActionResult.ts にある
    ・結果の文章・今回の変化・行動前の控え・見つけたもの・
-     ちょっとしたできごと・休憩／おやつの結果かどうか、の入れもの
+     休憩／おやつの結果かどうか、の入れもの
    ・変化量を作る saveStatusChanges() と、「今回の変化」の表示データ changeGroups
    ・そのぜんぶを最初に戻す resetActionResult()
 
    ■ このファイルに残してあるもの
-     ・行動の中身（ステータスの増減・時間・アイテム取得・ちょっとしたできごとの抽選）
+     ・行動の中身（ステータスの増減・時間・アイテム取得）
        入れものへ入れるのは今までどおりこのファイルで、
        resultMessage.value = ... のように、受けとった ref へ直接書きかえる
      ・行動をはじめる共通の入口 startStatusChanges()
@@ -303,8 +302,6 @@ const {
   /* 結果カードに出すもの */
   resultMessage,
   foundItemsThisAction,
-  randomEventText,
-  randomEventEffects,
 
   /* 今回の変化（上部ステータスと結果カードに出す） */
   statusChanges,
@@ -403,8 +400,8 @@ const pendingSuddenEvent = ref<GameEvent | null>(null);
      ・ゴールへ向かう流れ（goToGoal()）と、judgeResult() → unlockSPlusSongIfEarned() を呼ぶ順番
      ・GAME OVERの条件判定・BGM・画面の切りかえ（checkGameOver()）
        gameOverTitle / gameOverMessage は、受けとった ref へ今までどおり代入する
-     ・1回の行動ごとの結果（resultMessage・statusChanges・見つけたもの・
-       ちょっとしたできごと）は、今までどおりこのファイルが持っている
+     ・1回の行動ごとの結果（resultMessage・statusChanges・見つけたもの）は、
+       今までどおりこのファイルが持っている
 
    ※ 0〜100に収める keepInRange() は、ほかの場所でも使うのでこのファイルに残し、
      スコア計算のときだけ渡している（今までと同じ渡しかた）
@@ -518,7 +515,7 @@ const isNormalPlace = computed(() => normalPlaceEvents.includes(currentEvent.val
 
    公園入口の「ひとやすみ」から入る、休憩・おやつを選ぶ画面
    遊ぶ場所ではないので normalPlaceEvents には入れていない
-   （探検済み・アイテム・ちょっとしたできごと・いやいや・とつぜんのできごとは、ここでは起きない）
+   （探検済み・アイテム・いやいや・とつぜんのできごとは、ここでは起きない）
 */
 const isRestArea = computed(() => currentEvent.value === 'restArea');
 
@@ -1153,10 +1150,6 @@ function startStatusChanges() {
   // 演出用：前の行動で見つけたものの表示が残らないように空へ戻す
   foundItemsThisAction.value = [];
 
-  // 演出用：前の行動のちょっとしたできごとの表示も空へ戻す
-  randomEventText.value = '';
-  randomEventEffects.value = [];
-
   // 演出用：前の行動のいやいや文も空へ戻す
   tantrumText.value = '';
 
@@ -1249,55 +1242,6 @@ function tryCollectPlaceItem(place: ItemPlace) {
   }
 
   addCollectedItem(itemName);
-}
-
-/* ランダムイベントで動いたステータスを、画面に出す形で1つ控える
-
-   label    … 画面に出す項目名（「おでかけポイント」など）
-   statName … 中の名前（changeClass() に渡して色を決めるのに使う）
-   amount   … その増減（5 なら +5、-8 なら -8）
-
-   ※ ステータスそのものは、呼ぶ前に outingPoint.value += 5 のように動かしてある
-     この関数は「画面に出す用のメモを1行足す」だけ
-*/
-function addRandomEventEffect(label: string, statName: string, amount: number) {
-  randomEventEffects.value.push({
-    label,
-    text: formatChange(amount),
-    className: changeClass(statName, amount),
-  });
-}
-
-/* ランダムイベント（通常行動中に起きる、ちょっとしたできごと）
-
-   何が起きるかを決めるのは composables/useRandomEvent.ts の drawRandomEvent()
-   ここは、返ってきたできごとを実際のステータスと画面に反映するだけ
-
-   ※ いやいやが起きた回は、そもそもこの関数が呼ばれない
-     （呼ぶかどうかを決めているのは finishPlayAction()）
-*/
-function runRandomEvent() {
-  const event = drawRandomEvent();
-
-  // 今回は何も起こらなかった（80%はこちら）
-  if (event === null) {
-    return;
-  }
-
-  // ステータスを動かして、そのぶんを結果カードのメモにも足す
-  for (const effect of event.effects) {
-    if (effect.statName === 'childMood') {
-      childMood.value += effect.amount;
-    } else if (effect.statName === 'parentEnergy') {
-      parentEnergy.value += effect.amount;
-    } else {
-      parentCalm.value += effect.amount;
-    }
-
-    addRandomEventEffect(effect.label, effect.statName, effect.amount);
-  }
-
-  randomEventText.value = event.text;
 }
 
 /* 疲れたり、おなかがすいたりすると、だんだん機嫌もわるくなる
@@ -1551,17 +1495,16 @@ function checkSuddenEvent() {
    ① その場所を探検済みにする
    ② 疲れていたら、機嫌が少し下がる
    ③ いやいやが始まるか判定する
-   ④ いやいやが起きなかったときだけ、たまにちょっとしたできごとが起こる
-   ⑤ 今回の変化量を記録する（機嫌ダウンと、いやいや・ちょっとしたできごとの分もふくむ）
-   ⑥ ステータスを0〜100に収める
-   ⑦ GAME OVERになっていないか判定する
-   ⑧ とつぜんのできごとが起きるか抽選する（起きるなら予定表に書くだけ）
-   ※ いやいやをなだめる行動では呼ばない（ちょっとしたできごとを起こさないため）
+   ④ 今回の変化量を記録する（機嫌ダウンと、いやいやの分もふくむ）
+   ⑤ ステータスを0〜100に収める
+   ⑥ GAME OVERになっていないか判定する
+   ⑦ とつぜんのできごとが起きるか抽選する（起きるなら予定表に書くだけ）
+   ※ いやいやをなだめる行動では呼ばない（遊んだ回数・探検済みを増やさないため）
    ※ とつぜんのできごとの行動でも呼ばない（とつぜんのできごとが連続で起きないようにするため）
 
-   ⑦を⑥の次に置いているので、
-   ちょっとしたできごとの「だっこ！」で親の体力が0になった場合も、
+   ⑥を⑤の次に置いているので、
    いやいや発生で親の余裕が0になった場合も、まとめてGAME OVERになる
+   （前は、いやいやが起きなかった回に、たまに「ちょっとしたできごと」（ランダムイベント）も起きていたが、なくした）
 
    ②がいやいや判定より前にあるのもポイント
    下がったあとの機嫌でいやいやを判定するので、
@@ -1572,23 +1515,6 @@ function finishPlayAction(place: GameEvent) {
   addVisitedPlace(place);
   dropMoodWhenTired();
   checkTantrum();
-
-  /* ④ ちょっとしたできごとの抽選
-
-     いやいやが起きた回は、ちょっとしたできごとを起こさない
-     いやいやは専用の画面とBGMまである大きなできごとなので、
-     同じ結果カードに「ねこちゃん！（機嫌 +5）」と「いやいや発生」が並ぶと、
-     どちらの話なのか分からなくなってしまう
-     1回の行動で目立つできごとは1つ、という形にそろえている
-     （すぐ下の⑧「とつぜんのできごと」も、同じ考えかたでいやいや中は抽選しない）
-
-     ※ いやいや判定（checkTantrum()）のあとに抽選するので、
-       ちょっとしたできごとの機嫌や余裕の増減が、
-       いやいやの起きやすさを変えることはない
-  */
-  if (!isTantrum.value) {
-    runRandomEvent();
-  }
 
   saveStatusChanges();
   fixAllStatus();
@@ -2456,7 +2382,7 @@ function goToNextPlace() {
    ③ 時間を進める
    ④ 結果の文章を入れる
    ⑤ アイテムが見つかるかを見る（抽選）
-   ⑥ 行動後の共通処理（遊んだ回数・探検済み・いやいや・ちょっとしたできごと・
+   ⑥ 行動後の共通処理（遊んだ回数・探検済み・いやいや・
      今回の変化の記録・とつぜんのできごとの抽選）
 
    ※ ⑤と⑥の中では乱数を使うので、呼ぶ順番と回数は変えないこと
@@ -2605,7 +2531,6 @@ function goToSecretArea() {
    あの関数は「その場所で遊んだ」ときの共通処理なので、中で
    ・playCount（遊んだ回数）を増やす
    ・visitedPlaces（探検済みの場所）に追加する
-   ・runRandomEvent()（ちょっとしたできごと）を起こす
    ・checkTantrum()（いやいや抽選）
    ・checkSuddenEvent()（とつぜんのできごと抽選）
    までまとめて行っている
@@ -2723,7 +2648,7 @@ function giveSnackWhileExploring(snackId: SnackId) {
 
    通常の場所の行動とちがうところ
    ・finishPlayAction() を呼ばない
-     → runRandomEvent() / checkTantrum() / checkSuddenEvent() が動かないので、
+     → checkTantrum() / checkSuddenEvent() が動かないので、
        とつぜんのできごとから続けてとつぜんのできごとが起きることはない
      → visitedPlaces（探検した場所）にも入らない
    ・そのかわり、どの行動も次の4つは必ず行う
@@ -3313,7 +3238,7 @@ function resetGame() {
   closeGoalConfirm();
 
   /* 通常の行動1回ぶんの結果（結果の文章・今回の変化・行動前の控え・見つけたもの・
-     ちょっとしたできごと・休憩／おやつの結果かどうか）を、まとめて最初に戻す
+     休憩／おやつの結果かどうか）を、まとめて最初に戻す
 
      初期値は composables/useActionResult.ts が持っている
      （はじめるときと同じ値になるので、ここに書き写す必要がない） */
@@ -3335,7 +3260,7 @@ function resetGame() {
        （あちらの resetGameResult() でも、そこだけは戻していない） */
   resetGameResult();
 
-  // ※ 演出用に控えていたもの（見つけたもの・ちょっとしたできごと）と、行動前の控えは、
+  // ※ 演出用に控えていたもの（見つけたもの）と、行動前の控えは、
   //   上の resetActionResult() で空に戻している
   // ※ いやいやの文章と「✨ ナイス対応！」の表示は、上の resetTantrumState() で空に戻している
   // ※ GAME OVER画面に出す文章は、上の resetGameResult() で空に戻している
@@ -4699,7 +4624,7 @@ onUnmounted(() => {
                  どうする？ … 休憩する／おやつにする／（そのほか）← 場所選びにもどる
                  結果のあと … 次の場所を選ぶ（公園入口の「どこへ行く？」へ戻る）
 
-               遊ぶ場所ではないので、探検済み・アイテム・ちょっとしたできごと・いやいや・とつぜんのできごとは起きない
+               遊ぶ場所ではないので、探検済み・アイテム・いやいや・とつぜんのできごとは起きない
                （休憩・おやつは finishPlayAction() を通らず、finishCareAction() だけを通るため）
                BGMも公園BGMのまま -->
           <div v-else-if="currentEvent === 'restArea'" class="scene" :class="sceneClass" key="restArea">
@@ -4722,8 +4647,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -4771,8 +4694,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -4812,8 +4733,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -4853,8 +4772,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -4894,8 +4811,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -4935,8 +4850,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -5149,8 +5062,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -5224,8 +5135,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups"
@@ -5282,8 +5191,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -5322,8 +5229,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -5362,8 +5267,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -5402,8 +5305,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
@@ -5442,8 +5343,6 @@ onUnmounted(() => {
                 :result-message="resultMessage"
                 :is-tantrum="isTantrum"
                 :found-items-this-action="foundItemsThisAction"
-                :random-event-text="randomEventText"
-                :random-event-effects="randomEventEffects"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />

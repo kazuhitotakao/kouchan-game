@@ -67,17 +67,6 @@ export type GameEvent =
 */
 export type SceneVariant = 'place' | 'rest' | 'tantrum' | 'suddenEvent';
 
-/* ランダムイベントで動いたステータス1つぶんの型
-   label     … 「おでかけポイント」などの項目名
-   text      … 「+5」「-8」の形にした増減
-   className … 増減の色（changeClass() が返すクラス名）
-*/
-export type RandomEventEffect = {
-  label: string;
-  text: string;
-  className: string;
-};
-
 /* おやつの名札（どのおやつかを表す文字）
 
    'gummy' のように決めた文字しか入れられないようにしておくと、

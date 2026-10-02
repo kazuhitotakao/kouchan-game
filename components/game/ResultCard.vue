@@ -2,7 +2,7 @@
 /* ============================================================
    行動したあとに出る「結果」カード
 
-   行動の結果の文章・見つけたもの・ちょっとしたできごと・ナイス対応・
+   行動の結果の文章・見つけたもの・ナイス対応・
    いやいやが始まったときの文・今回の変化（合計）を出す
 
    ■ このコンポーネントは「計算ずみの結果を表示するだけ」
@@ -25,7 +25,7 @@
 
 import { itemImages, placeItems } from '~/data/places';
 import { splitItemName } from '~/utils/itemName';
-import type { ChangeGroup, RandomEventEffect, SceneVariant, StatusChanges } from '~/types/game';
+import type { ChangeGroup, SceneVariant, StatusChanges } from '~/types/game';
 import { formatChange } from '~/utils/statusChange';
 
 defineProps<{
@@ -40,10 +40,6 @@ defineProps<{
 
   /* 今回の行動で新しく見つけたもの */
   foundItemsThisAction: string[];
-
-  /* ちょっとしたできごと（ランダムイベント）の文章と、そのぶんの増減 */
-  randomEventText: string;
-  randomEventEffects: RandomEventEffect[];
 
   /* いやいやが始まったときの文 */
   tantrumText: string;
@@ -108,7 +104,7 @@ function itemReaction(itemName: string) {
       <p class="result-card__text">{{ resultMessage }}</p>
 
       <!-- ナイス対応（いやいやタイムで、いやいやの理由に合った対応をしたときだけ出す）
-           「ちょっとしたできごと」と同じ形の枠を使い、色だけ緑に変えて「いいこと」と分かるようにする
+           緑の枠（.event-flash--nice → assets/css/game/event-flash.css）で「いいこと」と分かるようにする
            ボーナスの数字は、実際に足している niceTantrumBonus〜 をそのまま出す -->
       <div v-if="variant === 'tantrum' && niceTantrumResponseText" class="event-flash event-flash--nice">
         <p class="event-flash__label">✨ ナイス対応！</p>
@@ -142,7 +138,7 @@ function itemReaction(itemName: string) {
            ・foundItemsThisAction には、新しく見つけたものしか入らない（もう持っているものは、2回目以降は見つからない）
              ので、この演出は かならず はじめて見つけたときだけ出る
            ・前は、結果の文の上に「★ アイテム発見！［名前］」の帯、文の下に「『○○』を見つけました！」の行と分かれていた
-             絵を主役にして1つにまとめ、起きた順（行動 → アイテム → できごと → いやいや）で読めるよう、結果の文のあとに置いている -->
+             絵を主役にして1つにまとめ、起きた順（行動 → アイテム → いやいや）で読めるよう、結果の文のあとに置いている -->
       <section v-if="variant !== 'suddenEvent' && foundItemsThisAction.length > 0" class="found-flash" aria-label="アイテム発見">
         <div v-for="(item, index) in foundItemsThisAction" :key="item" class="found-flash__item">
           <!-- 絵（まわりの光・きらきらは飾りなので、読み上げでは読ませない。名前は下の文字で読む） -->
@@ -169,24 +165,8 @@ function itemReaction(itemName: string) {
         </div>
       </section>
 
-      <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
-           地の文にまぎれないように、専用の枠と
-           色つきのしるし（おでかけポイント +5 など）で出す -->
-      <div v-if="randomEventText" class="event-flash">
-        <p class="event-flash__label">ちょっとしたできごと！</p>
-
-        <p class="event-flash__text">{{ randomEventText }}</p>
-
-        <ul v-if="randomEventEffects.length > 0" class="event-flash__list">
-          <li v-for="effect in randomEventEffects" :key="effect.label" class="event-flash__item">
-            <span class="event-flash__item-label">{{ effect.label }}</span>
-            <span class="event-flash__item-value" :class="effect.className">{{ effect.text }}</span>
-          </li>
-        </ul>
-      </div>
-
       <!-- いやいやが始まったときの文
-           起きた順（行動 → アイテム → ちょっとしたできごと → いやいや）で
+           起きた順（行動 → アイテム → いやいや）で
            読めるように、いちばん最後に置く -->
       <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
 
@@ -232,7 +212,7 @@ function itemReaction(itemName: string) {
        game.css を読むと、リザルトやコマンド欄など、ここでは使わないCSSまで
        このコンポーネントぶんとして、もう一度ビルド結果に出てしまう
 
-     ※ ちょっとしたできごと（.event-flash 〜）は pages/index.vue でも使うので、
+     ※ ナイス対応の枠（.event-flash 〜）は pages/index.vue のこもれびボーナスでも使うので、
        app.vue からグローバルに読みこむ event-flash.css にある
      ※ result-card.css は game.css からは読みこまない（二重出力になるため） -->
 <style scoped src="~/assets/css/game/result-card.css"></style>

@@ -7,13 +7,13 @@
 
    ■ ここがやること
      ・結果の文章・今回の変化・行動前の控え・見つけたもの・
-       ちょっとしたできごと・休憩／おやつの結果かどうか、を持つ
+       休憩／おやつの結果かどうか、を持つ
      ・行動が終わったあとの変化量を作る（saveStatusChanges()）
      ・「今回の変化」の表示データを組み立てる（changeGroups）
      ・そのぜんぶを最初の状態へ戻す（resetActionResult()）
 
    ■ ここがやらないこと
-     ・行動の中身（ステータスの増減・時間・アイテム取得・ちょっとしたできごとの抽選）は、
+     ・行動の中身（ステータスの増減・時間・アイテム取得）は、
        ぜんぶ pages/index.vue のまま
        ここが持っているのは入れものだけで、入れるのは今までどおりあちら
        （resultMessage.value = ... のように、受けとった ref へ直接書きかえる）
@@ -35,7 +35,7 @@ import type { ComputedRef, Ref } from 'vue';
 
 import { buildChangeGroups } from '~/utils/changeGroups';
 import type { StatusSnapshot } from '~/utils/changeGroups';
-import type { RandomEventEffect, StatusChanges } from '~/types/game';
+import type { StatusChanges } from '~/types/game';
 
 /* ============================================================
    最初の状態（初期値）
@@ -46,7 +46,7 @@ import type { RandomEventEffect, StatusChanges } from '~/types/game';
    の両方が、ここに書いた値を見る
    初期値を変えたいときは、この場所だけを直せばよい
 
-   ※ 配列（見つけたもの・ちょっとしたできごとの増減）は、ここに置いていない
+   ※ 配列（見つけたもの）は、ここに置いていない
      同じ配列を使いまわすと、戻したはずの中身が前の行動とつながってしまうので、
      作るときも戻すときも、毎回からっぽの配列を作りなおす
 
@@ -56,7 +56,6 @@ import type { RandomEventEffect, StatusChanges } from '~/types/game';
    ============================================================ */
 const initialResultMessage: string = ''; // 結果の文章
 const initialStatusChanges: StatusChanges | null = null; // 今回の変化（null = まだ結果がない）
-const initialRandomEventText: string = ''; // ちょっとしたできごとの文章
 
 /* 行動する前のステータスの控え（最初はぜんぶ0）
    pages/index.vue の ref 生成時と resetGame() に、同じ形が2つ書いてあったものをまとめたもの */
@@ -98,21 +97,6 @@ export function useActionResult(options: UseActionResultOptions) {
      ※ 見つけたものの本体は collectedItems のままで、取得のルールは変えていない
   */
   const foundItemsThisAction = ref<string[]>([]);
-
-  /* 今回の行動で起きたランダムイベント（演出用）
-     ・randomEventText    … 何が起きたかの文章
-     ・randomEventEffects … そのできごとだけのステータス増減
-
-     前は結果メッセージの文章に「おでかけポイント +5」と書き足していたが、
-     それだと地の文にまぎれて見のがされてしまうので、
-     文章と増減を分けて持ち、画面では専用の枠に出す
-
-     ※ ステータスの数字そのものは、今までどおり outingPoint などを直接動かしている
-       ここに入れるのは「画面に出すためのメモ」だけ
-     ※ 行動をはじめるたびに空へ戻すので、直前の1回ぶんだけが入っている
-  */
-  const randomEventText = ref(initialRandomEventText);
-  const randomEventEffects = ref<RandomEventEffect[]>([]);
 
   /* 結果メッセージ */
   const resultMessage = ref(initialResultMessage);
@@ -195,16 +179,12 @@ export function useActionResult(options: UseActionResultOptions) {
     statusBefore.value = createInitialStatusBefore();
 
     foundItemsThisAction.value = [];
-    randomEventText.value = initialRandomEventText;
-    randomEventEffects.value = [];
   }
 
   return {
     /* ===== 結果カードに出すもの ===== */
     resultMessage,
     foundItemsThisAction,
-    randomEventText,
-    randomEventEffects,
 
     /* ===== 今回の変化（上部ステータスと結果カードに出す） ===== */
     statusChanges,
