@@ -415,10 +415,11 @@ const playButtonRef = ref<HTMLButtonElement | null>(null);
    ・もう一回 … 結果の画面の GAME OVER の曲を止めて、「こもれびの奥で」を最初から鳴らしなおす */
 function play() {
   if (secretPathPhase.value === 'finished') {
-    restartSecretPathGame();
-
-    // 「もう一回」は、押してすぐ（結果が出てから 0.6秒のあいだ）は受けつけないので、始まったときだけ曲を入れかえる
-    if (secretPathPhase.value === 'playing') {
+    /* 「もう一回」は、押してすぐ（結果が出てから 0.6秒のあいだ）は受けつけないので、始まったときだけ曲を入れかえる
+       始まったかどうかは restartSecretPathGame() の返す値で見る
+       （前は呼んだあとに secretPathPhase を読みなおしていたが、TypeScript には
+         「すぐ上で finished と確かめたので playing にはならない」と見えて、型のエラーになっていた） */
+    if (restartSecretPathGame()) {
       stopGameOverBgm();
       playSecretBgmSoon();
 
