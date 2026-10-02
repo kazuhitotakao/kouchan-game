@@ -21,8 +21,8 @@
        ここは gameOverTitle / gameOverMessage の入れものを持つだけ
      ・ゴールへ向かう流れ（goToGoal()）も pages/index.vue のまま
        呼ぶ順番（judgeResult() → unlockSPlusSongIfEarned()）も、今までどおりあちらが決める
-     ・1回の行動ごとの結果（resultMessage・statusChanges・見つけたもの・
-       ちょっとしたできごと）は、ここには入れない。今までどおり pages/index.vue のもの
+     ・1回の行動ごとの結果（resultMessage・statusChanges・見つけたもの）は、
+       ここには入れない。今までどおり pages/index.vue のもの
 
    ■ 計算のしかた・数字・文章・呼ぶ順番は、いっさい変えていない
      pages/index.vue にあったときと同じものを、同じ順番で呼んでいる

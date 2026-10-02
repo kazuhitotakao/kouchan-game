@@ -15,7 +15,7 @@
    ■ ここから出ていったもの
      ・結果カードの中身（.result-card／.change-box／.found-flash 〜）
        → assets/css/game/result-card.css（ResultCard.vue が読みこむ）
-     ・ちょっとしたできごと（.event-flash 〜）
+     ・ナイス対応／こもれびボーナスの枠（.event-flash 〜）
        → assets/css/game/event-flash.css（app.vue がグローバルに読みこむ）
      ・@keyframes result-in
        → assets/css/game/keyframes.css（app.vue がグローバルに読みこむ）
