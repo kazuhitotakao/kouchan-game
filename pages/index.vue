@@ -2072,11 +2072,15 @@ function goToMinigame() {
 /* 場所を移動する
    移動すると前の結果メッセージと変化量の表示は消す
 
-   ※ BGMが変わるのは、秘密の場所へ行くときだけ
+   ※ BGMが変わるのは、秘密の小道・秘密の場所へ行くとき（と、小道から公園入口へ引き返すとき）だけ
      すべり台・砂場・どんぐり・池・芝生広場は、ぜんぶ同じ公園のつづきなので
      公園BGMを鳴らしたままにする（場所を移るたびに曲が鳴りなおすと落ち着かない）
 */
 function goToPlace(place: GameEvent) {
+  /* いま出ようとしている画面が「秘密の小道」だったかを、先に覚えておく
+     （このあと currentEvent を書きかえると分からなくなるため。BGMをどうするかに使う） */
+  const leavingSecretPath = currentEvent.value === 'secretPath';
+
   // 決定音「ポン♪」（公園入口から各場所へ移動するとき）
   playDecisionSound();
 
@@ -2099,7 +2103,7 @@ function goToPlace(place: GameEvent) {
   // 新しいコマンド画面になるので、選択中のコマンドを一番上（0）に戻す
   selectedCommandIndex.value = 0;
 
-  /* 秘密の場所へ入るときだけ、公園BGMからこもれびの広場BGMへ入れかえる
+  /* 秘密の小道・秘密の場所へ入るときは、公園BGMからこもれびの広場BGM（こもれびの奥で）へ入れかえる
 
      かならず「公園BGMを止める → こもれびの広場BGMを鳴らす」の順番にする
      先に止めておかないと、待っている0.7秒のあいだ公園BGMが鳴りつづけ、
@@ -2113,12 +2117,26 @@ function goToPlace(place: GameEvent) {
      ・いったん静かになるので「特別な場所へ入った」という感じが出る
      （待つのは音だけで、画面はこの上の行ですでに切りかわっている）
 
+     ※ 小道をぬけて広場へ着いたとき（leavingSecretPath）は、何もしない
+       曲は小道からすでに鳴っているので、鳴らしなおさずにそのまま続ける
+
      ※ currentEvent を place にしたあとで呼ぶこと
        playSecretBgmSoon() は、鳴らす直前に
-       「まだ秘密の場所にいるか」を currentEvent で確かめているため */
-  if (place === 'secretSpot') {
+       「まだ秘密の小道か秘密の場所にいるか」を currentEvent で確かめているため */
+  if (place === 'secretPath' || (place === 'secretSpot' && !leavingSecretPath)) {
     stopParkBgm();
     playSecretBgmSoon();
+  }
+
+  /* 秘密の小道から公園入口へ引き返したときは、公園BGMへ戻す
+     （「← 場所選びにもどる」。小道へ入ったときに公園BGMは止めてあるため）
+
+     ・stop（先頭へ戻す）なので、次に小道へ入ったときも曲の頭から鳴る
+     ・公園BGMは playParkBgmSoon() で、少し間を空けてから頭から鳴らす
+       どちらの公園BGM（BGM1・BGM2）へ戻るかは、playParkBgmSoon() が時計を見て決める */
+  if (leavingSecretPath && place !== 'secretSpot') {
+    stopSecretBgm();
+    playParkBgmSoon();
   }
 }
 
@@ -2441,8 +2459,10 @@ function runPlaceAction(action: PlaceActionDefinition) {
        （集められなくても損はしない。こもれびの数で変わるのは、結果の文章とボーナスだけ）
 
    ■ BGM
-     小道のあいだは公園BGMのまま（ここではBGMにさわらない）
-     こもれびの広場BGMが始まるのは、広場へ入ったとき（goToPlace('secretSpot') の中）
+     ここではBGMにさわらない（入れかえは、ぜんぶ goToPlace() の中）
+     ・小道へ入ったとき（goToPlace('secretPath')）に、公園BGMからこもれびの広場BGM「こもれびの奥で」へ入れかえる
+     ・小道をぬけて広場へ着いても、鳴らしなおさずにそのまま続ける
+     ・「← 場所選びにもどる」で公園入口へ引き返したら、公園BGMへ戻す
    ============================================================ */
 const {
   /* 画面に出す状態 */
@@ -2506,8 +2526,7 @@ const {
    ・このプレイで、まだ広場を見つけていない … 秘密の小道（ミニゲーム）へ
    ・もう見つけている                     … 今までどおり、そのまま こもれびの広場へ
 
-   ※ 秘密の小道へ行くときは、BGMは変えない（公園BGMのまま）
-     goToPlace() がBGMを入れかえるのは、行き先が secretSpot のときだけ */
+   ※ どちらへ行くときも、goToPlace() が公園BGMからこもれびの広場BGMへ入れかえる */
 function goToSecretArea() {
   if (hasDiscoveredSecretSpot.value) {
     goToPlace('secretSpot');

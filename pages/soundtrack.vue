@@ -178,7 +178,7 @@ const sPlusBonusTrack: SoundtrackTrack = {
 const secretVocalBonusTrack: SoundtrackTrack = {
   id: 9,
   title: secretVocalSongTitle,
-  description: 'ミニゲーム達成の|特別BGM',
+  description: 'どこまで行ける？|300m達成の特別BGM',
   src: secretVocalSongSrc,
   // 音量と制作情報は、通常版（04 こもれびの奥で）と同じ
   // （うた入り版は、通常版の曲にSunoでうたを足したもののため）
@@ -218,7 +218,7 @@ const lockedTrackHints = computed(() => {
   }
 
   if (!hasUnlockedSecretVocalSong.value) {
-    hints.push('ミニゲーム|「どこまで行ける？」で解放');
+    hints.push('ミニゲーム|「どこまで行ける？」で|300m達成すると解放');
   }
 
   return hints;

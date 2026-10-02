@@ -238,16 +238,16 @@ export function useAudio(options: UseAudioOptions) {
            isTantrum だけが true になっている状態
            ここでONに戻しても、わざと作った無音をこわさないように何も鳴らさない
 
-         ※ 秘密の場所を、公園BGMより先に置くのが大事
-           秘密の場所も「ゲーム中で、結果画面ではない」に当てはまってしまうので、
+         ※ 秘密の場所・秘密の小道を、公園BGMより先に置くのが大事
+           どちらも「ゲーム中で、結果画面ではない」に当てはまってしまうので、
            あとに置くと、秘密の場所なのに公園BGMが鳴りだしてしまう
            （そのうえ、あとからこもれびの広場BGMも鳴ると2曲が重なってしまう）
 
-         ※ 秘密の場所から出たあとにONへ戻したときは、
-           currentEvent がもう 'secretSpot' ではないので公園BGMのほうへ進む
+         ※ 秘密の場所・秘密の小道から出たあとにONへ戻したときは、
+           currentEvent がもう 'secretSpot' / 'secretPath' ではないので公園BGMのほうへ進む
            こもれびの広場BGMが勝手に鳴りなおすことはない
 
-         ※ サウンドOFFのまま秘密の場所へ入って、そこでONに戻したときは、
+         ※ サウンドOFFのまま秘密の小道・秘密の場所へ入って、そこでONに戻したときは、
            まだ曲を一度も作っていないので、resumeSecretBgm() の中で
            新しく作って先頭から鳴りはじめる（公園BGMは鳴らない）
 
@@ -267,10 +267,10 @@ export function useAudio(options: UseAudioOptions) {
         resumeTantrumBgm();
       } else if (gameStarted.value && isTantrum.value) {
         // いやいや発生の結果カードを読んでいる最中（わざと無音）なので、何も鳴らさない
-      } else if (gameStarted.value && currentEvent.value === 'secretSpot') {
+      } else if (gameStarted.value && (currentEvent.value === 'secretSpot' || currentEvent.value === 'secretPath')) {
+        // 秘密の小道も、こもれびの広場と同じ「こもれびの奥で」
         resumeSecretBgm();
       } else if (gameStarted.value && !isResultScene.value) {
-        // 秘密の小道（ミニゲーム）もここ。こもれびの広場へ着くまでは公園BGMのまま
         resumeParkBgm();
       }
     } else {
@@ -2726,7 +2726,8 @@ export function useAudio(options: UseAudioOptions) {
 
      作りは公園BGM・タイトルBGM・いやいやBGM・リザルトBGMとまったく同じで、
      鳴らす場面だけがちがう
-     ・こもれびの広場BGM … 秘密の場所にいるあいだ（currentEvent === 'secretSpot'）
+     ・こもれびの広場BGM … 秘密の小道と秘密の場所にいるあいだ（currentEvent === 'secretPath' / 'secretSpot'）
+                           小道へ入ったときに鳴りはじめ、広場へ着いても鳴らしなおさずにそのまま続ける
 
      ここだけ曲を変える理由は「特別な場所に来た」と分かるようにするため
      公園入口・すべり台・砂場などは、ぜんぶ同じ公園のつづきなので公園BGMのまま
@@ -2911,12 +2912,13 @@ export function useAudio(options: UseAudioOptions) {
       secretBgmTimer = null;
 
       /* 待っている0.7秒のあいだに画面が変わっていたら、もう鳴らさない
-         （秘密の場所を出た、いやいやになった、GAME OVERになった、
+         （秘密の場所を出た、小道から公園入口へ引き返した、いやいやになった、GAME OVERになった、
            ゴールした、「もう一度あそぶ」でタイトルへ戻った、などの場合）
 
-         まだ秘密の場所にいるときだけ鳴らす、という確かめかたにしてあるので、
-         行き先がどこであっても「あとから鳴りだす」ことがない */
-      if (currentEvent.value !== 'secretSpot') {
+         まだ秘密の小道か秘密の場所にいるときだけ鳴らす、という確かめかたにしてあるので、
+         行き先がどこであっても「あとから鳴りだす」ことがない
+         （小道で待っているあいだに広場へ進んだときは、そのまま鳴らしてよい） */
+      if (currentEvent.value !== 'secretSpot' && currentEvent.value !== 'secretPath') {
         return;
       }
 
