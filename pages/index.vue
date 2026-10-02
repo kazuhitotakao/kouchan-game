@@ -104,7 +104,7 @@ import { itemIcons, normalPlaceEvents, placeItems, placeSelectionIndexes } from 
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
-import { maxSnackCount, snacks } from '~/data/snacks';
+import { maxSnackCount, snackBagImage, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
@@ -4346,7 +4346,7 @@ onUnmounted(() => {
                    （.snack-option--selected … ふちが紺の二重線になり、背景が水色になる）
 
                    札を出すと、その置き場所のぶんだけカードが縦に大きくなる
-                   下の「🎒 おやつバッグ」に、選んだおやつの名前が出るので、
+                   下の「おやつバッグ」に、選んだおやつの名前が出るので、
                    何を選んでいるかはそちらでも確かめられる
 
                    読み上げソフトには、上の :aria-pressed が
@@ -4357,9 +4357,17 @@ onUnmounted(() => {
           <!-- おやつバッグ（いま選んでいる2個が分かるところ） -->
           <div class="snack-bag">
             <p class="snack-bag__head">
-              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して 🎒 だけにする（読み上げ用には残す）
-                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css） -->
-              <span class="snack-bag__title">🎒 <span class="snack-bag__titleText">おやつバッグ</span></span>
+              <!-- 「おやつバッグ」の文字は、スマホでは見た目から消して リュックの絵だけにする（読み上げ用には残す）
+                   スマホではバッグを1行にまとめて、選んだおやつの札を横にならべる場所を作るため（→ base.css）
+
+                   リュックの絵は data/snacks.ts の snackBagImage（前は 🎒 の絵文字だった）
+                   alt="" … となりに「おやつバッグ」の文字があるので、絵はかざりとして読ませない -->
+              <span class="snack-bag__title">
+                <span class="snack-bag__titleIcon">
+                  <img class="snack-bag__titleImage" :src="snackBagImage" alt="" decoding="async" />
+                </span>
+                <span class="snack-bag__titleText">おやつバッグ</span>
+              </span>
 
               <!-- 「1 / 2」の数え方も maxSnackCount を見ている
                    （持っていける数を3つに変えても、ここは直さなくてよい） -->

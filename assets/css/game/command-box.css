@@ -179,6 +179,38 @@
   filter: brightness(1.03);
 }
 
+/* 見出し（［リュックの絵］どのおやつにする？）
+
+   ・絵と文字を横にならべて、たての まんなかをそろえる
+   ・リュックの絵（data/snacks.ts の snackBagImage。前は 🎒 の絵文字）は、
+     下のおやつの絵（.snack-menu__icon）と同じく、紺色の上なので背景になじませず、角を丸めたタイルとして見せる
+     タイルの色は、画像のクリーム色の背景そのまま
+   ・リュックは たてにほぼいっぱいに描いてあるので（上下の余白は6%ほど）、
+     広げるのは 110% だけにして、上下左右を5%ずつ切り落とす
+   ・大きさは 22px（見出しの文字 13.5px より ひとまわり大きく、見出しの行が高くなりすぎない大きさ） */
+.snack-menu__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snack-menu__labelIcon {
+  display: block;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  overflow: hidden;
+  border-radius: 5px;
+}
+
+.snack-menu__labelImage {
+  display: block;
+  width: 110%;
+  height: 110%;
+  margin: -5%;
+  object-fit: contain;
+}
+
 /* おやつの名前（「グミ」） */
 .snack-menu__name {
   line-height: 1.5;

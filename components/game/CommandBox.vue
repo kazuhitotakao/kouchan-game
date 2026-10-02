@@ -27,6 +27,7 @@
        休憩・おやつはどの場所でも同じ効果なので、公園入口の「ひとやすみ」（rest）へまとめた
    ============================================================ */
 
+import { snackBagImage } from '~/data/snacks';
 import type { SceneVariant, Snack } from '~/types/game';
 
 withDefaults(
@@ -191,7 +192,13 @@ defineEmits<{
            ならべるのはバッグに残っているおやつ（selectedSnacks）だけで、食べたおやつはここからも消える
            「← もどる」・Escape で、休憩する／おやつにする に戻る -->
       <template v-if="isSnackMenuVisible">
-        <p class="command-box__label">🎒 どのおやつにする？</p>
+        <!-- 見出しの左のリュックの絵は data/snacks.ts の snackBagImage（前は 🎒 の絵文字。くわしくは command-box.css の .snack-menu__labelIcon） -->
+        <p class="command-box__label snack-menu__label">
+          <span class="snack-menu__labelIcon">
+            <img class="snack-menu__labelImage" :src="snackBagImage" alt="" decoding="async" />
+          </span>
+          どのおやつにする？
+        </p>
 
         <button
           v-for="(snack, index) in selectedSnacks"
@@ -285,7 +292,13 @@ defineEmits<{
            いやいやのコマンドと入れかえて、同じ枠の中に出す
            「← もどる」・Escape で、お話／だっこ／おやつ／待つ に戻る -->
       <template v-if="isSnackMenuVisible">
-        <p class="command-box__label">🎒 どのおやつをあげる？</p>
+        <!-- 見出しの左のリュックの絵は、ひとやすみのおやつバッグと同じ（data/snacks.ts の snackBagImage） -->
+        <p class="command-box__label snack-menu__label">
+          <span class="snack-menu__labelIcon">
+            <img class="snack-menu__labelImage" :src="snackBagImage" alt="" decoding="async" />
+          </span>
+          どのおやつをあげる？
+        </p>
 
         <button
           v-for="(snack, index) in selectedSnacks"

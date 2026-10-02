@@ -88,3 +88,12 @@ export const snacks: Snack[] = [
    3つ持っていける仕様にしたくなったら、この数字を 3 に変えるだけでよい
    （画面の「2 / 2」も、押せるようになる条件も、ぜんぶここを見ている） */
 export const maxSnackCount = 2;
+
+/* おやつバッグの絵（リュック）
+
+   前は 🎒 の絵文字だったところを、ぜんぶこの絵にしている
+   ・おやつ選択画面の「おやつバッグ」（pages/index.vue）
+   ・ゲーム中に、どのおやつを食べるか選ぶメニューの見出し（「どのおやつにする？」「どのおやつをあげる？」→ components/game/CommandBox.vue）
+   ・スマホの上部ステータスの、おやつの残りの数（components/game/StatusBar.vue）
+   絵を差しかえたいときは、ここ1か所を書きかえるだけでよい */
+export const snackBagImage = '/images/snacks/snack-backpack.webp';
