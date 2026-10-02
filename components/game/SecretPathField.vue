@@ -29,7 +29,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import { getSecretPathLaneLeft } from '~/composables/useSecretPath';
-import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerY } from '~/data/secretPath';
+import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerImages, secretPathPlayerY } from '~/data/secretPath';
+import type { SecretPathPlayerVisual } from '~/data/secretPath';
 import type { SecretPathItem, SecretPathLane } from '~/types/game';
 
 const props = defineProps<{
@@ -116,6 +117,28 @@ const isComboActive = computed(() => (props.boostTotalMultiplier ?? 0) > secretP
 /* 次の段までのゲージの長さ（%）
    1コマごとに書きかわるので、整数に丸めておく（同じ値のあいだは、style を書きかえない） */
 const comboGaugeWidth = computed(() => `${Math.round((props.comboProgress ?? 0) * 100)}%`);
+
+/* こうちゃんの見た目（どの絵を出すか → data/secretPath.ts の secretPathPlayerImages）
+
+   ・枝に当たった直後（isBumped）       … hurt（「いたっ！」を出しているあいだ）
+   ・こもれびを取った直後（isSparkling） … get（「［こもれびの絵］+1」を出しているあいだ）
+   ・それ以外                           … normal
+
+   ■ 切りかえのためのタイマーは持たない
+     isBumped・isSparkling は、useSecretPathGame() がゲームの時計で決めている「いたっ！」「+1」を出す長さ（どちらも 600ms）をそのまま使う
+     どちらかが起きると、もう片方はその場で終わらせてある（あとから起きたほうだけを出す → useSecretPathGame.ts）ので、
+     取った直後に枝に当たっても、古い表示が残ったり、途中で normal に戻ったりしない
+     （念のため、両方が同時に true のときは hurt を出す） */
+const playerVisual = computed<SecretPathPlayerVisual>(() => {
+  if (props.isBumped) {
+    return 'hurt';
+  }
+
+  return props.isSparkling ? 'get' : 'normal';
+});
+
+/* 3枚の絵の名前（template で3枚とも置いておくための ならび） */
+const playerVisuals = Object.keys(secretPathPlayerImages) as SecretPathPlayerVisual[];
 
 /* レベルが上がった直後か（距離の丸を金色に光らせているあいだ）
 
@@ -376,6 +399,12 @@ onMounted(() => {
              こうちゃんより後ろは、もう通りすぎた所なので、枝をよけるのに見づらくならない
              加速コンボの倍率が付いたら（「どこまで行ける？」だけ）、HUD の札と同じ金色にする -->
         <span v-if="isBoosting" class="secret-path-player__trail" :class="{ 'secret-path-player__trail--combo': isComboActive }"></span>
+        <!-- こうちゃんの絵（前は 👦 の絵文字。見た目の切りかえは playerVisual）
+             ・わく（__face）の大きさは固定で、3枚とも その中いっぱいに object-fit: contain で出す（→ secret-path-field.css）
+               絵を切りかえても、レーンの上の位置・足もとの高さは変わらない
+             ・3枚とも はじめから置いておき、いま見せる1枚だけを出す（v-show）
+               当たった・取ったときに はじめて画像を読みこむと、読みこむまでの一瞬、こうちゃんが消えてしまうため
+             ・絵は見た目だけ。当たり判定には かかわらない（判定は useSecretPathGame.ts が、レーンと高さだけで見ている） -->
         <span
           class="secret-path-player__face"
           :class="{
@@ -383,7 +412,15 @@ onMounted(() => {
             'secret-path-player__face--bumped': isBumped,
             'secret-path-player__face--sparkle': isSparkling,
           }">
-          👦
+          <img
+            v-for="visual in playerVisuals"
+            v-show="visual === playerVisual"
+            :key="visual"
+            class="secret-path-player__image"
+            :src="secretPathPlayerImages[visual]"
+            alt=""
+            decoding="async"
+            draggable="false" />
         </span>
       </div>
 

@@ -22,6 +22,23 @@ export const secretPathItemImages: Record<SecretPathItemKind, string> = {
   sunlight: '/images/minigames/secret-path/komorebi-light.webp',
 };
 
+/* こうちゃんの絵（3枚とも public/images/minigames/secret-path/ にある。前は 👦 の絵文字だった）
+
+   normal … ふだん（走っている）
+   hurt   … 枝に当たった直後（「いたっ！」を出しているあいだ）
+   get    … こもれびを取った直後（「［こもれびの絵］+1」を出しているあいだ）
+   どれを出すかは components/game/SecretPathField.vue が、当たった直後か・取った直後か（isBumped・isSparkling）から決める
+   ・絵は見た目だけ。当たり判定・レーン・位置は、絵とは関係なく composables/useSecretPathGame.ts が決めている
+     （hurt・get は手足を広げた絵だが、それで当たり判定が大きくなることはない） */
+export const secretPathPlayerImages = {
+  normal: '/images/minigames/secret-path/player-normal.webp',
+  hurt: '/images/minigames/secret-path/player-hurt.webp',
+  get: '/images/minigames/secret-path/player-get.webp',
+} as const;
+
+/* こうちゃんの見た目の種類（上の secretPathPlayerImages の名前） */
+export type SecretPathPlayerVisual = keyof typeof secretPathPlayerImages;
+
 /* ミニゲームの長さ（ミリ秒）。15000 で15秒 */
 export const secretPathDuration = 15000;
 
