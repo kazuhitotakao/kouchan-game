@@ -50,22 +50,24 @@ export const placeItems: Record<ItemPlace, string> = {
   secretSpot: 'ふしぎな形の枝',
 };
 
-/* 見つけたものの絵文字（名前 → 絵文字）
+/* 見つけたものの絵（名前 → 画像のパス。6つとも public/images/items/found/ にある）
 
-   900px以下（スマホ・タブレットくらいの幅）の上部ステータス「見つけたもの」では、名前のかわりにこの絵文字だけを並べる
-   名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
-   （名前は読み上げ用に残してある → components/game/StatusBar.vue・assets/css/game/status.css）
-   PC（901px以上）では今までどおり名前を出す
+   ・1024px以下（スマホ・タブレットくらいの幅）の上部ステータス「見つけたもの」では、名前のかわりにこの絵だけを並べる
+     名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
+     （名前は読み上げ用に残してある → components/game/StatusBar.vue・assets/css/game/status.css）
+     PC（1025px以上）では、名前の左にこの絵を出す
+   ・結果画面の「見つけたもの」では、名前の左にこの絵を出す（pages/index.vue の .found-list）
 
-   ※ 松ぼっくりには専用の絵文字が無いので、松の木（🌲）で代わりにしている
-   ※ 見つかるものを増やしたときは、ここにも1行足すこと（無いときは 🔍 を出す） */
-export const itemIcons: Record<string, string> = {
-  [placeItems.slide]: '🌲',
-  [placeItems.sandbox]: '🪨',
-  [placeItems.acornArea]: '🌰',
-  [placeItems.pond]: '🔵',
-  [placeItems.grassArea]: '🌼',
-  [placeItems.secretSpot]: '🪵',
+   ※ 前は絵文字（🌲 🪨 🌰 🔵 🌼 🪵）だったが、松ぼっくり・どんぐり・ガラス玉・枝は ぴったりの絵文字が無く、
+     別の物（松の木・栗・青い丸・丸太）で代わりにしていたので、専用の絵にした
+   ※ 見つかるものを増やしたときは、ここにも1行足すこと（無いときは絵のかわりに 🔍 を出す） */
+export const itemImages: Record<string, string> = {
+  [placeItems.slide]: '/images/items/found/pinecone.webp',
+  [placeItems.sandbox]: '/images/items/found/pretty-stone.webp',
+  [placeItems.acornArea]: '/images/items/found/acorn.webp',
+  [placeItems.pond]: '/images/items/found/glass-marble.webp',
+  [placeItems.grassArea]: '/images/items/found/yellow-flower.webp',
+  [placeItems.secretSpot]: '/images/items/found/odd-branch.webp',
 };
 
 /* その場所ではじめて遊んだときに、アイテムが見つかる確率（60%） */

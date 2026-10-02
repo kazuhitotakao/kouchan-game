@@ -18,7 +18,7 @@
 
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 
-import { itemIcons } from '~/data/places';
+import { itemImages } from '~/data/places';
 import { snackBagImage } from '~/data/snacks';
 import type { StatusChanges } from '~/types/game';
 import { changeClass, formatChange } from '~/utils/statusChange';
@@ -113,13 +113,13 @@ const changeBands = computed(() => ({
 
 /* 見つけたもの：吹き出しで名前を出しているアイテム（null ＝ 出していない）
 
-   900px以下（スマホ・タブレットくらいの幅）では絵文字だけを並べているので、
-   絵文字をタップすると、そのすぐ下に名前の吹き出しを出す
+   1024px以下（スマホ・タブレットくらいの幅）では絵だけを並べているので、
+   絵をタップすると、そのすぐ下に名前の吹き出しを出す
    （見た目は、サウンドのコントロールの吹き出し .sound-control__tooltip とそろえてある）
-   ・同じ絵文字をもう一度タップすると閉じる
-   ・別の絵文字をタップすると、そちらに切りかわる（出すのはいつも1つだけ）
+   ・同じ絵をもう一度タップすると閉じる
+   ・別の絵をタップすると、そちらに切りかわる（出すのはいつも1つだけ）
    ・ほかの場所をタップしたとき・スクロールしたとき・少したったとき（foundTooltipShowMs）にも閉じる
-   PC（901px以上）では名前がはじめから出ているので、吹き出しは出さない（→ status.css）
+   PC（1025px以上）では名前がはじめから出ているので、吹き出しは出さない（→ status.css）
 
    ■ 吹き出しを position: fixed にしている理由
      「見つけたもの」の箱（.status-found）は、あふれたときに中だけスクロールするよう overflow を付けている
@@ -377,12 +377,14 @@ onBeforeUnmount(closeFoundTooltip);
 
       <span v-if="collectedItems.length === 0" class="status-found__empty">なにが見つかるかな？</span>
 
-      <!-- 1つのアイテムの中に、絵文字（__icon）と名前（__name）の両方を入れてある
-           ・PC（901px以上）                 … 名前だけを出す（今までどおり）
-           ・900px以下（スマホ・タブレット） … 絵文字だけを出して、名前は読み上げ用に残す
+      <!-- 1つのアイテムの中に、絵（__icon）と名前（__name）の両方を入れてある
+           ・PC（1025px以上）                … 名前の左に絵を出す
+           ・1024px以下（スマホ・タブレット）… 絵だけを出して、名前は読み上げ用に残す
              名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
-             絵文字だけだと何か分からないので、タップすると下に名前の吹き出しが出る（→ toggleFoundTooltip）
-           （切りかえは assets/css/game/status.css、絵文字の一覧は data/places.ts の itemIcons） -->
+             絵だけだと何か分からないので、タップすると下に名前の吹き出しが出る（→ toggleFoundTooltip）
+           （切りかえは assets/css/game/status.css、絵の一覧は data/places.ts の itemImages。前は絵文字だった）
+           alt="" … 名前は __name で読み上げるので、絵はかざりとして読ませない
+           絵が登録されていないもの（あとから増やして、itemImages に書きわすれたとき）は 🔍 を出す -->
       <ul v-else class="status-found__list">
         <li v-for="item in collectedItems" :key="item">
           <button
@@ -391,13 +393,16 @@ onBeforeUnmount(closeFoundTooltip);
             :class="{ 'status-found__item--open': openFoundItem === item }"
             :title="item"
             @click="toggleFoundTooltip(item, $event)">
-            <span class="status-found__icon" aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span>
+            <span class="status-found__icon" aria-hidden="true">
+              <img v-if="itemImages[item]" class="status-found__image" :src="itemImages[item]" alt="" decoding="async" />
+              <template v-else>🔍</template>
+            </span>
             <span class="status-found__name">{{ item }}</span>
           </button>
         </li>
       </ul>
 
-      <!-- タップした絵文字の名前の吹き出し（900px以下だけ）
+      <!-- タップした絵の名前の吹き出し（1024px以下だけ）
            名前はチップの中（__name）にも読み上げ用で入っているので、こちらは aria-hidden にして二重に読ませない -->
       <span
         v-if="openFoundItem"
