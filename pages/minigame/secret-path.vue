@@ -16,7 +16,7 @@
        （どこにも出しておかないと、そういうご褒美があること自体に気づけないため）
 
    ■ 入口
-     起動画面（A画面）の「🌿 ミニゲーム」→ ミニゲームの一覧（pages/minigame/index.vue）→ このページ
+     起動画面（A画面）の「🎮 ミニゲーム」→ ミニゲームの一覧（pages/minigame/index.vue）→ このページ
      ゲーム本編で、秘密の小道をぬけたら解放される（→ pages/index.vue の unlockMinigame('secret-path')）
      まだ解放していないブラウザで、このページのアドレスを直接開いたときは、遊べるようになる条件をひとことだけ出す
      「← ミニゲーム一覧へ」で一覧へ戻る
@@ -37,6 +37,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 
 import SecretPathField from '~/components/game/SecretPathField.vue';
+import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
@@ -207,10 +208,11 @@ const isNewlyUnlockedSecretVocalSong = ref(false);
 /* 画面に出す距離（メートル。小数は切り捨てる） */
 const distanceMeters = computed(() => Math.floor(secretPathDistance.value));
 
-/* こもれびを取ったときに、こうちゃんの上に出す文字
-   本編の小道は「✨ +1」（集めた数が1つ増える）だが、こちらは進んだ距離のボーナスが付くので「✨ +5m」にする
-   （数のほうは、HUD の「✨ こもれび 8」がぽんっと増えるので、そちらで分かる） */
-const sparkleLabel = `✨ +${secretPathEndlessSunlightBonusMeters}m`;
+/* こもれびを取ったときに、こうちゃんの上に（こもれびの絵の右に）出す文字
+   本編の小道は「+1」（集めた数が1つ増える）だが、こちらは進んだ距離のボーナスが付くので「+5m」にする
+   （数のほうは、HUD の「［こもれびの絵］こもれび 8」がぽんっと増えるので、そちらで分かる）
+   こもれびの絵は SecretPathField.vue が文字の左に出す（前は「✨ +5m」と絵文字ごと渡していた） */
+const sparkleLabel = `+${secretPathEndlessSunlightBonusMeters}m`;
 
 /* はじまる前のルールに出す、加速コンボの倍率のならび（「×3 → ×4 → ×6」）
 
@@ -635,10 +637,17 @@ onUnmounted(() => {
     <section v-else-if="unlockState === 'unlocked'" class="mg-stage">
       <!-- はじまる前 -->
       <article v-if="secretPathPhase === 'ready'" class="place-card place-card--secret">
-        <h1 class="place-card__title">🌿 どこまで行ける？</h1>
+        <!-- 名前の左のアイコンは、ミニゲームの一覧のカードと同じ絵（data/minigames.ts の iconImage）
+             となりに名前が書いてあるので、読み上げでは読ませない（alt="" ） -->
+        <h1 class="place-card__title mg-title">
+          <img v-if="minigameInfo.iconImage" class="mg-title__icon" :src="minigameInfo.iconImage" alt="" decoding="async" />
+          どこまで行ける？
+        </h1>
 
+        <!-- 枝・こもれびの絵は、前は 🌿・✨ の絵文字だった（絵は components/game/SecretPathIcon.vue）
+             「枝」「こもれび」という言葉のかわりに絵を置いているところは、読み上げでその名前を読ませる（alt） -->
         <p class="mg-lead">
-          🌿をよけて ✨をあつめながら
+          <SecretPathIcon kind="branch" alt="枝" />をよけて <SecretPathIcon kind="sunlight" alt="こもれび" />をあつめながら
           <br />
           どこまでも進もう！
         </p>
@@ -655,9 +664,9 @@ onUnmounted(() => {
             <span class="mg-rules__part">タップ・フリック：よける</span>
             <span class="mg-rules__part">長押し：加速</span>
           </li>
-          <li>🌿に{{ secretPathEndlessLives }}回当たると おしまい</li>
+          <li><SecretPathIcon kind="branch" alt="枝" />に{{ secretPathEndlessLives }}回当たると おしまい</li>
           <!-- こもれびのボーナス（1つ取るごとに、進んだ距離が増える → data/secretPathEndless.ts） -->
-          <li class="mg-rules__bonus">✨ 1つで きょりが +{{ secretPathEndlessSunlightBonusMeters }}m！</li>
+          <li class="mg-rules__bonus"><SecretPathIcon kind="sunlight" alt="こもれび" /> 1つで きょりが +{{ secretPathEndlessSunlightBonusMeters }}m！</li>
           <!-- 加速コンボ（加速しつづけると、進んだ距離が多めに数えられる → data/secretPathEndless.ts）
                出すのは「ふだんの何倍か（合計）」。加速しただけで ×2 数えられているので、コンボが付くと ×3 → ×4 → ×6 になる
                （HUD の札に出る数字と、そろえてある） -->
@@ -671,7 +680,7 @@ onUnmounted(() => {
         <p v-if="best.distance > 0 || best.sunlight > 0" class="mg-best">
           じこベスト
           <span class="mg-best__item">🏁 {{ best.distance }}m</span>
-          <span class="mg-best__item">✨ {{ best.sunlight }}</span>
+          <span class="mg-best__item"><SecretPathIcon kind="sunlight" alt="こもれび" /> {{ best.sunlight }}</span>
         </p>
 
         <!-- ご褒美のヒント（まだ解放していないときだけ）
@@ -691,7 +700,7 @@ onUnmounted(() => {
         :countdown-number="secretPathCountdownNumber"
         :is-start-cue-visible="isSecretPathStartCueVisible"
         :is-bumped="isSecretPathBumped"
-        bump-penalty="❤️ -1"
+        bump-penalty="life"
         :bump-id="secretPathBumpId"
         :is-sparkling="isSecretPathSparkling"
         :sparkle-label="sparkleLabel"
@@ -721,7 +730,8 @@ onUnmounted(() => {
         <p class="place-card__flash">ここまで来た！</p>
 
         <!-- 結果の記録（何の記録か → 数 → そのほか、の順に読めるよう、大きさを3つに分けている → .mg-result）
-             絵文字は、読み上げでは「旗」「きらきら」と読まれてしまうので隠して、となりの言葉（きょり・こもれび）で伝える -->
+             絵文字・絵は、読み上げでは「旗」などと読まれてしまうので隠して、となりの言葉（きょり・こもれび）で伝える
+             （こもれびは、前は ✨ の絵文字だったが、こもれびの絵にした → components/game/SecretPathIcon.vue） -->
         <p class="mg-result">
           <span class="mg-result__item">
             <span class="mg-result__icon" aria-hidden="true">🏁</span>
@@ -733,7 +743,7 @@ onUnmounted(() => {
             <span v-if="isNewDistanceBest" class="mg-result__new">じこベスト！</span>
           </span>
           <span class="mg-result__item">
-            <span class="mg-result__icon" aria-hidden="true">✨</span>
+            <span class="mg-result__icon" aria-hidden="true"><SecretPathIcon kind="sunlight" /></span>
             <span class="mg-result__label">こもれび</span>
             <b class="mg-result__value">{{ secretPathSunlightCount }}</b>
             <span class="mg-result__unit">こ</span>
@@ -760,7 +770,7 @@ onUnmounted(() => {
         <p class="mg-best">
           じこベスト
           <span class="mg-best__item">🏁 {{ best.distance }}m</span>
-          <span class="mg-best__item">✨ {{ best.sunlight }}</span>
+          <span class="mg-best__item"><SecretPathIcon kind="sunlight" alt="こもれび" /> {{ best.sunlight }}</span>
         </p>
       </article>
 
@@ -887,6 +897,27 @@ onUnmounted(() => {
 
 .mg-text + .mg-text {
   margin-top: 8px;
+}
+
+/* はじまる前の見出し（［アイコンの絵］どこまで行ける？）
+
+   アイコンの絵と名前を横にならべて、たての まんなかをそろえる
+   ・絵の大きさは 2.1em（見出しの文字 26px に対して 約55px。文字の高さの2倍ほどにして、ゲームの顔として目立たせる）
+   ・角の丸い絵は、画像のまんなかの 9割ほど（はしから 6% ずつ透明）なので、1.12倍に広げて余白を切り落とす
+     （一覧のカードの .mg-card__iconImage と同じしかけ → pages/minigame/index.vue） */
+.mg-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mg-title__icon {
+  flex: none;
+  width: 2.1em;
+  height: 2.1em;
+  object-fit: contain;
+  transform: scale(1.12);
+  filter: drop-shadow(0 2px 3px rgb(87 56 158 / 22%));
 }
 
 /* はじまる前の「えだをよけながら どこまでも進もう！」（本編の .secret-path-lead と同じ見た目） */
@@ -1017,7 +1048,7 @@ onUnmounted(() => {
   opacity: 0.92;
 }
 
-/* 結果（「🏁 きょり 123m Lv.4」「✨ こもれび 8こ 🏁 +40m」）
+/* 結果（「🏁 きょり 123m Lv.4」「［こもれびの絵］こもれび 8こ 🏁 +40m」）
 
    ぱっと読めるように、文字の大きさを3つに分けている
    ・何の記録か（絵文字 ＋ 「きょり」「こもれび」）… 小さめ・うすい紫
@@ -1042,7 +1073,7 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* 記録の絵文字（🏁・✨）と、何の記録かの言葉（きょり・こもれび）
+/* 記録の絵文字・絵（🏁・こもれびの絵）と、何の記録かの言葉（きょり・こもれび）
    数より小さく・うすくして、大きい数字が先に目に入るようにする */
 .mg-result__icon {
   font-size: 22px;

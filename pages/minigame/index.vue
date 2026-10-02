@@ -2,7 +2,7 @@
 /* ============================================================
    ミニゲームの一覧（/minigame）
 
-   起動画面（A画面）の「🌿 ミニゲーム」から来るページ
+   起動画面（A画面）の「🎮 ミニゲーム」から来るページ
    data/minigames.ts の一覧を上から順にカードで並べ、押すとそのミニゲームのページ（/minigame/<id>）へ移る
 
    ■ カードは2種類
@@ -21,11 +21,12 @@
 
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 
+import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
 import { minigames } from '~/data/minigames';
-import type { MinigameId } from '~/data/minigames';
+import type { MinigameBestPart, MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames } from '~/utils/minigameStorage';
 
@@ -67,15 +68,15 @@ const {
 const isLoaded = ref(false);
 const unlockedIds = ref<MinigameId[]>([]);
 
-/* カードに出す自己ベストの文（まだ遊んでいないものは入れない） */
-const bestTexts = ref<Partial<Record<MinigameId, string>>>({});
+/* カードに出す自己ベストの項目のならび（まだ遊んでいないものは入れない。項目の形は data/minigames.ts の MinigameBestPart） */
+const bestParts = ref<Partial<Record<MinigameId, MinigameBestPart[]>>>({});
 
 /* 一覧のカード（上から順）。解放したかどうかと、自己ベストの文をつけておく */
 const cards = computed(() =>
   minigames.map((minigame) => ({
     ...minigame,
     isUnlocked: unlockedIds.value.includes(minigame.id),
-    bestText: bestTexts.value[minigame.id] ?? null,
+    bestParts: bestParts.value[minigame.id] ?? null,
   })),
 );
 
@@ -153,7 +154,7 @@ onMounted(async () => {
 
   /* タイトルBGM（少し待ってから、ふわっと鳴りはじめる）
 
-     はじめの画面の「🌿 ミニゲーム」を押して来たときは、そのまま鳴る
+     はじめの画面の「🎮 ミニゲーム」を押して来たときは、そのまま鳴る
      アドレスを直接開いたときは、ブラウザの決まりで、まだ一度もさわっていないページでは音を鳴らせない
      そのときは、はじめて押した・キーを押したときに鳴らす（→ resumeBgmOnFirstInput） */
   playTitleBgmSoon();
@@ -161,11 +162,11 @@ onMounted(async () => {
   window.addEventListener('keydown', resumeBgmOnFirstInput, { once: true });
 
   unlockedIds.value = loadUnlockedMinigames();
-  bestTexts.value = Object.fromEntries(
+  bestParts.value = Object.fromEntries(
     minigames.flatMap((minigame) => {
-      const text = minigame.formatBest(loadMinigameBest(minigame.id));
+      const parts = minigame.formatBest(loadMinigameBest(minigame.id));
 
-      return text ? [[minigame.id, text]] : [];
+      return parts ? [[minigame.id, parts]] : [];
     }),
   );
   isLoaded.value = true;
@@ -223,11 +224,22 @@ onUnmounted(() => {
         <li v-for="card in cards" :key="card.id">
           <!-- 解放したミニゲーム（押すと、そのページへ。↑ ↓ で選ぶときの行き先にもなる → getCardButtons()） -->
           <button v-if="card.isUnlocked" type="button" class="mg-card" @click="goTo(`/minigame/${card.id}`)">
-            <span class="mg-card__icon" aria-hidden="true">{{ card.icon }}</span>
+            <!-- アイコン：絵（iconImage）があれば絵、無ければ絵文字（icon） → data/minigames.ts -->
+            <span class="mg-card__icon" aria-hidden="true">
+              <img v-if="card.iconImage" class="mg-card__iconImage" :src="card.iconImage" alt="" decoding="async" />
+              <template v-else>{{ card.icon }}</template>
+            </span>
             <span class="mg-card__body">
               <span class="mg-card__title">{{ card.title }}</span>
               <span class="mg-card__text">{{ card.description }}</span>
-              <span v-if="card.bestText" class="mg-card__best">じこベスト　{{ card.bestText }}</span>
+              <!-- 自己ベスト（「じこベスト　🏁 97m　［こもれびの絵］ 8」）。項目ごとに、絵があれば文字の左に出す -->
+              <span v-if="card.bestParts" class="mg-card__best">
+                じこベスト
+                <span v-for="(part, index) in card.bestParts" :key="index" class="mg-card__bestPart">
+                  <SecretPathIcon v-if="part.icon" :kind="part.icon" :alt="part.iconAlt" />
+                  {{ part.text }}
+                </span>
+              </span>
             </span>
           </button>
 
@@ -306,7 +318,8 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: auto 1fr;
   align-items: center;
-  gap: 14px;
+  /* アイコンの絵は 1.12倍に広げて はみ出して見える（→ .mg-card__iconImage）ので、そのぶん文とのすき間を広めにとる */
+  gap: 20px;
   box-sizing: border-box;
   width: 100%;
   padding: 16px 18px 16px 32px;
@@ -367,6 +380,29 @@ button.mg-card:focus::before {
   line-height: 1;
 }
 
+/* アイコンの絵（data/minigames.ts の iconImage。角の丸いアプリのアイコンのような絵）
+
+   ■ 大きさ … PC 88px・スマホ 60px（→ 下の @media (max-width: 700px)）
+     カードの顔として目立たせるため、絵文字（34px）より ずっと大きくしている
+     （絵の中に こうちゃん・枝・こもれびが描きこんであり、小さいと何の絵か分からないため）
+     カードは「アイコンの列（auto）＋ 文の列（1fr）」の2列なので、絵が大きくなったぶん、名前・説明・自己ベストは右へずれる
+     スマホは文の列が せまくなりすぎないよう、PC より小さくしている
+
+   ■ まわりの透明な余白を切り落とす
+     角の丸い絵は、画像のまんなかの 9割ほど（はしから 6% ずつ透明）
+     そのままだと、わくの大きさのわりに小さく見えるので、transform で 1.12倍に広げる
+     （わくの大きさは変わらないので、となりの文字の並びはずれない。はみ出すのは透明な余白だけ）
+
+   ■ 影 … カードのうすい紫の上で、絵のふちが ぼやけないよう、下に うすい影を付ける */
+.mg-card__iconImage {
+  display: block;
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  transform: scale(1.12);
+  filter: drop-shadow(0 2px 3px rgb(87 56 158 / 22%));
+}
+
 .mg-card__body {
   display: grid;
   gap: 2px;
@@ -386,8 +422,20 @@ button.mg-card:focus::before {
 }
 
 /* 自己ベスト（遊んだことがあるときだけ） */
+/* 自己ベストの札（「じこベスト　🏁 97m　［こもれびの絵］ 8」）
+
+   項目（「じこベスト」・「🏁 97m」・「［こもれびの絵］ 8」）を横にならべ、入りきらないときは項目のあいだで折り返す
+   アイコンの絵を大きくしたぶん文の列がせまく、細いスマホでは1行に入りきらずに、カードの右のふちからはみ出していたため
+   ・項目の中（「97m」など）は折り返さない（white-space: nowrap）
+   ・max-width: 100% … 文の列（.mg-card__body）の幅をこえない（こえる前に折り返す） */
 .mg-card__best {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 1em;
   justify-self: start;
+  box-sizing: border-box;
+  max-width: 100%;
   margin-top: 4px;
   padding: 1px 12px;
   border-radius: 999px;
@@ -399,6 +447,9 @@ button.mg-card:focus::before {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* 自己ベストの1項目（「🏁 97m」「［こもれびの絵］ 8」）
+   項目のあいだは、上の .mg-card__best の column-gap で1文字ぶんあける（前は全角スペースで区切った1つの文だったので、そのときと同じくらい） */
 
 /* ===== まだ解放していないカード（「？？？」とヒントだけ） =====
    点線の灰色にして、押せないことが見て分かるようにする */
@@ -442,12 +493,17 @@ button.mg-card:focus::before {
   }
 
   .mg-card {
-    gap: 12px;
+    gap: 16px;
     padding: 14px 14px 14px 28px;
   }
 
   .mg-card__icon {
     font-size: 30px;
+  }
+
+  .mg-card__iconImage {
+    width: 60px;
+    height: 60px;
   }
 
   .mg-card__title {

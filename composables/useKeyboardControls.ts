@@ -304,7 +304,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
      起動画面（A）・タイトル画面（B）のキーボード操作
 
      この2つの画面で操作するものは、A画面もB画面も4つ
-       A … ① はじめる             ② ♪（サウンドトラック）   ③ 🌿 ミニゲーム ④ サウンドON/OFF
+       A … ① はじめる             ② ♪（サウンドトラック）   ③ 🎮 ミニゲーム ④ サウンドON/OFF
        B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
 
      ①がその画面のメインのボタン
@@ -370,7 +370,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
      ■ A画面（ボタン4つ）
 
-       [ ♪ ][ 🌿 ミニゲーム ]        [ サウンドON/OFF ]
+       [ ♪ ][ 🎮 ミニゲーム ]        [ サウンドON/OFF ]
 
                     [ はじめる ]
 
@@ -393,7 +393,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* 上の行から ↓ でメインのボタンへ下りたとき、上の行のどのボタンにいたか
 
      ↑ で上の行へ戻るときに、同じボタンへ戻すために覚えておく
-     （サウンドから↓で「はじめる」へ下りたら、↑でサウンドへ戻る。A画面の 🌿 ミニゲーム・B画面の ？ あそびかた も同じ）
+     （サウンドから↓で「はじめる」へ下りたら、↑でサウンドへ戻る。A画面の 🎮 ミニゲーム・B画面の ？ あそびかた も同じ）
      ボタンそのものを覚えているので、A画面⇄B画面で画面が入れかわると、もう画面に無いボタンになる
      そのときは覚えていないのと同じにして、左上のボタンへ戻す */
   let lastTitleTopItem: HTMLButtonElement | null = null;
