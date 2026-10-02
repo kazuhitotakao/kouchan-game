@@ -1259,7 +1259,17 @@
   list-style: none;
 }
 
+/* おやつの札（［グミの絵］グミ）
+
+   絵と名前を横にならべて、たての まんなかをそろえる（inline-flex ＋ align-items: center）
+   絵の大きさ（--snack-bag-image-size）は、名前の文字の行の高さより大きくしない
+   札が高くなると、バッグの高さ（下の min-height）をこえて、選んだときにバッグがのびてしまうため */
 .snack-bag__item {
+  --snack-bag-image-size: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 12px;
   border: 1px solid var(--navy-line);
   border-radius: 999px;
@@ -1267,6 +1277,27 @@
   color: var(--navy);
   font-size: 15px;
   font-weight: 700;
+}
+
+/* 札の絵（上のカードの絵 .snack-option__icon と同じしかけ）
+   ・わくの中で 125% に広げて、まわりの白い余白を1割ずつ切り落とす
+   ・multiply で、画像の白を札の色になじませる（3%明るくして、白をまっ白にそろえてから） */
+.snack-bag__icon {
+  display: block;
+  flex: none;
+  width: var(--snack-bag-image-size);
+  height: var(--snack-bag-image-size);
+  overflow: hidden;
+}
+
+.snack-bag__image {
+  display: block;
+  width: 125%;
+  height: 125%;
+  margin: -12.5%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  filter: brightness(1.03);
 }
 
 /* まだ1つも選んでいないとき
@@ -2371,7 +2402,12 @@
     gap: 6px;
   }
 
+  /* 札の絵は 18px にする（「🍇 」の絵文字と空白とほぼ同じ横はば）
+     スマホでは札2つを「🎒 … 2 / 2」の1行にならべているので、札の横はばを今までより広げないため */
   .snack-bag__item {
+    --snack-bag-image-size: 18px;
+
+    gap: 3px;
     padding: 1px 9px;
     font-size: 13.5px;
     white-space: nowrap;
@@ -2454,6 +2490,30 @@
   .snack-option__effect {
     gap: 0 5px;
     font-size: 12px;
+  }
+
+  /* おやつバッグの札は、絵だけにする（［🎒］［グミの絵］［チョコの絵］ …… ［2 / 2］）
+
+     札を「🎒 … 2 / 2」の1行にならべているが、389px以下の画面では札がならぶ場所がせまい
+     （320pxで約160px。「おせんべい」「ビスケット」のような5文字の札は1枚 約110px あるので、2枚が入りきらず、
+       2枚目が「2 / 2」と重なって はみ出していた）
+     絵だけにすると札は1枚 約36px になるので、どのおやつを2つ選んでも入りきる
+     ・何を選んだかは、絵と、上のカードの水色（選んでいるカード）で分かる
+     ・名前は見た目から消すだけで、読み上げ用には残す（「おやつバッグ」の文字 .snack-bag__titleText と同じ消しかた）
+     ・絵は 22px（札の高さは名前があったころ（27px）より低くなるが、バッグの高さは min-height で決まっているので変わらない） */
+  .snack-bag__item {
+    --snack-bag-image-size: 22px;
+
+    padding: 1px 7px;
+  }
+
+  .snack-bag__name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

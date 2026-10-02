@@ -4367,10 +4367,21 @@ onUnmounted(() => {
             </p>
 
             <!-- 選んだおやつの名前をならべる
-                 名札（selectedSnackIds）ではなく、絵文字と名前を持っている
-                 selectedSnacks のほうを使う -->
+                 名札（selectedSnackIds）ではなく、絵と名前を持っている
+                 selectedSnacks のほうを使う
+
+                 札の絵は、上のカードと同じ おやつの画像（data/snacks.ts の image）
+                 alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
+
+                 名前を span で包んでいるのは、細いスマホ（389px以下）で札を絵だけにするため
+                 （名前は見た目から消すが、読み上げ用には残す → assets/css/game/base.css の @media (max-width: 389px)） -->
             <ul v-if="selectedSnacks.length > 0" class="snack-bag__list">
-              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">{{ snack.icon }} {{ snack.name }}</li>
+              <li v-for="snack in selectedSnacks" :key="snack.id" class="snack-bag__item">
+                <span class="snack-bag__icon">
+                  <img class="snack-bag__image" :src="snack.image" alt="" decoding="async" />
+                </span>
+                <span class="snack-bag__name">{{ snack.name }}</span>
+              </li>
             </ul>
 
             <p v-else class="snack-bag__empty">まだ選んでいません</p>
