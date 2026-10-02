@@ -351,7 +351,17 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       return null;
     }
 
-    return hoverLane < currentLane ? currentLane - 1 : currentLane + 1;
+    const destination = hoverLane < currentLane ? currentLane - 1 : currentLane + 1;
+
+    /* 0・1・2 のどれかであることを確かめてから返す（moveSecretPathPlayer() と同じ書きかた）
+       計算のうえでは かならず 0〜2 におさまる（左へ動くのは いま 1 か 2 のとき、右へ動くのは いま 0 か 1 のとき）が、
+       足し算・引き算をすると TypeScript には「ただの数」に見えてしまい、
+       レーンの番号（SecretPathLane）を受けとる SecretPathField.vue に渡せないため */
+    if (destination === 0 || destination === 1 || destination === 2) {
+      return destination;
+    }
+
+    return null;
   });
 
   /* 残り時間（秒）。「あと 12秒」のように出す（カウントダウン中は 15秒のまま） */
@@ -444,18 +454,22 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* 「もう一回」（「どこまで行ける？」の結果の画面から、すぐに次を始める）
 
      時間切れ・❤ が0になったしゅんかんに押していた指やキーで、
-     結果を読む前に次が始まってしまわないよう、本編の「先へ進む」と同じ待ち時間をはさむ */
+     結果を読む前に次が始まってしまわないよう、本編の「先へ進む」と同じ待ち時間をはさむ
+
+     返す値 … 次を始めたら true、待ち時間のうちなどで始めなかったら false
+     呼ぶ側（pages/minigame/secret-path.vue の play()）は、始めたときだけ曲を入れかえる */
   function restartSecretPathGame() {
     if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'finished') {
-      return;
+      return false;
     }
 
     if (performance.now() - secretPathFinishedAt < secretPathLeaveGuard) {
-      return;
+      return false;
     }
 
     resetSecretPathGame();
     startSecretPathGame();
+    return true;
   }
 
   /* 1コマぶんの処理（requestAnimationFrame から呼ばれる） */
