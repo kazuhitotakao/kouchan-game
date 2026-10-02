@@ -320,13 +320,48 @@
   list-style: none;
 }
 
+/* 見つけたものの札（［どんぐりの絵］大きなどんぐり）
+   絵と名前を横にならべて、たての まんなかをそろえる（inline-flex ＋ align-items: center）
+   左の余白は、絵のぶん少しつめて、見た目の左右の余白をそろえる */
 .found-list__item {
-  padding: 3px 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 14px 3px 10px;
   border: 1px solid #f5e2be;
   border-radius: 999px;
   background: #fff6e0;
   color: #6a4a10;
   font-size: 13px;
+}
+
+/* 札の絵（data/places.ts の itemImages。おやつバッグの札の絵 base.css の .snack-bag__icon と同じしかけ）
+   ・大きさは 20px（名前の文字の行の高さとほぼ同じ。札の高さがほとんど変わらないように）
+   ・画像は正方形で、絵はまんなかの 7割ほど。わくの中で 125% に広げて、まわりの白い余白を1割ずつ切り落とす
+   ・画像は透明ではなく、うしろが白でぬってあるので、multiply で札のクリーム色になじませる
+     （3%明るくして、少し黄みがかった白を まっ白にそろえてから重ねる）
+   ・絵が登録されていないときの 🔍 も、この箱のまんなかに出す */
+.found-list__icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+  line-height: 1;
+}
+
+/* margin の % は、たても横も「わくの幅」をもとに決まる（わくは正方形なので、上下左右に同じだけずれる） */
+.found-list__image {
+  display: block;
+  flex: none;
+  width: 125%;
+  height: 125%;
+  margin: -12.5%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  filter: brightness(1.03);
 }
 
 /* --- GAME OVER --- */

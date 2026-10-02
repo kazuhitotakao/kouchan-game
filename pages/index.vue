@@ -100,7 +100,7 @@ import type {
    プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { parkMapStartPlace } from '~/data/parkMap';
-import { itemIcons, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { itemImages, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
@@ -5580,8 +5580,17 @@ onUnmounted(() => {
 
                   <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
 
+                  <!-- 名前の左に、見つけたものの絵（data/places.ts の itemImages。前は絵文字だった）
+                       alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
+                       絵が登録されていないものは 🔍 を出す（くわしくは assets/css/game/result.css の .found-list__icon） -->
                   <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item">
+                      <span class="found-list__icon" aria-hidden="true">
+                        <img v-if="itemImages[item]" class="found-list__image" :src="itemImages[item]" alt="" decoding="async" />
+                        <template v-else>🔍</template>
+                      </span>
+                      {{ item }}
+                    </li>
                   </ul>
                 </article>
               </div>
@@ -5696,8 +5705,17 @@ onUnmounted(() => {
 
                   <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
 
+                  <!-- 名前の左に、見つけたものの絵（data/places.ts の itemImages。前は絵文字だった）
+                       alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
+                       絵が登録されていないものは 🔍 を出す（くわしくは assets/css/game/result.css の .found-list__icon） -->
                   <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item"><span aria-hidden="true">{{ itemIcons[item] ?? '🔍' }}</span> {{ item }}</li>
+                    <li v-for="item in collectedItems" :key="item" class="found-list__item">
+                      <span class="found-list__icon" aria-hidden="true">
+                        <img v-if="itemImages[item]" class="found-list__image" :src="itemImages[item]" alt="" decoding="async" />
+                        <template v-else>🔍</template>
+                      </span>
+                      {{ item }}
+                    </li>
                   </ul>
                 </article>
               </div>
