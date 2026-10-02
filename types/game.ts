@@ -89,7 +89,8 @@ export type SnackId = 'gummy' | 'chocolate' | 'senbei' | 'biscuit' | 'banana' | 
 
    id          … 名札（上の SnackId）
    name        … 画面に出す名前（「グミ」）
-   icon        … 画面に出す絵文字（「🍇」）
+   icon        … 画面に出す絵文字（「🍇」）。おやつバッグなど、文字の中にならべるところで使う
+   image       … おやつ選択画面のカードに出す絵（public/images/snacks/ の画像。URLでは /images/snacks/〜）
    energy      … 食べたときに回復する、こうちゃんの体力
    mood        … 食べたときに回復する、こうちゃんの機嫌
    minutes     … 食べるのにかかる時間（分）
@@ -105,6 +106,7 @@ export type Snack = {
   id: SnackId;
   name: string;
   icon: string;
+  image: string;
   energy: number;
   mood: number;
   minutes: number;

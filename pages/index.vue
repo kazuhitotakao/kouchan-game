@@ -4302,15 +4302,22 @@ onUnmounted(() => {
               :aria-pressed="isSnackSelected(snack.id)"
               @click="toggleSnackSelection(snack.id, $event)"
               @mouseenter="moveSnackSelectionToHovered">
-              <!-- 絵文字と名前は、1行にならべる（「🍇 グミ」の形）
+              <!-- おやつの絵と名前は、1行にならべる（［グミの絵］グミ の形）
 
                    たてに積むより1行ぶん背が低くなるので、
                    おやつ6枚をならべてもカードが画面からはみ出しにくい
-                   2列にして1枚が横に広くなったぶん、
-                   横にならべても のびのび置ける
-                   （おやつバッグの「🍇 グミ」とも同じ見た目になる） -->
+                   （スマホでは、6枚・バッグ・出発ボタンを1画面に収めているので、
+                     絵を名前の上に積むと、背の低い画面で入りきらなくなる）
+
+                   ・絵は前は絵文字（🍇）だったが、おやつごとの画像にした（data/snacks.ts の image）
+                     おやつバッグの札は、今までどおり絵文字（🍇 グミ）のまま
+                   ・alt="" … となりに名前の文字があり、ボタンの読み上げは「グミ」になる
+                     alt にも名前を入れると「グミ グミ」と2回読まれるので、絵はかざりとして読ませない
+                   ・大きさ・余白の切り落とし・背景のなじませかたは CSS（assets/css/game/base.css の .snack-option__icon） -->
               <span class="snack-option__head">
-                <span class="snack-option__icon">{{ snack.icon }}</span>
+                <span class="snack-option__icon">
+                  <img class="snack-option__image" :src="snack.image" alt="" decoding="async" />
+                </span>
                 <span class="snack-option__name">{{ snack.name }}</span>
               </span>
 

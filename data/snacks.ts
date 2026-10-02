@@ -13,7 +13,7 @@ import type { Snack } from '~/types/game';
    おやつを増やしたいときは、ここへ1件足すだけでよい
    画面のほうは v-for でこの配列をそのまま並べているので、
    HTMLに新しいカードを書き足す必要はない
-   （そのぶん SnackId にも名札を1つ足すこと） */
+   （そのぶん SnackId にも名札を1つ足すこと。カードの絵も public/images/snacks/ に置いて、image に書く） */
 export const snacks: Snack[] = [
   {
     id: 'gummy',
@@ -24,9 +24,13 @@ export const snacks: Snack[] = [
        果汁グミでおなじみのぶどうにして、飴と見まちがえないようにしている
        （ほかの5つ 🍫 🍘 🍪 🍌 🧃 とも色・形がかぶらない）
 
-       ※ ここを変えるだけで、画面のカードもバッグの表示も入れかわる
-         （どちらも snacks のこの icon を見ているため） */
+       ※ ここを変えるだけで、おやつバッグなどの表示が入れかわる
+         （どれも snacks のこの icon を見ているため）
+         おやつ選択画面のカードだけは、絵文字ではなく下の image の絵を出す */
     icon: '🍇',
+    /* おやつ選択画面のカードに出す絵（6つとも public/images/snacks/ にある）
+       ※ グミの画像だけ、ファイル名は gummy.webp（ほかは「チョコの板（chocolate-bar）」のように中身の形まで書いてある） */
+    image: '/images/snacks/gummy.webp',
     energy: 5,
     mood: 20,
     minutes: 5,
@@ -35,6 +39,7 @@ export const snacks: Snack[] = [
     id: 'chocolate',
     name: 'チョコ',
     icon: '🍫',
+    image: '/images/snacks/chocolate-bar.webp',
     energy: 10,
     mood: 14,
     minutes: 5,
@@ -43,6 +48,7 @@ export const snacks: Snack[] = [
     id: 'senbei',
     name: 'おせんべい',
     icon: '🍘',
+    image: '/images/snacks/senbei-pack.webp',
     energy: 18,
     mood: 6,
     minutes: 10,
@@ -51,6 +57,7 @@ export const snacks: Snack[] = [
     id: 'biscuit',
     name: 'ビスケット',
     icon: '🍪',
+    image: '/images/snacks/biscuit-pack.webp',
     energy: 12,
     mood: 10,
     minutes: 5,
@@ -59,6 +66,7 @@ export const snacks: Snack[] = [
     id: 'banana',
     name: 'バナナ',
     icon: '🍌',
+    image: '/images/snacks/banana.webp',
     energy: 24,
     mood: 4,
     minutes: 10,
@@ -67,6 +75,7 @@ export const snacks: Snack[] = [
     id: 'jelly',
     name: 'ゼリー',
     icon: '🧃',
+    image: '/images/snacks/fruit-jelly-cup.webp',
     energy: 7,
     mood: 15,
     minutes: 5,
