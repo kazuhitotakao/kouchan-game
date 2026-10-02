@@ -2128,7 +2128,7 @@
      高さが足りないぶんは、上の余白（padding・gap）を減らしてかせぐ
 
      ※ 同じ指定を、別の <style scoped> になった次の2か所にも置いてある
-       ・result-card.css … .result-card__text／.found-line／.tantrum-line
+       ・result-card.css … .result-card__text／.tantrum-line
        ・event-flash.css … .event-flash__text
        （まとめ書きのままだと、このファイルのスコープでしか効かないため。
          値は3か所とも同じ） */
@@ -2167,7 +2167,7 @@
      （画面がせまいぶん、行間は1.8のままゆったり取る）
 
      ※ 同じ指定を、別の <style scoped> になった次の2か所にも置いてある
-       ・result-card.css … .result-card__text／.found-line／.tantrum-line
+       ・result-card.css … .result-card__text／.tantrum-line
        ・event-flash.css … .event-flash__text
        （値は3か所とも同じ） */
   .place-card__text {

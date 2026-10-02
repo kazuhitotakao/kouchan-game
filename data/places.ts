@@ -46,7 +46,7 @@ export const placeItems: Record<ItemPlace, string> = {
   sandbox: 'きれいな石',
   acornArea: '大きなどんぐり',
   pond: '水色のガラス玉',
-  grassArea: '黄色い花',
+  grassArea: 'きいろい花',
   secretSpot: 'ふしぎな形の枝',
 };
 
@@ -56,7 +56,8 @@ export const placeItems: Record<ItemPlace, string> = {
      名前のままだと3個目あたりから1行に入りきらず、横スクロールになってしまうため
      （名前は読み上げ用に残してある → components/game/StatusBar.vue・assets/css/game/status.css）
      PC（1025px以上）では、名前の左にこの絵を出す
-   ・結果画面の「見つけたもの」では、名前の左にこの絵を出す（pages/index.vue の .found-list）
+   ・結果画面の「見つけたもの」では、図鑑のようなマスの大きなメダルに この絵を出す（components/game/FoundItemCollection.vue）
+   ・場所で見つけた瞬間の結果カードの「★ アイテム発見！」でも、この絵を大きく出す（components/game/ResultCard.vue）
 
    ※ 前は絵文字（🌲 🪨 🌰 🔵 🌼 🪵）だったが、松ぼっくり・どんぐり・ガラス玉・枝は ぴったりの絵文字が無く、
      別の物（松の木・栗・青い丸・丸太）で代わりにしていたので、専用の絵にした

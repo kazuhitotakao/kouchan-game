@@ -16,6 +16,7 @@ import { addMinutesToTime } from '~/utils/gameTime';
 /* ゲーム画面の部品（どれも表示と、押されたことを伝えるだけ）
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
 import CommandBox from '~/components/game/CommandBox.vue';
+import FoundItemCollection from '~/components/game/FoundItemCollection.vue';
 import ResultCard from '~/components/game/ResultCard.vue';
 import SecretPathField from '~/components/game/SecretPathField.vue';
 import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
@@ -101,7 +102,7 @@ import type {
    プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { parkMapStartPlace } from '~/data/parkMap';
-import { itemImages, normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
@@ -1214,6 +1215,10 @@ function addCollectedItem(itemName: string) {
   // 画面のほうで組み立てる（アイテムの名前だけ色をつけて目立たせるため）
   foundItemsThisAction.value.push(itemName);
 }
+
+/* 見つかるものが、ぜんぶでいくつあるか（リザルトの「見つけたもの 3 / 6」の 6）
+   data/places.ts の placeItems の数なので、見つかるものを増やすと、ここも自動で増える */
+const foundItemTotal = Object.keys(placeItems).length;
 
 /* その場所のアイテムを、もう見つけているかどうか
 
@@ -5579,23 +5584,17 @@ onUnmounted(() => {
                   </ul>
                 </article>
 
+                <!-- 見つけたもの（図鑑のような6つのマス。中身は components/game/FoundItemCollection.vue）
+                     見出しの右に「3 / 6」と、いくつ見つけたかを出す（6つぜんぶのときは金色 → result.css の .record-card__count--complete） -->
                 <article class="record-card">
-                  <h3 class="record-card__title">見つけたもの</h3>
+                  <h3 class="record-card__title record-card__title--found">
+                    見つけたもの
+                    <span class="record-card__count" :class="{ 'record-card__count--complete': collectedItems.length >= foundItemTotal }">
+                      {{ collectedItems.length }} / {{ foundItemTotal }}
+                    </span>
+                  </h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
-
-                  <!-- 名前の左に、見つけたものの絵（data/places.ts の itemImages。前は絵文字だった）
-                       alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
-                       絵が登録されていないものは 🔍 を出す（くわしくは assets/css/game/result.css の .found-list__icon） -->
-                  <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item">
-                      <span class="found-list__icon" aria-hidden="true">
-                        <img v-if="itemImages[item]" class="found-list__image" :src="itemImages[item]" alt="" decoding="async" />
-                        <template v-else>🔍</template>
-                      </span>
-                      {{ item }}
-                    </li>
-                  </ul>
+                  <FoundItemCollection :collected-items="collectedItems" />
                 </article>
               </div>
             </section>
@@ -5704,23 +5703,17 @@ onUnmounted(() => {
                   </ul>
                 </article>
 
+                <!-- 見つけたもの（図鑑のような6つのマス。中身は components/game/FoundItemCollection.vue）
+                     見出しの右に「3 / 6」と、いくつ見つけたかを出す（6つぜんぶのときは金色 → result.css の .record-card__count--complete） -->
                 <article class="record-card">
-                  <h3 class="record-card__title">見つけたもの</h3>
+                  <h3 class="record-card__title record-card__title--found">
+                    見つけたもの
+                    <span class="record-card__count" :class="{ 'record-card__count--complete': collectedItems.length >= foundItemTotal }">
+                      {{ collectedItems.length }} / {{ foundItemTotal }}
+                    </span>
+                  </h3>
 
-                  <p v-if="collectedItems.length === 0" class="record-card__empty">なし</p>
-
-                  <!-- 名前の左に、見つけたものの絵（data/places.ts の itemImages。前は絵文字だった）
-                       alt="" … となりに名前の文字があるので、絵はかざりとして読ませない
-                       絵が登録されていないものは 🔍 を出す（くわしくは assets/css/game/result.css の .found-list__icon） -->
-                  <ul v-else class="found-list">
-                    <li v-for="item in collectedItems" :key="item" class="found-list__item">
-                      <span class="found-list__icon" aria-hidden="true">
-                        <img v-if="itemImages[item]" class="found-list__image" :src="itemImages[item]" alt="" decoding="async" />
-                        <template v-else>🔍</template>
-                      </span>
-                      {{ item }}
-                    </li>
-                  </ul>
+                  <FoundItemCollection :collected-items="collectedItems" />
                 </article>
               </div>
             </section>

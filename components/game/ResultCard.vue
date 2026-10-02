@@ -15,7 +15,7 @@
                                          place   tantrum   suddenEvent
      カードが揺れる（いやいや中）          ○       ○         ×
      「まだ いやいや は続いています…」    ×       ○         ×
-     「★ アイテム発見！」                  ○       ○         ×
+     「★ アイテム発見！」（絵つき）        ○       ○         ×
      「✨ ナイス対応！」                    ×       ○         ×
 
      place       … 通常の場所6か所（すべり台・砂場など）
@@ -23,6 +23,8 @@
      suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
    ============================================================ */
 
+import { itemImages, placeItems } from '~/data/places';
+import { splitItemName } from '~/utils/itemName';
 import type { ChangeGroup, RandomEventEffect, SceneVariant, StatusChanges } from '~/types/game';
 import { formatChange } from '~/utils/statusChange';
 
@@ -58,19 +60,19 @@ defineProps<{
 
 /* アイテムごとの、こうちゃんのひとこと
 
-   結果カードの「★ アイテム発見！」「『○○』を見つけました！」の下に、1文だけ出す
-   見出し（キー）は pages/index.vue の placeItems のアイテム名とそろえてあるので、
-   placeItems の名前を変えたときは、ここも合わせて変えること
+   結果カードの「★ アイテム発見！」の絵と名前の下に、1文だけ出す
+   見出し（キー）は data/places.ts の placeItems のアイテム名をそのまま使う
+   （placeItems の名前を変えても、ここは直さなくてよい。前は名前を ここにも書いていて、変えると ひとことが出なくなっていた）
 
    ※ 同じ文を画面のほうに何度も書かないように、文章はここだけに置いてある
 */
 const itemReactions: Record<string, string> = {
-  ちいさな松ぼっくり: '「みてみて！」まつぼっくりを見せてくれました。',
-  きれいな石: '「つるつるしてる！」何度もさわっています。',
-  大きなどんぐり: '「大きいのあった〜！」うれしそうに見せてくれました。',
-  水色のガラス玉: '「きらきら！」光にかざして見ています。',
-  黄色い花: '「おはな！」大事そうに持っています。',
-  ふしぎな形の枝: '「これなに？」くるくる回して見ています。',
+  [placeItems.slide]: '「みてみて！」まつぼっくりを見せてくれました。',
+  [placeItems.sandbox]: '「つるつるしてる！」何度もさわっています。',
+  [placeItems.acornArea]: '「大きいのあった〜！」うれしそうに見せてくれました。',
+  [placeItems.pond]: '「きらきら！」光にかざして見ています。',
+  [placeItems.grassArea]: '「おはな！」大事そうに持っています。',
+  [placeItems.secretSpot]: '「これなに？」くるくる回して見ています。',
 };
 
 /* アイテムの名前から、こうちゃんのひとことを取り出す
@@ -103,12 +105,6 @@ function itemReaction(itemName: string) {
            対応が効かなかった・少し落ち着いただけで、まだいやいやが続いているときに出す -->
       <p v-if="variant === 'tantrum' && isTantrum" class="result-alert">まだ いやいや は続いています…</p>
 
-      <!-- 今回の行動で新しく見つけたものがあるときだけ出す（とつぜんのできごとでは出さない） -->
-      <p v-if="variant !== 'suddenEvent' && foundItemsThisAction.length > 0" class="found-flash">
-        <span class="found-flash__label">★ アイテム発見！</span>
-        <span v-for="item in foundItemsThisAction" :key="item" class="found-flash__item">{{ item }}</span>
-      </p>
-
       <p class="result-card__text">{{ resultMessage }}</p>
 
       <!-- ナイス対応（いやいやタイムで、いやいやの理由に合った対応をしたときだけ出す）
@@ -131,22 +127,47 @@ function itemReaction(itemName: string) {
         </ul>
       </div>
 
-      <!-- 見つけたものの文
-           アイテムの名前だけ、色をつけて文の中でも目立つようにする
+      <!-- アイテム発見（今回の行動で新しく見つけたものがあるときだけ。とつぜんのできごとでは出さない）
 
-           そのすぐ下に、アイテムごとのこうちゃんのひとことを1文そえる
-           （文章は上の script の itemReactions にまとめてある）
-           今回の行動で新しく見つけたときだけ出る
-           （foundItemsThisAction には、新しく見つけたものしか入らない） -->
-      <template v-for="item in foundItemsThisAction" :key="item">
-        <p class="found-line">
-          「
-          <b class="found-line__name">{{ item }}</b>
-          」を見つけました！
-        </p>
+           ［そのものの大きな絵］ ★ アイテム発見！
+                                  名前
+                                  こうちゃんのひとこと（文章は上の script の itemReactions）
 
-        <p v-if="itemReaction(item)" class="found-reaction">{{ itemReaction(item) }}</p>
-      </template>
+           ・絵を左、文字を右の横ならびにして、たてに長くならないようにする（PC・スマホとも）
+             「★ アイテム発見！」の見出しも、名前の上（右の列）に入れて、1行ぶん低くしている
+
+           ・絵は data/places.ts の itemImages（上部ステータス・リザルトの「見つけたもの」と同じ絵）
+             絵が登録されていないものは、絵のかわりに 🔍 を出す
+           ・見つけた瞬間に、絵が小さい所から ふわっと大きくなり、まわりが少し光って、小さなきらきらが出る（1回だけ。→ result-card.css）
+           ・foundItemsThisAction には、新しく見つけたものしか入らない（もう持っているものは、2回目以降は見つからない）
+             ので、この演出は かならず はじめて見つけたときだけ出る
+           ・前は、結果の文の上に「★ アイテム発見！［名前］」の帯、文の下に「『○○』を見つけました！」の行と分かれていた
+             絵を主役にして1つにまとめ、起きた順（行動 → アイテム → できごと → いやいや）で読めるよう、結果の文のあとに置いている -->
+      <section v-if="variant !== 'suddenEvent' && foundItemsThisAction.length > 0" class="found-flash" aria-label="アイテム発見">
+        <div v-for="(item, index) in foundItemsThisAction" :key="item" class="found-flash__item">
+          <!-- 絵（まわりの光・きらきらは飾りなので、読み上げでは読ませない。名前は下の文字で読む） -->
+          <div class="found-flash__visual" aria-hidden="true">
+            <span class="found-flash__glow"></span>
+            <span class="found-flash__medal">
+              <img v-if="itemImages[item]" class="found-flash__image" :src="itemImages[item]" alt="" decoding="async" />
+              <template v-else>🔍</template>
+            </span>
+            <span class="found-flash__sparkle found-flash__sparkle--1"></span>
+            <span class="found-flash__sparkle found-flash__sparkle--2"></span>
+            <span class="found-flash__sparkle found-flash__sparkle--3"></span>
+          </div>
+
+          <div class="found-flash__body">
+            <!-- 見出しは、いちばん上の1つにだけ付ける（2つ以上見つけても「★ アイテム発見！」は1回） -->
+            <p v-if="index === 0" class="found-flash__label">★ アイテム発見！</p>
+            <!-- 名前は「ちいさな」「松ぼっくり」のように分けて ならべ、折り返すのは そのあいだ だけにする（→ utils/itemName.ts） -->
+            <p class="found-flash__name">
+              <span v-for="part in splitItemName(item)" :key="part" class="found-flash__namePart">{{ part }}</span>
+            </p>
+            <p v-if="itemReaction(item)" class="found-flash__reaction">{{ itemReaction(item) }}</p>
+          </div>
+        </div>
+      </section>
 
       <!-- 行動の最中に起きたちょっとしたできごと（ランダムイベント）
            地の文にまぎれないように、専用の枠と

@@ -7,7 +7,7 @@
 
    ・結果カードのわく（.result-card 〜）
    ・今回の変化（.change-box 〜 .change-item 〜）
-   ・アイテム発見（.found-flash／.found-line／.found-reaction）
+   ・アイテム発見（.found-flash 〜。絵・名前・こうちゃんのひとこと）
    ・いやいやの文（.tantrum-line）、いやいやの結果カード（.result-card--tantrum）
    ・上のそれぞれに対する、画面の幅・高さごとの上書き（@media）
 
@@ -338,69 +338,290 @@
    このファイルは <style scoped> として読みこまれるため、ここに置くと
    status.css / base.css からの参照と名前が合わなくなる */
 
-/* 「★ アイテム発見！」の帯
-   少し遅れて、ふわっと浮き上がりながら出す
-*/
+/* 「★ アイテム発見！」（絵つき。ResultCard.vue の .found-flash）
+
+   ［大きな絵］ ★ アイテム発見！
+               名前
+               こうちゃんのひとこと
+
+   ・絵が主役。PC・スマホとも、絵を左・文字を右の横ならびにして、たてに長くならないようにする
+     「★ アイテム発見！」の見出しも、名前の上（右の列）に入れて、1行ぶん低くしている
+     （前は見出しを上に1行、スマホでは絵・名前・ひとことを たてに積んでいて、スマホでは発見の枠だけで画面の半分ほどになっていた）
+   ・少し遅れて、ふわっと浮き上がりながら出す（@keyframes found-in は keyframes.css） */
 .found-flash {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  margin: 0 0 12px;
-  padding: 8px 14px;
+  /* 絵（メダル）の大きさ。PC 112px（高さ 800px 以下の画面は 96px）・スマホ 80px（→ 下の @media） */
+  --found-size: 112px;
+
+  margin: 14px 0 0;
+  padding: 12px 18px;
   border: 1px solid #f5e2be;
-  border-radius: 10px;
-  background: #fff6e0;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #fffaf0 0%, #fff3d6 100%);
   animation: found-in 0.4s ease-out 0.2s backwards;
 }
 
+/* 「★ アイテム発見！」（右の列の いちばん上。名前より小さく、金色の文字） */
 .found-flash__label {
-  color: #8a5a00;
+  margin: 0 0 2px;
+  color: #a06a00;
   font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
+/* 1つぶん（絵 ＋ 名前・ひとこと）。1回の行動で見つかるのは ふつう1つだが、2つ以上でも下にならぶ */
 .found-flash__item {
-  padding: 1px 12px;
-  border-radius: 999px;
-  background: var(--gold);
-  color: #4a3208;
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.found-flash__item + .found-flash__item {
+  margin-top: 14px;
+}
+
+/* 絵のまわり（光・メダル・きらきらを重ねる台）
+   position: relative … 光ときらきら（position: absolute）の基準を、この台にする */
+.found-flash__visual {
+  position: relative;
+  flex: none;
+  width: var(--found-size);
+  height: var(--found-size);
+}
+
+/* まわりの光：メダルのうしろに、やわらかい金色の光を まるく にじませる
+   見つけた瞬間に ふわっと強く光ってから、うすい光になって残る（1回だけ。光りつづけない） */
+.found-flash__glow {
+  position: absolute;
+  inset: -16%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(255 222 130 / 85%) 0 38%, rgb(255 222 130 / 0%) 70%);
+  opacity: 0.55;
+  animation: found-flash-glow 1.1s ease-out 0.35s backwards;
+}
+
+/* メダル（リザルトの「見つけたもの」のメダルと同じ見た目を、大きくしたもの → FoundItemCollection.vue）
+   ・クリーム色の丸に金色のふち、下に うすい影
+   ・overflow: hidden … 四角い画像を、丸の形に切りぬく
+   ・isolation: isolate … 絵の白を multiply でなじませる相手を、メダル自身のクリーム色だけにする
+     （これが無いと、大きくなる動き（transform）のあいだ、画像の白い四角が丸の外に見えてしまう）
+   ・見つけた瞬間に、少し小さい所から ふわっと大きくなって、ほんの少し行きすぎてから止まる（0.8 → 1.05 → 1） */
+.found-flash__medal {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  isolation: isolate;
+  border: 3px solid #f0cf7a;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%, #fffdf6 0 45%, #fff1c9 100%);
+  box-shadow:
+    0 4px 0 rgb(180 130 30 / 18%),
+    inset 0 0 0 4px rgb(255 255 255 / 70%);
+  font-size: calc(var(--found-size) * 0.4);
+  line-height: 1;
+  animation: found-flash-pop 0.6s ease-out 0.3s backwards;
+}
+
+/* 絵（data/places.ts の itemImages）
+   ・メダルの 9割の大きさ。縦横の比は object-fit: contain でそのまま
+   ・画像は透明ではなく、うしろが白でぬってあるので、multiply でメダルのクリーム色になじませる
+     （3%明るくして、少し黄みがかった白を まっ白にそろえてから重ねる。上部ステータス・リザルトの絵と同じ） */
+.found-flash__image {
+  display: block;
+  width: 90%;
+  height: 90%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  filter: brightness(1.03);
+}
+
+/* 小さなきらきら（4つの角の星）
+   メダルのまわりの3か所に、少しずつずらして ぱっと出て、すぐに消える（1回だけ。出たあとは見えない） */
+.found-flash__sparkle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: #ffd45c;
+  clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%);
+  opacity: 0;
+  pointer-events: none;
+  animation: found-flash-sparkle 0.7s ease-out forwards;
+}
+
+.found-flash__sparkle--1 {
+  top: -2%;
+  right: 2%;
+  animation-delay: 0.55s;
+}
+
+.found-flash__sparkle--2 {
+  bottom: 6%;
+  left: -6%;
+  width: 12px;
+  height: 12px;
+  animation-delay: 0.7s;
+}
+
+.found-flash__sparkle--3 {
+  top: 26%;
+  right: -10%;
+  width: 10px;
+  height: 10px;
+  animation-delay: 0.85s;
+}
+
+/* 名前とひとこと（絵のあとに、ふわっと出す） */
+.found-flash__body {
+  min-width: 0;
+  animation: found-in 0.4s ease-out 0.55s backwards;
+}
+
+.found-flash__name {
+  margin: 0;
+  color: #6a4300;
+  font-size: 22px;
   font-weight: 700;
+  line-height: 1.4;
 }
 
-/* 「〜を見つけました！」の文
-   アイテムの名前だけ、うすい黄色の下じきを敷いて
-   地の文の中でもすぐ目に入るようにする
-*/
-.found-line {
-  margin: 10px 0 0;
-  font-size: 17px;
-  line-height: 1.8;
+/* 名前の ひとかたまり（「ちいさな」「松ぼっくり」 → utils/itemName.ts の splitItemName()）
+   inline-block にすると、かたまりの中では折り返さず、かたまりと かたまりの あいだでだけ折り返す
+   （入りきらないときは「ちいさな／松ぼっくり」になり、「ちいさな松ぼっく／り」のように さいごの1文字だけ落ちない）
+   max-width: 100% … かたまり1つでも入りきらない、とても せまい所では、かたまりの中でも折り返す（はみ出さない） */
+.found-flash__namePart {
+  display: inline-block;
+  max-width: 100%;
 }
 
-.found-line__name {
-  padding: 1px 8px;
-  border-radius: 6px;
-  background: #fff1c9;
-  color: #7a5410;
-}
-
-/* アイテムごとの、こうちゃんのひとこと
-
-   すぐ上の「〜を見つけました！」に続く1文なので、
-   ・少し小さめ・やわらかい色にして、上の行を主役のままにする
-   ・左に細い線を入れて「上の行に付いている文」と分かるようにする
-     （線の色は「★ アイテム発見！」の帯のふちと同じ）
-*/
-.found-reaction {
-  margin: 4px 0 0;
-  padding-left: 10px;
-  border-left: 2px solid #f5e2be;
+/* こうちゃんのひとこと（名前より小さめ・やわらかい色にして、名前を主役のままにする） */
+.found-flash__reaction {
+  margin: 6px 0 0;
   color: var(--ink-soft);
   font-size: 16px;
   line-height: 1.8;
+}
+
+@keyframes found-flash-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
+
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes found-flash-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  45% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+}
+
+@keyframes found-flash-sparkle {
+  0% {
+    opacity: 0;
+    transform: scale(0.3) rotate(0deg);
+  }
+
+  40% {
+    opacity: 1;
+    transform: scale(1.1) rotate(20deg);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(0.6) rotate(45deg);
+  }
+}
+
+/* 高さの低い PC（800px 以下）では、絵を少し小さくして、結果の文や「今回の変化」の場所を残す */
+@media (max-height: 800px) {
+  .found-flash {
+    --found-size: 96px;
+  }
+}
+
+/* スマホ幅：横ならびのまま、絵を 80px にして、余白と文字を少しつめる
+   （320px の画面でも、右の列に名前が入るように。長い名前「ちいさな松ぼっくり」は2行に折り返す） */
+@media (max-width: 700px) {
+  .found-flash {
+    --found-size: 80px;
+
+    padding: 10px 12px;
+  }
+
+  .found-flash__item {
+    gap: 12px;
+  }
+
+  .found-flash__label {
+    font-size: 12px;
+  }
+
+  .found-flash__name {
+    font-size: 18px;
+    line-height: 1.35;
+  }
+
+  .found-flash__reaction {
+    margin-top: 4px;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+}
+
+/* 細いスマホ（360px 以下）：絵を 72px、名前を 16px にして、いちばん長い名前「ちいさな松ぼっくり」も1行に収める
+   （320px の画面で、80px・18px のままだと「ちいさな松ぼっく／り」と、さいごの1文字だけ次の行に落ちていた） */
+@media (max-width: 360px) {
+  .found-flash {
+    --found-size: 72px;
+  }
+
+  .found-flash__name {
+    font-size: 16px;
+  }
+
+  .found-flash__reaction {
+    font-size: 14.5px;
+  }
+}
+
+/* 動きを減らす設定のときは、大きくなる・光る・きらきらの動きをやめて、はじめから出しておく
+   （きらきらは、出てすぐ消える飾りなので、出さない） */
+@media (prefers-reduced-motion: reduce) {
+  .found-flash,
+  .found-flash__glow,
+  .found-flash__medal,
+  .found-flash__body {
+    animation: none;
+  }
+
+  .found-flash__sparkle {
+    display: none;
+  }
 }
 
 /* いやいやが始まったときの文
@@ -546,7 +767,7 @@
    本文の文字サイズ（もとは base.css のまとめ書き）
 
    もともと base.css に
-     .place-card__text, .result-card__text, .found-line,
+     .place-card__text, .result-card__text, .found-line（いまは無い）,
      .event-flash__text, .tantrum-line { ... }
    と1つにまとめて書かれていた指定。
 
@@ -559,7 +780,6 @@
 
   /* 本文は 17px → 16px までにとどめる */
   .result-card__text,
-  .found-line,
   .tantrum-line {
     font-size: 16px;
     line-height: 1.75;
@@ -570,7 +790,6 @@
 
   /* 本文はスマホでも16pxを下まわらないようにする */
   .result-card__text,
-  .found-line,
   .tantrum-line {
     font-size: 16px;
     line-height: 1.8;
