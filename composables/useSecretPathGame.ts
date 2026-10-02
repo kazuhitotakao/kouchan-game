@@ -781,8 +781,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
 
   /* 「先へ進む」（こもれびの広場へ）
 
-     BGMの入れかえ（公園BGMを止める → こもれびの広場BGM）は、goToPlace() の中のまま
-     ＝ 広場へ着いたこの瞬間に「こもれびの奥で」が始まる */
+     BGM「こもれびの奥で」は小道へ入ったときから鳴っているので、広場へ着いてもそのまま続く
+     （小道から広場へ着いたときは鳴らしなおさない。決めているのは goToPlace() の中） */
   function enterSecretSpotFromPath() {
     if (currentEvent.value !== 'secretPath' || secretPathPhase.value !== 'finished') {
       return;
@@ -806,7 +806,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      ・時間・親子のステータス・おでかけポイント・アイテム・visitedPlaces は、そのまま
      ・hasDiscoveredSecretSpot も false のまま
        → あとでもう一度「秘密の小道」を選ぶと、また ready 画面から始まる
-     ・BGMは公園BGMのまま（goToPlace() がBGMを入れかえるのは secretSpot のときだけ）
+     ・BGMは、こもれびの広場BGMから公園BGMへ戻る（入れかえは goToPlace() の中）
      ・小道の状態は、画面が変わってから片づける（enterSecretSpotFromPath() と同じ）
      ・カーソルは「秘密の小道」に合わせる（restoreEntranceCursor()。小道へ入るときに lastSelectedPlace が secretPath になっている） */
   function leaveSecretPathToEntrance() {
