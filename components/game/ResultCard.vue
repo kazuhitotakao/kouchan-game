@@ -27,6 +27,8 @@ import { itemImages, placeItems } from '~/data/places';
 import { splitItemName } from '~/utils/itemName';
 import type { ChangeGroup, SceneVariant, StatusChanges } from '~/types/game';
 import { formatChange } from '~/utils/statusChange';
+// 中の絵が表示できるようになってから、箱ごと出す目印（→ utils/imagePreload.ts）
+import { vRevealWithImages } from '~/utils/imagePreload';
 
 defineProps<{
   /* どの場面の結果カードか（上の表を参照） */
@@ -139,7 +141,7 @@ function itemReaction(itemName: string) {
              ので、この演出は かならず はじめて見つけたときだけ出る
            ・前は、結果の文の上に「★ アイテム発見！［名前］」の帯、文の下に「『○○』を見つけました！」の行と分かれていた
              絵を主役にして1つにまとめ、起きた順（行動 → アイテム → いやいや）で読めるよう、結果の文のあとに置いている -->
-      <section v-if="variant !== 'suddenEvent' && foundItemsThisAction.length > 0" class="found-flash" aria-label="アイテム発見">
+      <section v-if="variant !== 'suddenEvent' && foundItemsThisAction.length > 0" v-reveal-with-images class="found-flash" aria-label="アイテム発見">
         <div v-for="(item, index) in foundItemsThisAction" :key="item" class="found-flash__item">
           <!-- 絵（まわりの光・きらきらは飾りなので、読み上げでは読ませない。名前は下の文字で読む） -->
           <div class="found-flash__visual" aria-hidden="true">
