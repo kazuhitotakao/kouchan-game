@@ -29,6 +29,8 @@ import { minigames } from '~/data/minigames';
 import type { MinigameBestPart, MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames } from '~/utils/minigameStorage';
+// 絵の先読みと、中の絵が表示できるようになってから箱ごと出す目印（→ utils/imagePreload.ts）
+import { preloadSecretPathImages, vRevealWithImages } from '~/utils/imagePreload';
 
 /* ============================================================
    音（タイトルBGM・決定音・サウンドのON/OFF・音量）
@@ -152,6 +154,9 @@ onMounted(async () => {
   // 前回のサウンドの設定（ON/OFFと音量）を思い出す（本編と同じ保存場所）
   restoreSoundSettings();
 
+  // カードのアイコンと、ミニゲームの中で使う絵を先読みしておく（ミニゲームへ進んだときに、絵だけあとから出ないようにする）
+  preloadSecretPathImages();
+
   /* タイトルBGM（少し待ってから、ふわっと鳴りはじめる）
 
      はじめの画面の「🎮 ミニゲーム」を押して来たときは、そのまま鳴る
@@ -220,7 +225,7 @@ onUnmounted(() => {
         </p>
       </header>
 
-      <ul v-if="isLoaded" ref="listRef" class="mg-list">
+      <ul v-if="isLoaded" ref="listRef" v-reveal-with-images class="mg-list">
         <li v-for="card in cards" :key="card.id">
           <!-- 解放したミニゲーム（押すと、そのページへ。↑ ↓ で選ぶときの行き先にもなる → getCardButtons()） -->
           <button v-if="card.isUnlocked" type="button" class="mg-card" @click="goTo(`/minigame/${card.id}`)">

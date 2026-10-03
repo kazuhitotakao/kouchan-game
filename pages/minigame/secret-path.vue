@@ -63,6 +63,9 @@ import {
   secretVocalSongUnlockDistance,
 } from '~/utils/secretVocalSong';
 
+// 絵の先読みと、中の絵が表示できるようになってから箱ごと出す目印（→ utils/imagePreload.ts）
+import { preloadSecretPathImages, vRevealWithImages } from '~/utils/imagePreload';
+
 /* このミニゲームの id（URL の /minigame/secret-path と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
 const minigameId: MinigameId = 'secret-path';
 const minigameInfo = minigames.find((minigame) => minigame.id === minigameId)!;
@@ -566,6 +569,10 @@ onMounted(() => {
   // 前回のサウンドの設定（ON/OFFと音量）を思い出す（本編と同じ保存場所）
   restoreSoundSettings();
 
+  // こうちゃん・枝・こもれびの絵を、遊びはじめる前に先読みしておく
+  // （こうちゃんの絵は、当たった・取ったときに入れかわるので、はじめて入れかわったときに絵が一瞬消えないようにする）
+  preloadSecretPathImages();
+
   unlockState.value = loadUnlockedMinigames().includes(minigameId) ? 'unlocked' : 'locked';
 
   // ご褒美（うた入りの「こもれびの奥で」）を、もう解放してあるか（→ utils/secretVocalSong.ts）
@@ -636,7 +643,7 @@ onUnmounted(() => {
 
     <section v-else-if="unlockState === 'unlocked'" class="mg-stage">
       <!-- はじまる前 -->
-      <article v-if="secretPathPhase === 'ready'" class="place-card place-card--secret">
+      <article v-if="secretPathPhase === 'ready'" v-reveal-with-images class="place-card place-card--secret">
         <!-- 名前の左のアイコンは、ミニゲームの一覧のカードと同じ絵（data/minigames.ts の iconImage）
              となりに名前が書いてあるので、読み上げでは読ませない（alt="" ） -->
         <h1 class="place-card__title mg-title">

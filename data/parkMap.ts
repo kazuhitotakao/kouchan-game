@@ -142,3 +142,15 @@ export const parkMapReturnMoves: Partial<Record<ParkMapSpot, ParkMapDirection[]>
   // おうちへ帰る の ↑ … きゅうけい／すべり台 のうち、来たほうへ戻る（どちらでもなければ きゅうけい）
   goal: ['up'],
 };
+
+/* 公園入口の地図の絵（2枚とも public/images/park/ にある）
+
+   pc … PC用（横長）
+   sp … スマホ用（3:4）。画面の幅が spMaxWidth 以下のときに使う
+   どちらを出すかは、pages/index.vue の <picture> の <source media> で切りかえている
+   はじめの画面を開いたときに先に読みこんでおくときも、同じ幅で選ぶ（→ utils/imagePreload.ts の preloadGameImages） */
+export const parkMapImages = {
+  pc: '/images/park/park-map.webp',
+  sp: '/images/park/park-map-sp.webp',
+  spMaxWidth: 700,
+} as const;

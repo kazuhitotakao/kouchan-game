@@ -270,6 +270,13 @@ export function setElementVolume(audio: GameAudio, volume: number, getContext: (
     return;
   }
 
+  /* 止め終わって、音量つまみを0のままにしている mp3 の音も、つまみはさわらない
+     ここで上げてしまうと、止めたあとに残っている音が大きな音で鳴ってしまう（→ mutedAfterPause）
+     覚えておいた大きさは、次に鳴らす直前に入る（→ cancelElementPause()） */
+  if (mutedAfterPause.has(audio)) {
+    return;
+  }
+
   setGainValue(gain, safeVolume, !audio.paused);
 }
 
@@ -363,9 +370,24 @@ type PendingPause = {
   rewind: boolean;
   onPaused: (() => void) | null;
   release: boolean;
+  // release のとき、作業台から外し終わったあとに呼ぶ（→ releaseElement() の onReleased）
+  onReleased: (() => void) | null;
 };
 
 const pendingPauses = new WeakMap<GameAudio, PendingPause>();
+
+/* 止め終わったあとも、音量つまみを0のままにしている mp3 の音（HTMLAudioElement）
+
+   ■ なぜいるのか
+     iPhone の Safari は、つまみに通した mp3 の音を、少し先の分までまとめて取りこんでから鳴らしている
+     そのため pause() したあとも、取りこみ済みの音がほんの少しだけ流れる
+     止めたその場でつまみを元の大きさへ戻すと、その残りの音が大きな音で一瞬鳴って とぎれ、
+     「ブツッ」と聞こえていた（サウンドトラックの一時停止・曲の切りかえのとき）
+
+   ■ どうしているか
+     止め終わっても、つまみは0のままにしておき、次に鳴らす直前に元の大きさへ戻す（→ cancelElementPause()）
+     ・BufferedAudio（ゲームの BGM・効果音）は Web Audio だけで鳴らしていて、残りの音が無いので、今までどおり その場で戻す */
+const mutedAfterPause = new WeakSet<GameAudio>();
 
 /* 止める（rewind: true なら、止めたあと曲の先頭へ戻す）
 
@@ -439,11 +461,19 @@ function fadeOutAndPause(audio: GameAudio, rewind: boolean, onPaused: (() => voi
         // ページを離れるときは、止め終わったところで作業台から外して終わり
         if (pending.release) {
           disconnectElement(audio);
+          pending.onReleased?.();
           return;
         }
 
-        // 止め終わったので、音量つまみを「ほんとうの大きさ」へ戻しておく（次に play() したときのため）
-        setGainValue(gain, targetVolumes.get(audio) ?? 1, false);
+        if (audio instanceof BufferedAudio) {
+          // 止め終わったので、音量つまみを「ほんとうの大きさ」へ戻しておく（次に play() したときのため）
+          setGainValue(gain, targetVolumes.get(audio) ?? 1, false);
+        } else {
+          /* mp3 の音は、残りの音が鳴らないように0のままにしておき、次に鳴らす直前に戻す（→ mutedAfterPause）
+             cancelElementPause() を通らずに鳴りはじめたときも、無音のままにならないよう、鳴りはじめたら戻す */
+          mutedAfterPause.add(audio);
+          audio.addEventListener('play', () => restoreGainAfterPause(audio), { once: true });
+        }
 
         pending.onPaused?.();
       },
@@ -452,6 +482,7 @@ function fadeOutAndPause(audio: GameAudio, rewind: boolean, onPaused: (() => voi
     rewind,
     onPaused,
     release: false,
+    onReleased: null,
   };
 
   pendingPauses.set(audio, pending);
@@ -481,20 +512,37 @@ export function isElementPlaying(audio: GameAudio) {
 /* 止める予約を取り消す（止めている途中の曲を、また鳴らすとき）
 
    play() の直前に呼ぶ
-   止める予約が無いときは、何もしない */
+   止め終わって、音量つまみを0のままにしている mp3 の音なら、ここで元の大きさへ戻す（→ mutedAfterPause）
+   どちらでもないときは、何もしない */
 export function cancelElementPause(audio: GameAudio) {
   const pending = pendingPauses.get(audio);
 
   if (!pending) {
+    restoreGainAfterPause(audio);
     return;
   }
 
   clearTimeout(pending.timer);
   pendingPauses.delete(audio);
+  mutedAfterPause.delete(audio);
 
   const gain = getGainNode(audio);
 
   // 0へ下げかけていた音量を、ほんとうの大きさへ なめらかに戻す
+  if (gain) {
+    setGainValue(gain, targetVolumes.get(audio) ?? 1, true);
+  }
+}
+
+/* 止め終わって0のままにしていた音量つまみを、ほんとうの大きさへ なめらかに戻す（→ mutedAfterPause）
+   0のままにしていないときは、何もしない（2回呼ばれても、戻すのは1回だけ） */
+function restoreGainAfterPause(audio: GameAudio) {
+  if (!mutedAfterPause.delete(audio)) {
+    return;
+  }
+
+  const gain = getGainNode(audio);
+
   if (gain) {
     setGainValue(gain, targetVolumes.get(audio) ?? 1, true);
   }
@@ -511,17 +559,23 @@ export function cancelElementPause(audio: GameAudio) {
    ・外したAudioは、もう鳴らせない（createMediaElementSource() は1つのAudioに1回しか呼べないため）
      ページを離れるときの後始末で、もう使わないAudioにだけ使う
    ・mp3 の音（HTMLAudioElement）は、止め終わったあとに曲も外して空にする（→ unloadMediaElement()）
-     つまみに通していないAudio（パソコン・Android など）も、曲は外す */
-export function releaseElement(audio: GameAudio) {
+     つまみに通していないAudio（パソコン・Android など）も、曲は外す
+   ・onReleased … 止め終わって、曲も外し終わったあとに呼ぶ
+                  （音量を下げている途中なら、下げ終わって外したあと。そうでなければ、その場で）
+                  サウンドトラックは、ここでロック画面に知らせていた曲名・再生状態を消して、画面を消しても鳴らしつづける設定を元に戻す
+                  （まだ鳴っている途中で消すと、iPhone が鳴っている Audio から曲名なしで知らせなおすことがあるため） */
+export function releaseElement(audio: GameAudio, onReleased?: () => void) {
   const pending = pendingPauses.get(audio);
 
   if (pending) {
     pending.release = true;
     pending.onPaused = null;
+    pending.onReleased = onReleased ?? null;
     return;
   }
 
   disconnectElement(audio);
+  onReleased?.();
 }
 
 /* releaseElement() の中身（その場で外す） */

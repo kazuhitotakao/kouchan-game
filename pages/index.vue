@@ -13,6 +13,9 @@ import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameTex
    「09:25」の文字を分の数に直すほうは、composables/useGameState.ts のなかで使っている */
 import { addMinutesToTime } from '~/utils/gameTime';
 
+// 画像の先読みと、画像がそろってから まとめて出す目印（v-reveal-with-images）
+import { preloadGameImages, vRevealWithImages } from '~/utils/imagePreload';
+
 /* ゲーム画面の部品（どれも表示と、押されたことを伝えるだけ）
    行動の中身・ステータスの計算・キーボード操作は、このファイルに残してある */
 import CommandBox from '~/components/game/CommandBox.vue';
@@ -100,7 +103,7 @@ import type {
    いま何を持っているか・いま何のいやいやか、のような
    プレイ中に変わる値は、それぞれの composable が持っている */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
-import { parkMapStartPlace } from '~/data/parkMap';
+import { parkMapImages, parkMapStartPlace } from '~/data/parkMap';
 import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
@@ -3706,6 +3709,10 @@ onMounted(() => {
   window.addEventListener('pointermove', handleWindowPointer);
   window.addEventListener('pointerdown', handleWindowPointer);
 
+  /* この先の画面（おやつ選択・公園入口の地図・見つけたもの・秘密の小道）で使う画像を、うしろで先に読みこんでおく
+     画面へ進んだときに、ボタンや文字だけが先に出て、画像があとから出ることがないようにするため（→ utils/imagePreload.ts） */
+  preloadGameImages();
+
   /* A画面のメインのボタン「はじめる」へフォーカスを当てておく
      ページを開いたときのほか、/soundtrack から戻ってきたときもここを通る
      （このページは、もう一度まっさらに作り直されるため） */
@@ -4218,8 +4225,11 @@ onUnmounted(() => {
 
              おやつのカードだけでなくカード全体に付けているのは、
              矢印キーの行き先に「このおやつで公園へ行く！」
-             「← ひとつ前の画面へ戻る」「サウンドON/OFF」も入るため -->
-        <div ref="snackSelectionRef" class="title-card title-card--snack">
+             「← ひとつ前の画面へ戻る」「サウンドON/OFF」も入るため
+
+             v-reveal-with-images … おやつ・おやつバッグの絵が ぜんぶ表示できるようになってから、カードごと出す
+                                    （文字やボタンが先に出て、絵だけあとから出ないようにする → utils/imagePreload.ts） -->
+        <div ref="snackSelectionRef" v-reveal-with-images class="title-card title-card--snack">
           <!-- おやつのカード6つ -->
           <div class="snack-list">
             <!-- カードまるごとが1つのボタン
@@ -4504,8 +4514,10 @@ onUnmounted(() => {
                        どこへ動くかは data/parkMap.ts の表で決めている（→ composables/useKeyboardControls.ts の moveEntranceOnMap()）
 
                      command--pointer-paused … 公園入口へ戻ってきた直後、マウスを動かすまでマウスで選べなくする
-                                               （最後にいた場所に合わせたカーソルが、@mouseenter で上書きされないようにする） -->
-                <nav class="park-map" :class="{ 'command--pointer-paused': isCommandPointerPaused }" aria-label="どこへ行く？">
+                                               （最後にいた場所に合わせたカーソルが、@mouseenter で上書きされないようにする）
+                     v-reveal-with-images … 地図の絵が表示できるようになってから、地図とボタンをいっしょに出す
+                                            （白い地図の上にボタンだけが先に出て、絵があとから出ないようにする → utils/imagePreload.ts） -->
+                <nav v-reveal-with-images class="park-map" :class="{ 'command--pointer-paused': isCommandPointerPaused }" aria-label="どこへ行く？">
                   <!-- 地図の絵と同じ縦横比の板（この板が、行き先を置くときの基準 → assets/css/game/park-map.css の .park-map__canvas）
                        絵とボタンを同じ板に乗せているので、画面の大きさが変わっても、ボタンは絵の同じ場所に乗ったままになる -->
                   <div class="park-map__canvas">
@@ -4513,10 +4525,11 @@ onUnmounted(() => {
 
                          <source media> の幅は、ゲーム全体のスマホ幅のきまり（max-width: 700px）と同じにしてある
                          （板の縦横比・ボタンの置き場所を切りかえる park-map.css の @media (max-width: 700px) と、絵がずれないようにするため）
-                         場所の名前はボタンで読めるので、絵は飾りとして読みとばす（alt は空） -->
+                         場所の名前はボタンで読めるので、絵は飾りとして読みとばす（alt は空）
+                         絵のパスと切りかえる幅は data/parkMap.ts の parkMapImages（はじめの画面で先読みするときも同じものを使う） -->
                     <picture class="park-map__base">
-                      <source media="(max-width: 700px)" srcset="/images/park/park-map-sp.webp" />
-                      <img class="park-map__img" src="/images/park/park-map.webp" alt="" />
+                      <source :media="`(max-width: ${parkMapImages.spMaxWidth}px)`" :srcset="parkMapImages.sp" />
+                      <img class="park-map__img" :src="parkMapImages.pc" alt="" />
                     </picture>
 
                     <div class="park-map__spot park-map__spot--slide">

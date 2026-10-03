@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from 'vue';
+import { onBeforeRouteLeave } from 'vue-router';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 import { loadHasUnlockedSecretVocalSong, secretVocalSongSrc, secretVocalSongTitle } from '~/utils/secretVocalSong';
 
@@ -787,7 +788,7 @@ function toggleRepeat() {
    作業台は、ゲーム本編と同じ1つを使い回す（→ utils/audioContext.ts）
    このページだけで作ると、ページを行き来するたびに作業台が増えていくうえ、
    iPhone では、作るたびに音がとぎれて「プツプツ」と鳴ってしまうため
-   ページを離れるときは、作業台は閉じずに、曲を作業台から外すだけにする（→ onUnmounted） */
+   ページを離れるときは、作業台は閉じずに、曲を作業台から外すだけにする（→ disposeSoundtrackPlayer()） */
 function getEffectAudioContext() {
   return getSharedAudioContext();
 }
@@ -1236,6 +1237,13 @@ function getSoundtrackAudio() {
     return null;
   }
 
+  /* このページを離れはじめたあとは、もう作らない（→ disposeSoundtrackPlayer()）
+     消えかけのページで、キーボード（Enter / Space）で ▶ を押されても、
+     新しいAudioを作って鳴らしはじめ、ゲームの画面でもサントラの曲が残る、ということが起きないようにする */
+  if (isPlayerDisposed) {
+    return null;
+  }
+
   try {
     // まだ無いときだけ作る（2回目からは、この行は通らない）
     if (!soundtrackAudio) {
@@ -1346,11 +1354,10 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
      個別再生のときに、全曲再生の覚えごと（playlistTracks など）まで戻しても困らない
      （全曲再生中でなければ使われず、次に全曲再生を始めるときは作り直すため）
      なので、個別再生用の停止の関数は、わざわざ別に作っていない
-   ・このページから離れて、画面が消えたあとの後片付け（onUnmounted）
 
    ※ ページを移る「直前」には使わない
      表示が先に消えてしまい、画面がバタバタして見えるため
-     そのときは下の stopAudioForNavigation()（音だけ止める）を使う */
+     そのときは disposeSoundtrackPlayer()（音だけ止めて、Audioを手放す。表示はさわらない）を使う */
 function stopSoundtrack() {
   if (soundtrackAudio) {
     try {
@@ -1375,9 +1382,8 @@ function stopSoundtrack() {
      こうしておくと、次に「▶ 全曲再生」「🔀 シャッフル再生」を押したときは、
      かならず曲順から作り直される（前回の曲順が残らない）
 
-     ※ ここを通るのは操作行の「■ 停止」と、ページを離れたあとの
-       後片づけ（onUnmounted）だけ
-       ページを移る直前の stopAudioForNavigation() では、
+     ※ ここを通るのは操作行の「■ 停止」だけ
+       ページを離れるときの disposeSoundtrackPlayer() では、
        表示にかかわるこれらの覚えごとは いっさいさわらない */
   isShufflePlaying.value = false;
   playlistTracks.value = [];
@@ -1393,9 +1399,7 @@ function stopSoundtrack() {
        キーボードで「■ 停止」を押したときは、押したボタンが消えてフォーカスが無くなるので、ここで戻す
      ・マウス・タッチで押したときも ここを通るが、ブラウザは直前の操作がマウス・タッチなら、
        プログラムで移したフォーカスに :focus-visible の枠をふつう出さない
-       （キーボードで押したときだけ、どこへ移ったかが枠で分かる。全曲再生の停止と同じ考えかた）
-     ※ ページから離れるときの後片付け（onUnmounted）でもここを通るが、
-       そのときボタンはもう無い（ref は null）ので、何も起きないだけ */
+       （キーボードで押したときだけ、どこへ移ったかが枠で分かる。全曲再生の停止と同じ考えかた） */
   focusAfterPlaylistChange(playAllButtonRef);
 }
 
@@ -1403,37 +1407,100 @@ function stopSoundtrack() {
    画面に出す数字ではないので、ref ではなくふつうの入れものでよい */
 let isLeavingPage = false;
 
-/* ページを離れる直前に「音だけ」止める
+/* ============================================================
+   このページを離れるときに、サントラの再生をまるごと終わらせる（disposeSoundtrackPlayer）
 
-   上の stopSoundtrack() との違いは、画面の表示にさわるかどうか
+   ■ なぜいるのか
+     サントラは、iPhone で画面を消しても鳴りつづけ、ロック画面から操作できるようにしている
+     （→ keepAudioContextAwake() の backgroundPlayback と、startMediaSession()）
+     このページを離れたら、それをぜんぶ終わらせて、
+     ゲームの画面でロックしたときに、サントラの ▶ がロック画面に残らないようにする
+     止める（pause）だけだと、iPhone は「まだ音楽プレーヤーがある」とみなすことがあるので、
+     Audioから曲を外して手放し、ロック画面に知らせていた曲名・再生状態も消す
 
-   ・stopSoundtrack()        … 音を止めて、画面の表示も止まった状態に戻す
-                               （「■ 停止」を押したときなど、
-                                 このページを見たまま止めるとき用）
-   ・stopAudioForNavigation() … 音を止めるだけ。表示はいっさいさわらない
-                               （タイトル画面へ移るときなど、
-                                 このあと画面ごと消えるとき用）
+   ■ やること（この順番が大事）
+     ① いまの曲・再生位置・一覧のスクロール位置を覚える（止めると再生位置が0秒に戻るので、かならず止める前）
+     ② ロック画面・車・イヤホンの操作の受付をやめる
+        （このあと曲を止めている約0.1秒のあいだに ▶ を押されても、このページの関数が呼ばれないように）
+     ③ 曲をすっと止めて先頭へ戻し、Audioから曲を外して、作業台から外す（→ releaseElement()）
+     ④ 外し終わったところで、ロック画面に知らせていた曲名・再生状態を「なし」にする
+        ②でも消しているが、まだ鳴っている途中だと、iPhone が鳴っている Audio から曲名なしで知らせなおすことがある
+        そこで、Audioが空になったあとに、もう一度「なし」にして終わる
+     ⑤ 同じく外し終わったところで、「画面を消しても鳴らしつづける」設定を元に戻す（ゲームは、ロックしたら音も止まる）
+        鳴っている途中で戻すと、iPhone が音の出しかたを切りかえるときに、曲がとぎれて「ブツッ」と鳴るため
+        （外し終わるのは約0.1秒後。次のページは、このページが消えきってから（約0.18秒後）出てくるので、それより先に終わる）
 
-   移る直前に表示まで止めた状態に戻してしまうと、
-   画面が消えるまでのほんの一瞬に
-   「全曲再生中の案内が消える → 再生バーが消える → ボタンの並びが変わる」
-   と見えてしまい、バタバタ閉じたように感じられる
-   そこで、ここでは音だけを止めて、見た目はそのままにしておく
+   ■ 呼ぶところ
+     ・onBeforeRouteLeave … ページを離れると決まったとき
+                            「← 戻る」でも、ブラウザの戻る（iPhone の左はしからのスワイプ）でも、かならず通る
+                            画面が消える（約0.18秒）より前に始めるので、次のページ（ゲーム）が出てくるころには終わっている
+     ・onUnmounted         … 念のため（何かの理由で上を通らずに、画面が消えたとき）
+     2回目からは何もしない（isPlayerDisposed）ので、止める処理が二重に走ることはない
 
-   ※ すでに止まっている音にもう一度 pause() を呼んでも、何も起きないだけで安全
-     （このあと onUnmounted() の stopSoundtrack() でもう一度止まるが問題ない）
-*/
-function stopAudioForNavigation() {
-  if (!soundtrackAudio) {
+   ※ 表示（再生中・再生バー・操作行）は、いっさいさわらない
+     このあとページごと消えるので、表示まで止めた形に戻すと、消えるまでの一瞬に
+     「全曲再生中の案内が消える → 再生バーが消える → ボタンの並びが変わる」と見えて、バタバタしてしまう
+   ※ ゲーム本編の BGM・効果音にはさわらない
+     止めるのは、このページで作ったAudio（soundtrackAudio）だけ
+     作業台（AudioContext）はゲームと共用なので閉じない（→ getEffectAudioContext()）
+   ============================================================ */
+
+/* もう後始末を済ませたか（2回目からは何もしない。済ませたあとは、新しいAudioも作らない → getSoundtrackAudio()） */
+let isPlayerDisposed = false;
+
+function disposeSoundtrackPlayer() {
+  if (isPlayerDisposed) {
     return;
   }
 
-  try {
-    pauseElement(soundtrackAudio, { rewind: true }); // 曲の先頭へ戻す
-  } catch {
-    // 止められなくても、このあとページごと消えるので何もしない
+  isPlayerDisposed = true;
+
+  // ① 止める前に、いまの状態を覚える（覚えたあとは、もう書きかえない → fixLastState）
+  fixLastState();
+
+  // ② 車のステアリング・ロック画面・イヤホンの操作の受付をやめて、知らせていた曲名も消す
+  stopMediaSession?.();
+  stopMediaSession = null;
+
+  const audio = soundtrackAudio;
+  soundtrackAudio = null;
+
+  // Audioが空になったあとの仕上げ
+  const finishDisposal = () => {
+    // ④ ロック画面へ「何も再生していない」と知らせなおす
+    setMediaSessionTrack(null);
+    setMediaSessionPlaybackState('none');
+
+    // ⑤ さわるたびに作業台を起こす受付をやめる（画面を消しても鳴りつづける設定も、ここで元に戻る）
+    stopWakingAudioContext?.();
+    stopWakingAudioContext = null;
+  };
+
+  // 一度も鳴らしていない（Audioを作っていない）ときは、仕上げだけ
+  if (!audio) {
+    finishDisposal();
+    return;
   }
+
+  // 「教えて」とお願いしていた受付を、ぜんぶやめる
+  audio.removeEventListener('ended', handleTrackEnded);
+  audio.removeEventListener('timeupdate', handleTimeUpdate);
+  audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+
+  // ③ 曲をすっと止めて先頭へ戻し、止め終わったら曲を外して、作業台から外す
+  try {
+    pauseElement(audio, { rewind: true });
+  } catch {
+    // 止められなくても、このあと曲を外すので鳴りつづけない
+  }
+
+  releaseElement(audio, finishDisposal);
 }
+
+/* ページを離れると決まったとき（「← 戻る」・ブラウザの戻る のどちらでも通る） */
+onBeforeRouteLeave(() => {
+  disposeSoundtrackPlayer();
+});
 
 /* ============================================================
    前回の続きから聴けるようにする（曲・再生位置・一覧のスクロール位置を覚える）
@@ -1470,7 +1537,7 @@ function stopAudioForNavigation() {
    ■ 覚えるタイミング
      ・曲が進んでいるあいだ … 1秒に1回まで（→ saveLastPlayState の throttle）
      ・曲・再生/一時停止・全曲再生の状態が変わったとき … 下の watch
-     ・このページを離れるとき … goToTitle() と onUnmounted()（止める前に最後の1回）
+     ・このページを離れるとき … disposeSoundtrackPlayer()（止める前に最後の1回）
      「■ 停止」を押したときは playingTrackId が null になるので、覚えごとも消える
      （止めた人に、次もまた同じ曲を見せないため）
 
@@ -2550,7 +2617,7 @@ function togglePlayback() {
      曲が変わるたびに入れかえ、曲を選んでいないときは消す
      （出すかどうか・どこに出すかは、端末や車しだい）
 
-   ■ 受付を始めるのは onMounted、やめるのは onUnmounted
+   ■ 受付を始めるのは onMounted、やめるのはページを離れるとき（→ disposeSoundtrackPlayer()）
    ============================================================ */
 
 /* 操作の受付をやめるための関数（受付していないときは null） */
@@ -3327,19 +3394,14 @@ async function focusAfterPlaylistChange(button: Ref<HTMLButtonElement | null>) {
      曲の一覧をスクロールしても画面に残る、上部ツールバー（st-toolbar）へ移した
      ボタンの場所を変えただけで、押したときの処理（この関数）は変えていない
 
-   ここでやるのは2つだけ
-
-   ① 鳴っている曲を止める（音だけ）
-      移動したあとに、サントラの曲だけが鳴り続けないようにするため
-   ② タイトル画面へ移る
+   ここでやるのは、タイトル画面へ移ることだけ
+   曲を止めて、サントラの再生をまるごと終わらせるのは、移ると決まったときの
+   onBeforeRouteLeave（→ disposeSoundtrackPlayer()）にまかせる
+   （ブラウザの戻るボタンで出ていったときも同じところを通るので、止めかたが1つにそろう）
 
    ※ ここでは stopSoundtrack() を呼ばないのが大事
      呼ぶと「再生中」や再生バーの表示まで先に消えてしまい、
      画面が切りかわるまでの一瞬、レイアウトがバタバタ動いて見える
-     表示の後片付けは、画面が消えたあとの onUnmounted() にまかせる
-
-   ※ ブラウザの「戻る」ボタンで出ていった場合はここを通らないが、
-     そのときも onUnmounted() が同じように止めてくれる
 
    ※ ページの入れかわりには短いフェードがかかる（→ nuxt.config.ts の pageTransition）
      押したあともしばらくこのページが見えているので、
@@ -3358,12 +3420,6 @@ async function goToTitle() {
      引き返すだけのボタンで、このあとすぐページごと切りかわるため
      （ゲーム本編のA画面・B画面の「戻る」、ミニゲームの「戻る」も同じ） */
 
-  /* 音を止める前に、いまの曲・再生位置・一覧のスクロール位置を覚えておく
-     （次にこのページを開いたときは、ここから続きを聴ける） */
-  fixLastState();
-
-  stopAudioForNavigation();
-
   await navigateTo('/');
 }
 
@@ -3380,12 +3436,12 @@ let stopWakingAudioContext: (() => void) | null = null;
 onMounted(() => {
   document.addEventListener('pointerdown', handleOutsideCreditPointerDown);
 
-  /* さわるたびに作業台（AudioContext）を起こす受付を始める（onUnmounted でやめる）
+  /* さわるたびに作業台（AudioContext）を起こす受付を始める（ページを離れるときにやめる → disposeSoundtrackPlayer()）
      backgroundPlayback … 曲を聴くためのページなので、iPhone で画面を消しても・ほかのアプリへ切りかえても鳴りつづけるようにする
                           （ゲーム本編・ミニゲームは、今までどおり止まる。くわしくは utils/elementVolume.ts） */
   stopWakingAudioContext = keepAudioContextAwake(getEffectAudioContext, { backgroundPlayback: true });
 
-  // 車のステアリング・ロック画面・イヤホンの操作の受付を始める（onUnmounted でやめる）
+  // 車のステアリング・ロック画面・イヤホンの操作の受付を始める（ページを離れるときにやめる → disposeSoundtrackPlayer()）
   stopMediaSession = startMediaSession({
     play: handleMediaSessionPlay,
     pause: handleMediaSessionPause,
@@ -3493,61 +3549,18 @@ onMounted(() => {
   });
 });
 
-/* このページから離れるときの後始末
+/* 画面が消えたあとの後始末
 
-   ・「← 戻る」を押したとき
-   ・ブラウザの戻るボタンで出ていったとき
-   のどちらでも、かならずここを通る
-
-   曲を止めて、使いまわしていたAudioも手放しておく
-   全曲再生・シャッフル再生の覚えごと（isPlaylistPlaying・isShufflePlaying・
-   playlistTracks・playlistIndex）も、stopSoundtrack() の中でまとめて元に戻る
-
-   ※ ここが呼ばれるのは、画面がもう消えたあと
-     だから stopSoundtrack() で「再生中」や再生バーの表示を止まった状態に戻しても、
-     その変化は誰にも見えない（＝バタバタした動きにならない）
-
-   ※ ブラウザの戻るボタンのときは goToTitle() を通らないので、
-     音を確実に止められるのはここだけ
-     「戻る」ボタンからのときは goToTitle() ですでに止まっているが、
-     止まっている音をもう一度止めても何も起きないだけなので、そのままで安全
-*/
+   サントラの再生を終わらせるのは disposeSoundtrackPlayer()（ふつうは onBeforeRouteLeave で、もう済んでいる）
+   ここでは、念のためにもう一度呼んで（済んでいれば何もしない）、ページの見張りをやめるだけ */
 onUnmounted(() => {
-  /* 下の stopSoundtrack() で音を止める「前」に、いまの状態を覚えておく
-
-     止めると再生位置が0秒に戻ってしまうので、覚えるのはかならず止める前
-     覚えたあとは、もう書きかえない（→ fixLastState）
-     ※ ブラウザの戻るボタンで出ていったときも、かならずここを通る */
-  fixLastState();
+  disposeSoundtrackPlayer();
 
   // ページ全体の見張りをやめる（付けっぱなしにしない）
   document.removeEventListener('pointerdown', handleOutsideCreditPointerDown);
 
-  // さわるたびに作業台を起こす受付をやめる（画面を消しても鳴りつづける設定も、ここで元に戻る）
-  stopWakingAudioContext?.();
-  stopWakingAudioContext = null;
-
-  // 車のステアリング・ロック画面・イヤホンの操作の受付をやめて、知らせていた曲名も消す
-  // （ほかのページで、車の「次の曲」がこのページの関数を呼ばないように）
-  stopMediaSession?.();
-  stopMediaSession = null;
-
   // 歌詞の行を見なおすのもやめる
   stopLyricFrame();
-
-  stopSoundtrack();
-
-  if (soundtrackAudio) {
-    // 「教えて」とお願いしていた受付を、ぜんぶやめる
-    soundtrackAudio.removeEventListener('ended', handleTrackEnded);
-    soundtrackAudio.removeEventListener('timeupdate', handleTimeUpdate);
-    soundtrackAudio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-
-    // 作業台から外す（上の stopSoundtrack() で音量を下げている途中なら、止め終わってから外れる）
-    releaseElement(soundtrackAudio);
-  }
-
-  soundtrackAudio = null;
 });
 </script>
 
@@ -4163,7 +4176,7 @@ onUnmounted(() => {
    ※ 左右の余白は、この枠ではなく、中の2つの箱（.st-fixedArea / .st-trackScroll）に持たせている
      曲の一覧のスクロールバーを、枠のいちばん右はしに出すため
    ※ 縦にとても低い画面と、とても幅のせまい画面では、この分けかたをやめて、ページ全体のスクロールに戻す
-     （→ いちばん下の @media (max-height: 580px), (max-width: 359px)）
+     （→ いちばん下の @media (max-height: 480px), (max-width: 359px)）
    ============================================================ */
 .soundtrack {
   /* 色はゲーム画面と同じものを使う */
@@ -5911,10 +5924,10 @@ onUnmounted(() => {
                      （ボタンを押す・音量バーを横に動かす・2本指で拡大する、はそのままできる）
    ・.st-trackScroll … 曲の一覧のはしまで来ても、その勢いをうしろのページへ伝えない
 
-   ※ 縦にとても低い画面（高さ 580px 以下）と、とても幅のせまい画面（幅 360px 未満）は、
+   ※ 縦にとても低い画面（高さ 480px 以下）と、とても幅のせまい画面（幅 360px 未満）は、
      下の @media でページ全体をスクロールする作りに戻しているので、ここは効かせない
    ============================================================ */
-@media (max-width: 600px) and (min-width: 360px) and (min-height: 581px) {
+@media (max-width: 600px) and (min-width: 360px) and (min-height: 481px) {
   :global(html:has(.soundtrack)),
   :global(body:has(.soundtrack)) {
     overflow: hidden;
@@ -5932,7 +5945,7 @@ onUnmounted(() => {
 }
 
 /* ============================================================
-   縦にとても低い画面（高さ 580px 以下）と、とても幅のせまい画面（幅 360px 未満）
+   縦にとても低い画面（高さ 480px 以下）と、とても幅のせまい画面（幅 360px 未満）
 
    スマホを横向きにしたときや、ブラウザの窓をとても低くしたときは、
    操作エリアだけで画面がほとんど埋まってしまい、
@@ -5945,11 +5958,19 @@ onUnmounted(() => {
    そういう画面では、上と下に分けるのをやめて、
    前と同じ「ページ全体を縦にスクロールする」作りに戻す
    （カンマで区切った @media は「どちらか1つに当てはまれば」という意味）
+
+   ■ 高さの境目を 480px にしている理由
+     前は 580px だったが、iPhone SE（第2世代）の Safari は、アドレスバーなどを除いた高さが 548px ほどしかない
+     そのせいで、縦向きで ふつうに使っているだけなのに、この「ページ全体スクロール」になり、
+     上の操作エリアが画面に残らなかった
+     操作エリアの高さは、スマホでは いちばん高いとき（再生中）でも 333px ほどなので、
+     高さ 548px でも、曲の一覧に 200px 以上が残る（カード1枚ぶん以上は見える）
+     480px なら、スマホの横向き（高さ 320〜430px ほど）は、今までどおり こちらの作りになる
    ・.soundtrack     … 画面の高さに合わせるのをやめ、中身ぶんまでのびる（ページがスクロールする）
    ・.st-trackScroll … 自分ではスクロールせず、曲のカードをぜんぶならべる
    ・.st-fixedArea   … 曲の一覧にスクロールバーが出ないので、その場所を空けておくのもやめる
    ============================================================ */
-@media (max-height: 580px), (max-width: 359px) {
+@media (max-height: 480px), (max-width: 359px) {
   .soundtrack {
     height: auto;
     min-height: 100vh;
