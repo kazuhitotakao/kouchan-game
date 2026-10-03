@@ -437,7 +437,7 @@ function restoreGainAfterPause(audio: GameAudio) {
    作業台はサイト全体で1つを使い回していて閉じないので、外さないと、ページを行き来するほど作業台の仕事が増えていく
    ・かならず pauseElement() のあとに呼ぶ（下げている途中なら、止め終わってから外す。途中で外すと「ぶつっ」と鳴る）
    ・外したAudioは、もう鳴らせない（createMediaElementSource() は1回しか呼べないため）
-   ・mp3 の音は、曲も外して空にする（→ unloadMediaElement()）
+   ・mp3 の音は、消音して、曲も外して空にする（ロック画面に ▶ を残さないため → unloadMediaElement()）
    ・onReleased … 外し終わったあとに呼ぶ
                   （サウンドトラックは、ここでロック画面の曲名などを消す。鳴っている途中で消すと、
                     iPhone が鳴っている Audio から曲名なしで知らせなおすことがあるため） */
@@ -476,12 +476,24 @@ function disconnectElement(audio: GameAudio) {
   targetVolumes.delete(audio);
 }
 
-/* mp3 の音（HTMLAudioElement）から曲を外して、空にする
+/* mp3 の音（HTMLAudioElement）を、ロック画面に出ない・何も持っていない状態にする
 
-   iPhone は、一度鳴らした Audio が曲を持ったまま残っていると、止まっていても「再生中の曲」とみなして、
+   iPhone は、一度鳴らした Audio が残っていると、止まっていても「再生中の曲」とみなして、
    ロック画面に ▶ を出しつづける（サウンドトラックからゲームへ戻ったあとも ▶ が出ていた）
-   ・src に '' を入れると「読みこめない曲」になってエラーが起きるので、属性ごと外してから load() する */
+   Audio が片づけられれば消えるが、いつ片づくかはブラウザしだいで、しばらく残ってしまう
+
+   ① 消音する（muted）
+      iPhone は、消音した Audio をロック画面に出さない
+      消音にしたその場で、ロック画面に出すものを選びなおすので、▶ もすぐに消える
+      ※ 曲を外す（②）だけでは消えない
+        iPhone は、外したあとも「さっきまで鳴らしていた曲」を覚えていて、まだ再生中の曲とみなすため
+   ② 曲を外して、空にする（読みこんだ曲のデータも手放せる）
+      src に '' を入れると「読みこめない曲」になってエラーが起きるので、属性ごと外してから load() する
+
+   ※ 止め終わってから呼ばれるので（→ releaseElement()）、消音しても「ぶつっ」とは鳴らない
+   ※ 外したAudioは、もう鳴らさないので、消音したままでよい */
 function unloadMediaElement(audio: HTMLAudioElement) {
+  audio.muted = true;
   audio.removeAttribute('src');
   audio.load();
 }
