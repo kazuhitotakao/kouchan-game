@@ -1422,11 +1422,13 @@ let isLeavingPage = false;
      ① いまの曲・再生位置・一覧のスクロール位置を覚える（止めると再生位置が0秒に戻るので、かならず止める前）
      ② ロック画面・車・イヤホンの操作の受付をやめる
         （このあと曲を止めている約0.1秒のあいだに ▶ を押されても、このページの関数が呼ばれないように）
-     ③ 「画面を消しても鳴らしつづける」設定を元に戻す（ゲームは、ロックしたら音も止まる）
-     ④ 曲をすっと止めて先頭へ戻し、Audioから曲を外して、作業台から外す（→ releaseElement()）
-     ⑤ 外し終わったところで、ロック画面に知らせていた曲名・再生状態を「なし」にする
+     ③ 曲をすっと止めて先頭へ戻し、Audioから曲を外して、作業台から外す（→ releaseElement()）
+     ④ 外し終わったところで、ロック画面に知らせていた曲名・再生状態を「なし」にする
         ②でも消しているが、まだ鳴っている途中だと、iPhone が鳴っている Audio から曲名なしで知らせなおすことがある
         そこで、Audioが空になったあとに、もう一度「なし」にして終わる
+     ⑤ 同じく外し終わったところで、「画面を消しても鳴らしつづける」設定を元に戻す（ゲームは、ロックしたら音も止まる）
+        鳴っている途中で戻すと、iPhone が音の出しかたを切りかえるときに、曲がとぎれて「ブツッ」と鳴るため
+        （外し終わるのは約0.1秒後。次のページは、このページが消えきってから（約0.18秒後）出てくるので、それより先に終わる）
 
    ■ 呼ぶところ
      ・onBeforeRouteLeave … ページを離れると決まったとき
@@ -1460,22 +1462,23 @@ function disposeSoundtrackPlayer() {
   stopMediaSession?.();
   stopMediaSession = null;
 
-  // ③ さわるたびに作業台を起こす受付をやめる（画面を消しても鳴りつづける設定も、ここで元に戻る）
-  stopWakingAudioContext?.();
-  stopWakingAudioContext = null;
-
   const audio = soundtrackAudio;
   soundtrackAudio = null;
 
-  // ⑤ Audioが空になったあとに、ロック画面へ「何も再生していない」と知らせなおす
-  const clearNowPlaying = () => {
+  // Audioが空になったあとの仕上げ
+  const finishDisposal = () => {
+    // ④ ロック画面へ「何も再生していない」と知らせなおす
     setMediaSessionTrack(null);
     setMediaSessionPlaybackState('none');
+
+    // ⑤ さわるたびに作業台を起こす受付をやめる（画面を消しても鳴りつづける設定も、ここで元に戻る）
+    stopWakingAudioContext?.();
+    stopWakingAudioContext = null;
   };
 
-  // 一度も鳴らしていない（Audioを作っていない）ときは、知らせなおすだけ
+  // 一度も鳴らしていない（Audioを作っていない）ときは、仕上げだけ
   if (!audio) {
-    clearNowPlaying();
+    finishDisposal();
     return;
   }
 
@@ -1484,14 +1487,14 @@ function disposeSoundtrackPlayer() {
   audio.removeEventListener('timeupdate', handleTimeUpdate);
   audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
 
-  // ④ 曲をすっと止めて先頭へ戻し、止め終わったら曲を外して、作業台から外す
+  // ③ 曲をすっと止めて先頭へ戻し、止め終わったら曲を外して、作業台から外す
   try {
     pauseElement(audio, { rewind: true });
   } catch {
     // 止められなくても、このあと曲を外すので鳴りつづけない
   }
 
-  releaseElement(audio, clearNowPlaying);
+  releaseElement(audio, finishDisposal);
 }
 
 /* ページを離れると決まったとき（「← 戻る」・ブラウザの戻る のどちらでも通る） */
