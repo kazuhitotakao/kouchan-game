@@ -1,47 +1,18 @@
 /* ============================================================
    ページ（pages/index.vue）の見た目（読みこみの入口）
 
-   ■ このファイルを読むのは pages/index.vue の1か所だけ
-     <style scoped src="~/assets/css/game.css"> で読みこまれる
-     そのため、ここから読みこむCSSはすべて scoped あつかいになる
-     （＝ pages/index.vue の中の要素にしか効かない。グローバルCSSではない）
+   pages/index.vue の <style scoped src> だけが読むので、
+   ここから読みこむCSSはすべて scoped あつかい（index.vue の中の要素にしか効かない）
 
-     子コンポーネントは、それぞれ自分に必要なCSSだけを自分で読む
-     （下の「ここからは読みこまない」を参照）
-     ここに書いてあるのは、pages/index.vue 自身が描画する画面のCSSだけ
+   書いた順番が、そのまま CSS の効く順番になる（あとに読んだほうが勝つ）
+   ・park-map は command のあと（.cmd の幅・バッジを上書きするため）
+   ・responsive は base のあと（先に読むと上書きが効かない）
 
-   中身は用途ごとに game/ の中へ分けてある
-   ここに書いてある順番が、そのまま CSS の効く順番になる
-   （同じ強さの指定どうしでは、あとに読みこんだほうが勝つ）
-
-   1. result    … リザルト・GAME OVER
-   2. command   … コマンドボタン（.cmd）・コマンド欄の外わく
-      park-map  … 公園入口の地図（絵の枠の上に行き先を置く。試作）
-                   ※ command のあとに置くこと（.cmd の幅・バッジを上書きするため）
-   3. sound     … サウンドの置き場所（タイトル画面／ゲーム画面上部バー）
-   4. base      … ゲーム画面の土台（わく・中央エリア・タイトル画面など）
-   5. responsive … 画面の大きさに合わせた上書き（全体レイアウト）
-      ※ base のあとに置くこと。先に読むと上書きが効かなくなる
-
-   ■ 次の7つは、ここからは読みこまない
-     ここでも読むと、同じCSSがビルド結果に二重に出てしまうため
-
-     ・game/status.css      … components/game/StatusBar.vue が
-                               <style scoped src> で自分で読みこむ
-     ・game/result-card.css … components/game/ResultCard.vue が
-                               <style scoped src> で自分で読みこむ
-     ・game/command-box.css … components/game/CommandBox.vue が
-                               <style scoped src> で自分で読みこむ
-     ・game/sound-control.css
-                             … components/game/SoundControl.vue が
-                               <style scoped src> で自分で読みこむ
-     ・game/event-flash.css … ResultCard.vue と pages/index.vue の
-                               両方で使うので、app.vue がグローバルに読みこむ
-     ・game/command-shared.css
-                             … CommandBox.vue と pages/index.vue の
-                               両方で使うので、app.vue がグローバルに読みこむ
-     ・game/keyframes.css   … 複数の scoped CSS から参照する @keyframes。
-                               app.vue がグローバルに読みこむ
+   ■ ここからは読みこまないもの（二重に出力されてしまうため）
+     ・status.css／result-card.css／command-box.css／sound-control.css
+       … それぞれのコンポーネントが自分で読みこむ
+     ・event-flash.css／command-shared.css／keyframes.css
+       … いくつもの scoped から使うので、app.vue がグローバルに読みこむ
    ============================================================ */
 
 @import './game/result.css';
