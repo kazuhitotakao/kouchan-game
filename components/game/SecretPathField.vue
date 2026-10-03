@@ -31,6 +31,8 @@ import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import { getSecretPathLaneLeft } from '~/composables/useSecretPath';
 import { secretPathBoostMultiplier, secretPathLanes, secretPathPlayerImages, secretPathPlayerY } from '~/data/secretPath';
 import type { SecretPathPlayerVisual } from '~/data/secretPath';
+// 中の絵が表示できるようになってから、箱ごと出す目印（→ utils/imagePreload.ts）
+import { vRevealWithImages } from '~/utils/imagePreload';
 import type { SecretPathItem, SecretPathLane } from '~/types/game';
 
 const props = defineProps<{
@@ -246,7 +248,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <article ref="cardRef" class="place-card place-card--secret secret-path">
+  <article ref="cardRef" v-reveal-with-images class="place-card place-card--secret secret-path">
     <!-- secret-path-hud--endless … 「どこまで行ける？」の HUD（❤ と距離もならぶので、スマホ幅では「こもれび」の文字を省いて1行に収める） -->
     <div class="secret-path-hud" :class="{ 'secret-path-hud--endless': distance !== undefined }">
       <span

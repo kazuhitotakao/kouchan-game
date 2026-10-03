@@ -21,6 +21,8 @@ import { computed } from 'vue';
 
 import { itemImages, placeItems } from '~/data/places';
 import { splitItemName } from '~/utils/itemName';
+// 中の絵が表示できるようになってから、箱ごと出す目印（→ utils/imagePreload.ts）
+import { vRevealWithImages } from '~/utils/imagePreload';
 
 const props = defineProps<{
   /* これまでに見つけたものの名前（見つけた順） */
@@ -49,7 +51,7 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
 </script>
 
 <template>
-  <div class="found-collection" :class="{ 'found-collection--complete': isComplete }">
+  <div v-reveal-with-images class="found-collection" :class="{ 'found-collection--complete': isComplete }">
     <ul class="found-collection__list">
       <li
         v-for="slot in slots"
