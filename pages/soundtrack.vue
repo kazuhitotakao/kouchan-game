@@ -8,7 +8,7 @@ import { sPlusSongLyrics, type LyricLine } from '~/data/sPlusSongLyrics';
 import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
 
 /* 曲の音量は、かならずこれを通して入れる（audio.volume に直接入れても、iPhone では変わらないため） */
-import { cancelElementPause, keepAudioContextAwake, pauseElement, pauseElementThen, releaseElement, setElementVolume } from '~/utils/elementVolume';
+import { cancelElementPause, isElementPlaying, keepAudioContextAwake, pauseElement, pauseElementThen, releaseElement, setElementVolume, wakeElementAudioContext } from '~/utils/elementVolume';
 import { isTouchOnlyDevice } from '~/utils/touchDevice';
 
 /* 音の作業台（AudioContext）。ゲーム本編と同じ1つを使い回す（→ getEffectAudioContext()） */
@@ -200,7 +200,8 @@ let playRequestId = 0;
 /* いま選んでいる曲の番号（選んでいないときは null） */
 const playingTrackId = ref<number | null>(null);
 
-/* いま音が鳴っているか（一時停止中は playingTrackId を残して、こちらだけ false。続きから再生できるように） */
+/* いま音が鳴っているか（一時停止中は playingTrackId を残して、こちらだけ false。続きから再生できるように）
+   iPhone が勝手に止めた・鳴らしなおしたときも、Audio の知らせを見てそろえる（→ handleAudioPause / handleAudioPlay） */
 const isPlaying = ref(false);
 
 /* いま鳴らしている位置（秒）。再生バーと経過時間の表示に使う */
@@ -816,6 +817,49 @@ function handleTrackEnded() {
   isPlaying.value = false;
 }
 
+/* ============================================================
+   このページの外で、曲が止められた・鳴らしなおされたとき（handleAudioPause / handleAudioPlay）
+
+   iPhone は、車の Bluetooth・イヤホンが外れたとき・電話がかかってきたときなどに、曲を勝手に一時停止する
+   （電話が終わったあとは、勝手に続きから鳴らしなおすこともある）
+   このページは、自分で止めた・鳴らしたときにしか isPlaying を書きかえないので、
+   そのままだと、止まっているのに画面は「⏸ 一時停止」「♪ 再生中」のまま残ってしまう
+   そうなると、ロック画面の ▶ を押しても「もう鳴っている」として何もせず（→ handleMediaSessionPlay）、
+   画面のボタンも1回目は「一時停止」として働くので、続きから鳴らせなかった
+   そこで、Audio の pause・play の知らせを見て、表示を実際の音にそろえる
+
+   ※ このページが自分で止めた・鳴らしたときは、先に isPlaying をそろえているので、ここでは何もしない
+   ※ 曲が最後まで流れきったときの pause は、handleTrackEnded() にまかせる（ended で見分ける）
+   ============================================================ */
+
+/* 曲が止められたとき */
+function handleAudioPause() {
+  const audio = soundtrackAudio;
+
+  // 曲の差しかえの途中などで、もう鳴りなおしているときは、さわらない
+  if (!audio || audio.ended || !audio.paused || !isPlaying.value) {
+    return;
+  }
+
+  isPlaying.value = false;
+
+  /* ▶ を押した直後に止められると、その play() から「鳴らせませんでした」が遅れて届くことがある
+     それで選んでいる曲まで消されないよう、指示の番号を進めて「もう最新ではない」ことにする（→ playTrackAudio） */
+  playRequestId += 1;
+}
+
+/* 曲が鳴らしなおされたとき */
+function handleAudioPlay() {
+  const audio = soundtrackAudio;
+
+  // 自分で止めている途中（音量を下げている最中）は、もうすぐ止まるので、さわらない（→ isElementPlaying()）
+  if (!audio || !isElementPlaying(audio) || isPlaying.value || playingTrackId.value === null) {
+    return;
+  }
+
+  isPlaying.value = true;
+}
+
 /* 使いまわすAudioを用意して返す（初めて必要になったときだけ作る） */
 function getSoundtrackAudio() {
   if (!import.meta.client) {
@@ -839,6 +883,8 @@ function getSoundtrackAudio() {
       soundtrackAudio.addEventListener('ended', handleTrackEnded);
       soundtrackAudio.addEventListener('timeupdate', handleTimeUpdate);
       soundtrackAudio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      soundtrackAudio.addEventListener('pause', handleAudioPause);
+      soundtrackAudio.addEventListener('play', handleAudioPlay);
     }
 
     return soundtrackAudio;
@@ -885,6 +931,10 @@ function playTrackAudio(audio: HTMLAudioElement, track: SoundtrackTrack) {
   try {
     // 止めている途中なら、その予約を取り消してから鳴らす
     cancelElementPause(audio);
+
+    /* 作業台が止まっていたら起こす（iPhone は、車の Bluetooth が外れたときなどに、作業台も止めてしまう）
+       画面のボタンなら、さわったときに起きるが、ロック画面・車・イヤホンの ▶ では起きないため（→ wakeElementAudioContext()） */
+    wakeElementAudioContext(audio);
 
     audio.play().catch(() => {
       // 再生できなかったときは表示を戻す（待っているあいだに別の曲へ切りかわっていたら、そちらは消さない）
@@ -999,6 +1049,8 @@ function disposeSoundtrackPlayer() {
   audio.removeEventListener('ended', handleTrackEnded);
   audio.removeEventListener('timeupdate', handleTimeUpdate);
   audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+  audio.removeEventListener('pause', handleAudioPause);
+  audio.removeEventListener('play', handleAudioPlay);
 
   // ③
   try {
