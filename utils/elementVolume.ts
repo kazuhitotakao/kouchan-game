@@ -363,6 +363,8 @@ type PendingPause = {
   rewind: boolean;
   onPaused: (() => void) | null;
   release: boolean;
+  // release のとき、作業台から外し終わったあとに呼ぶ（→ releaseElement() の onReleased）
+  onReleased: (() => void) | null;
 };
 
 const pendingPauses = new WeakMap<GameAudio, PendingPause>();
@@ -439,6 +441,7 @@ function fadeOutAndPause(audio: GameAudio, rewind: boolean, onPaused: (() => voi
         // ページを離れるときは、止め終わったところで作業台から外して終わり
         if (pending.release) {
           disconnectElement(audio);
+          pending.onReleased?.();
           return;
         }
 
@@ -452,6 +455,7 @@ function fadeOutAndPause(audio: GameAudio, rewind: boolean, onPaused: (() => voi
     rewind,
     onPaused,
     release: false,
+    onReleased: null,
   };
 
   pendingPauses.set(audio, pending);
@@ -511,17 +515,23 @@ export function cancelElementPause(audio: GameAudio) {
    ・外したAudioは、もう鳴らせない（createMediaElementSource() は1つのAudioに1回しか呼べないため）
      ページを離れるときの後始末で、もう使わないAudioにだけ使う
    ・mp3 の音（HTMLAudioElement）は、止め終わったあとに曲も外して空にする（→ unloadMediaElement()）
-     つまみに通していないAudio（パソコン・Android など）も、曲は外す */
-export function releaseElement(audio: GameAudio) {
+     つまみに通していないAudio（パソコン・Android など）も、曲は外す
+   ・onReleased … 止め終わって、曲も外し終わったあとに呼ぶ
+                  （音量を下げている途中なら、下げ終わって外したあと。そうでなければ、その場で）
+                  サウンドトラックは、ここでロック画面に知らせていた曲名・再生状態を消す
+                  （まだ鳴っている途中で消すと、iPhone が鳴っている Audio から曲名なしで知らせなおすことがあるため） */
+export function releaseElement(audio: GameAudio, onReleased?: () => void) {
   const pending = pendingPauses.get(audio);
 
   if (pending) {
     pending.release = true;
     pending.onPaused = null;
+    pending.onReleased = onReleased ?? null;
     return;
   }
 
   disconnectElement(audio);
+  onReleased?.();
 }
 
 /* releaseElement() の中身（その場で外す） */
