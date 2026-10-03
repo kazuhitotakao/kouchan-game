@@ -18,6 +18,8 @@
      ・ゲーム本編・ミニゲームは、画面が見えているあいだだけ 'playback' にする（マナーモードでも鳴らすため
        → playThroughSilentModeWhileVisible()）。画面を消したら、今までどおり音も止まる
      ・navigator.audioSession があるのは iOS 16.4 から、鳴りつづけるのは iOS 17.5 から
+     ・車の Bluetooth・イヤホンが外れると、iPhone は曲といっしょに作業台も止める
+       画面をさわれば起きるが、ロック画面などから鳴らしなおすときは起きないので、鳴らす直前にも起こす（→ wakeElementAudioContext()）
    ============================================================ */
 
 /* iPhone・iPad で、ゲームの BGM・mp3 の効果音を鳴らす係（→ createGameAudio()） */
@@ -430,6 +432,25 @@ function restoreGainAfterPause(audio: GameAudio) {
   if (gain) {
     setGainValue(gain, targetVolumes.get(audio) ?? 1, true);
   }
+}
+
+/* audio をつないでいる作業台（AudioContext）が止まっていたら、起こす（play() の直前に呼ぶ）
+
+   iPhone は、車の Bluetooth・イヤホンが外れたときに、鳴っている曲といっしょに作業台も止めてしまう
+   作業台が止まったままだと、play() しても曲が先へ進まず、音も出ない
+   画面をさわったときは keepAudioContextAwake() が起こすが、
+   ロック画面・車・イヤホンの ▶ で鳴らしなおすときは、画面をさわらないので起きない。そこで、鳴らすたびに確かめる
+   ・作業台につないでいない Audio（パソコン・Android など）は、何もしない
+   ・起きるのを待たずに play() してよい（起きたところから音が出る） */
+export function wakeElementAudioContext(audio: GameAudio) {
+  const context = getGainNode(audio)?.context;
+
+  // interrupted は iPhone だけの状態なので、「running でも closed でもない」で見る（→ keepAudioContextAwake()）
+  if (!(context instanceof AudioContext) || context.state === 'running' || context.state === 'closed') {
+    return;
+  }
+
+  context.resume().catch(() => {});
 }
 
 /* ページを離れるときに、audio を作業台（AudioContext）から外す
