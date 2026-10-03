@@ -1,45 +1,24 @@
 /* ============================================================
-   ページ全体で共通に使う @keyframes（グローバル）
+   ページ全体で共通に使う @keyframes（グローバル。app.vue から読みこむ）
 
-   ■ なぜ、このファイルだけ別あつかいなのか
+   ■ なぜ別ファイルなのか
+     <style scoped> は @keyframes の名前も付けかえるが、
+     付けかえるのは「同じ <style> の中で定義された名前」への参照だけ
+     定義と参照が別々の scoped CSS に分かれると、名前が合わずに動かなくなる
+     そこで、いくつもの scoped CSS から使う @keyframes だけを、ここにまとめている
 
-     Vue の <style scoped> は、@keyframes の名前も
-     「danger-pulse-<スコープID>」のように付けかえる
-     そのとき付けかえられるのは、
-     「同じ <style> の中で定義された名前」への参照だけ
+     ・danger-pulse … status.css
+     ・found-in     … status.css／result-card.css／event-flash.css／base.css
+     ・result-in    … result-card.css／base.css
+     ・shake        … result-card.css／secret-path-field.css
+     ・status-pop   … status.css／result-card.css／secret-path-field.css
+     ・command-selected-glow
+                    … command.css／command-shared.css／command-box.css／pages/minigame/secret-path.vue
 
-     そのため、定義と参照が別々の <style> に分かれてしまうと、
-     参照側だけが元の名前のまま残り、
-     どこにも無い名前を指すことになってアニメーションが効かなくなる
-
-     ・@keyframes danger-pulse … status.css から参照
-     ・@keyframes found-in     … status.css／result-card.css／
-                                 event-flash.css／base.css から参照
-     ・@keyframes result-in    … result-card.css／base.css から参照
-     ・@keyframes shake        … result-card.css／secret-path-field.css から参照
-     ・@keyframes status-pop   … status.css／result-card.css／secret-path-field.css から参照
-     ・@keyframes command-selected-glow
-                               … command.css／command-shared.css／
-                                 command-box.css／pages/minigame/secret-path.vue から参照
-
-     status.css は components/game/StatusBar.vue が、
-     result-card.css は components/game/ResultCard.vue が、
-     command-box.css は components/game/CommandBox.vue が、
-     result.css / base.css は game.css 経由で index.vue などが、
-     それぞれ別の <style scoped> として読みこんでいる
-
-   ■ どう直したか
-
-     これらの @keyframes だけを、scoped が付かない
-     app.vue の <style> から読みこむ（＝名前が付けかえられない）ようにした
-     参照側もすべて元の名前のままなので、名前が一致する
-
-     ※ 中身（時間・色・easing・keyframe の内容）は、
-       移動前の base.css / result.css からそのまま持ってきている
-     ※ 同じ @keyframes を他のファイルに重複して残さないこと
+   ※ 同じ @keyframes を他のファイルに重複して書かないこと
    ============================================================ */
 
-/* --- 危険なステータスのゆっくりした点滅（もとは base.css） --- */
+/* --- 危険なステータスのゆっくりした点滅 --- */
 @keyframes danger-pulse {
   0%,
   100% {
@@ -51,7 +30,7 @@
   }
 }
 
-/* --- アイテム発見（もとは result.css） --- */
+/* --- アイテム発見 --- */
 @keyframes found-in {
   from {
     opacity: 0;
@@ -64,7 +43,7 @@
   }
 }
 
-/* --- 結果カードが下から浮き上がる（もとは result.css） --- */
+/* --- 結果カードが下から浮き上がる --- */
 @keyframes result-in {
   from {
     opacity: 0;
@@ -77,7 +56,7 @@
   }
 }
 
-/* --- いやいや発生：中央のカードだけを軽く左右に揺らす（もとは base.css） --- */
+/* --- いやいや発生：中央のカードだけを軽く左右に揺らす --- */
 @keyframes shake {
   0%,
   100% {
@@ -93,7 +72,7 @@
   }
 }
 
-/* --- 直前の増減値（-18 や +6）が出るときのポップ（もとは status.css） --- */
+/* --- 直前の増減値（-18 や +6）が出るときのポップ --- */
 @keyframes status-pop {
   0% {
     opacity: 0;
@@ -107,36 +86,20 @@
 }
 
 /* ============================================================
-   【共通】いま選んでいるコマンドを、水色でふわっと光らせる演出
+   いま選んでいるコマンドを、水色でふわっと光らせる
+   （キーボードで遊ぶとき、Enter でどれが実行されるか一目で分かるように）
 
-   ねらい
-     キーボードで遊んでいるとき「いま Enter を押したら
-     どのボタンが実行されるのか」を一目で分かるようにする
+   ボタンの上に重ねた透明な ::after の box-shadow だけを強弱させる
+   ・ボタン本来の色はそのまま、幅や配置もズレない
+   ・transform はさわらない（hover や :active の動きとケンカさせないため）
 
-   仕組み
-     ボタンの上に ::after という「透明な板」を1枚だけ重ねて、
-     その板の box-shadow（内側の水色の枠＋外側の水色の光）だけを
-     ゆっくり強くしたり弱くしたりする。
-     ・板は透明なので、ボタン本来の色（紙／金／紫／緑）はそのまま残る
-     ・box-shadow は場所を取らないので、ボタンの幅や配置はズレない
-     ・pointer-events: none なので、クリックのじゃまもしない
-
-   対象
-     .cmd--selected              … 公園入口などで選んでいるボタン
-     .cmd--single                … ボタンが1つだけの画面のボタン（はじめる／きょうのおやつを選ぶ）
-     .command-box__item--selected … 各イベントの中で選んでいる行
+   対象: .cmd--selected／.cmd--single／.command-box__item--selected
    ============================================================ */
 
-/* 水色の光の強さを 弱 → 少し強い → 弱 と往復させる
-   ※ transform（動き）はここでは一切さわらない。
-     hover や :active の translateY / translateX とケンカさせないため
-
-   影は3枚がさねになっている
-     1枚目 inset … ボタンのふちの内側に引く水色の線
-     2枚目 0 0 0 2px … ボタンのすぐ外に引く水色の線
-       ※ 水色は「紺色の下地」の上でいちばんよく見える（コントラスト4.25:1）。
-         紙のボタンや金色のボタンは色が明るく、内側の線だけでは見えにくいので、
-         紺色の下地に出るこの外側の線が「選択中」の目じるしの主役になる
+/* 影は3枚がさね
+     1枚目 inset … ボタンのふちの内側の線
+     2枚目 外側の線 … 紺色の下地の上でいちばんよく見えるので、
+                     明るい紙・金色のボタンでは、これが「選択中」の目じるしの主役になる
      3枚目 ぼかし … まわりへ広がる、ふんわりした光 */
 @keyframes command-selected-glow {
   0%,

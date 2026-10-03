@@ -1,40 +1,13 @@
 /* ============================================================
-   ゴールしたあとのリザルトと GAME OVER の見た目
+   ゴールしたあとのリザルトと GAME OVER の見た目（pages/index.vue の中で使う。game.css から読みこむ）
 
-   ・ゴールしたあとのリザルト（.ending-card／.score-card／.record-card）
-   ・GAME OVER（.gameover-card 〜）
-   ・見つけたものの見出しの数（.record-card__count。中身は components/game/FoundItemCollection.vue）
-   ・リザルトのときだけ効くレイアウト（.scene--result／.scene--gameover）
-   ・結果カードを縮めてよくする .stage > .result-card
-     （.stage は pages/index.vue 側の要素なので、ここに残してある）
-   ・上のそれぞれに対する、画面の幅・高さごとの上書き（@media）
-
-   これらは pages/index.vue の中で使うので、
-   これまでどおり game.css から読みこむ
-
-   ■ ここから出ていったもの
-     ・結果カードの中身（.result-card／.change-box／.found-flash 〜）
-       → assets/css/game/result-card.css（ResultCard.vue が読みこむ）
-     ・ナイス対応／こもれびボーナスの枠（.event-flash 〜）
-       → assets/css/game/event-flash.css（app.vue がグローバルに読みこむ）
-     ・@keyframes result-in
-       → assets/css/game/keyframes.css（app.vue がグローバルに読みこむ）
-
-   ※ 次のものは、結果以外でも使うので game.css に残してある
-     ・.change--good / .change--bad / .change--neutral（増減の色。上部ステータスでも使う）
-     ・いやいやタイムの画面（.tantrum-alert／.place-card--tantrum 〜）
-     ・秘密の小道の結果（.secret-path-result）、コマンド欄（.command--result）
+   ・.stage > .result-card も、.stage が index.vue 側の要素なので、ここに置いている
+   ・結果カードの中身は result-card.css、.event-flash は event-flash.css
    ============================================================ */
 
-/* 結果カードだけは縮んでよい
-
-   flex: 0 1 auto ＝ 「大きくはならないが、小さくはなってよい」
-   場所のカードとコマンドボックスが縮まないので、
-   高さが足りないときに縮むのは結果カードだけになる
-   → コマンドボックスがいつも画面の中に残る
-
-   ※ セレクタを .stage > .result-card にしているのは、
-     すぐ上の .stage > * より強くして、確実に上書きするため
+/* 結果カードだけは縮んでよい（flex: 0 1 auto）
+   高さが足りないときに縮むのは結果カードだけになり、コマンドボックスがいつも画面に残る
+   ※ .stage > * より強くするため、このセレクタにしている
 */
 .stage > .result-card {
   flex: 0 1 auto;
@@ -50,10 +23,9 @@
 }
 
 /* ランクのバッジ
-   ・min-width で、Dランクでも S+ランクでも同じ大きさに見えるようにする
-   ・box-sizing: border-box にしているので、padding をふくめた幅が
-     max-width: 100% におさまり、せまい画面でもカードからはみ出さない
-   ・色は上部バーと同じ --navy と --gold を使って、画面から浮かないようにする */
+/* ランクのバッジ
+   ・min-width で、Dランクでも S+ランクでも同じ大きさに見せる
+   ・border-box ＋ max-width: 100% で、せまい画面でもはみ出さない */
 .ending-card__rank {
   animation: rank-in 0.5s ease-out 0.12s backwards;
   display: inline-block;
@@ -93,8 +65,7 @@
   align-items: baseline;
   justify-content: center;
   gap: 6px;
-  /* ランクのバッジを大きくしたぶん、ここの下の余白は少しつめる
-     （カード全体が縦に長くなりすぎないようにするため） */
+  /* ランクのバッジを大きくしたぶん、カードが縦に長くなりすぎないよう、下の余白は少しつめる */
   margin: 0 0 10px;
 }
 
@@ -113,10 +84,8 @@
 }
 
 /* S+ランクのときだけ出す、うた入りエンディングBGMの小さな表示
-   主役（スコア・ランク・結果の文）より目立たないよう、結果の文の下に小さな帯で出す
-   ・ランクのバッジと同じ rank-in の動きで、少しおくれて、ふわっと出す
-   ・せまい画面では「お知らせ」と「曲名」が2行に分かれる（flex-wrap）
-     2行になっても形がくずれないよう、角の丸みは まんまるにせず 12px にしている */
+   主役より目立たないよう、結果の文の下に小さな帯で出す
+   せまい画面で2行に分かれても形がくずれないよう、角の丸みは 12px にしている */
 .ending-card__song {
   animation: rank-in 0.5s ease-out 0.6s backwards;
   display: inline-flex;
@@ -143,10 +112,7 @@
 }
 
 /* A／Sランクのときに出す、S+のヒント（まだ うた入りBGMを取っていない人だけ）
-
-   まだ手に入れていないものの話なので、金色のふち（ごほうび）は付けない
-   ミニゲームのヒント（pages/minigame/secret-path.vue の .mg-reward--locked）と同じ考えかたで、
-   白地＋うすい枠にして、文字も うすい茶色（スコアの「/ 100」と同じ色）にしてひかえめに置く */
+   まだ手に入れていないものなので、金色のふちは付けず、ひかえめに置く（ミニゲームの .mg-reward--locked と同じ考えかた） */
 .ending-card__song--locked {
   border-color: #ece2cd;
   background: #fff;
@@ -196,7 +162,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* プラスは緑・マイナスは赤（changeClass() が付けるクラス名にあわせている） */
+/* プラスは緑・マイナスは赤（クラス名は changeClass()） */
 .score-item__value.change--good {
   color: var(--good);
 }
@@ -221,7 +187,7 @@
 }
 
 .gameover-card__label {
-  /* 少し遅れて、ゆっくり大きく出す（backwards ＝ 待っている間は消えたまま） */
+  /* 少し遅れて、ゆっくり大きく出す */
   animation: gameover-label-in 0.55s ease-out 0.15s backwards;
   margin: 0 0 10px;
   color: #ff9d8c;
@@ -300,8 +266,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* 見た目からは消して、読み上げでは読まれる文字（「総合スコア」の見出しなど）
-   display: none にすると読み上げでも読まれなくなるので、1px に縮めて隠す */
+/* 見た目からは消して、読み上げでは読まれる文字（display: none だと読まれなくなるので、1px に縮めて隠す） */
 .sr-only {
   position: absolute;
   width: 1px;
@@ -311,9 +276,7 @@
   white-space: nowrap;
 }
 
-/* 「見つけたもの」の見出し（見つけたもの ……… 3 / 6）
-   中身（図鑑のような6つのマス）は components/game/FoundItemCollection.vue
-   前は、見つけたものの札（［絵］名前）を横にならべていた（.found-list） */
+/* 「見つけたもの」の見出し（見つけたもの ……… 3 / 6。中身は FoundItemCollection.vue） */
 .record-card__title--found {
   display: flex;
   align-items: baseline;
@@ -377,7 +340,7 @@
 
 @media (max-height: 800px) {
   /* ゴールの結果カードも、たてにつめて1画面におさめる
-     ランクのバッジは主役なので、小さくしすぎないように気をつける */
+  /* ゴールの結果カードも、たてにつめる（ランクのバッジは主役なので、小さくしすぎない） */
   .ending-card {
     padding: 16px 24px;
   }
@@ -403,10 +366,7 @@
   .record-grid {
     grid-template-columns: 1fr;
   }
-  /* ゴールのランクバッジ
-     スマホでは min-width 180px のままだと画面いっぱいになるので、
-     少しだけ小さくして左右に余白を残す
-     （max-width: 100% と box-sizing のおかげで、はみ出しはしない） */
+  /* ランクのバッジは、スマホでは画面いっぱいにならないよう少し小さく */
   .ending-card__rank {
     min-width: 150px;
     padding: 8px 20px;
@@ -421,21 +381,9 @@
 }
 
 /* ============================================================
-   ゴール後のリザルト画面（小さい画面）
-
-   リザルトには
-     総合スコア／ランク／結果メッセージ／スコア内訳／今日の記録／見つけたもの
-   がならぶので、小さいスマホではどうしても1画面に収まらない
-
-   ここは「1画面に押しこむ」より「ぜんぶきちんと読める」を優先する
-   ＝ カードを縮めず、自然に たてスクロールさせる
-
-   ・.stage の min-height（中央エリアの下限）は、ここでは外す
-     リザルトはもともと背が高いので、下限を使う場面がない
-   ・上部ステータスも貼りつけない（読むための高さを最大にする）
-
-   スクロールするのはページ側の1か所だけ
-   （.stage は overflow-y: visible のままなので、二重スクロールにはならない）
+   ゴール後のリザルト画面（スマホ）
+   項目が多く1画面に収まらないので、押しこまずに、ぜんぶ読めるようにたてスクロールさせる
+   リザルトはもともと背が高いので、中央エリアの下限（min-height）は外す
    ============================================================ */
 @media (max-width: 700px) {
   .scene--result .stage,
