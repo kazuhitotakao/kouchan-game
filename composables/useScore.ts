@@ -1,22 +1,8 @@
 /* ============================================================
    総合スコアとランクの計算
 
-   ゲーム本編にあった calculateFinalScore() と judgeResult() の
-   「計算しているところ」だけを取り出してある
-   （その2つ自体は、いま composables/useGameResult.ts にある）
-
-   ■ ここがやること
-     ・ゴールしたときの状態を受けとって、スコアと内訳を返す
-     ・その点数と、今日あったことから、ランク・見出し・文章を返す
-
-   ■ ここがやらないこと
-     ゲームの状態は、いっさい書きかえない（受けとった数を見て、答えを返すだけ）
-     音・画面の切りかえはさわらない
-     S+の曲の解放は composables/useGameResult.ts と utils/sPlusSong.ts のほう
-     （ここは「S+ランク」という答えを返すところまで）
-
-   ■ 配点・境界値・判定の順番は、いっさい変えていない
-     数字も文章も、移す前とまったく同じものを使っている
+   ゴールしたときの状態を受けとって、スコアと内訳・ランク・見出し・文章を返すだけ
+   （ゲームの状態は書きかえない。S+の曲の解放は useGameResult.ts と utils/sPlusSong.ts）
    ============================================================ */
 
 import type { ScoreBreakdownItem } from '~/types/game';
@@ -29,7 +15,6 @@ export type ScoreInput = {
   /* こもれびの広場（秘密の場所）を探検したか */
   hasVisitedSecretSpot: boolean;
 
-  /* 見つけたものの数 */
   collectedItemCount: number;
 
   /* 帰ってきた時間（分。09:00 なら 540） */
@@ -41,11 +26,9 @@ export type ScoreInput = {
   childEnergy: number;
   parentCalm: number;
 
-  /* いやいやが起きた回数 */
   tantrumCount: number;
 
-  /* 0〜100に収める処理（pages/index.vue の keepInRange() をそのまま渡してもらう）
-     同じ「0〜100」をここにも書いてしまうと、直すところが2か所になるため */
+  /* 0〜100に収める処理（pages/index.vue のものを渡してもらう。ここにも書くと、直すところが2か所になるため） */
   keepInRange: (value: number) => number;
 };
 
@@ -57,39 +40,29 @@ export type ScoreResult = {
   breakdown: ScoreBreakdownItem[];
 };
 
-/* 総合スコア（0〜100点）と、その内訳を作る
-
-   ① 加点・減点を1項目ずつ計算して、内訳に足していく
-   ② 内訳の点数を全部たす
-   ③ 0〜100に収める
-*/
+/* 総合スコア（0〜100点）と、その内訳を作る（加点・減点を1項目ずつ内訳に足して、全部たして、0〜100に収める） */
 export function calculateScore(input: ScoreInput): ScoreResult {
   const breakdown: ScoreBreakdownItem[] = [];
 
-  // ② 基本点：おでかけポイントは、そのまま点数になる
-  //   （0点でも「ここがスコアの土台」と分かるように、いつも表示する）
+  // 基本点：おでかけポイントは、そのまま点数になる（0点でも「スコアの土台」と分かるように、いつも表示する）
   breakdown.push({ label: 'おでかけポイント', points: input.outingPoint });
 
-  // ③ 秘密の場所ボーナス：探検できていれば +10点
+  // 秘密の場所ボーナス
   if (input.hasVisitedSecretSpot) {
     breakdown.push({ label: '秘密の場所発見', points: 10 });
   }
 
-  // ④ 見つけたものボーナス：1種類につき +2点
+  // 見つけたものボーナス：1種類につき +2点
   const itemPoints = input.collectedItemCount * 2;
 
   if (itemPoints > 0) {
     breakdown.push({ label: '見つけたもの', points: itemPoints });
   }
 
-  // ⑤ 帰宅時間ボーナス
-  //   goToGoal() で出口まで10分歩いたあとの時間で判定される
-  //   ・11:45まで      → +8点
-  //   ・11:46〜12:00   → +4点
-  //   ・12:00を過ぎた  → -10点
-  //   ※ 11:45 にしているのは、6か所ぜんぶ回ると
-  //     いやいや や とつぜんのできごと の時間で必ずはみ出してしまい、
-  //     +8点が「ぜったいに取れないボーナス」になっていたため
+  /* 帰宅時間ボーナス（出口まで10分歩いたあとの時間で判定する）
+     11:45まで +8 ／ 12:00まで +4 ／ 12:00を過ぎた -10
+     ※ 11:45 にしているのは、6か所ぜんぶ回ると、いやいや や できごと の時間で必ずはみ出して、
+       +8点が「ぜったいに取れないボーナス」になっていたため */
   if (input.currentMinutes <= 11 * 60 + 45) {
     breakdown.push({ label: '余裕をもって帰宅', points: 8 });
   } else if (input.currentMinutes <= 12 * 60) {
@@ -98,45 +71,42 @@ export function calculateScore(input: ScoreInput): ScoreResult {
     breakdown.push({ label: '時間オーバー', points: -10 });
   }
 
-  // ⑥ 親の体力ボーナス：50以上で+5点、30〜49で+3点、29以下は0点
+  // 親の体力ボーナス：50以上 +5 ／ 30〜49 +3
   if (input.parentEnergy >= 50) {
     breakdown.push({ label: '親の体力', points: 5 });
   } else if (input.parentEnergy >= 30) {
     breakdown.push({ label: '親の体力', points: 3 });
   }
 
-  // ⑦ こうちゃんの機嫌ボーナス：70以上で+5点、50〜69で+3点、49以下は0点
+  // こうちゃんの機嫌ボーナス：70以上 +5 ／ 50〜69 +3
   if (input.childMood >= 70) {
     breakdown.push({ label: 'こうちゃんの機嫌', points: 5 });
   } else if (input.childMood >= 50) {
     breakdown.push({ label: 'こうちゃんの機嫌', points: 3 });
   }
 
-  // ⑧ こうちゃんの体力ボーナス：30以上なら+3点
+  // こうちゃんの体力ボーナス：30以上 +3
   if (input.childEnergy >= 30) {
     breakdown.push({ label: 'こうちゃんの体力', points: 3 });
   }
 
-  // ⑨ 親の余裕ボーナス：親の余裕が70以上なら+3点
-  //   「余裕を残したまま帰れた」ごほうび
+  // 親の余裕ボーナス：70以上 +3（「余裕を残したまま帰れた」ごほうび）
   if (input.parentCalm >= 70) {
     breakdown.push({ label: '親の余裕', points: 3 });
   }
 
-  // ⑩ いやいや減点：1回につき -2点
+  // いやいや減点：1回につき -2点
   if (input.tantrumCount > 0) {
     breakdown.push({ label: 'いやいや', points: input.tantrumCount * -2 });
   }
 
-  // ⑪ 内訳の点数を全部たす
   let total = 0;
 
   for (const item of breakdown) {
     total += item.points;
   }
 
-  // ⑫ 0〜100に収める（100を超えたら100、0未満なら0）
-  //   ※ ここで丸めるので、内訳の単純合計と totalScore がずれることがある
+  // 0〜100に収める（ここで丸めるので、内訳の単純合計と totalScore がずれることがある）
   return { totalScore: input.keepInRange(total), breakdown };
 }
 
@@ -159,44 +129,35 @@ export type EndingInput = {
   visitedPlaceCount: number;
   playCount: number;
 
-  /* 目もり（pages/index.vue のものをそのまま渡してもらう） */
+  /* 目もり（data/game.ts のものを渡してもらう） */
   fussMoodLine: number;
   totalPlaceCount: number;
   playedALotLine: number;
 };
 
 export type EndingResult = {
-  /* 'S+ランク' などのランク名（S+の曲の解放は composables/useGameResult.ts が受けもつ） */
+  /* 'S+ランク' などのランク名 */
   rank: string;
   title: string;
   message: string;
 };
 
-/* 遊びつかれて、親かこうちゃんの体力が減っているかどうか（isWornOut() の理由のうち「体力」だけ）
+/* 遊びつかれて、親かこうちゃんの体力が減っているか（isWornOut() の理由のうち「体力」だけ）
 
-   Cランクの「ちょっと遊びすぎた！」「今日はちょっと大変…」、
-   Dランクの「遊びこんでへとへと…」「今日は大変だった……」（あまり遊べないうちに へとへと）は、
-   これが true のときだけ出す
-   isWornOut() は、機嫌・余裕・いやいや・お昼すぎ でも true になるので、
-   それだけで決めると、少ししか遊んでいないのに「遊びすぎた」「へとへと」と出てしまう
-   （そのときは「バタバタ」の文章にする。いやいやや、ヒヤッとしたことで疲れた日なので）
-   （機嫌は55スタートで、ぐずりだすライン50のすぐ上。少し下がっただけで isWornOut() が true になる）
+   C／Dランクの「遊びすぎた」「どっと疲れた」「へとへと」は、これが true のときだけ出す
+   isWornOut() は機嫌・余裕・いやいや・お昼すぎ でも true になるので、それだけで決めると、
+   少ししか遊んでいないのに「遊びすぎた」と出てしまうため（そのときは「バタバタ」の文章にする）
+   （機嫌は55スタートなので、少し下がっただけで isWornOut() が true になる）
    体力は遊ぶたびにしっかり減るので、ここが下がっていれば「たくさん遊んで疲れた」と言える */
 function isTiredFromPlaying(input: EndingInput) {
   return input.parentEnergy < 50 || input.childEnergy < 30;
 }
 
-/* 「つかれて帰ってきた」と言える状態かどうか
+/* 「つかれて帰ってきた」と言える状態か
 
-   スコアが低くなる理由は、大きく分けて2つある
-   ① 遊びすぎて、こうちゃんも親もクタクタになった
-   ② ほとんど遊ばずに、すぐ帰ってきた
-   点数はどちらも同じくらい低くなるけれど、
-   ①に「まだまだ元気だね」と言うのも、
-   ②に「遊びすぎたね」と言うのもおかしいので、ここで見分けて文章を変える
-
-   ※ 使っている数字は、calculateScore() のボーナスの基準とそろえている
-     （＝「ボーナスをもらえなかった項目が1つでもあれば、疲れて帰ってきた」） */
+   スコアが低くなるのは、①遊びすぎてクタクタ ②ほとんど遊ばずにすぐ帰った、のどちらか
+   ①に「まだまだ元気だね」、②に「遊びすぎたね」と言うのはおかしいので、ここで見分けて文章を変える
+   ※ 数字は calculateScore() のボーナスの基準とそろえている（ボーナスをもらえなかった項目が1つでもあれば、疲れて帰ってきた） */
 function isWornOut(input: EndingInput) {
   if (isTiredFromPlaying(input)) {
     return true;
@@ -221,26 +182,14 @@ function isWornOut(input: EndingInput) {
   return false;
 }
 
-/* ランク・見出し・文章を決める
+/* ランク・見出し・文章を決める（いやいや3回以上は特殊エンド。それ以外は総合スコアで S+ / S / A / B / C / D）
 
-   上から順番に見て、あてはまった時点で決まる
-   ① いやいや3回以上 → 特殊エンド（通常ランクより優先）
-   ② 総合スコアで S+ / S / A / B / C / D を決める
-
-   ※ 同じランクでも、実際に何が起きたかで文章を変えている
-     画面には「回った場所」「帰った時間」「機嫌」も出ているので、
-     文章がそれとくいちがうと、遊んでいる人が混乱してしまうため
-     ・Aランク … こうちゃんの機嫌が低いときは「楽しそう」と書かない
-                  見出しに「最高」は使わない（上に S・S+ があるので、ランクより上に聞こえてしまう）
-     ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
-                  時間オーバーの見出しに「ぎりぎり」は使わない（間に合ったように読めてしまう）
-     ・C／Dランク … 「あまり遊べなかった」系の文は、遊んだ回数が少ないときだけ使う
-                     （同じ場所でくりかえし遊んだ人に言うと話が合わない）
-     ・C／Dランク … 「遊びすぎた」「どっと疲れた」「へとへと」は、体力が減っているときだけ使う（isTiredFromPlaying()）
-                     （機嫌・余裕・いやいや・時間だけで疲れた判定になった人に言うと話が合わない）
-
-   ※ GAME OVERのときは goToGoal() が先に return するので、この関数は呼ばれない
-*/
+   同じランクでも、実際に何が起きたかで文章を変える（画面に出ている記録と、文章がくいちがわないように）
+   ・Aランク … 機嫌が低いときは「楽しそう」と書かない。見出しに「最高」は使わない（上に S・S+ があるため）
+   ・Bランク … 時間オーバーか／まだ行っていない場所があるかで書きわける
+                時間オーバーの見出しに「ぎりぎり」は使わない（間に合ったように読めてしまう）
+   ・C／Dランク … 「あまり遊べなかった」系は、遊んだ回数が少ないときだけ
+                   「遊びすぎた」「へとへと」系は、体力が減っているときだけ（isTiredFromPlaying()） */
 export function judgeEnding(input: EndingInput): EndingResult {
   if (input.tantrumCount >= 3) {
     return {

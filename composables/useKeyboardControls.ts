@@ -1,8 +1,6 @@
 /* ============================================================
    キーボード操作をまとめた場所
 
-   ゲーム本編（pages/index.vue）にあったキーボードの処理を、そのまま移してある
-
    ■ ここがやること
      ・押されたキーを見て、どの画面の操作かを振り分ける
      ・選んでいる番号（selectedCommandIndex など）を動かす
@@ -10,19 +8,10 @@
      ・Enter / Space のときは、親からもらった runSelectedCommand() を呼ぶ
 
    ■ ここがやらないこと
-     ゲームの中身は、ぜんぶ親（pages/index.vue）に残してある
-     「どの番号で、どの遊びの関数を呼ぶか」を決める runSelectedCommand() も親のまま
-     （すべり台の遊びなども、今までどおり pages/index.vue の runPlaceAction() が実行する）
-
-     ステータス・時間・いやいや・おやつ・BGM・効果音も、いっさいさわらない
+     ゲームの中身（どの番号で、どの遊びの関数を呼ぶか・ステータス・音など）は、ぜんぶ親（pages/index.vue）のまま
 
    ■ 受けとるもの（options）
-     いま使っている ref・computed・関数を、そのまま渡してもらう
-     新しく状態を作って二重に持つことはしない
-     （たとえば selectedCommandIndex は、親が持っている ref をそのまま動かす）
-
-   ■ キーの受付
-     画面が表示されたときに window へ登録し、消えるときに外す（onMounted / onUnmounted）
+     親の ref・computed・関数を、そのまま渡してもらう（新しく状態を作って二重に持たない）
    ============================================================ */
 
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
@@ -56,8 +45,7 @@ export type UseKeyboardControlsOptions = {
   goalCommandIndex: ComputedRef<number>;
   isGoalConfirmVisible: ComputedRef<boolean>;
 
-  /* 公園入口で、その場所へ入るコマンドが何番か（出ていないときは null。→ pages/index.vue）
-     公園入口の地図で、矢印キーの移動先の番号を調べるのに使う */
+  /* 公園入口で、その場所へ入るコマンドが何番か（出ていないときは null）。地図の上の矢印キーの移動先を調べるのに使う */
   getPlaceSelectionIndex: (place: GameEvent) => number | null;
   isSecretPathPlaying: ComputedRef<boolean>;
 
@@ -77,8 +65,7 @@ export type UseKeyboardControlsOptions = {
 
   /* ===== 押されたときに親へお願いすること ===== */
 
-  /* Enter / Space で、いま選んでいるコマンドを実行する
-     どの番号がどの遊びかを決めるのは親の仕事（ゲームの中身は親に残してある） */
+  /* Enter / Space で、いま選んでいるコマンドを実行する */
   runSelectedCommand: () => void;
 
   /* 画面の開け閉め */
@@ -88,7 +75,7 @@ export type UseKeyboardControlsOptions = {
   closeHowToPlay: () => void;
   closeSnackMenu: () => void;
 
-  /* 「公園の出口へ向かう？」をやめる（決定音も鳴らす。→ pages/index.vue の cancelGoalConfirm()） */
+  /* 「公園の出口へ向かう？」をやめる（決定音も鳴らす） */
   cancelGoalConfirm: () => void;
   confirmGoToGoal: () => void;
 
@@ -99,8 +86,6 @@ export type UseKeyboardControlsOptions = {
 };
 
 export function useKeyboardControls(options: UseKeyboardControlsOptions) {
-  /* 受けとったものを、今までと同じ名前で使えるようにしておく
-     （こうすると、pages/index.vue にあったときのコードをそのまま動かせる） */
   const {
     titleEntered,
     gameStarted,
@@ -147,27 +132,15 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* ============================================================
      キーボード操作（各場所の「どうする？」コマンドボックス）
 
-     ・↑        1つ上のコマンドへ移動する
-     ・↓        1つ下のコマンドへ移動する
-     ・← →      1つ前（左）／次（右）のコマンドへ移動する（横ならびの選択肢や、結果を読む画面）
-     ・Enter    選択中のコマンドを実行する
-     ・Space    Enterと同じく、選択中のコマンドを実行する
-
-     ※ 結果・リザルトなどの「読む画面」で中身がスクロールするときは、
-       ↑↓ はスクロールに使い、コマンドは ← → で選ぶ（handleKeydown() の ⓪-3 と isReadingScene を参照）
-
-     これまでどおりマウスのクリックでも遊べる（クリック操作はそのまま）
-     ※ 起動画面・タイトル画面はボタンが1つだけなので、↑↓は使わず
-       Enter / Space だけで押せるようにしてある
-       （ゴール・GAME OVER画面はボタンが2つ横にならぶので、← → で行き来できる）
+     ・↑ ↓   1つ上・下のコマンドへ（はしでは回りこむ）
+     ・← →   1つ前（左）・次（右）のコマンドへ（横ならびの選択肢や、結果を読む画面。はしで止まる）
+     ・Enter / Space   選択中のコマンドを実行する
+     ※ 「読む画面」で中身がスクロールするときは、↑↓ はスクロールに使い、コマンドは ← → で選ぶ
+       （handleKeydown() の ⓪-3 と isReadingScene）
      ============================================================ */
 
-  /* ↑：1つ上のコマンドへ移動する
-     一番上（0）でさらに上を押したときは、一番下へ回りこむ
-     例）3つあるとき 0 → 2 → 1 → 0 …
-  */
+  /* ↑：1つ上のコマンドへ（一番上では、一番下へ回りこむ） */
   function moveCommandUp() {
-    // すでに一番上にいるなら、一番下（コマンド数 - 1）へ回りこむ
     if (selectedCommandIndex.value <= 0) {
       selectedCommandIndex.value = commandCount.value - 1;
       return;
@@ -176,12 +149,8 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectedCommandIndex.value -= 1;
   }
 
-  /* ↓：1つ下のコマンドへ移動する
-     一番下でさらに下を押したときは、一番上（0）へ戻る
-     例）3つあるとき 0 → 1 → 2 → 0 …
-  */
+  /* ↓：1つ下のコマンドへ（一番下では、一番上へ戻る） */
   function moveCommandDown() {
-    // すでに一番下にいるなら、一番上（0）へ戻る
     if (selectedCommandIndex.value >= commandCount.value - 1) {
       selectedCommandIndex.value = 0;
       return;
@@ -190,38 +159,20 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectedCommandIndex.value += 1;
   }
 
-  /* ←：1つ前（左）のコマンドへ移動する
-
-     横にならべた選択肢（いやいやタイム・とつぜんのできごと・秘密の小道・ゴール／GAME OVER）と、
-     結果を読む画面で使う
-     ↑↓ とちがい、いちばん左（0）では止まって、反対のはしへは回りこまない
-     （ボタンが2つの画面で「← は左のボタン、→ は右のボタン」と、押す前から分かるようにするため）
-     例）4つあるとき 3 → 2 → 1 → 0 → 0 …
-  */
+  /* ←：1つ前（左）のコマンドへ（横ならびの選択肢と、結果を読む画面で使う）
+     ↑↓ とちがい、はしで止まって回りこまない（ボタンが2つの画面で「← は左、→ は右」と、押す前から分かるように） */
   function moveCommandPrevious() {
     selectedCommandIndex.value = Math.max(0, selectedCommandIndex.value - 1);
   }
 
-  /* →：1つ次（右）のコマンドへ移動する
-     いちばん右（コマンド数 - 1）では止まる
-     例）3つあるとき 0 → 1 → 2 → 2 …
-  */
+  /* →：1つ次（右）のコマンドへ（はしで止まる） */
   function moveCommandNext() {
     selectedCommandIndex.value = Math.min(commandCount.value - 1, selectedCommandIndex.value + 1);
   }
 
-  /* ===== ここから下は、おやつバッグの中の↑↓ =====
+  /* ===== おやつバッグの中の↑↓（メインコマンドと同じ考えかたで、いちばん下が「← もどる」） ===== */
 
-     メインコマンドの↑↓（moveCommandUp / moveCommandDown）と同じ考えかたで、
-     見ている数が selectedSnackMenuIndex、いちばん下が「← もどる」（snackMenuBackIndex）に変わるだけ
-
-     例）バッグにグミ・せんべいがあるとき
-       0 グミ → 1 せんべい → 2 ← もどる → 0 グミ …
-  */
-
-  /* ↑：おやつバッグの1つ上の行へ */
   function moveSnackMenuUp() {
-    // すでに一番上にいるなら、一番下（← もどる）へ回りこむ
     if (selectedSnackMenuIndex.value <= 0) {
       selectedSnackMenuIndex.value = snackMenuBackIndex.value;
       return;
@@ -230,9 +181,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectedSnackMenuIndex.value -= 1;
   }
 
-  /* ↓：おやつバッグの1つ下の行へ */
   function moveSnackMenuDown() {
-    // すでに一番下（← もどる）にいるなら、一番上（0）へ戻る
     if (selectedSnackMenuIndex.value >= snackMenuBackIndex.value) {
       selectedSnackMenuIndex.value = 0;
       return;
@@ -241,15 +190,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectedSnackMenuIndex.value += 1;
   }
 
-  /* ===== ここから下は、公園入口（地図の上にならぶ行き先）のための処理 ===== */
+  /* ===== 公園入口（地図の上にならぶ行き先） ===== */
 
-  /* 地図の上の場所が、いま何番のコマンドか（地図に出ていないときは null）
-
-     番号は、ほかの画面と同じ selectedCommandIndex の番号をそのまま使う
-     （Enter / Space で runSelectedCommand() が選ぶ遊び、マウスで選んだときの番号と同じ）
-     ・行き先・きゅうけい … 親の getPlaceSelectionIndex()
-                           （秘密の小道がまだ出ていないときは null を返してくれる）
-     ・おうちへ帰る（ゴール） … goalCommandIndex */
+  /* 地図の上の場所が、いま何番のコマンドか（地図に出ていないときは null。番号は selectedCommandIndex と同じもの） */
   function getParkMapSpotIndex(spot: ParkMapSpot): number | null {
     if (spot === 'goal') {
       return goalCommandIndex.value;
@@ -259,25 +202,20 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   }
 
   /* 地図の上で、矢印キーで動く前にいた場所（「来たほうへ戻る」ために使う → data/parkMap.ts の parkMapReturnMoves）
-
-     矢印キーの動きかただけに使う覚え書きなので、ゲームの状態（useGameState）には入れない
-     マウス・タップで選びなおしたあとや、公園入口へ戻ってきたあとは古いままのこともあるが、
-     候補に入っていなければ使わないので、ふつうの動きかたになるだけ */
+     マウスで選びなおしたあとなどは古いままのこともあるが、候補に入っていなければ使わないので、ふつうの動きになるだけ */
   let previousMapSpot: ParkMapSpot | null = null;
 
   /* 公園入口の ↑ ↓ ← →：地図の上で、押した向きにある場所へ動かす
 
-     どこへ動くかは data/parkMap.ts の parkMapMoves に書いてある
-     候補を前から順に見て、いま地図に出ている最初の場所へ動く
-     ただし parkMapReturnMoves に書いた向きは、候補の中に直前にいた場所があれば、先にそこへ戻る
-     どの候補も出ていない・その向きに何もないときは、動かない（はしで止まる） */
+     候補（data/parkMap.ts の parkMapMoves）を前から見て、いま地図に出ている最初の場所へ動く
+     parkMapReturnMoves に書いた向きは、候補の中に直前にいた場所があれば、先にそこへ戻る
+     どの候補も出ていないときは、動かない（はしで止まる） */
   function moveEntranceOnMap(direction: ParkMapDirection) {
     const spots = Object.keys(parkMapMoves) as ParkMapSpot[];
 
-    // いま選んでいる番号が、地図のどの場所か
     const current = spots.find((spot) => getParkMapSpotIndex(spot) === selectedCommandIndex.value);
 
-    // どの場所でもない（番号がずれている）ときは、公園入口に来たときと同じ場所（地図のまん中の芝生広場）へ戻す
+    // どの場所でもない（番号がずれている）ときは、地図のまん中へ戻す
     if (!current) {
       selectedCommandIndex.value = getPlaceSelectionIndex(parkMapStartPlace) ?? 0;
       return;
@@ -301,64 +239,34 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   }
 
   /* ============================================================
-     起動画面（A）・タイトル画面（B）のキーボード操作
+     起動画面（A）・タイトル画面（B）のキーボード操作（どちらもボタン4つ）
 
-     この2つの画面で操作するものは、A画面もB画面も4つ
        A … ① はじめる             ② ♪（サウンドトラック）   ③ 🎮 ミニゲーム ④ サウンドON/OFF
        B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
+     ①がその画面のメインのボタンで、画面が出たときは①にフォーカスを当てる
 
-     ①がその画面のメインのボタン
-     画面が出たときは、いつも①にフォーカスが当たるようにしてある
-
-     ・Tab / Shift+Tab … ブラウザのふつうの移動
-                         （はしまで来たら、反対のはしへ回りこませる）
-     ・↑ ← ↓ →        … 画面の並びのとおりに動かす、補助の操作
-                         （くわしい行き先は moveTitleFocusByArrow() を見ること）
+     ・Tab / Shift+Tab … ブラウザのふつうの移動（はしでは反対のはしへ回りこませる）
+     ・↑ ← ↓ →        … 画面の並びのとおりに動かす（→ moveTitleFocusByArrow()）
      ・Enter / Space   … 選んでいるボタンを実行する
-
-     ここに書いてあるのはA画面・B画面のことだけで、
-     ゲームが始まったあと（gameStarted）の操作には、いっさい関係しない
      ============================================================ */
 
-  /* いまの画面で選べるボタンを、選ぶ順番どおりに取り出す
-
-     画面に出ていないボタンは null が入っているので、取りのぞいてから返す
-     ゲームが始まったあとは、この操作じたいを使わないので空っぽを返す */
+  /* いまの画面で選べるボタンを、選ぶ順番（＝Tab の順番）どおりに取り出す
+     ゲームが始まったあと・あそびかた画面・おやつ選択画面では、空っぽを返す
+     （A画面・B画面のボタンが出ていないので、矢印キー・Tab の回りこみ・フォーカスが、どれも動かないようにする） */
   function getTitleFocusItems(): HTMLButtonElement[] {
     if (gameStarted.value) {
       return [];
     }
 
-    /* あそびかた画面のときも空っぽを返す（おやつ選択画面と同じ理由）
-
-       この画面にはA画面・B画面のボタンが出ていないので、
-       タイトル側の矢印キー・Tabの回りこみ・メインのボタンへのフォーカスが
-       どれも動かないようにしておく
-       （あそびかた画面のキー操作は handleHowToPlayKeydown() が受け持つ） */
     if (isHowToPlayOpen.value) {
       return [];
     }
 
-    /* おやつ選択画面のときも空っぽを返す
-
-       この画面にはA画面・B画面のボタン3つが出ていないので、
-       並びを返してしまうと「もう画面に無い『きょうのおやつを選ぶ』へ
-       フォーカスを動かす」ことになってしまう
-       （selectSnacksButtonRef などは画面から消えると null に戻るが、
-         消えたあとに参照しないほうが分かりやすい）
-
-       空っぽを返すと、この画面では
-       ・moveTitleFocusByArrow() … 何もしない
-       ・focusTitleMainButton()  … 何もしない
-       ・handleTitleKeydown()    … すぐ return する
-       となり、おやつ選択画面のキー操作はブラウザ本来の
-       Tab / Shift+Tab ・ Enter / Space だけになる */
     if (isSnackSelectionOpen.value) {
       return [];
     }
 
-    /* 並びは「メイン → 上の行のボタンを左から順に」
-       Tabキーで回る順番（HTMLに書いた順番）と同じにしてある */
+    // 並びは「メイン → 上の行のボタンを左から順に」
     const items = titleEntered.value
       ? [selectSnacksButtonRef.value, backToBootButtonRef.value, howToPlayButtonRef.value, soundToggleButtonRef.value] // B画面
       : [startButtonRef.value, soundtrackButtonRef.value, minigameButtonRef.value, soundToggleButtonRef.value]; // A画面
@@ -368,34 +276,19 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
   /* ↑↓←→ でフォーカスを動かす
 
-     ■ A画面（ボタン4つ）
-
+     ■ A画面
        [ ♪ ][ 🎮 ミニゲーム ]        [ サウンドON/OFF ]
-
                     [ はじめる ]
 
-     ■ B画面（ボタン4つ）
-
+     ■ B画面
        [ はじめの画面へ戻る ]     [ ？ あそびかた ][ サウンドON/OFF ]
-
                    [ きょうのおやつを選ぶ ]
 
-     どちらの画面も「下にメインのボタンが1つ、上の行にいくつか」の形なので、同じ動きにしている
-       ・↑ ↓ … メインのボタンと、上の行を行き来する
-                （メインからは、さっき上の行でいたボタンへ戻る。覚えていないときは左上のボタン（♪／はじめの画面へ戻る）へ）
-       ・← → … 上の行を、となりへ1つずつ動く
-                （はしまで来たら反対のはしへ回りこむ。メインにいるときは、←で左上・→で右上のサウンドへ）
-
-     どのキーもかならずどこかへ動くので、ボタンを矢印キーだけで選べる
-
-     ※ 前はA画面だけ「上の行は2つ」と決めて書いていたが、
-       ミニゲームの入口が増えて上の行が3つになったので、B画面と同じ書きかたにそろえた */
-  /* 上の行から ↓ でメインのボタンへ下りたとき、上の行のどのボタンにいたか
-
-     ↑ で上の行へ戻るときに、同じボタンへ戻すために覚えておく
-     （サウンドから↓で「はじめる」へ下りたら、↑でサウンドへ戻る。A画面の 🎮 ミニゲーム・B画面の ？ あそびかた も同じ）
-     ボタンそのものを覚えているので、A画面⇄B画面で画面が入れかわると、もう画面に無いボタンになる
-     そのときは覚えていないのと同じにして、左上のボタンへ戻す */
+     どちらも「下にメインのボタンが1つ、上の行にいくつか」の形なので、同じ動きにしている
+       ・↑ ↓ … メインのボタンと、上の行を行き来する（メインからは、さっき上の行でいたボタンへ戻る）
+       ・← → … 上の行を、となりへ1つずつ動く（はしでは回りこむ。メインからは、←で左上・→で右上のサウンドへ） */
+  /* 上の行から ↓ でメインへ下りたとき、上の行のどのボタンにいたか（↑ で同じボタンへ戻すため）
+     A画面⇄B画面で入れかわると、もう画面に無いボタンになるので、そのときは左上のボタンへ戻す */
   let lastTitleTopItem: HTMLButtonElement | null = null;
 
   function moveTitleFocusByArrow(key: string) {
@@ -403,12 +296,10 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     const active = document.activeElement;
 
     // そろっていないときは何もしない（画面の切りかわり中など）
-    // どちらの画面も4つ
     if (items.length < 4) {
       return;
     }
 
-    // getTitleFocusItems() の並びは「メイン → 上の行を左から」
     const [mainButton, ...topRow] = items;
 
     // 上の行の何番目にいるか（上の行にいないときは -1）
@@ -417,10 +308,8 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     // ↑ ↓：メインのボタン ⇔ 上の行
     if (key === 'ArrowUp' || key === 'ArrowDown') {
       if (active === mainButton) {
-        /* 上の行へ戻るときは、さっき上の行でいた場所へ戻る（→ lastTitleTopItem）
-           （サウンドから↓で「はじめる」へ来たなら、↑でサウンドへ戻る）
-           覚えている場所が無い・この画面には無い（A→Bで画面が変わった など）ときは、
-           真上の左上のボタンへ（A画面なら ♪ サウンドトラック、B画面なら はじめの画面へ戻る） */
+        /* 上の行へ戻るときは、さっき上の行でいた場所へ戻る
+           覚えている場所が無い・この画面には無いときは、左上のボタンへ */
         const lastTopItem = lastTitleTopItem && topRow.includes(lastTitleTopItem) ? lastTitleTopItem : topRow[0];
 
         lastTopItem.focus();
@@ -448,87 +337,40 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     topRow[rightIndex].focus();
   }
 
-  /* その画面のメインのボタン（はじめる／きょうのおやつを選ぶ）へフォーカスを当てる
-
-     画面が切りかわった直後は、新しいボタンがまだ作られていない
-     そこで nextTick()（画面の書きかえが終わるのを待つ）をはさんでからフォーカスする */
+  /* その画面のメインのボタンへフォーカスを当てる（画面が切りかわった直後は、まだボタンが無いので nextTick() を待つ） */
   async function focusTitleMainButton() {
     await nextTick();
 
     const items = getTitleFocusItems();
 
-    // 先頭が、その画面のメインのボタン
     items[0]?.focus();
   }
 
   /* ============================================================
      おやつ選択画面のキーボード操作
 
-     ・↑ ↓ ← → … 画面にならんでいるとおりに、となりのボタンへ動く
-     ・Enter / Space … いま選んでいるボタンを押す（選ぶ・解除・決定）
-     ・Escape        … B画面へ戻る
-     ・Tab / Shift+Tab … ブラウザのふつうの移動（こちらでは何もしない）
+     ・↑ ↓ ← →        … 画面にならんでいるとおりに、となりのボタンへ動く
+     ・Enter / Space   … いま選んでいるボタンを押す（ボタンを押すのはブラウザにまかせる）
+     ・Escape          … B画面へ戻る
+     ・Tab / Shift+Tab … ブラウザのふつうの移動
 
-     ■ 「いまどこを選んでいるか」は、フォーカスそのもので覚えている
+     ■ 「いまどこを選んでいるか」は、番号ではなくフォーカスそのもので覚える
+       番号とフォーカスの2つを持つと、Tab・矢印・マウスで動かしたときに かならずズレるため
+       （フォーカスの枠は「カーソルがここにある」という意味で、「バッグに入れた」こととは別物）
 
-       ゲーム本編は selectedCommandIndex のような番号で選択位置を持っているが、
-       この画面ではそれを作っていない
-
-       理由は、番号とフォーカスの2つを持つと、かならずズレるため
-       （Tabで動かすとフォーカスだけ動く、矢印で動かすと番号だけ動く…）
-       ブラウザのフォーカス1つだけを「いまの居場所」と決めておけば、
-       矢印・Tab・マウスのどれで動かしても、ズレようがない
-
-       見た目は、ボタンの :focus-visible（紺色の枠）が知らせてくれる
-       これは「いまカーソルがここにある」という意味で、
-       「バッグに入れた」ことを表すカードの色の変化とは別物
-       （矢印キーで動かしただけでは、selectedSnackIds は変わらない）
-
-     ■ 行き先は「画面のどこにあるか」で決めている
-
-       おやつは、いまはパソコンでもスマホでも グミ／チョコ が横にならぶ2列
-       ただ、列の数は CSS（base.css の .snack-list）で決めていて、
-       前はスマホだけ1列にしていたように、画面の広さによって変わることがある
-
-       ここで「2列だから、2つ先が真下」と番号で計算してしまうと、
-       列の数が変わったとたんに、ぜんぶズレてしまう
-
-       そこで getBoundingClientRect()（＝そのボタンが画面のどこにあるか）を
-       その場で調べて、押した矢印の向きにあるボタンへ動かしている
-       こうすると、CSSの列数を JavaScript 側で知らなくてよい
-       画面幅の数字（600px など）をこのファイルへ書き足す必要もない
+     ■ 行き先は「画面のどこにあるか」（getBoundingClientRect()）で決める
+       おやつの列の数は CSS で決めていて、画面の広さで変わることがある
+       番号で「2つ先が真下」と計算すると、列の数が変わったとたんにズレるため
 
      ■ Enter / Space は、ここでは実行しない
-
-       おやつのカードも、出発も、戻るも、サウンドも、ぜんぶ button なので、
-       フォーカスが当たっていれば、ブラウザが勝手に click してくれる
-       ここで toggleSnackSelection() などを呼ぶと、
-       ブラウザのclickと合わせて2回動いてしまう
-       （1回押しただけで「選ぶ→すぐ解除」になってしまう）
-
-       なので、この関数がEnter / Spaceについてやるのは、
-       「押しっぱなしを止める」ことだけ
-       （A画面・B画面の handleTitleKeydown() と同じ考えかた）
+       ぜんぶ button なので、ブラウザが click してくれる。ここでも呼ぶと2回動いてしまう
+       （1回押しただけで「選ぶ→すぐ解除」になる）。やるのは押しっぱなしを止めることだけ
      ============================================================ */
 
-  /* 矢印キーで行き来できるボタンを、ぜんぶ取り出す
+  /* 矢印キーで行き来できるボタンを、ぜんぶ取り出す（おやつのカード・出発・戻る・サウンド）
 
-     探すのはこの4つ
-       .snack-option     … おやつのカード（6枚）
-       .snack-go         … このおやつで公園へ行く！
-       .title-card__back … ← ひとつ前の画面へ戻る
-       .sound-toggle     … サウンドON/OFF
-
-     並び順はここでは気にしなくてよい
-     行き先は、このあと画面のどこにあるかで決めるため
-     （おやつが7個・8個に増えても、ここは直さなくてよい）
-
-     最後の filter で、押せないボタンを取りのぞいている
-     ・バッグがいっぱいのときの、選んでいないおやつ
-     ・まだ2個そろっていないときの「このおやつで公園へ行く！」
-     押せないボタンは矢印キーでも飛ばしたいので、
-     画面に出す条件（disabled）をそのまま使いまわしている
-     ＝ 見た目と操作の判定が1か所で済み、食いちがわない */
+     並び順は気にしなくてよい（行き先は、画面のどこにあるかで決める）
+     押せないボタン（disabled）は取りのぞく（見た目と操作の判定が1か所で済み、食いちがわない） */
   function getSnackSelectionFocusItems(): HTMLButtonElement[] {
     const container = snackSelectionRef.value;
 
@@ -541,14 +383,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     return items.filter((item) => !item.disabled);
   }
 
-  /* 矢印キーの向き */
   type SnackArrowDirection = 'up' | 'down' | 'left' | 'right';
 
-  /* ボタン1つぶんの「画面のどこにあるか」
-
-     rect … 上下左右のふち（重なっているかを調べるのに使う）
-     x, y … まんなかの位置（どれだけ離れているかを測るのに使う）
-  */
+  /* ボタン1つぶんの「画面のどこにあるか」（rect … 上下左右のふち ／ x, y … まんなかの位置） */
   type SnackNavItem = {
     button: HTMLButtonElement;
     rect: DOMRect;
@@ -558,48 +395,12 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
   /* 矢印キーでフォーカスを動かす（画面の見た目どおりに）
 
-     やることは3つだけ
-
-     ① いまいるボタンと、ほかのボタンの位置を調べる
-     ② 押した矢印の向きにあるものだけに しぼる
-     ③ そのなかから、いちばん自然なものを1つ選んで、フォーカスを当てる
-
-     ■ ← → のとき（②のしぼりかた）
-
-       「同じ行にあること」を条件にしている
-       同じ行かどうかは、上下のふちが重なっているかで調べる
-       （rect.top と rect.bottom を見くらべる）
-
-       こうしておかないと、グミで→を押したときに、
-       1つ下の行のビスケットのような、ななめのボタンへ飛んでしまう
-
-     ■ ↑ ↓ のとき（③の選びかた）
-
-       まず「いちばん近い行」を見つけて、そのなかで
-       「横の位置がいちばん近いもの」を選ぶ
-
-       たとえばパソコンでグミ（左の列）から↑を押すと、
-       上の行にあるのは「← ひとつ前の画面へ戻る」（左はし）と
-       「サウンドON/OFF」（右はし）の2つ
-       グミは左の列にあるので、横の位置が近い「戻る」が選ばれる
-       チョコ（右の列）から↑なら、同じ理由で「サウンド」が選ばれる
-
-       スマホで1列になると、グミの真上には同じように上の行の2つがあり、
-       カードが画面いっぱいの幅になるぶん、まんなか寄りになる
-       それでも近いほうの「戻る」が選ばれるので、
-       列数を気にしなくても自然な動きになる
-
-     ■ 行き先が無いときは、動かない
-
-       たとえば「← ひとつ前の画面へ戻る」で↑を押しても、
-       その上にはボタンが無いので、その場に残る
-       2個選んでいて、グミの下のせんべいが押せないときも、
-       押せるボタンだけを見るので、変なところへは飛ばない
-
-     rowTolerance（12px）は「同じ行とみなす、たての ずれ」の許容
-     同じ行のボタンは、まんなかの高さがほぼ同じになるが、
-     ボタンの高さがちがうと数pxずれることがあるので、少しだけ余裕を持たせる
-     （行と行のあいだは100px以上あるので、12pxで取りちがえることはない） */
+     ・← → … 同じ行（上下のふちが重なっている）にあるものだけを候補にする
+              （そうしないと、ななめ下の行のボタンへ飛んでしまうため）
+     ・↑ ↓ … いちばん近い行を見つけて、その中で横の位置がいちばん近いものを選ぶ
+              （グミから↑なら、左はしの「戻る」。列の数を気にしなくても自然な動きになる）
+     ・行き先が無いときは、動かない
+     rowTolerance … 「同じ行」とみなす、たてのずれの許容（ボタンの高さのちがいで数pxずれるため。行と行は100px以上離れている） */
   function moveSnackSelectionByArrow(direction: SnackArrowDirection) {
     const items = getSnackSelectionFocusItems();
 
@@ -607,11 +408,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    // いまフォーカスしているボタンを探す
     const currentButton = items.find((item) => item === document.activeElement);
 
-    /* どこにもフォーカスが無いとき（画面のすきまをクリックしたあとなど）は、
-       最初のおやつから始める */
+    // どこにもフォーカスが無いとき（すきまをクリックしたあとなど）は、最初のおやつから始める
     if (!currentButton) {
       items[0].focus();
       return;
@@ -630,7 +429,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
     // ← → ：同じ行の中で、その向きにあるものだけ
     if (direction === 'left' || direction === 'right') {
-      // 上下のふちが重なっている＝同じ行にいる
       const sameRow = others.filter((item) => item.rect.bottom > current.rect.top + 1 && item.rect.top < current.rect.bottom - 1);
 
       const candidates = sameRow.filter((item) => (direction === 'left' ? item.x < current.x : item.x > current.x));
@@ -646,30 +444,17 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* いちばん近い行だけに しぼる
-
-       いちばん近いボタンまでの たての距離を出して、
-       そこから rowTolerance のうちにあるものを「同じ行」とみなす */
+    // いちばん近い行だけに しぼる
     const nearestRowDistance = Math.min(...candidates.map((item) => Math.abs(item.y - current.y)));
     const nearestRow = candidates.filter((item) => Math.abs(item.y - current.y) <= nearestRowDistance + rowTolerance);
 
-    // その行の中で、横の位置がいちばん近いものへ
     focusNearestSnackItem(nearestRow, current, 'x');
   }
 
-  /* 候補の中から、いちばん近いものへフォーカスを当てる
+  /* 候補の中から、いちばん近いものへフォーカスを当てる（axis … 'x' なら横、'y' ならたての位置で測る）
 
-     axis … 'x' なら横の位置、'y' ならたての位置で近さを測る
-
-     同じ近さのものが2つあったときは、先に見つけたほう（HTMLで先に書いてあるほう）
-     を選ぶようにしてある
-     たとえば「このおやつで公園へ行く！」は画面の幅いっぱいにあるので、
-     ↑を押すと バナナ と ゼリー がまったく同じ近さになる
-     そのときは、左にある バナナ へ動く（毎回同じ動きになるので迷わない）
-
-     0.5 を引いて くらべているのが、その「同じ近さ」の判定
-     画面の位置は小数で返ってくることがあるので、
-     0.5px くらいの差は「同じ」とみなしている */
+     同じ近さのものが2つあったときは、HTMLで先に書いてあるほうを選ぶ（毎回同じ動きになるので迷わない）
+     画面の位置は小数で返ってくることがあるので、0.5px くらいの差は「同じ」とみなす */
   function focusNearestSnackItem(candidates: SnackNavItem[], current: SnackNavItem, axis: 'x' | 'y') {
     if (candidates.length === 0) {
       return;
@@ -689,16 +474,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     nearest.button.focus();
   }
 
-  /* マウスを乗せたおやつへ、キーボードの居場所も移す
-
-     この画面の「いまどこを選んでいるか」はフォーカスそのものなので、
-     マウスに合わせるには、そのカードへフォーカスを移せばよい
-
-     preventScroll: true は「フォーカスを当てるときに画面を動かさない」指示
-     これが無いと、マウスを乗せただけで画面が少しスクロールすることがある
-
-     ※ 乗せただけでは、おやつは選ばれない（selectedSnackIds は変わらない）
-       選ぶのは click と、そのボタンの Enter / Space だけ */
+  /* マウスを乗せたおやつへ、キーボードの居場所（＝フォーカス）も移す
+     preventScroll: true … マウスを乗せただけで画面がスクロールしないように
+     ※ 乗せただけでは選ばない（選ぶのは click と Enter / Space だけ） */
   function moveSnackSelectionToHovered(event: MouseEvent) {
     const hovered = event.currentTarget;
 
@@ -707,24 +485,15 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     }
   }
 
-  /* おやつ選択画面でキーを押したときの処理 */
   function handleSnackSelectionKeydown(event: KeyboardEvent) {
-    /* ① Escape … B画面へ戻る
-
-       画面のどこにフォーカスがあっても戻れるように、いちばん先に見る
-       「← ひとつ前の画面へ戻る」を押したのと、まったく同じ処理にする
-       （closeSnackSelection() を呼ぶだけなので、
-         選んだおやつは消えないし、ゲームも始まらない） */
+    /* ① Escape … B画面へ戻る（どこにフォーカスがあっても戻れるように、いちばん先に見る。選んだおやつは消えない） */
     if (event.key === 'Escape') {
       event.preventDefault();
       closeSnackSelection();
       return;
     }
 
-    /* ② ↑ ↓ ← → … 画面のならびどおりに動かす
-
-       矢印キーでページがスクロールしてしまわないように preventDefault() する
-       押しっぱなしは止めない（連続で動いてよいので） */
+    /* ② ↑ ↓ ← → … 画面のならびどおりに動かす（ページがスクロールしないように preventDefault。押しっぱなしは止めない） */
     const arrowDirections: Record<string, SnackArrowDirection> = {
       ArrowUp: 'up',
       ArrowDown: 'down',
@@ -744,40 +513,23 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     const isDecideKey = event.key === 'Enter' || event.key === ' ';
 
     if (!isDecideKey) {
-      // Tab などは、ブラウザのふつうの動きにまかせる
       return;
     }
 
-    /* 押しっぱなし（長押し）のときは、2回目以降をここで止める
-
-       キーには自動リピートがあるので、Enterを押したままにすると
-       フォーカスしているボタンが何度も押されてしまう
-       ・おやつのカード … 選ぶ／解除がパタパタくり返されてしまう
-       ・出発のボタン   … ゲーム開始が二重に走ってしまう
-
-       preventDefault() を呼ぶと、ブラウザは
-       このキーでボタンを押すのをやめてくれる */
+    /* 押しっぱなしのときは、2回目以降を止める
+       （自動リピートで、選ぶ／解除がパタパタくり返されたり、ゲーム開始が二重に走ったりするため） */
     if (event.repeat) {
       event.preventDefault();
       return;
     }
 
-    /* ボタンにフォーカスが当たっているときは、ここでは何もしない
-
-       そのボタンを「押す」のはブラウザの仕事なので、
-       ここでも toggleSnackSelection() などを呼ぶと、2回動いてしまう
-
-       preventDefault() を呼ばずに return するのが大事
-       呼んでしまうと、フォーカスしているボタン自身が押せなくなる */
+    /* ボタンにフォーカスがあるときは、何もしない（押すのはブラウザの仕事）
+       ※ preventDefault() を呼ばずに return するのが大事（呼ぶと、そのボタン自身が押せなくなる） */
     if (document.activeElement instanceof HTMLButtonElement) {
       return;
     }
 
-    /* どこにもフォーカスが無いときは、最初のおやつへカーソルを出すだけにする
-
-       ここでいきなり選んでしまうと、
-       「どれが選ばれるのか見えないまま決まった」ことになってしまう
-       いったんカーソルを出して、もう一度Enterで選んでもらう */
+    // どこにもフォーカスが無いときは、最初のおやつへカーソルを出すだけ（見えないまま選ばれないように）
     event.preventDefault();
     focusFirstSnackOption();
   }
@@ -785,21 +537,13 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* ============================================================
      あそびかた画面のキーボード操作
 
-     ・Escape          … タイトル画面（B画面）へ戻る（「← ひとつ前の画面へ戻る」と同じ closeHowToPlay()）
-     ・← →             … 上の「← ひとつ前の画面へ戻る」と「サウンドON/OFF」を行き来する
-                         （どちらかにフォーカスがあるときだけ）
-     ・↑ ↓             … ここでは何もしない（ブラウザのふつうのスクロールにまかせる）
-     ・Tab / Shift+Tab … ブラウザのふつうの移動（おやつ選択画面と同じく、回りこませない）
-     ・Enter / Space   … ボタンを押すのはブラウザにまかせる。押しっぱなしを止めるだけ
-
-     ■ 横取りするキーを、できるだけ少なくしている
-
-       この画面は、ほかの画面とちがって「読む」ための縦に長いページ
-       ↑↓・Space・PageUp / PageDown・Home / End でふつうにスクロールできるよう、
-       preventDefault() するのは、ここで実際に何かをしたキーだけにしてある
+     ・Escape        … B画面へ戻る
+     ・← →           … 上の「← 戻る」と「サウンド」を行き来する（どちらかにフォーカスがあるときだけ）
+     ・↑ ↓ など      … 何もしない（ふつうのスクロールにまかせる）
+     ・Enter / Space … 押すのはブラウザにまかせる。押しっぱなしを止めるだけ
+     読むための縦に長いページなので、preventDefault() するのは、実際に何かをしたキーだけ
      ============================================================ */
   function handleHowToPlayKeydown(event: KeyboardEvent) {
-    // ① Escape … どこにフォーカスがあってもB画面へ戻る
     if (event.key === 'Escape') {
       event.preventDefault();
       closeHowToPlay();
@@ -807,10 +551,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     }
 
     /* ② ← → … 上のツールバーの2つを行き来する
-
-       どちらかのボタンにフォーカスがあるときだけ動かす
-       本文を読んでいる途中（ほかの場所にフォーカスがあるとき）に←→で上のボタンへ飛ぶと、
-       フォーカスに合わせて画面がいちばん上までスクロールしてしまうため */
+       どちらかにフォーカスがあるときだけ（本文を読んでいる途中に上のボタンへ飛ぶと、いちばん上までスクロールしてしまうため） */
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       const backButton = howToBackButtonRef.value;
       const soundButton = soundToggleButtonRef.value;
@@ -832,19 +573,15 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* ③ Enter / Space … ボタンの押しっぱなし（長押し）だけ止める
-
-       ボタンを押すのはブラウザの仕事なので、ここでは closeHowToPlay() などを呼ばない
-       （呼ぶと、ブラウザのclickと合わせて2回動いてしまう）
-       押しっぱなしのときは、サウンドON/OFFがパタパタ切りかわらないように止めておく
-
+    /* ③ Enter / Space … 押しっぱなしだけ止める（サウンドON/OFFがパタパタ切りかわらないように）
+       押すのはブラウザの仕事なので、ここでは呼ばない（呼ぶと2回動く）
        ボタンにフォーカスが無いときの Space は止めない（ページを下へスクロールするふつうの動き） */
     if ((event.key === 'Enter' || event.key === ' ') && event.repeat && document.activeElement instanceof HTMLButtonElement) {
       event.preventDefault();
     }
   }
 
-  /* A画面・B画面でキーを押したときの処理（ゲーム本編とは分けてある） */
+  /* A画面・B画面でキーを押したときの処理 */
   function handleTitleKeydown(event: KeyboardEvent) {
     const items = getTitleFocusItems();
 
@@ -852,33 +589,21 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    // ①② ↑ ↓ ← →：画面の並びのとおりにフォーカスを動かす
+    // ①② ↑ ↓ ← →：画面の並びのとおりにフォーカスを動かす（ページがスクロールしないように preventDefault）
     if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      // 矢印キーでページがスクロールしてしまわないようにする
       event.preventDefault();
       moveTitleFocusByArrow(event.key);
       return;
     }
 
-    /* ③ Tab：ふだんはブラウザにまかせる（＝いつもどおりの移動）
-
-       ただし、いちばん後ろのボタンで Tab を押すと、
-       フォーカスが画面の外（ブラウザの上のほう）へ出ていってしまう
-       そこで、はしに来たときだけ反対のはしへ回りこませる
-       こうすると Tab でも3つをぐるぐる回れる */
+    /* ③ Tab：ふだんはブラウザにまかせる
+       いちばん後ろで Tab を押すと、フォーカスが画面の外（ブラウザの上のほう）へ出てしまうので、はしでは反対のはしへ回りこませる */
     if (event.key === 'Tab') {
       const first = items[0];
 
-      /* いちばん後ろは「音量スライダー」
-
-         スライダーはボタンではないので items には入っていないが、
-         HTMLではサウンドボタンのすぐ後ろ（＝いちばん最後）に置いてある
-         ここで行き先に入れておかないと、サウンドボタンでTabを押したときに
-         スライダーを飛びこして、先頭まで戻ってしまう
-
-         ※ A画面には音量スライダーが無い（まだ音が鳴っていない画面なので出していない）
-           そのときは soundVolumeSliderRef が null になるので、
-           items のいちばん後ろ（＝ミュートボタン）が、そのまま行き先になる */
+      /* いちばん後ろは音量スライダー（ボタンではないので items に入っていないが、HTML ではいちばん最後にある）
+         入れておかないと、サウンドボタンで Tab を押したときにスライダーを飛びこしてしまう
+         ※ A画面にはスライダーが無いので、そのときはミュートボタンがいちばん後ろ */
       const last = soundVolumeSliderRef.value ?? items[items.length - 1];
 
       if (!event.shiftKey && document.activeElement === last) {
@@ -902,25 +627,16 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* 押しっぱなし（長押し）のときは、2回目以降をここで止める
-
-       Enterを押しっぱなしにすると、キーの自動リピートで
-       「はじめる」を押す → B画面へ進む → そのまま「きょうのおやつを選ぶ」も押される、
-       と続けて進んでしまうため、preventDefault で先へ行かせない */
+    /* 押しっぱなしのときは、2回目以降を止める
+       （「はじめる」→ B画面 → そのまま「きょうのおやつを選ぶ」も押される、と続けて進んでしまうため） */
     if (event.repeat) {
       event.preventDefault();
       return;
     }
 
-    /* ボタンなどにフォーカスが当たっているときは、ここでは何もしない
-
-       そのボタンを「押す」のはブラウザがやってくれるので、
-       ここで「はじめる」「きょうのおやつを選ぶ」まで動かしてしまうと、
-       1回押しただけで2つのことが起きてしまう
-       （例：サウンドON/OFFでSpaceを押すと、切り替えと同時に画面が進んでしまう）
-
-       preventDefault を呼ばずに return するのが大事
-       呼んでしまうと、フォーカスしているボタン自身が押せなくなる */
+    /* ボタンなどにフォーカスがあるときは、何もしない（押すのはブラウザの仕事）
+       ここでもメインのボタンを動かすと、1回押しただけで2つのことが起きてしまう
+       ※ preventDefault を呼ばずに return するのが大事（呼ぶと、そのボタン自身が押せなくなる） */
     const active = document.activeElement;
 
     if (
@@ -933,19 +649,12 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* どこも選んでいない（body など）ときは、
-       今までどおり、その画面のメインのボタンを押したことにする */
-
-    // Spaceでページが下にスクロールするのを防ぐ
+    // どこも選んでいない（body など）ときは、その画面のメインのボタンを押したことにする（Space のスクロールは止める）
     event.preventDefault();
 
     if (!titleEntered.value) {
-      enterTitle(); // A画面の「▶ はじめる」
+      enterTitle();
     } else {
-      /* B画面の「きょうのおやつを選ぶ」
-
-         押したときと同じで、ここでもゲームは始まらない
-         まずおやつ選択画面へ進む（公園へ出発するのは、そのあと） */
       openSnackSelection();
     }
   }
@@ -953,37 +662,19 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   /* ============================================================
      読む画面のスクロール（↑↓）
 
-     行動の結果・いやいやタイム・とつぜんのできごと・秘密の小道・ゴール／GAME OVER は、
-     文章を「読む」画面なので、中身が画面に収まらないときは
-     ↑↓ をスクロールに使い、コマンドは ← → で選ぶ
-     （スクロールしない＝画面に収まっているときは、今までどおり ↑↓ でも選べる）
-
-     公園入口と、通常の場所で結果が出る前の「どうする？」は、
-     選択肢そのものを選ぶメニューなので、今までどおり ↑↓ で選ぶ
-     選んだボタンが画面の外なら、revealSelectedCommand() で見える位置まで動かす
-
-     ※ 見るのは「スクロールできるか」だけで、「いま一番上／一番下か」は見ない
-       一番下で ↓ を押しても、とつぜんコマンド選択に切りかわらないようにするため
+     結果・いやいやタイム・とつぜんのできごと・秘密の小道・ゴール／GAME OVER は「読む」画面なので、
+     中身が画面に収まらないときは ↑↓ をスクロールに使い、コマンドは ← → で選ぶ（収まっているときは ↑↓ でも選べる）
+     公園入口と、通常の場所で結果が出る前の「どうする？」は、メニューなので ↑↓ で選ぶ
+     ※ 見るのは「スクロールできるか」だけ（一番下で ↓ を押しても、とつぜんコマンド選択に切りかわらないように）
      ============================================================ */
 
-  /* ゲーム画面の入れもの（上部ステータス ＋ いまの場面）
-     場面（.scene）をさがすときに、この中だけを見る */
+  /* ゲーム画面の入れもの（場面（.scene）をさがすときに、この中だけを見る） */
   const gameScreenRef = ref<HTMLElement | null>(null);
 
   /* ↑↓ を「読むためのスクロール」に使ってよい画面か
-
-     ✕ 公園入口                   … 行き先を選ぶメニュー
-     ✕ 通常の場所で結果が出る前     … 「どうする？」はたて1列のメニュー
-     ✕ 秘密の小道で遊んでいる最中   … キー操作は handleSecretPathKeydown() が先に受け取る
-     ○ それ以外のゲーム画面
-       行動の結果（いやいや発生の結果もふくむ）・いやいやタイム（対応を選ぶ前／続いている結果／おさまった結果）・
-       とつぜんのできごと（選ぶ前／結果）・秘密の小道（はじまる前／終わったあと）・ゴール・GAME OVER
-
-     ※ いやいや発生の結果は、まだ currentEvent が 'tantrum' ではなく、通常の場所の結果として出る
-       そのため currentEvent ではなく「結果が出ているか」で見分けている
-     ※ 通常の場所6か所と ひとやすみ（ベンチ）は、「どうする？」がたて1列なので、↑↓ はコマンドを選ぶのに使う
-     ※ おやつバッグは handleKeydown() でこれより先に受け取るので、
-       開いているあいだの ↑↓ はスクロールに取られない */
+     ✕ 公園入口・通常の場所とひとやすみで結果が出る前（たて1列のメニュー）・秘密の小道で遊んでいる最中
+     ※ いやいや発生の結果は、まだ currentEvent が 'tantrum' ではないので、「結果が出ているか」で見分ける
+     ※ おやつバッグは handleKeydown() でこれより先に受け取るので、開いているあいだの ↑↓ はスクロールに取られない */
   const isReadingScene = computed(() => {
     if (currentEvent.value === 'parkEntrance' || isSecretPathPlaying.value) {
       return false;
@@ -993,16 +684,12 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   });
 
   /* いま画面に出ている場面（.scene）
-
-     消えかけの前の場面（.scene-leave-active）はふくめない
-     ほかの場面の結果カードや .stage を、まちがってスクロールしないようにするため
-     （場面の切りかえは mode="out-in" なので、消えかけのあいだは次の場面がまだ無く、null になる） */
+     消えかけの前の場面はふくめない（ほかの場面を、まちがってスクロールしないように） */
   function getCurrentSceneElement() {
     return gameScreenRef.value?.querySelector<HTMLElement>(':scope > .scene:not(.scene-leave-active)') ?? null;
   }
 
-  /* 要素の中身を、その要素の中でスクロールできるか
-     overflow-y が auto / scroll で、中身が1pxより多くはみ出しているとき */
+  /* 要素の中身を、その要素の中でスクロールできるか（overflow-y が auto / scroll で、1pxより多くはみ出している） */
   function canScrollInside(element: HTMLElement | null): element is HTMLElement {
     if (!element) {
       return false;
@@ -1017,21 +704,14 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     return element.scrollHeight - element.clientHeight > 1;
   }
 
-  /* スクロールする要素の「見えている高さ」
-     ページ全体（document.scrollingElement）は、ウィンドウの高さで見る */
+  /* スクロールする要素の「見えている高さ」（ページ全体は、ウィンドウの高さで見る） */
   function getScrollViewHeight(element: HTMLElement) {
     return element === document.scrollingElement ? window.innerHeight : element.clientHeight;
   }
 
-  /* ↑↓ でスクロールできる要素を、先に動かす順に返す（スクロールできないものは入れない）
-
-     1. 結果カードの中身（.result-card__body）
-     2. その場面の中央エリア（.stage）
-     3. ページ全体（スマホ幅では .stage が伸びて、ページごとスクロールする）
-
-     空っぽなら「スクロールしない画面」＝ ↑↓ は今までどおりコマンドを選ぶ
-     ※ 結果カードは場面ごとに1枚ずつあるが、いま出ている場面の中だけをさがすので、
-       場面ごとに別々の処理を書かなくてよい */
+  /* ↑↓ でスクロールできる要素を、先に動かす順に返す
+     結果カードの中身 → その場面の中央エリア（.stage）→ ページ全体（スマホ幅）
+     空っぽなら「スクロールしない画面」＝ ↑↓ はコマンドを選ぶ */
   function getSceneScrollers(scene: HTMLElement) {
     const scrollers: HTMLElement[] = [];
 
@@ -1058,10 +738,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
   /* ↑↓ を1回押したぶん、スクロールする
 
-     前の候補が、その向きにはもう動けない（いちばん上／下まで来た）ときは、次の候補を動かす
-     （結果カードを読みおえたら、そのまま .stage やページの続きへ進める。マウスホイールと同じ動き）
-     どれも動けないときは何もしない（コマンド選択には切りかえない）
-
+     前の候補がその向きにもう動けないときは、次の候補を動かす（マウスホイールと同じ動き）
      ・1回に動かす量 … 見えている高さの2割（60〜120px）
      ・behavior: 'auto' … なめらかスクロールを積み重ねないので、押しっぱなしでも続けて動く */
   function scrollSceneByArrow(scrollers: HTMLElement[], direction: 1 | -1) {
@@ -1083,16 +760,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   }
 
   /* キーボードで選んだコマンドが見えていないときだけ、見える位置までスクロールする
-
-     ・公園入口の「どこへ行く？」のように、選択肢の枠そのものがスクロールする画面
-     ・↑↓ で結果を読んでいるうちに、コマンドの枠が画面の外へ出ている画面
-     で「キーボードでは選べているのに、何を選んでいるか見えない」状態にしないためのもの
-
-     block: 'nearest' … もう見えているなら動かさない
-     ※ 選んでいる印（--selected）が付くのは画面の書きかえのあとなので、nextTick で待つ */
+     （block: 'nearest' … もう見えているなら動かさない。選んでいる印が付くのは書きかえのあとなので、nextTick で待つ） */
   function revealSelectedCommand() {
-    // 見える位置へスクロールすると、止まったままのマウスの下に別のボタンが来て、
-    // @mouseenter でキーボードの選択が上書きされてしまうので、マウスを動かすまで止めておく（isCommandPointerPaused を参照）
+    // スクロールすると、止まったままのマウスの下に別のボタンが来て、選択が上書きされるので、マウスを動かすまで止めておく
     pauseCommandPointer();
 
     nextTick(() => {
@@ -1102,50 +772,20 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     });
   }
 
-  /* キーボードのキーが押されたときの処理
-
-     ここが今回のキーボード操作の入口
-     ① キー操作しない画面なら、なにもしないで終わり
-     ② ↑↓ならコマンドを動かす（読む画面でスクロールできるときは、スクロールする）
-     ③ ← →なら、となりのコマンドへ動かす
-     ④ Enter / Space なら、選択中のコマンドを実行する
-  */
+  /* キーボードのキーが押されたときの処理（キーボード操作の入口） */
   function handleKeydown(event: KeyboardEvent) {
     /* 画面がフェードで切りかわっている最中は、キーを受けつけない
-
-       見えているのは前の画面なのに、中身（state）はもう次の画面のものになっている
-       ここでEnterを押せてしまうと、見えていない次の画面のボタンまで
-       続けて押したことになってしまうため
-       （例：「はじめる」→ 見えないうちに「きょうのおやつを選ぶ」まで押されてゲームが始まる）
-
-       マウスのほうは、消えかけの画面を押せなくするCSSで止めている
-       （.screen-fade-leave-active の pointer-events: none） */
+       （見えているのは前の画面なのに中身はもう次の画面なので、見えていないボタンまで押してしまうため） */
     if (isScreenChanging.value) {
       return;
     }
 
-    /* 音量スライダーを選んでいるあいだは、ゲームのキー操作をしない
-
-       このゲームのキー操作は window 全体で受け取っているため、
-       スライダーを選んだまま ← → を押すと
-       「音量を変える」と「コマンドを選びなおす」が同時に起きてしまう
-
-       input type="range" は、ブラウザがもともと
-       ・← →        … 1目もり（1%）ずつ増やす・減らす
-       ・Home / End  … 0% / 100%
-       を用意してくれているので、ここでは何もせず、そのままブラウザにまかせる
-       Enter / Space はスライダーでは何も起きないキーだが、
-       そのまま下へ行くとゲームの「決定」になってしまうので、ここで止めておく
-
-       ※ event.preventDefault() は呼ばない
-         呼ぶと、そのブラウザ本来の操作まで止まってしまう
-       ※ Tab と Escape は、わざと素通りさせている
-         Tab … A画面・B画面の「いちばん後ろまで行ったら先頭へ戻る」を今までどおり動かすため
-         Escape … おやつ選択画面・あそびかた画面から、今までどおり戻れるようにするため
-       ※ 画面ごとの分岐より前（いちばん上）に置くのが大事
-         A画面・B画面・おやつ選択画面・あそびかた画面・ゲーム本編と、
-         スライダーはどの画面にも出ているので、ここ1か所でまとめて止められる
-    */
+    /* 音量スライダーを選んでいるあいだは、ゲームのキー操作をしない（ブラウザ本来のスライダーの操作にまかせる）
+       window 全体で受け取っているので、← → で「音量を変える」と「コマンドを選びなおす」が同時に起きてしまうため
+       Enter / Space もここで止める（下へ行くとゲームの「決定」になってしまう）
+       ※ preventDefault() は呼ばない（呼ぶと、スライダー本来の操作まで止まる）
+       ※ Tab と Escape は素通りさせる（Tab の回りこみと、Escape で戻る操作を、今までどおり動かすため）
+       ※ スライダーはどの画面にも出ているので、画面ごとの分岐より前（いちばん上）に置く */
     const sliderOwnKeys = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown', 'Enter', ' '];
     const keyTarget = event.target as HTMLElement | null;
 
@@ -1153,47 +793,19 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* ⓪ あそびかた画面
-
-       おやつ選択画面・A画面・B画面より先に見る（画面の出し分けと同じ順番）
-       あとに置くと、あそびかた画面なのに
-       画面に無いB画面のボタンを矢印キーで動かそうとしてしまう
-       （getTitleFocusItems() も、この画面では空を返すようにしてある）
-       ・Escape         … B画面へ戻る
-       ・← →            … 上の「戻る」と「サウンド」を行き来する
-       ・↑ ↓            … 横取りしない（ふつうのスクロール）
-       ・Tab / Enter / Space … ブラウザのふつうの動き */
+    /* 画面ごとに、専用の関数へまかせる（画面の出し分けと同じ順番で見る）
+       あそびかた画面・おやつ選択画面を、A画面・B画面より先に見るのが大事
+       （あとに置くと、画面に無いB画面のボタンを操作しようとしてしまうため） */
     if (!gameStarted.value && isHowToPlayOpen.value) {
       handleHowToPlayKeydown(event);
       return;
     }
 
-    /* ⓪ おやつ選択画面
-
-       この画面は、操作するものが「おやつのカード ＋ 出発 ＋ 戻る ＋ サウンド」で、
-       A画面・B画面ともゲーム本編ともちがう
-       そのため、ここで分けて専用の関数にまかせる
-       ・↑ ↓ ← →     … 画面のならびどおりに、となりのボタンへ動く
-       ・Enter / Space … 選んでいるボタンを押す（選ぶ・解除・決定）
-       ・Escape        … B画面へ戻る
-       ・Tab           … ブラウザのふつうの移動
-
-       ※ A画面・B画面の分岐（この下の⓪）より前に置くのが大事
-         あとに置くと、おやつ選択画面なのに
-         画面に無いB画面のボタンを操作しようとしてしまう
-         （getTitleFocusItems() も、この画面では空を返すようにしてある） */
     if (!gameStarted.value && isSnackSelectionOpen.value) {
       handleSnackSelectionKeydown(event);
       return;
     }
 
-    /* ⓪ 起動画面（A）・タイトル画面（B）
-
-       この2画面は、操作するものが「ボタン3つ」だけで、
-       ゲーム本編とは考えかたがちがう
-       そのため、いちばん最初にここで分けて、専用の関数にまかせる
-       （キーの受付は window の1か所のままなので、
-         同じようなリスナーが2つに増えることはない） */
     if (!gameStarted.value) {
       handleTitleKeydown(event);
       return;
@@ -1201,34 +813,20 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
     /* ここから下は、ゲーム本編（gameStarted === true）だけの処理 */
 
-    /* ⓪-00 秘密の小道（ミニゲーム）で遊んでいる最中
-
-       ← → / A D はミニゲームの操作だけに使い、ふつうのコマンド操作（↑↓・Enter）は動かさない
-       はじまる前（小道へ進む／← 場所選びにもどる）と終わったあと（先へ進む）は、ここを通らずに
-       いつもどおりのコマンド操作になる（commandCount は はじまる前 2・終わったあと 1） */
+    /* ⓪-00 秘密の小道で遊んでいる最中は、ミニゲームの操作だけにする
+       （はじまる前と終わったあとは、ここを通らずに、いつもどおりのコマンド操作になる） */
     if (isSecretPathPlaying.value) {
       handleSecretPathKeydown(event);
       return;
     }
 
-    /* ⓪-0 「公園の出口へ向かう？」の確認ダイアログが開いているとき
+    /* ⓪-0 「公園の出口へ向かう？」の確認ダイアログが開いているとき（いちばん手前なので、ほかの操作より先に見る）
 
-       画面のいちばん手前に出ているので、ほかのどの操作より先に見る
-       開いているあいだは、キー操作をぜんぶダイアログで受け取る
-       （うしろの「どこへ行く？」のコマンドは動かない）
-
-       ・← ↑           「もう少し遊ぶ」を選ぶ
-       ・→ ↓           「出口へ向かう」を選ぶ
-                         （スマホ幅では2つのボタンが たてに並ぶので、↑↓でも同じ向きになる）
-       ・Tab           2つのボタンを行き来する（うしろの画面へカーソルを逃がさない）
-       ・Enter / Space 選んでいるボタンを押す
-       ・Escape        閉じる（「もう少し遊ぶ」と同じ）
-
-       ※ 長押し（event.repeat）の Enter / Space は受けつけない
-         「公園の出口へ向かう」で Enter を押しっぱなしにしても、
-         ダイアログが開いた直後に、そのまま次のボタンまで押されてしまわないようにする
-       ※ ここにあるキーだけ preventDefault() する
-         それ以外のキー（ブラウザの再読みこみなど）は、じゃましない */
+       ・← ↑ … 「もう少し遊ぶ」／ → ↓ … 「出口へ向かう」（スマホ幅では たてに並ぶので、↑↓でも同じ向き）
+       ・Tab … 2つのボタンを行き来する（うしろの画面へカーソルを逃がさない）
+       ・Enter / Space … 選んでいるボタンを押す（押しっぱなしは受けつけない。開いた直後に次のボタンまで押されないように）
+       ・Escape … 閉じる
+       ※ ここにあるキーだけ preventDefault() する（ブラウザの再読みこみなどは、じゃましない） */
     if (isGoalConfirmVisible.value) {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -1271,45 +869,23 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* 画面の中のボタンにフォーカスしているときは、ゲームのキー操作をしない
-
-       このゲームのキー操作は window 全体で受け取っているため、
-       音ボタンを選んだ状態で Enter を押すと、
-       「音のON/OFF」と「ゲームの決定（次の場所を選ぶ など）」が同時に起きてしまう
-       それを防ぐために、ここで抜ける
-
-       ここで抜けるボタン
-       ・.sound-toggle … サウンドのON/OFF（上部バーにあるもの）
-
-       ※ event.preventDefault() は呼ばない
-         呼ばずに return することで、button本来の Enter / Space による
-         クリック動作はブラウザにそのまま任せられる
-    */
+    /* 上部バーのサウンドボタンにフォーカスしているときは、ゲームのキー操作をしない
+       （Enter で「音のON/OFF」と「ゲームの決定」が同時に起きてしまうため）
+       ※ preventDefault() は呼ばない（ボタン本来のクリックは、ブラウザにまかせる） */
     const target = event.target as HTMLElement | null;
 
     if (target?.closest?.('.sound-toggle')) {
       return;
     }
 
-    // Enter と Space は、どちらも同じ「決定」として扱う
-    // Space は event.key では ' '（半角スペース1文字）になる
+    // Space は event.key では ' '（半角スペース1文字）
     const isDecideKey = event.key === 'Enter' || event.key === ' ';
 
-    /* ⓪-1 おやつバッグが開いているとき
+    /* ⓪-1 おやつバッグが開いているとき（いちばん内側のメニューなので、メインコマンドより先に見る）
 
-       いちばん内側のメニューなので、メインコマンドより先に見る
-
-       ・↑↓           バッグの中で選ぶ（いちばん下は「← もどる」）
-       ・Enter / Space 選んでいるおやつを食べる（「← もどる」なら戻る）
-       ・Escape        1つ前のメニューへ戻る（ひとやすみ の休憩・おやつ／いやいやのコマンド）
-                       ゲームを終えたり、タイトルへ戻ったりはしない
-
+       ・↑↓ … バッグの中で選ぶ ／ Enter / Space … 食べる（「← もどる」なら戻る）／ Escape … 1つ前のメニューへ
        ※ Enter / Space で preventDefault() を呼ぶのが大事
-         フォーカスが当たっているボタンの「本来のクリック」が止まるので、
-         1回押しただけで「ここでの実行」と「ボタンのクリック」の2回ぶん
-         おやつを食べてしまう、ということが起きない
-         （メインコマンドと同じやりかた）
-    */
+         フォーカスの当たったボタンの本来のクリックが止まるので、2回ぶん食べてしまうことがない */
     if (isSnackMenuVisible.value) {
       if (event.key === 'Escape') {
         event.preventDefault();
@@ -1318,7 +894,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       }
 
       if (event.key === 'ArrowUp') {
-        // 矢印キーでページが上下にスクロールしてしまわないようにする
         event.preventDefault();
         moveSnackMenuUp();
         return;
@@ -1331,10 +906,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       }
 
       if (isDecideKey) {
-        // Spaceでページが下にスクロールするのを防ぐ（ボタン本来のクリックも、これで止まる）
         event.preventDefault();
 
-        // 押しっぱなし（長押し）で、おやつを続けて食べてしまわないようにする
+        // 押しっぱなしで、おやつを続けて食べてしまわないように
         if (event.repeat) {
           return;
         }
@@ -1343,32 +917,21 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
         return;
       }
 
-      // ここまでに当てはまらないキー（←→など）は、何もしないでブラウザにまかせる
       return;
     }
 
-    // 公園入口だけは、行き先が地図の上にバラバラに並んでいるので、
-    // ↑↓←→ の動きかたが他の場所とちがう（押した向きにある場所へ動く → moveEntranceOnMap()）
+    // 公園入口は、行き先が地図の上にバラバラに並んでいるので、矢印キーの動きかたがちがう（→ moveEntranceOnMap()）
     const isEntrance = currentEvent.value === 'parkEntrance';
 
-    /* ⓪-3 読む画面で ↑↓ を押したとき（どの画面が「読む画面」かは isReadingScene を参照）
+    /* ⓪-3 読む画面で ↑↓ を押したとき（→ isReadingScene）
 
-       結果カードの中身・中央エリア・ページのどれかがスクロールできるなら、
-       ↑↓ はスクロールだけに使い、コマンドは動かさない（コマンドは この下の ③ の ← → で選ぶ）
-       どれもスクロールできない（画面に収まっている）ときは、この下の ①② で今までどおりコマンドを選ぶ
-
-       次の画面を、ここ1か所でまとめて受け取っている（場面ごとに別の処理は書かない）
-       ・ゴール／GAME OVER のリザルト
-       ・いやいやタイム（対応を選ぶ前・まだ続いている結果・おさまった結果）
-       ・行動の結果（いやいや発生の結果もふくむ）
-       ・とつぜんのできごと（選ぶ前・結果）／秘密の小道（はじまる前・終わったあと）
-
-       ※ 押しっぱなし（event.repeat）でも止めない。続けてスクロールできるようにするため */
+       どれかがスクロールできるなら、↑↓ はスクロールだけに使う（コマンドは ③ の ← → で選ぶ）
+       どれもスクロールできないときは、①② でコマンドを選ぶ
+       ※ 押しっぱなしでも止めない（続けてスクロールできるように） */
     if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && isReadingScene.value) {
       const scene = getCurrentSceneElement();
 
-      // 場面が切りかわっている最中（次の場面がまだ無い）は、何もしない
-      // ここでコマンドを動かしてしまうと、次の場面が出たときに選択がずれているため
+      // 場面が切りかわっている最中は、何もしない（コマンドを動かすと、次の場面が出たときに選択がずれているため）
       if (!scene) {
         event.preventDefault();
         return;
@@ -1380,24 +943,22 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
         event.preventDefault();
         scrollSceneByArrow(scrollers, event.key === 'ArrowUp' ? -1 : 1);
 
-        // スクロールで止まったままのマウスの下にボタンが来ても、選択が変わらないようにする（isCommandPointerPaused を参照）
+        // スクロールで止まったままのマウスの下にボタンが来ても、選択が変わらないように
         pauseCommandPointer();
         return;
       }
     }
 
-    // ① ↑：1つ上のコマンドへ
+    // ① ↑：1つ上のコマンドへ（公園入口は、地図の上で上にある場所へ）
     if (event.key === 'ArrowUp') {
-      // 矢印キーでページが上下にスクロールしてしまわないようにする
       event.preventDefault();
 
       if (isEntrance) {
-        moveEntranceOnMap('up'); // 公園入口は、地図の上で上にある場所へ
+        moveEntranceOnMap('up');
       } else {
-        moveCommandUp(); // たて1列の場所は1つ上へ
+        moveCommandUp();
       }
 
-      // 選んだコマンドが画面の外（スクロールで隠れたところ）にあれば、見える位置へ
       revealSelectedCommand();
       return;
     }
@@ -1407,41 +968,36 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       event.preventDefault();
 
       if (isEntrance) {
-        moveEntranceOnMap('down'); // 公園入口は、地図の上で下にある場所へ
+        moveEntranceOnMap('down');
       } else {
-        moveCommandDown(); // たて1列の場所は1つ下へ
+        moveCommandDown();
       }
 
       revealSelectedCommand();
       return;
     }
 
-    /* ③ ← →：となりのコマンドへ1つ動かす
-
-       ・公園入口 … 地図の上で左／右にある場所へ（はしで止まる → moveEntranceOnMap()）
-       ・読む画面 … 1つ前（左）／次（右）へ
-                    横ならびの選択肢（いやいや・とつぜんのできごと・秘密の小道・ゴール／GAME OVER）は、見た目の左右と同じ向きに動く
-                    ↑↓ で結果をスクロールしているあいだも、ここでコマンドを選べる
-                    ボタンが1つだけの画面では、押しても何も変わらない
-       ・通常の場所で結果が出る前 … 「どうする？」はたて1列なので、左右キーは使わない */
+    /* ③ ← →：となりのコマンドへ
+       ・公園入口 … 地図の上で左／右にある場所へ
+       ・読む画面 … 1つ前（左）／次（右）へ（横ならびの選択肢は、見た目の左右と同じ向きに動く）
+       ・通常の場所で結果が出る前 … たて1列なので、左右キーは使わない */
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
       if (!isEntrance && !isReadingScene.value) {
         return;
       }
 
-      // 矢印キーでページが左右にスクロールしてしまわないようにする
       event.preventDefault();
 
       if (isEntrance) {
         if (event.key === 'ArrowLeft') {
-          moveEntranceOnMap('left'); // 地図の上で左にある場所へ
+          moveEntranceOnMap('left');
         } else {
-          moveEntranceOnMap('right'); // 地図の上で右にある場所へ
+          moveEntranceOnMap('right');
         }
       } else if (event.key === 'ArrowLeft') {
-        moveCommandPrevious(); // ← は1つ左へ（いちばん左で止まる）
+        moveCommandPrevious();
       } else {
-        moveCommandNext(); // → は1つ右へ（いちばん右で止まる）
+        moveCommandNext();
       }
 
       revealSelectedCommand();
@@ -1450,12 +1006,10 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
     // ④ Enter / Space：いま選んでいるコマンドを実行する
     if (isDecideKey) {
-      // Spaceでページが下にスクロールするのを防ぐ
-      // （フォーカスの当たったボタンが二重に押されるのも、これで防げる）
+      // Space のスクロールと、フォーカスの当たったボタンが二重に押されるのを防ぐ
       event.preventDefault();
 
-      // 押しっぱなし（長押し）のときは、同じ行動が何度も実行されてしまうので、
-      // 2回目以降のkeydownはここで止める
+      // 押しっぱなしで、同じ行動が何度も実行されないように
       if (event.repeat) {
         return;
       }
@@ -1465,8 +1019,6 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     }
   }
 
-  /* 画面が表示されているあいだだけ、キーボードの受付をする
-     （pages/index.vue の onMounted / onUnmounted でやっていた登録・解除を、そのまま持ってきた） */
   onMounted(() => {
     window.addEventListener('keydown', handleKeydown);
   });
