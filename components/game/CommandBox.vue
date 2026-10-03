@@ -2,29 +2,14 @@
 /* ============================================================
    「どうする？」のコマンド欄（選択肢のならんだ枠）
 
-   ■ このコンポーネントは「選択肢を出して、押されたことを親へ伝えるだけ」
-     行動の中身（遊ぶ・休憩する・おやつを食べる・いやいやへの対応など）は、
-     ぜんぶ親（pages/index.vue）の関数がやる
-     ここでは @select や @leave のように「押された」と伝えるだけで、
-     ステータス・時間・ゲームの進行はさわらない
+   ・選択肢を出して、押されたことを親へ伝えるだけ（行動の中身は、ぜんぶ親の pages/index.vue）
+   ・選ばれている番号は親が持っていて、v-model で受け取る（キー操作は useKeyboardControls.ts）
 
-   ■ キーボード操作も親のまま
-     いま何番目が選ばれているか（selectedIndex など）は親が持っていて、
-     ここは v-model で受け取って「選ばれている見た目」にするだけ
-     ↑↓キーやEnterの処理は、今までどおり pages/index.vue にある
-     （マウスを乗せたとき・フォーカスが来たときだけ、番号の更新を親へお願いする）
-
-   ■ 場面によって中身がちがう（variant で見分ける）
-     place       … 通常の場所6か所
-                   その場所の遊び2つ ＋ 場所選びにもどる
-     rest        … ひとやすみ（公園入口の「ひとやすみ」から入るベンチ）
-                   休憩する ＋ おやつにする（おやつバッグ） ＋ 場所選びにもどる
-     tantrum     … いやいやタイム（お話・だっこ・おやつ・待つ、おやつバッグ）
+   ■ 場面によって中身がちがう（variant）
+     place       … 通常の場所6か所（その場所の遊び2つ ＋ 場所選びにもどる）
+     rest        … ひとやすみ（休憩する ＋ おやつにする ＋ 場所選びにもどる）
+     tantrum     … いやいやタイム（お話・だっこ・おやつ・待つ）
      suddenEvent … とつぜんのできごと（選択肢3つ）
-
-     ※ 前は、通常の場所の「どうする？」に「休憩・おやつ」があり、
-       押すと上に「ひとやすみ」のサブメニューが開く作りだった
-       休憩・おやつはどの場所でも同じ効果なので、公園入口の「ひとやすみ」（rest）へまとめた
    ============================================================ */
 
 import { snackBagImage } from '~/data/snacks';
@@ -88,8 +73,7 @@ withDefaults(
   },
 );
 
-/* いま選ばれている番号（親が持っているものを、そのまま借りてくる）
-   メインコマンド・おやつバッグの中で、それぞれ別の番号を使う */
+/* いま選ばれている番号（メインコマンドとおやつバッグで、別の番号を使う） */
 const selectedIndex = defineModel<number>('selectedIndex', { required: true });
 const snackIndex = defineModel<number>('snackIndex', { default: 0 });
 
@@ -136,24 +120,11 @@ defineEmits<{
           <span class="command-box__text">{{ command.label }}</span>
         </button>
 
-        <!-- ここから下は「どこでも同じコマンド」という区切り
-
-             上の2つ … その場所ならではの遊び（すべる・見守る など）
-             下の1つ … ← 場所選びにもどる（どの場所でも同じ）
-
-             同じ枠の中にならんでいても種類がちがうので、
-             あいだに細い線と小さな見出しを入れて、
-             ひとめで「ここからは別のなかま」と分かるようにする
-
-             ※ ボタンではなくただの見出しなので、
-               ↑↓キーの番号（selectedIndex）には数えない
-             ※ 前はここに「休憩・おやつ」もあったが、公園入口の「ひとやすみ」へ移した -->
+        <!-- ここから下は「どこでも同じコマンド」という区切り（種類がちがうことを、ひとめで分かるように）
+             ※ ただの見出しなので、↑↓キーの番号には数えない -->
         <p class="command-box__divider">そのほか</p>
 
-        <!-- 「← 場所選びにもどる」… この場所では遊ばずに、公園入口の「どこへ行く？」へ戻る
-
-             よく使うコマンドなので、見た目も上の行動と
-             まったく同じ（同じ文字の大きさ・同じ色）にそろえてある -->
+        <!-- 「← 場所選びにもどる」（よく使うので、見た目は上の行動とまったく同じ） -->
         <button
           class="command-box__item"
           :class="{ 'command-box__item--selected': selectedIndex === leavePlaceCommandIndex }"
@@ -178,21 +149,11 @@ defineEmits<{
     </template>
 
     <!-- ============ ひとやすみ（ベンチ） ============
-
-         休憩とおやつは、その場所ならではの遊びではなく
-         「どこでも同じ、親子の状態を整える行動」なので、
-         公園入口の「ひとやすみ」から入る、この画面にまとめている
-
-         0 休憩する
-         1 おやつにする（バッグにおやつが残っているときだけ。押すとおやつバッグが開く）
-         最後 ← 場所選びにもどる（番号はおやつの有無で変わるので leavePlaceCommandIndex を見る） -->
+         休憩とおやつは「どこでも同じ、親子の状態を整える行動」なので、ここにまとめている
+         「← 場所選びにもどる」の番号はおやつの有無で変わるので leavePlaceCommandIndex を見る -->
     <template v-else-if="variant === 'rest'">
-      <!-- おやつバッグ（「おやつにする」を押したあと）
-           休憩・おやつのコマンドと入れかえて、同じ枠の中に出す（いやいやタイムのバッグと同じ形）
-           ならべるのはバッグに残っているおやつ（selectedSnacks）だけで、食べたおやつはここからも消える
-           「← もどる」・Escape で、休憩する／おやつにする に戻る -->
+      <!-- おやつバッグ（同じ枠の中身を入れかえて出す。バッグに残っているおやつだけをならべる） -->
       <template v-if="isSnackMenuVisible">
-        <!-- 見出しの左のリュックの絵は data/snacks.ts の snackBagImage（前は 🎒 の絵文字。くわしくは command-box.css の .snack-menu__labelIcon） -->
         <p class="command-box__label snack-menu__label">
           <span class="snack-menu__labelIcon">
             <img class="snack-menu__labelImage" :src="snackBagImage" alt="" decoding="async" />
@@ -208,8 +169,7 @@ defineEmits<{
           @click="$emit('eatSnack', snack.id)"
           @mouseenter="snackIndex = index"
           @focus="snackIndex = index">
-          <!-- おやつの絵（おやつ選択画面のカードと同じ画像。くわしくは assets/css/game/command-box.css の .snack-menu__icon）
-               alt="" … となりに名前の文字があるので、絵はかざりとして読ませない（「グミ グミ」と2回読まれないように） -->
+          <!-- おやつの絵（となりに名前があるので、「グミ グミ」と2回読まれないよう alt は空） -->
           <span class="snack-menu__icon">
             <img class="snack-menu__image" :src="snack.image" alt="" decoding="async" />
           </span>
@@ -244,8 +204,7 @@ defineEmits<{
           <span class="command-box__text">休憩する</span>
         </button>
 
-        <!-- バッグにおやつが残っているときだけ出す
-             ※ バッグは、いやいやタイムで使うおやつと同じ selectedSnackIds -->
+        <!-- バッグにおやつが残っているときだけ出す（いやいやタイムと同じバッグ） -->
         <button
           v-if="snackLeft > 0"
           class="command-box__item"
@@ -272,8 +231,7 @@ defineEmits<{
         </button>
       </template>
 
-      <!-- 休憩・おやつの結果のあと（「次の場所を選ぶ」の1つだけ。押すと公園入口の「どこへ行く？」へ）
-           12:00を過ぎたときは、ほかの行動のあとと同じく「公園の出口へ向かう」になる（→ nextPlaceCommandLabel） -->
+      <!-- 休憩・おやつの結果のあと（「次の場所を選ぶ」の1つだけ） -->
       <template v-else>
         <button
           class="command-box__item"
@@ -288,11 +246,8 @@ defineEmits<{
 
     <!-- ============ いやいやタイム ============ -->
     <template v-else-if="variant === 'tantrum'">
-      <!-- おやつバッグ（「おやつをあげる」を押したあと）
-           いやいやのコマンドと入れかえて、同じ枠の中に出す
-           「← もどる」・Escape で、お話／だっこ／おやつ／待つ に戻る -->
+      <!-- おやつバッグ（ひとやすみと同じ形） -->
       <template v-if="isSnackMenuVisible">
-        <!-- 見出しの左のリュックの絵は、ひとやすみのおやつバッグと同じ（data/snacks.ts の snackBagImage） -->
         <p class="command-box__label snack-menu__label">
           <span class="snack-menu__labelIcon">
             <img class="snack-menu__labelImage" :src="snackBagImage" alt="" decoding="async" />
@@ -308,8 +263,7 @@ defineEmits<{
           @click="$emit('eatSnack', snack.id)"
           @mouseenter="snackIndex = index"
           @focus="snackIndex = index">
-          <!-- おやつの絵（おやつ選択画面のカードと同じ画像。くわしくは assets/css/game/command-box.css の .snack-menu__icon）
-               alt="" … となりに名前の文字があるので、絵はかざりとして読ませない（「グミ グミ」と2回読まれないように） -->
+          <!-- おやつの絵（となりに名前があるので、「グミ グミ」と2回読まれないよう alt は空） -->
           <span class="snack-menu__icon">
             <img class="snack-menu__image" :src="snack.image" alt="" decoding="async" />
           </span>
@@ -368,8 +322,7 @@ defineEmits<{
 
         <p v-else class="command-box__note">おやつは、もうぜんぶ食べてしまいました…</p>
 
-        <!-- 少し待ってみる
-             番号はおやつの有無で変わるので waitCommandIndex を見る（おやつあり 3／なし 2） -->
+        <!-- 少し待ってみる（番号はおやつの有無で変わるので waitCommandIndex を見る） -->
         <button
           class="command-box__item"
           :class="{ 'command-box__item--selected': selectedIndex === waitCommandIndex }"
@@ -425,16 +378,6 @@ defineEmits<{
   </nav>
 </template>
 
-<!-- 見た目は、このコンポーネント専用の assets/css/game/command-box.css だけを読みこむ
-     （理由は components/game/StatusBar.vue の <style> の説明と同じ。
-       index.vue の scoped CSS は、このコンポーネントの中の要素には届かないため）
-
-     ■ game.css まるごとではなく command-box.css だけにした理由
-       game.css を読むと、結果カードやリザルトなど、ここでは使わないCSSまで
-       このコンポーネントぶんとして、もう一度ビルド結果に出てしまう
-
-     ※ 「どうする？」のコマンド欄（.command-box 〜）は pages/index.vue の
-       秘密の小道でも使うので、app.vue からグローバルに読みこむ
-       command-shared.css にある
-     ※ command-box.css は game.css からは読みこまない（二重出力になるため） -->
+<!-- 見た目は command-box.css だけ（game.css をまるごと読むと、使わないCSSまで二重に出力されるため）
+     共通の .command-box 〜 は、app.vue が読みこむ command-shared.css にある -->
 <style scoped src="~/assets/css/game/command-box.css"></style>
