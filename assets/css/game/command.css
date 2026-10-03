@@ -467,83 +467,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* ===== 公園入口の「どこへ行く？」を、1画面に収める =====
-     ① 行き先を2列にならべる（ゴールは横1行をまるごと使う）
-     ② バッジを、ボタンの右上の角に重ねた小さな印（✓・★）にする
-        （せまいボタンに文字のバッジを入れると、ボタンの高さが2〜3倍になるため。文字は読み上げ用に残す） */
-  .command--entrance {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  /* 公園入口のボタンは 44px にする（段が多いので、1段ぶんの高さが画面全体に効いてくる。
-     44px は指で押しやすい大きさの目安なので、ここより小さくはしない） */
-  .command--entrance .cmd {
-    padding-top: 7px;
-    padding-bottom: 7px;
-  }
-
-  /* 「秘密の小道」が出て1段ふえたときは、ボタンを 40px に少し低くして、段のすき間も 5px にする
-     ※ クラスを2つ重ねているのは、あとに書いてある .command { gap: 7px } に負けないようにするため */
-  .command.command--entrance-withSecret {
-    gap: 5px;
-  }
-
-  .command--entrance-withSecret .cmd {
-    padding-top: 5px;
-    padding-bottom: 5px;
-  }
-
-  /* バッジの箱を、ボタンの右上の角に重ねる（ボタンの高さを使わない）
-     上へ少しはみ出させて、ボタンの文字と重ならないようにする（すき間・余白の中に収まるので、切れない） */
-  .command--entrance .cmd__badges {
-    position: absolute;
-    top: -6px;
-    right: -4px;
-    flex-wrap: nowrap;
-    gap: 3px;
-    pointer-events: none;
-  }
-
-  /* 印だけの、小さな丸いバッジにする（色は、ふつうの幅のバッジと同じ） */
-  .command--entrance .cmd__badge {
-    display: inline-grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    padding: 0;
-    border: 1px solid #c8d4e6;
-    box-sizing: border-box;
-    font-size: 11px;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  /* ボタンを低くしたときは、印も小さくして少し上へずらす（低くなったボタンの文字に、印がかからないように） */
-  .command--entrance-withSecret .cmd__badges {
-    top: -8px;
-    gap: 2px;
-  }
-
-  .command--entrance-withSecret .cmd__badge {
-    width: 16px;
-    height: 16px;
-    font-size: 9.5px;
-  }
-
-  .command--entrance .cmd__badgeIcon--compactOnly {
-    display: inline;
-  }
-
-  /* 文字（探検済み・発見済み）は、見た目からは消して、読み上げ用に残す */
-  .command--entrance .cmd__badgeText {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-
   .cmd {
     padding: 11px 14px 11px 30px;
     font-size: 16px;
@@ -585,36 +508,5 @@
   .command {
     max-height: 46vh;
     padding: 8px 10px 9px;
-  }
-
-  /* とても背の低いスマホ（375×548 の Safari・320×568 など）でも、公園入口を1画面に収める
-     （ほかの調整は status.css・responsive.css の同じ @media） */
-  .command--entrance .command__label {
-    font-size: 12.5px;
-    line-height: 1.2;
-  }
-
-  /* 「秘密の小道」が出て1段ふえたときは、ボタンを 36px、段のすき間を 4px までつめる */
-  .command.command--entrance-withSecret {
-    gap: 4px;
-  }
-
-  .command--entrance-withSecret .cmd {
-    padding-top: 3px;
-    padding-bottom: 3px;
-  }
-}
-
-/* とても細い画面（340px以下）の公園入口
-   2列だと1つのボタンが140px台しかなく、「どんぐりの木」が2行に折り返すので、「▶」を左へ寄せて左右の余白を少しつめる */
-@media (max-width: 340px) {
-
-  .command--entrance .cmd:not(.cmd--goal) {
-    padding-right: 8px;
-    padding-left: 25px;
-  }
-
-  .command--entrance .cmd::before {
-    left: 10px;
   }
 }
