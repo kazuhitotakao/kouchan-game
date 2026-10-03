@@ -1075,7 +1075,7 @@
 @media (max-width: 700px) and (max-height: 620px) {
 
   /* とても背の低いスマホ（375×548 の Safari・320×568 など）
-     公園入口を1画面に収めるために、すき間と余白をつめる（ほかの調整は command.css・responsive.css の同じ @media） */
+     公園入口を1画面に収めるために、すき間と余白をつめる（ほかの調整は responsive.css の同じ @media） */
   .status-area {
     gap: 4px 10px;
     padding: 6px 10px 7px;

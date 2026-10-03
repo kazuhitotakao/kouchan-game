@@ -254,7 +254,7 @@
   }
 
   /* 公園入口は、「どこへ行く？」まで1画面に収めるため、上下の余白をもう少しつめる
-     （上部ステータス・コマンド欄のほうは status.css・command.css の同じ @media） */
+     （上部ステータスのほうは status.css の同じ @media） */
   .stage--entrance {
     padding: 6px 10px 8px;
   }
