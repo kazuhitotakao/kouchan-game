@@ -1,27 +1,12 @@
 /* ============================================================
    秘密の小道（ミニゲーム）の計算
 
-   ゲーム本編（pages/index.vue）にあった、秘密の小道の
-   「計算しているところ」だけを取り出してある
+   ・予定づくり（何を・いつ・どのレーンに出すか）、「どこまで行ける？」のレベル・速さ・行の間隔
+   ・結果の文章とボーナスポイント、レーンの位置（%）、スワイプのしきい値
 
-   ■ ここがやること
-     ・1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
-     ・ミニゲームのページの「どこまで行ける？」の、レベル（進んだ距離から）・1行ずつの予定・速さ・行の間隔を決める
-       （設定の数字は data/secretPathEndless.ts）
-     ・集めたこもれびの数から、結果の文章とボーナスポイントを決める
-     ・レーンの番号を、画面の位置（%）にする
-     ・いま操作しているものに合わせて、スワイプのしきい値を選ぶ
-
-   ■ ここがやらないこと
-     ゲームの状態は、いっさい書きかえない（受けとった数を見て、答えを返すだけ）
-     1コマごとの動き（advanceSecretPath）・指やキーの操作・音・画面の切りかえは、
-     ぜんぶ composables/useSecretPathGame.ts のほう
-
-   ■ 区切りの数字・文章は、移す前と同じ
-     予定づくり（buildSecretPathSpawnQueue()）だけは、あとから
-     「前の行とつなげて見ても、よけられる・取れる並びにする」決まりを足している
-
-   ■ 設定の数字は data/secretPath.ts、型は types/game.ts のものをそのまま使う
+   ゲームの状態は書きかえない（受けとった数を見て、答えを返すだけ）
+   1コマごとの動き・操作・音は useSecretPathGame.ts
+   設定の数字は data/secretPath.ts（「どこまで行ける？」だけの数字は data/secretPathEndless.ts）
    ============================================================ */
 
 import {
@@ -81,11 +66,7 @@ export function getSecretPathLaneLeft(lane: SecretPathLane) {
   return `${((lane * 2 + 1) / 6) * 100}%`;
 }
 
-/* いま操作しているものに合わせて、しきい値を選ぶ
-
-   pointerType … 'mouse' / 'touch'（指）/ 'pen' のどれか
-   マウス以外（指・ペン）は、まとめて指のほうの数字を使う
-*/
+/* いま操作しているものに合わせて、スワイプのしきい値を選ぶ（マウス以外は、指のほうの数字） */
 export function getSecretPathSwipeThreshold(pointerType: string) {
   return pointerType === 'mouse' ? secretPathMouseSwipeThreshold : secretPathTouchSwipeThreshold;
 }
@@ -96,26 +77,15 @@ function pickRandomSecretPathLane(candidates: SecretPathLane[] = secretPathLanes
 }
 
 /* 1プレイぶんの「何を・いつ・どのレーンに出すか」の予定を作る
-
-   こもれびの数（5つ）は毎回同じにして、出てくるレーンだけをランダムにする
-   どの行も、少なくとも1つのレーンは空いているので、よけられない形にはならない
+   こもれびの数は毎回同じにして、出てくるレーンだけをランダムにする
 
    ■ 前の行とのつながりも見る
      行と行のあいだに動けるのは1レーンまで、と考えて並びを決める
-     （左はし → 右はしの2レーン移動は、まん中のレーンに前後の行の枝がはさまっていると、
-       すき間がとても短く、実際にはまず間に合わないため）
-
-     例：「✨ 🌿 なし」のすぐあとに「🌿 🌿 なし」
-         ✨ を取ると左はしにいるので、次の行をよけるには右はしまで2レーン動くしかない
-
-     そうならないように、次の2つを守る
+     （はしからはしへの2レーン移動は、すき間が短く、まず間に合わないため）
      ・枝2本の行   … 空けるレーンは、前の行のどの空きレーンからも1レーン以内で行ける所にする
      ・こもれびの行 … こもれびも、前の行のどの空きレーンからも1レーン以内で取れる所に出す
-     枝1本の行は、前の行のどこにいても、いまのレーンかとなりのレーンのどちらかが空いているので、そのままでよい
-     （いちばん最初の行は、こうちゃんのスタート位置（まん中）を「前の行」として見る）
-
-     前の行で空いていたどのレーンにいても、次の行をよけられて・こもれびも取れるので、
-     こもれびを取りに行ったあとや、枝をよけた先で、つみにならない */
+     （枝1本の行は、どこにいても いまのレーンかとなりが空いているので、そのままでよい）
+     こうすると、こもれびを取りに行ったあとや、枝をよけた先で、つみにならない */
 export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
   const queue: SecretPathSpawn[] = [];
 
@@ -133,20 +103,11 @@ export function buildSecretPathSpawnQueue(): SecretPathSpawn[] {
   return queue.sort((a, b) => a.at - b.at);
 }
 
-/* 1行ぶんの予定（どのレーンに枝・こもれびを出すか）を作る
+/* 1行ぶんの予定を作る（本編の小道と「どこまで行ける？」の両方が使う。決まりは すぐ上の説明のとおり）
 
-   本編の小道（buildSecretPathSpawnQueue()）と、
-   ミニゲームのページの「どこまで行ける？」（composables/useSecretPathGame.ts）の両方が使う
-   「前の行とのつながりも見る」決まりは、すぐ上の buildSecretPathSpawnQueue() の説明のとおり
-
-   at                 … この行を出す時刻（ゲームの時計）
    previousOpenLanes  … 前の行で空いていたレーン（こうちゃんがいるかもしれない所）
-   isSunlightRow      … こもれびの行にするか
    doubleBranchChance … ふつうの行を、枝2本（空きレーン1つ）にする割合
-
-   返すのは、この行の予定（spawns）と、この行で空いているレーン（次の行の previousOpenLanes になる）
-
-   ※ 乱数を使う順番は、この関数に分ける前の buildSecretPathSpawnQueue() と同じ */
+   返すのは、この行の予定と、この行で空いているレーン（次の行の previousOpenLanes になる） */
 export function buildSecretPathRow(at: number, previousOpenLanes: SecretPathLane[], isSunlightRow: boolean, doubleBranchChance: number) {
   const spawns: SecretPathSpawn[] = [];
 
@@ -159,9 +120,8 @@ export function buildSecretPathRow(at: number, previousOpenLanes: SecretPathLane
 
     spawns.push({ at, kind: 'sunlight', lane: sunlightLane });
 
-    // たいていは、こもれびとはべつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
-    // ときどき枝を2本にして、こもれびのレーンしか空いていない行にする
-    // （こもれびは前の行のどこからでも1レーン以内なので、この行も かならずよけられる）
+    // たいていは、べつのレーンに枝もいっしょに出す（取りに行くとき、よける必要が出てくる）
+    // ときどき枝を2本にして、こもれびのレーンしか空いていない行にする（こもれびは1レーン以内なので、よけられる）
     if (Math.random() < secretPathSunlightBranchChance) {
       const otherLanes = secretPathLanes.filter((lane) => lane !== sunlightLane);
 
@@ -192,10 +152,8 @@ export function getSecretPathEndlessLevel(distance: number) {
 }
 
 /* 「どこまで行ける？」の、そのレベルの きびしさ（速さ・行の間隔・枝2本の割合）
-
-   Lv.1 〜 表の最後（Lv.7）までは、data/secretPathEndless.ts の secretPathEndlessLevels のとおり
-   その先は、表の最後から1つ上がるごとに secretPathEndlessLevelStep ずつ きびしくして、
-   secretPathEndlessLevelLimits で止める（上手な人でも、いつかは続けられなくなる） */
+   表（secretPathEndlessLevels）の先は、1つ上がるごとに secretPathEndlessLevelStep ずつ きびしくして、
+   secretPathEndlessLevelLimits で止める */
 export function getSecretPathEndlessLevelSettings(level: number) {
   const tableLevel = secretPathEndlessLevels[level - 1];
 
@@ -225,10 +183,8 @@ export function getSecretPathEndlessNextRowAt(at: number, distance: number) {
   return at + rowInterval + (Math.random() * 2 - 1) * secretPathEndlessRowJitter;
 }
 
-/* 「どこまで行ける？」の1行ぶんの予定を作る（at に出す行。枝2本の割合は、いまのレベルで決まる）
-
-   こもれびの行にするかどうかを抽選して、行の中身は本編と同じ buildSecretPathRow() で作る
-   （前の行とつなげて見ても、よけられる・取れる並びになる） */
+/* 「どこまで行ける？」の1行ぶんの予定を作る
+   こもれびの行にするかを抽選して、中身は本編と同じ buildSecretPathRow() で作る */
 export function buildSecretPathEndlessRow(at: number, previousOpenLanes: SecretPathLane[], distance: number) {
   const { doubleBranchChance } = getSecretPathEndlessLevelSettings(getSecretPathEndlessLevel(distance));
 

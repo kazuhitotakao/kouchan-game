@@ -1,22 +1,13 @@
 /* ============================================================
    ミニゲームの「解放」と「自己ベスト」の保存（ミニゲームごと）
 
-   ゲーム本編（pages/index.vue）・ミニゲームの一覧（pages/minigame/index.vue）・
-   それぞれのミニゲームのページ（pages/minigame/<id>.vue）で、同じ保存場所を使うので、ここ1か所にまとめてある
-   （S+ランクのうた入りBGM（utils/sPlusSong.ts）と同じ考えかた）
+   本編・ミニゲームの一覧・それぞれのミニゲームで、同じ保存場所を使うので、ここにまとめてある
 
    ■ 保存する場所（localStorage）
-     ・解放したミニゲーム … kouchan-game-minigames-unlocked に、id の一覧（["secret-path"] など）
-     ・自己ベスト         … kouchan-game-minigame-best-<id> に、ゲームごとの形のまま（{ distance, sunlight } など）
-     ほかの保存（kouchan-game-〜・kouchan-soundtrack-〜）とぶつからない名前にしてある
-
-   ■ 一度解放したら、もう一度あそんでも、ブラウザを閉じても、ロックには戻さない
-     （そのため、ロックに戻す関数は わざと作っていない）
-
-   ■ localStorage はブラウザにしか無い
-     読み書きは import.meta.client（ブラウザで動いているとき）だけ行う
-     呼ぶ側も、onMounted や遊んでいる最中など、ブラウザで動くところから呼ぶ
-     読めない・書けないとき（ブラウザの設定など）は、まだ解放していない・記録が無いあつかいにする
+     ・解放したミニゲーム … id の一覧（["secret-path"] など）
+     ・自己ベスト         … ゲームごとの形のまま（{ distance, sunlight } など）
+   ■ 一度解放したら戻さない（ロックに戻す関数は わざと作っていない）
+   ■ 読み書きはブラウザで動いているときだけ。読めない・書けないときは、解放していない・記録が無いあつかい
    ============================================================ */
 
 import { isMinigameId } from '~/data/minigames';
@@ -64,9 +55,7 @@ export function unlockMinigame(id: MinigameId) {
 }
 
 /* 自己ベストを、保存したときの形のまま読む（まだ遊んでいない・読めないときは null）
-
-   中身の形はゲームごとにちがうので、ここではたしかめない
-   使う側（それぞれのミニゲームのページ・data/minigames.ts の formatBest）が、数に直して使う */
+   中身の形はゲームごとにちがうので、使う側が数に直して使う */
 export function loadMinigameBest(id: MinigameId): Record<string, unknown> | null {
   if (!import.meta.client) {
     return null;
