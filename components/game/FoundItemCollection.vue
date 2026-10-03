@@ -2,19 +2,11 @@
 /* ============================================================
    リザルト画面の「見つけたもの」（図鑑のような6つのマス）
 
-   ゴールしたあとのリザルトと、GAME OVER の両方で使う（pages/index.vue の「見つけたもの」のカードの中身）
+   リザルトと GAME OVER の両方で使う
 
-   ■ 出しかた
-     ・見つかるもの6種類（data/places.ts の placeItems）を、いつも同じ順にマスへならべる（3列 × 2段）
-     ・見つけたもの … 大きな丸いメダルに、そのものの絵（data/places.ts の itemImages）と名前
-     ・まだのもの   … 点線の丸に「？」。名前も「？？？」にして、何が見つかるかは言わない
-                      （あといくつ見つかるものがあるかだけを伝えて、次も探したくなるようにする）
-     ・6つぜんぶ見つけたら、メダルを金色に光らせて「コンプリート！」と出す
-     ・リザルトが出たら、見つけたメダルが1つずつ順に、ぽんっと出てくる（動きを減らす設定のときは出さない）
-
-   ■ 読み上げ
-     メダルの絵・「？」は飾りなので読ませない（名前の文字を読む）
-     まだのマスは「？？？」と読まれても分からないので、かわりに「まだ見つけていないもの」と読ませる
+   ・見つかるもの6種類を、いつも同じ順にならべる（3列 × 2段）
+   ・まだのものは「？？？」にして、何が見つかるかは言わない（あといくつあるかだけ伝えて、次も探したくなるように）
+   ・読み上げでは、まだのマスは「？？？」ではなく「まだ見つけていないもの」と読ませる
    ============================================================ */
 
 import { computed } from 'vue';
@@ -68,7 +60,7 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
           <template v-else>？</template>
         </span>
 
-        <!-- 名前は「ちいさな」「松ぼっくり」のように分けて ならべ、折り返すのは そのあいだ だけにする（→ utils/itemName.ts） -->
+        <!-- 名前は「ちいさな」「松ぼっくり」のように分けて、そのあいだでだけ折り返す -->
         <span v-if="slot.isFound" class="found-collection__name">
           <span v-for="part in splitItemName(slot.name)" :key="part" class="found-collection__namePart">{{ part }}</span>
         </span>
@@ -94,9 +86,8 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
   list-style: none;
 }
 
-/* position: relative … 中の読み上げ用の文字（.found-collection__srOnly。position: absolute）の基準を、このマスにする
-   無いと、基準がページ全体（body）になって、文字がリザルトの中央エリア（スクロールする箱）の外へ はみ出し、
-   ページ全体まで たてにスクロールしてしまう（中央エリアのスクロールと二重になる） */
+/* position: relative … 中の読み上げ用の文字（position: absolute）の基準にする
+   無いと、文字がスクロールする箱の外へはみ出し、ページ全体までスクロールしてしまう */
 .found-collection__slot {
   position: relative;
   display: flex;
@@ -127,11 +118,8 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
   line-height: 1;
 }
 
-/* ・overflow: hidden … 絵（四角い画像）を、メダルの丸の形に切りぬく
-   ・isolation: isolate … 絵の白を multiply でなじませる相手を、メダル自身のクリーム色だけにする
-     （これが無いと、ぽんっと出てくる動き（transform）のあいだ、なじませる相手が無くなって、
-       画像の白い四角が丸の外に見えてしまう）
-   ・box-shadow（下の影・コンプリートの光）は、overflow: hidden でも切れない（わくの外に描かれるため） */
+/* ・overflow: hidden … 四角い画像を、丸の形に切りぬく
+   ・isolation: isolate … これが無いと、ぽんっと出る動きのあいだ、画像の白い四角が丸の外に見えてしまう */
 .found-collection__slot--found .found-collection__medal {
   overflow: hidden;
   isolation: isolate;
@@ -142,12 +130,8 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
     inset 0 0 0 3px rgb(255 255 255 / 70%);
 }
 
-/* メダルの絵（data/places.ts の itemImages）
-
-   ・メダルの 9割の大きさにする（絵は画像のまんなかの 7割ほどなので、絵そのものはメダルの丸の内がわに収まる）
-   ・画像は透明ではなく、うしろが白でぬってあるので、multiply でメダルのクリーム色になじませる
-     （3%明るくして、少し黄みがかった白を まっ白にそろえてから重ねる。おやつ・上部ステータスの絵と同じ）
-   ・画像の四すみの白い余白は、multiply でメダルになじむので、丸からはみ出して見えることはない */
+/* メダルの絵
+   うしろが白なので、multiply でメダルのクリーム色になじませる（3%明るくして白をそろえてから。ほかの絵と同じ） */
 .found-collection__image {
   display: block;
   width: 90%;
@@ -173,9 +157,7 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
   overflow-wrap: anywhere;
 }
 
-/* 名前の ひとかたまり（「ちいさな」「松ぼっくり」 → utils/itemName.ts の splitItemName()）
-   inline-block にすると、かたまりの中では折り返さず、かたまりと かたまりの あいだでだけ折り返す
-   max-width: 100% … かたまり1つでも入りきらない、とても せまい所では、かたまりの中でも折り返す（はみ出さない） */
+/* 名前の ひとかたまり（かたまりの あいだでだけ折り返す。とても せまい所では、中でも折り返す） */
 .found-collection__namePart {
   display: inline-block;
   max-width: 100%;
@@ -197,10 +179,7 @@ const isComplete = computed(() => slots.value.every((slot) => slot.isFound));
 }
 
 /* ===== ぽんっと出てくる =====
-
-   リザルトのカードが浮き上がって出てくる（0.3〜0.5秒）のを待ってから、見つけたメダルを1つずつ順に出す
-   ・--found-order … 見つけたもののうち何番目か（0, 1, 2 …）。1つにつき 0.12秒ずつ おくらせる
-   ・backwards … 出てくる前（おくれているあいだ）は、はじめの見た目（小さく・すけた）のままにしておく */
+   カードが出てくるのを待ってから、見つけたメダルを1つずつ順に出す（--found-order ごとに 0.12秒ずつ） */
 .found-collection__slot--found .found-collection__medal {
   animation: found-medal-pop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
   animation-delay: calc(0.5s + var(--found-order, 0) * 0.12s);

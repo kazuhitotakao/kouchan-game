@@ -1,9 +1,7 @@
 /* ============================================================
    いやいやタイムの設定（ゲーム中に変わらないデータ）
 
-   ここにあるのは「どんなセリフを出すか」「どのおやつがどの理由に効くか」だけで、
-   「いま何のいやいやか」（tantrumReason）や「いまのレベル」（tantrumLevel）は
-   プレイ中に変わるので composables/useTantrum.ts のほうが持っている
+   プレイ中に変わる値（いまの理由・レベル）は useTantrum.ts が持っている
    ============================================================ */
 
 import type { SnackId, TantrumLevel, TantrumLevelInfo, TantrumReason, TantrumReasonInfo, TantrumSnackFit } from '~/types/game';
@@ -48,10 +46,7 @@ export const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
 
 /* おやつ × いやいやの理由 の相性表
 
-   おやつの回復量（data/snacks.ts の energy / mood / minutes）とは別のルールなので、
-   Snack の型には入れず、ここに表として分けて持つ
-   （回復量を変えたいときは snacks、相性を変えたいときはこの表、と見る場所が分かれる）
-
+   おやつの回復量とは別のルールなので、Snack の型には入れず、ここに表として分けて持つ
    読みかた：snackTantrumFits.banana.hungry → バナナは「おなかすいた」に great */
 export const snackTantrumFits: Record<SnackId, Record<TantrumReason, TantrumSnackFit>> = {
   gummy: { tired: 'weak', hungry: 'normal', frustrated: 'great', wantMorePlay: 'normal' },
@@ -66,6 +61,5 @@ export const snackTantrumFits: Record<SnackId, Record<TantrumReason, TantrumSnac
 export const niceTantrumBonusOutingPoint = 3;
 export const niceTantrumBonusParentCalm = 2;
 
-/* いやいや発生の演出を出しておく時間（ミリ秒）
-   1000 で1秒。ここだけ書きかえれば、出ている長さを調整できる */
+/* いやいや発生の演出を出しておく時間（ミリ秒） */
 export const tantrumAlertDuration = 2000;
