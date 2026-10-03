@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   # ========================================
-  # ① buildできるか確認
+  # ① 型チェックとbuildができるか確認
   # ========================================
   build:
     name: build
@@ -62,12 +62,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # 型のまちがいが無いか確認（vue-tsc。.vue のテンプレートの中も調べる）
+      # エラーがあればここで止まり、buildも自動マージもしない
+      - name: Typecheck
+        run: npm run typecheck
+
       # Nuxtが正常にbuildできるか確認
       - name: Build
         run: npm run build
 
   # ========================================
-  # ② build成功後、developへ自動マージ
+  # ② 型チェック・build成功後、developへ自動マージ
   # ========================================
   merge:
     name: Merge to develop
