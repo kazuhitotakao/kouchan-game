@@ -33,16 +33,29 @@ function getMediaSession() {
   return navigator.mediaSession;
 }
 
+/* いま操作を受け取っているページの目印（どのページも受け取っていないときは null）
+
+   ページを移るときは、次のページの onMounted が、前のページの onUnmounted より先に呼ばれる
+   前のページの後始末で受付をやめると、次のページが始めた受付まで消してしまう
+   （パソコン・Android で A画面 → サウンドトラック と進むと、サウンドトラックの「次の曲」などの受付が消えていた）
+   そこで、あとから受付を始めたページを「持ち主」として覚え、受付をやめるのは、まだ自分が持ち主のときだけにする */
+let handlersOwner: symbol | null = null;
+
 /* 操作の受付を始める
 
    返す関数を呼ぶと、受付をやめて、知らせていた曲名なども消す（ページを離れるときの後始末用）
-   ページを移っても同じ画面のままなので、やめておかないと、ゲーム本編でも車の「次の曲」がサウンドトラックの関数を呼んでしまう */
+   ページを移っても同じ画面のままなので、やめておかないと、ゲーム本編でも車の「次の曲」がサウンドトラックの関数を呼んでしまう
+   ※ 次のページがもう受付を始めていたら、何もしない（→ handlersOwner） */
 export function startMediaSession(handlers: MediaSessionHandlers) {
   const mediaSession = getMediaSession();
 
   if (!mediaSession) {
     return () => {};
   }
+
+  const owner = Symbol('mediaSession');
+
+  handlersOwner = owner;
 
   const actions: [MediaSessionAction, () => void][] = [
     ['play', handlers.play],
@@ -61,6 +74,12 @@ export function startMediaSession(handlers: MediaSessionHandlers) {
   }
 
   return () => {
+    if (handlersOwner !== owner) {
+      return;
+    }
+
+    handlersOwner = null;
+
     for (const [action] of actions) {
       try {
         mediaSession.setActionHandler(action, null);
