@@ -7,6 +7,7 @@
    ③ 本編で解放したいところで unlockMinigame('<id>') を呼ぶ
    ============================================================ */
 
+import { ladybugBalanceStages } from '~/data/ladybugBalance';
 import type { SecretPathItemKind } from '~/types/game';
 
 /* ミニゲーム1つぶんの情報
@@ -54,6 +55,21 @@ export const minigames = [
             { text: String(sunlight), icon: 'sunlight', iconAlt: 'こもれび' },
           ]
         : null;
+    },
+  },
+  {
+    id: 'ladybug-balance',
+    icon: '🐞',
+    /* 絵はまだ無いので、絵文字（icon）を出す（書いておかないと、一覧の型から iconImage が消えて、読む側がエラーになる） */
+    iconImage: undefined,
+    title: 'てんとう虫バランス',
+    description: '枝をかたむけて、てんとう虫が飛んでいかないようにしよう！',
+    lockedHint: '公園で、ちいさな生きものに出会えるかも…',
+    /* 自己ベストのかわりに、どこまでクリアしたか（{ clearedStage: 3 } なら「ステージ 3/5 クリア」） */
+    formatBest: (savedBest) => {
+      const clearedStage = Math.min(Number(savedBest?.clearedStage) || 0, ladybugBalanceStages.length);
+
+      return clearedStage > 0 ? [{ text: `🐞 ステージ ${clearedStage}/${ladybugBalanceStages.length} クリア` }] : null;
     },
   },
 ] as const satisfies readonly MinigameInfo[];

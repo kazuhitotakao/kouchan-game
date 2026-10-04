@@ -1236,6 +1236,13 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
   unlockMinigame('secret-path');
 });
 
+/* ミニゲーム「てんとう虫バランス」の解放（とつぜんのできごとで、テントウムシを見つけたら、このブラウザに保存する） */
+watch(currentEvent, (event) => {
+  if (event === 'ladybug') {
+    unlockMinigame('ladybug-balance');
+  }
+});
+
 /* ミニゲームの一覧（/minigame）へ移動する（goToSoundtrack() と同じ手順。連打よけも同じものを使う） */
 function goToMinigame() {
   if (isLeavingPage) {
