@@ -17,6 +17,8 @@
      （→ keepAudioContextAwake() の backgroundPlayback。ページを離れるときに 'auto' へ戻す）
      ・ゲーム本編・ミニゲームは、画面が見えているあいだだけ 'playback' にする（マナーモードでも鳴らすため
        → playThroughSilentModeWhileVisible()）。画面を消したら、今までどおり音も止まる
+     ・'auto' へ戻すのは、最後に種類を入れたページだけ（前のページの後始末が、次のページの 'playback' を消さないように
+       → audioSessionOwner）
      ・navigator.audioSession があるのは iOS 16.4 から、鳴りつづけるのは iOS 17.5 から
      ・車の Bluetooth・イヤホンが外れると、iPhone は曲といっしょに作業台も止める
        画面をさわれば起きるが、ロック画面などから鳴らしなおすときは起きないので、鳴らす直前にも起こす（→ wakeElementAudioContext()）
@@ -105,6 +107,32 @@ function setAudioSessionType(type: 'playback' | 'auto') {
   } catch {
     // 変えられなくても、音は今までどおり鳴る（画面を消すと止まるだけ）
   }
+}
+
+/* いま navigator.audioSession の種類を決めているページの目印（どのページも決めていないときは null）
+
+   ページを移るときは、次のページの onMounted が、前のページの onUnmounted より先に呼ばれる
+   （Nuxt のページの切りかえでは、前のページの片づけが、次のページを出したあとになるため）
+   前のページの後始末で 'auto' に戻すと、次のページが入れた 'playback' を消してしまい、
+   iPhone で A画面 → ミニゲーム と進むと、マナーモードでは音が鳴らなくなっていた（ミニゲーム → A画面 と戻った本編も）
+   そこで、種類を入れたページを「持ち主」として覚え、'auto' に戻すのは、まだ自分が持ち主のときだけにする
+   （あとから入れたページが持ち主になるので、前のページの後始末では何もしない） */
+let audioSessionOwner: symbol | null = null;
+
+/* owner のページとして、種類を type にする */
+function claimAudioSessionType(owner: symbol, type: 'playback' | 'auto') {
+  audioSessionOwner = owner;
+  setAudioSessionType(type);
+}
+
+/* owner のページが、種類を決めるのをやめる（まだ持ち主のときだけ 'auto' へ戻す） */
+function releaseAudioSessionType(owner: symbol) {
+  if (audioSessionOwner !== owner) {
+    return;
+  }
+
+  audioSessionOwner = null;
+  setAudioSessionType('auto');
 }
 
 /* 音量つまみに通したAudioと、そのつまみの組
@@ -524,14 +552,16 @@ function unloadMediaElement(audio: HTMLAudioElement) {
    iPhone・iPad のゲームの音は Web Audio だけで鳴らしていて、そのままだとマナーモードで鳴らない
    そこで 'playback' にして、マナーモードでも鳴らす（ほかのアプリの音楽は止まる）
    ただし 'playback' のままだとロックしても鳴りつづけるので、画面が見えなくなったら すぐ 'auto' へ戻す
-   返す関数を呼ぶと、やめて 'auto' へ戻す（ページを離れるときの後始末用） */
+   返す関数を呼ぶと、やめて 'auto' へ戻す（ページを離れるときの後始末用。次のページが持ち主になっていたら戻さない → audioSessionOwner） */
 export function playThroughSilentModeWhileVisible() {
   if (!import.meta.client || canSetElementVolume()) {
     return () => {};
   }
 
+  const owner = Symbol('playThroughSilentMode');
+
   function applyAudioSessionType() {
-    setAudioSessionType(document.visibilityState === 'visible' ? 'playback' : 'auto');
+    claimAudioSessionType(owner, document.visibilityState === 'visible' ? 'playback' : 'auto');
   }
 
   applyAudioSessionType();
@@ -539,7 +569,7 @@ export function playThroughSilentModeWhileVisible() {
 
   return () => {
     document.removeEventListener('visibilitychange', applyAudioSessionType);
-    setAudioSessionType('auto');
+    releaseAudioSessionType(owner);
   };
 }
 
@@ -551,11 +581,14 @@ export function playThroughSilentModeWhileVisible() {
 
    backgroundPlayback … true なら、さわるたびに 'playback' にして、画面を消しても鳴りつづけるようにする（サウンドトラックだけ）
                         受付をやめるときに 'auto' へ戻す（ページを移っても同じ画面のままなので、戻さないとほかのページにも残る）
+                        ただし、次のページがもう持ち主になっていたら戻さない（→ audioSessionOwner）
    返す関数を呼ぶと、受付をやめる（ページを離れるときの後始末用） */
 export function keepAudioContextAwake(getContext: () => AudioContext | null, { backgroundPlayback = false } = {}) {
   if (!import.meta.client) {
     return () => {};
   }
+
+  const owner = Symbol('backgroundPlayback');
 
   function wakeAudioContext() {
     if (canSetElementVolume()) {
@@ -563,7 +596,7 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null, { b
     }
 
     if (backgroundPlayback) {
-      setAudioSessionType('playback');
+      claimAudioSessionType(owner, 'playback');
     }
 
     const context = getContext();
@@ -588,7 +621,7 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null, { b
     }
 
     if (backgroundPlayback && !canSetElementVolume()) {
-      setAudioSessionType('auto');
+      releaseAudioSessionType(owner);
     }
   };
 }
