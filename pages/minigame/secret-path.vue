@@ -27,6 +27,7 @@ import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
+import { useMinigamePause } from '~/composables/useMinigamePause';
 import { useSecretPathGame } from '~/composables/useSecretPathGame';
 import { minigames } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
@@ -131,6 +132,11 @@ const {
   secretPathHoverDestination,
   startSecretPathGame,
   restartSecretPathGame,
+  resetSecretPathGame,
+  canPauseSecretPath,
+  isSecretPathCountingDown,
+  pauseSecretPathGame,
+  resumeSecretPathGame,
   handleSecretPathKeydown,
   handleSecretPathPointerDown,
   handleSecretPathPointerMove,
@@ -154,6 +160,37 @@ const {
   playCountdownSound,
   playCountdownStartSound,
 });
+
+/* ============================================================
+   一時停止（とばないで！ と共通 → composables/useMinigamePause.ts）
+   「やめる」は、はじまる前の画面へ戻す（記録は残さない）
+   ============================================================ */
+const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinigamePause({
+  canPause: canPauseSecretPath,
+  isCountingDown: isSecretPathCountingDown,
+  pauseGame: pauseSecretPathGame,
+  resumeGame: resumeSecretPathGame,
+  quitGame: backToReady,
+  playDecisionSound,
+});
+
+/* はじまる前の画面へ戻す（一時停止の「やめる」と、遊んでいる最中・結果の画面の「← どこまで行ける？へ」）
+   ・ご褒美を解放したときの知らせは、次のプレイの結果には持ちこさない（解放そのものは、そのまま残る。「もう一回」と同じ）
+   ・結果の画面からは、GAME OVER の曲を止めて、「こもれびの奥で」を最初から鳴らしなおす */
+function backToReady() {
+  const wasFinished = secretPathPhase.value === 'finished';
+
+  resetSecretPathGame();
+  hideCommandNotice();
+  isNewlyUnlockedSecretVocalSong.value = false;
+
+  if (wasFinished) {
+    stopGameOverBgm();
+    playSecretBgmSoon();
+  }
+
+  focusPlayButton();
+}
 
 /* ============================================================
    解放されているか
@@ -277,10 +314,16 @@ function showCommandNotice(kind: CommandNotice['kind'], text: string) {
     clearTimeout(commandNoticeTimer);
   }
 
-  commandNoticeTimer = setTimeout(() => {
-    commandNotice.value = null;
+  commandNoticeTimer = setTimeout(hideCommandNotice, commandNoticeDuration);
+}
+
+function hideCommandNotice() {
+  if (commandNoticeTimer !== null) {
+    clearTimeout(commandNoticeTimer);
     commandNoticeTimer = null;
-  }, commandNoticeDuration);
+  }
+
+  commandNotice.value = null;
 }
 
 /* レベルが上がった瞬間の知らせ（「⏫ スピードアップ！ Lv.3」）
@@ -398,6 +441,20 @@ watch(bgmPlaybackRate, (rate) => setSecretBgmPlaybackRate(rate), { immediate: tr
 /* もうページを移動しはじめたか（連打よけ） */
 let isLeavingPage = false;
 
+/* 上の「戻る」は、ひとつ前の画面へ
+   ・はじまる前（まだ解放していないページもふくむ） … ミニゲーム一覧へ
+   ・遊んでいる最中・結果の画面 … はじまる前の画面へ（記録は残さない。決定音は ほかの「戻る」と同じく鳴らさない） */
+const isBackToReady = computed(() => unlockState.value === 'unlocked' && secretPathPhase.value !== 'ready');
+
+function goBack() {
+  if (isBackToReady.value) {
+    backToReady();
+    return;
+  }
+
+  goToList();
+}
+
 /* 「← ミニゲーム一覧へ」（サウンドトラックのページの「はじめの画面へ戻る」と同じ手順） */
 async function goToList() {
   if (isLeavingPage) {
@@ -428,6 +485,11 @@ async function goToList() {
 const layoutRef = ref<InstanceType<typeof MinigameLayout> | null>(null);
 
 function handleKeydown(event: KeyboardEvent) {
+  // 一時停止（Esc）と、止まっているあいだのキーは、ゲームの操作へ回さない
+  if (handlePauseKeydown(event)) {
+    return;
+  }
+
   if (isSecretPathPlaying.value) {
     handleSecretPathKeydown(event);
     return;
@@ -522,15 +584,20 @@ onUnmounted(() => {
 <template>
   <MinigameLayout
     ref="layoutRef"
-    back-label="← ミニゲーム一覧へ"
-    back-aria-label="ミニゲーム一覧へ戻る"
+    :back-label="isBackToReady ? '← どこまで行ける？へ' : '← ミニゲーム一覧へ'"
+    :back-aria-label="isBackToReady ? 'はじまる前の画面へ戻る' : 'ミニゲーム一覧へ戻る'"
     centered
     :class="{ 'mg-fit': secretPathPhase === 'playing' }"
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
-    @back="goToList"
+    :can-pause="canPauseSecretPath"
+    :pause-state="pauseState"
+    @back="goBack"
     @toggle-sound="toggleSound"
-    @volume-change="changeSoundVolume">
+    @volume-change="changeSoundVolume"
+    @pause="pauseByButton"
+    @resume="resume"
+    @quit="quit">
     <!-- 外枠（背景 ＋ 上部ツールバー）は、ミニゲームの一覧と同じ部品
          ※ このコメントを <MinigameLayout> の外に書かないこと
            開発中はコメントも残って、いちばん外の要素が2つになり、ページを移るときのフェードがこわれて画面がまっ暗になる -->
@@ -548,10 +615,11 @@ onUnmounted(() => {
     <section v-else-if="unlockState === 'unlocked'" class="mg-stage">
       <!-- はじまる前 -->
       <article v-if="secretPathPhase === 'ready'" v-reveal-with-images class="place-card place-card--secret">
-        <!-- アイコンは一覧のカードと同じ絵（となりに名前があるので、読み上げでは読ませない） -->
+        <!-- アイコンは一覧のカードと同じ絵（となりに名前があるので、読み上げでは読ませない）
+             アイコンと名前を ひとまとまりにして、カードのまん中に置く（.mg-title） -->
         <h1 class="place-card__title mg-title">
           <img v-if="minigameInfo.iconImage" class="mg-title__icon" :src="minigameInfo.iconImage" alt="" decoding="async" />
-          どこまで行ける？
+          <span class="mg-title__text">どこまで行ける？</span>
         </h1>
 
         <!-- 言葉のかわりに置いた枝・こもれびの絵は、読み上げでその名前を読ませる（alt） -->
@@ -784,9 +852,11 @@ onUnmounted(() => {
 /* はじまる前の見出し（［アイコンの絵］どこまで行ける？）
    絵は文字の高さの2倍ほどにして、ゲームの顔として目立たせる
    絵のまわりの透明な余白は、1.12倍に広げて切り落とす（一覧のカードと同じしかけ） */
+/* 見出し（アイコンと名前を ひとまとまりにして、カードのまん中に置く） */
 .mg-title {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 

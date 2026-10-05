@@ -7,7 +7,7 @@
 
    ■ 場面によって中身がちがう（variant）
      place       … 通常の場所6か所（その場所の遊び2つ ＋ 場所選びにもどる）
-     rest        … ひとやすみ（休憩する ＋ おやつにする ＋ 場所選びにもどる）
+     rest        … ひとやすみ（きゅうけいする ＋ おやつにする ＋ 場所選びにもどる）
      tantrum     … いやいやタイム（お話・だっこ・おやつ・待つ）
      suddenEvent … とつぜんのできごと（選択肢3つ）
    ============================================================ */
@@ -201,7 +201,7 @@ defineEmits<{
           @click="$emit('takeBreak')"
           @mouseenter="selectedIndex = 0"
           @focus="selectedIndex = 0">
-          <span class="command-box__text">休憩する</span>
+          <span class="command-box__text">きゅうけいする</span>
         </button>
 
         <!-- バッグにおやつが残っているときだけ出す（いやいやタイムと同じバッグ） -->
