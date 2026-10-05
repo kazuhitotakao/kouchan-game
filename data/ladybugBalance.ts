@@ -326,6 +326,24 @@ export const ladybugBalanceTilt = {
 };
 
 /* ============================================================
+   フィールドをさわって傾ける（スマホ向け。マウスでクリックしても同じ）
+
+   おさえているあいだは、左右のボタンを押しているのと同じ
+   ・おさえた場所 … フィールドの右半分なら右、左半分なら左へ傾く
+   ・指をずらす   … おさえた場所から switchDistance 以上ずらすと、ずらした向きへ切りかわる
+   ・フリック     … flickDistance 以上を flickTime 以内に払って はなすと、
+                    はなしたあとも flickHold のあいだ、払った向きへ押しつづける
+   ・switchDistance・flickDistance … 画面の点（px）
+   ・flickTime・flickHold           … ミリ秒（flickHold はゲームの時計で数える）
+   ============================================================ */
+export const ladybugBalanceTouch = {
+  switchDistance: 24,
+  flickDistance: 40,
+  flickTime: 300,
+  flickHold: 250,
+};
+
+/* ============================================================
    てんとう虫の動き（どのステージも同じ）
 
    ・climbSpeed   … 枝がいちばん傾いたときに、高いほうへ のぼる速さ（歩く速さに足される。種類の climb をかける）
