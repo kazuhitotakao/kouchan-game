@@ -46,10 +46,10 @@ export const ladybugBalanceKinds: Record<LadybugBalanceKind, LadybugBalanceKindI
   nanahoshi: { name: 'ナナホシ', trait: 'ふつう', walk: 1, climb: 1, quirkInterval: 1, dashChance: 0.5, canFly: true },
 
   // ナミテントウ（黒に赤い紋。気まぐれで、小走りが多い）
-  namitentou: { name: 'ナミテントウ', trait: 'きまぐれ・小走りが多い', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
+  namitentou: { name: 'ナミテントウ', trait: 'きまぐれで よく走る', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
 
   // 幼虫（歩くのは遅いけれど、のぼるのが得意。飛べない）
-  larva: { name: 'ようちゅう', trait: 'おそいけど のぼるのが得意', walk: 0.7, climb: 1.4, quirkInterval: 1, dashChance: 0.5, canFly: false },
+  larva: { name: 'ようちゅう', trait: 'おそいけど のぼるのが はやい', walk: 0.7, climb: 1.4, quirkInterval: 1, dashChance: 0.5, canFly: false },
 };
 
 /* ============================================================
@@ -323,6 +323,24 @@ export const ladybugBalanceTilt = {
   pushAccel: 190,
   returnStiffness: 6,
   damping: 5,
+};
+
+/* ============================================================
+   フィールドをさわって傾ける（スマホ向け。マウスでクリックしても同じ）
+
+   おさえているあいだは、左右のボタンを押しているのと同じ
+   ・おさえた場所 … フィールドの右半分なら右、左半分なら左へ傾く
+   ・指をずらす   … おさえた場所から switchDistance 以上ずらすと、ずらした向きへ切りかわる
+   ・フリック     … flickDistance 以上を flickTime 以内に払って はなすと、
+                    はなしたあとも flickHold のあいだ、払った向きへ押しつづける
+   ・switchDistance・flickDistance … 画面の点（px）
+   ・flickTime・flickHold           … ミリ秒（flickHold はゲームの時計で数える）
+   ============================================================ */
+export const ladybugBalanceTouch = {
+  switchDistance: 24,
+  flickDistance: 40,
+  flickTime: 300,
+  flickHold: 250,
 };
 
 /* ============================================================
