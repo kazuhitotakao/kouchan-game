@@ -4,6 +4,7 @@
 
    枝の上を勝手に歩くてんとう虫が、はしまで行って飛んでいかないように、左右のボタンで枝を傾けてバランスをとる
    ステージ制（ステージの中身は data/ladybugBalance.ts）。前のステージをクリアすると、次のステージが遊べる
+   ぜんぶのステージをクリアすると、エンドレス（どこまで たえられるか）が遊べるようになる
 
    ■ 入口
      ミニゲームの一覧（pages/minigame/index.vue）から来る
@@ -11,12 +12,15 @@
      まだ解放していないブラウザで直接開いたときは、遊べるようになる条件だけを出す
 
    ■ 保存するもの（utils/minigameStorage.ts の「自己ベスト」の場所を使う）
-     { clearedStage: 3 } … ステージ3までクリアした（次はステージ4が遊べる）
+     { clearedStage: 3, endlessBestMs: 23400 }
+       clearedStage  … ステージ3までクリアした（次はステージ4が遊べる）
+       endlessBestMs … エンドレスで たえた時間の自己ベスト（ミリ秒。まだ遊んでいなければ 0）
+     ※ 2つを いっしょに保存する（片方だけ保存すると、もう片方が消えるため → saveProgress()）
 
    ■ ゲームの中身
      ・動き・操作 … composables/useLadybugBalanceGame.ts
      ・フィールドの絵 … components/minigame/LadybugBalanceField.vue
-     このページが持つのは、はじまる前・結果の画面、ステージの開放、音
+     このページが持つのは、はじまる前・結果の画面、ステージの開放、エンドレスの記録、音
    ============================================================ */
 
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
@@ -27,7 +31,8 @@ import { useAudio } from '~/composables/useAudio';
 import { useLadybugBalanceGame } from '~/composables/useLadybugBalanceGame';
 import type { LadybugBalanceSide } from '~/composables/useLadybugBalanceGame';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
-import { ladybugBalanceStages } from '~/data/ladybugBalance';
+import { ladybugBalanceEndless, ladybugBalanceKinds, ladybugBalanceStages } from '~/data/ladybugBalance';
+import type { LadybugBalanceKind } from '~/data/ladybugBalance';
 import { minigames } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
@@ -50,6 +55,7 @@ const {
   toggleSound,
   changeSoundVolume,
   playDecisionSound,
+  playItemSound,
   playGoalSound,
   playTantrumSound,
   playCountdownSound,
@@ -81,13 +87,46 @@ const playableStageCount = computed(() => Math.min(stageCount, clearedStage.valu
 /* いま終わったプレイで、新しいステージが遊べるようになったか（結果の画面に出す） */
 const isNewStageUnlocked = ref(false);
 
+/* ============================================================
+   エンドレス（ぜんぶのステージをクリアすると遊べる）
+   ============================================================ */
+const endlessBestMs = ref(0);
+const isEndlessUnlocked = computed(() => clearedStage.value >= stageCount);
+
+/* いま終わったプレイで、エンドレスが遊べるようになったか ／ 自己ベストを更新したか ／ たえた時間 */
+const isNewEndlessUnlocked = ref(false);
+const isNewEndlessBest = ref(false);
+const endlessRecordMs = ref(0);
+
+/* 秒の文字（「23.4」。0.1秒きざみで切り捨て） */
+function formatSeconds(ms: number) {
+  return (Math.floor(ms / 100) / 10).toFixed(1);
+}
+
+/* クリアしたステージと、エンドレスの自己ベストを、いっしょに保存する */
+function saveProgress() {
+  saveMinigameBest(minigameId, { clearedStage: clearedStage.value, endlessBestMs: endlessBestMs.value });
+}
+
+/* 結果の画面の知らせを消す（次を始めるとき・えらびなおすとき） */
+function clearResultNotices() {
+  isNewStageUnlocked.value = false;
+  isNewEndlessUnlocked.value = false;
+  isNewEndlessBest.value = false;
+}
+
 const {
   phase,
+  mode,
   stageIndex,
   stage,
+  rule,
   tilt,
   ladybugs,
+  lostKind,
   elapsed,
+  endlessLevel,
+  endlessLevelProgress,
   windDir,
   windWarningDir,
   isLeftHeld,
@@ -95,7 +134,9 @@ const {
   countdownNumber,
   remainingMs,
   selectStage,
-  startGame,
+  selectEndless,
+  start,
+  startStage,
   canAcceptResultInput,
   pressPointer,
   releasePointer,
@@ -114,13 +155,37 @@ const {
 
     isNewStageUnlocked.value = stageNumber > clearedStage.value && stageNumber < stageCount;
 
+    // さいごのステージを はじめてクリアしたら、エンドレスが遊べるようになる
+    isNewEndlessUnlocked.value = stageNumber > clearedStage.value && stageNumber === stageCount;
+
     if (stageNumber > clearedStage.value) {
       clearedStage.value = stageNumber;
-      saveMinigameBest(minigameId, { clearedStage: stageNumber });
+      saveProgress();
     }
   },
   onFailed: () => {
     playTantrumSound();
+
+    if (mode.value !== 'endless') {
+      return;
+    }
+
+    // エンドレスは、おしまいになった時間が記録（飛んでいく演出のあいだは、時計が止まっている）
+    endlessRecordMs.value = Math.max(0, Math.floor(elapsed.value));
+    isNewEndlessBest.value = endlessRecordMs.value > endlessBestMs.value;
+
+    if (isNewEndlessBest.value) {
+      endlessBestMs.value = endlessRecordMs.value;
+      saveProgress();
+
+      // 自己ベストを更新したときだけ、キラリン♪
+      playItemSound();
+    }
+  },
+  onLevelUp: () => {
+    // エンドレスのレベルアップ「ピピッ」（どこまで行ける？ のスピードアップと同じ）
+    playCountdownSound();
+    playCountdownSound(0.1);
   },
 });
 
@@ -134,9 +199,34 @@ const isStartCueVisible = computed(() => phase.value === 'playing' && elapsed.va
 const hasNextStage = computed(() => stageIndex.value + 1 < stageCount);
 const isAllCleared = computed(() => phase.value === 'cleared' && !hasNextStage.value);
 
-/* はじまる前に出す、えらんだステージの説明（「てんとう虫 2ひき・10びょう・かぜ あり」） */
+/* 出てくる てんとう虫の説明（「🐞 ナナホシ ×2（ふつう）」のように、種類ごとに1行） */
+function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
+  const counts = new Map<LadybugBalanceKind, number>();
+
+  for (const kind of kinds) {
+    counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+
+  return [...counts].map(([kind, count]) => {
+    const info = ladybugBalanceKinds[kind];
+
+    return `🐞 ${info.name}${count > 1 ? ` ×${count}` : ''}（${info.trait}）`;
+  });
+}
+
+/* はじまる前に出す、えらんだステージ（エンドレス）の説明 */
 const stageSummary = computed(() => {
-  const parts = [`🐞 てんとう虫 ${stage.value.ladybugCount}ひき`, `⏱ ${stage.value.seconds}びょう たえたらクリア`];
+  if (mode.value === 'endless') {
+    const parts = ['♾ どこまで たえられるかな？', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+
+    if (endlessBestMs.value > 0) {
+      parts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
+    }
+
+    return parts;
+  }
+
+  const parts = [...describeLadybugs(stage.value.ladybugs), `⏱ ${stage.value.seconds}びょう たえたらクリア`];
 
   if (stage.value.wind) {
     parts.push('💨 ときどき かぜが ふく');
@@ -145,10 +235,16 @@ const stageSummary = computed(() => {
   return parts;
 });
 
-/* 結果の画面のひとこと */
+/* 結果の画面のひとこと（幼虫は飛べないので「落ちちゃった」） */
 const resultComment = computed(() => {
+  if (phase.value === 'failed' && mode.value === 'endless') {
+    return isNewEndlessBest.value ? 'じこベスト更新！ すごい、よく たえました！' : 'もういちど ちょうせんして、記録をのばそう！';
+  }
+
   if (phase.value === 'failed') {
-    return 'てんとう虫が 枝のはしから 飛んでいっちゃった。もういちど ちょうせんしよう！';
+    return lostKind.value === 'larva'
+      ? '幼虫が 枝のはしから 落ちちゃった。もういちど ちょうせんしよう！'
+      : 'てんとう虫が 枝のはしから 飛んでいっちゃった。もういちど ちょうせんしよう！';
   }
 
   if (isAllCleared.value) {
@@ -162,15 +258,18 @@ const resultComment = computed(() => {
    はじめる・もう一度・次のステージ
    ============================================================ */
 
-/* えらんだステージで始める（はじまる前の「はじめる」） */
+/* はじまる前の「はじめる」を押せるか（まだ遊べないステージ・エンドレスは押せない） */
+const canPlaySelected = computed(() => (mode.value === 'endless' ? isEndlessUnlocked.value : stageIndex.value < playableStageCount.value));
+
+/* えらんだステージ（エンドレス）で始める（はじまる前の「はじめる」） */
 function play() {
-  if (phase.value !== 'ready' || stageIndex.value >= playableStageCount.value) {
+  if (phase.value !== 'ready' || !canPlaySelected.value) {
     return;
   }
 
   playDecisionSound();
-  isNewStageUnlocked.value = false;
-  startGame(stageIndex.value);
+  clearResultNotices();
+  start();
 
   /* BGM は開いたときから鳴らしているが、直接開いたときはまだ鳴らせていないので、ここで鳴らす（鳴っていれば、そのまま） */
   resumeParkBgm();
@@ -183,8 +282,8 @@ function retry() {
   }
 
   playDecisionSound();
-  isNewStageUnlocked.value = false;
-  startGame(stageIndex.value);
+  clearResultNotices();
+  start();
 }
 
 function goToNextStage() {
@@ -193,8 +292,20 @@ function goToNextStage() {
   }
 
   playDecisionSound();
-  isNewStageUnlocked.value = false;
-  startGame(stageIndex.value + 1);
+  clearResultNotices();
+  startStage(stageIndex.value + 1);
+}
+
+/* さいごのステージをクリアしたあとの「エンドレスに ちょうせん」 */
+function goToEndless() {
+  if (!canAcceptResultInput() || !isEndlessUnlocked.value) {
+    return;
+  }
+
+  playDecisionSound();
+  clearResultNotices();
+  selectEndless();
+  start();
 }
 
 /* 「ステージをえらぶ」（はじまる前の画面へ戻る） */
@@ -204,20 +315,35 @@ async function backToStageSelect() {
   }
 
   playDecisionSound();
-  isNewStageUnlocked.value = false;
-  selectStage(stageIndex.value);
+  clearResultNotices();
+
+  if (mode.value === 'endless') {
+    selectEndless();
+  } else {
+    selectStage(stageIndex.value);
+  }
 
   await focusFirstMainButton();
 }
 
 /* はじまる前の画面で、ステージのボタンを押したとき */
 function chooseStage(index: number) {
-  if (index >= playableStageCount.value || index === stageIndex.value) {
+  if (index >= playableStageCount.value || (index === stageIndex.value && mode.value === 'stage')) {
     return;
   }
 
   playDecisionSound();
   selectStage(index);
+}
+
+/* はじまる前の画面で、エンドレスのボタンを押したとき */
+function chooseEndless() {
+  if (!isEndlessUnlocked.value || mode.value === 'endless') {
+    return;
+  }
+
+  playDecisionSound();
+  selectEndless();
 }
 
 /* 左右のボタン（押しているあいだだけ傾ける） */
@@ -326,8 +452,11 @@ onMounted(() => {
 
   unlockState.value = loadUnlockedMinigames().includes(minigameId) ? 'unlocked' : 'locked';
 
-  // どこまでクリアしたか（こわれた記録は 0。ステージを減らしたときも、ある数までにする）
-  clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(loadMinigameBest(minigameId)?.clearedStage) || 0)));
+  // どこまでクリアしたか と エンドレスの自己ベスト（こわれた記録は 0。ステージを減らしたときも、ある数までにする）
+  const savedBest = loadMinigameBest(minigameId);
+
+  clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(savedBest?.clearedStage) || 0)));
+  endlessBestMs.value = Math.max(0, Number(savedBest?.endlessBestMs) || 0);
 
   // まだクリアしていない いちばん前のステージを、えらんでおく（ぜんぶクリアしていたら最後のステージ）
   selectStage(Math.min(clearedStage.value, stageCount - 1));
@@ -396,9 +525,9 @@ onUnmounted(() => {
             :key="index"
             type="button"
             class="lb-stage lb-nav"
-            :class="{ 'lb-stage--selected': index === stageIndex, 'lb-stage--cleared': index < clearedStage }"
+            :class="{ 'lb-stage--selected': index === stageIndex && mode === 'stage', 'lb-stage--cleared': index < clearedStage }"
             :disabled="index >= playableStageCount"
-            :aria-pressed="index === stageIndex"
+            :aria-pressed="index === stageIndex && mode === 'stage'"
             :aria-label="index >= playableStageCount ? `ステージ${index + 1}（まだ遊べません）` : `ステージ${index + 1}${index < clearedStage ? '（クリアずみ）' : ''}`"
             @click="chooseStage(index)">
             <span v-if="index >= playableStageCount" aria-hidden="true">🔒</span>
@@ -407,8 +536,20 @@ onUnmounted(() => {
           </button>
         </div>
 
+        <!-- エンドレス（ぜんぶのステージをクリアすると出てくる） -->
+        <button
+          v-if="isEndlessUnlocked"
+          type="button"
+          class="lb-endless lb-nav"
+          :class="{ 'lb-endless--selected': mode === 'endless' }"
+          :aria-pressed="mode === 'endless'"
+          @click="chooseEndless">
+          ♾ エンドレス
+          <span v-if="endlessBestMs > 0" class="lb-endless__best">じこベスト {{ formatSeconds(endlessBestMs) }}びょう</span>
+        </button>
+
         <ul class="lb-summary">
-          <li class="lb-summary__title">ステージ {{ stageIndex + 1 }}</li>
+          <li class="lb-summary__title">{{ mode === 'endless' ? '♾ エンドレス' : `ステージ ${stageIndex + 1}` }}</li>
           <li v-for="part in stageSummary" :key="part">{{ part }}</li>
         </ul>
       </article>
@@ -421,14 +562,18 @@ onUnmounted(() => {
         :phase="phase"
         :stage-number="stageIndex + 1"
         :tilt="tilt"
-        :branch-length="stage.branchLength"
+        :branch-length="rule.branchLength"
         :ladybugs="ladybugs"
         :remaining-ms="remainingMs"
         :total-ms="stage.seconds * 1000"
         :countdown-number="countdownNumber"
         :is-start-cue-visible="isStartCueVisible"
         :wind-dir="windDir"
-        :wind-warning-dir="windWarningDir" />
+        :wind-warning-dir="windWarningDir"
+        :endless-level="mode === 'endless' ? endlessLevel : null"
+        :endless-progress="endlessLevelProgress"
+        :elapsed-ms="elapsed"
+        :lost-kind="lostKind" />
 
       <!-- 左右のボタン（遊んでいる最中・飛んでいくあいだ） -->
       <nav v-if="phase === 'playing' || phase === 'flyaway'" class="mg-command lb-controls" aria-label="枝をかたむける">
@@ -464,20 +609,35 @@ onUnmounted(() => {
 
       <!-- 結果（クリア ／ おしまい） -->
       <article v-else-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
-        <p class="place-card__flash" :class="{ 'lb-result__flash--failed': phase === 'failed' }">
+        <!-- エンドレス：たえた時間とレベル -->
+        <template v-if="mode === 'endless'">
+          <p class="place-card__flash">♾ エンドレス</p>
+          <p class="lb-record">
+            <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
+            <span class="lb-record__unit">びょう たえた！</span>
+            <span class="lb-record__level">Lv.{{ endlessLevel }}</span>
+            <span v-if="isNewEndlessBest" class="lb-record__new">じこベスト！</span>
+          </p>
+        </template>
+
+        <p v-else class="place-card__flash" :class="{ 'lb-result__flash--failed': phase === 'failed' }">
           {{ phase === 'cleared' ? `ステージ ${stageIndex + 1} クリア！` : 'ざんねん…' }}
         </p>
         <p class="mg-text">{{ resultComment }}</p>
         <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
+        <p v-if="isNewEndlessUnlocked" class="lb-unlocked">♾ エンドレスが あそべるようになった！</p>
+        <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
       </article>
 
       <!-- 「はじめる」（はじまる前） -->
-      <button v-if="phase === 'ready'" type="button" class="mg-play lb-nav lb-nav--primary" :disabled="stageIndex >= playableStageCount" @click="play">はじめる</button>
+      <button v-if="phase === 'ready'" type="button" class="mg-play lb-nav lb-nav--primary" :disabled="!canPlaySelected" @click="play">はじめる</button>
 
       <!-- 結果の画面のボタン -->
       <div v-else-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions">
         <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
-        <button type="button" class="lb-nav" :class="phase === 'cleared' && hasNextStage ? 'lb-sub' : 'mg-play lb-nav--primary'" @click="retry">もう一度あそぶ</button>
+        <!-- さいごのステージをクリアしたら、エンドレスへ -->
+        <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToEndless">♾ エンドレスに ちょうせん</button>
+        <button type="button" class="lb-nav" :class="phase === 'cleared' ? 'lb-sub' : 'mg-play lb-nav--primary'" @click="retry">もう一度あそぶ</button>
         <button type="button" class="lb-sub lb-nav" @click="backToStageSelect">ステージをえらぶ</button>
       </div>
     </section>
@@ -597,9 +757,10 @@ onUnmounted(() => {
 }
 
 /* ===== ステージえらび ===== */
+/* 5つずつ2行にならべる（10ステージ。スマホ幅でも1行に5つ入る） */
 .lb-stages {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, 48px);
   gap: 8px;
   margin: 16px 0 0;
 }
@@ -665,11 +826,53 @@ onUnmounted(() => {
   line-height: 1;
 }
 
-/* えらんだステージの説明 */
-.lb-summary {
+/* エンドレスのボタン（ステージのボタンの下に、横長で。金色） */
+.lb-endless {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 14px;
+  align-items: center;
+  gap: 2px 12px;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 10px 0 0;
+  padding: 10px 16px;
+  border: 2px solid #e8b23c;
+  border-radius: 12px;
+  background: #fff8e6;
+  color: #7a5410;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.1s ease;
+}
+
+.lb-endless:hover {
+  transform: translateY(-1px);
+}
+
+.lb-endless--selected {
+  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
+  color: #4a3208;
+  box-shadow: 0 3px 0 rgb(232 178 60 / 45%);
+}
+
+.lb-endless:focus-visible {
+  outline: 3px solid #67e8f9;
+  outline-offset: 2px;
+}
+
+.lb-endless__best {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* えらんだステージの説明 */
+/* 1行に1つ（てんとう虫の種類の説明が長いので、横にならべると読みにくい） */
+.lb-summary {
+  display: grid;
+  gap: 2px;
   margin: 12px 0 0;
   padding: 8px 14px;
   border-radius: 12px;
@@ -746,6 +949,58 @@ onUnmounted(() => {
 }
 
 /* ===== 結果 ===== */
+
+/* エンドレスの記録（「23.4 びょう たえた！ Lv.3 じこベスト！」） */
+.lb-record {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0 0 8px;
+  color: #6b4fb0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lb-record__value {
+  color: #57389e;
+  font-size: 44px;
+  font-weight: 800;
+  line-height: 1.05;
+  animation: status-pop 0.35s ease-out;
+}
+
+.lb-record__unit {
+  font-size: 17px;
+}
+
+.lb-record__level {
+  align-self: center;
+  padding: 1px 9px;
+  border-radius: 999px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.lb-record__new {
+  align-self: center;
+  padding: 1px 10px;
+  border-radius: 999px;
+  background: var(--gold);
+  color: #4a3208;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  animation: found-in 0.4s ease-out 0.3s backwards;
+}
+
+.lb-record__best {
+  margin-top: 6px;
+  color: #7a5410;
+  font-size: 14px;
+  font-weight: 700;
+}
 .lb-result__flash--failed {
   background: #dfe4ea;
   color: #4a5560;

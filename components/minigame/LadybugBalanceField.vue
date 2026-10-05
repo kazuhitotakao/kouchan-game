@@ -4,15 +4,17 @@
 
    ・切り株の上に、横向きの枝がのっている（まん中を支点に、左右へ傾く）
    ・てんとう虫は枝の上にいるので、枝といっしょに傾く（枝の箱の中に置いている）
-   ・上の HUD … ステージ番号と残り時間
+   ・上の HUD … ステージ番号と残り時間（エンドレスは、レベルと たえた時間）
    ・まん中の大きな文字 … カウントダウン・クリア・おしまい
+   ・てんとう虫の絵は、種類（ナナホシ・ナミテントウ・幼虫）で かきわける
 
    動き・判定は composables/useLadybugBalanceGame.ts。ここは受けとった値を絵にするだけ
    ============================================================ */
 
 import { computed } from 'vue';
 
-import { ladybugBalanceMotion } from '~/data/ladybugBalance';
+import { ladybugBalanceKinds, ladybugBalanceMotion } from '~/data/ladybugBalance';
+import type { LadybugBalanceKind } from '~/data/ladybugBalance';
 import type { LadybugBalanceBug, LadybugBalancePhase } from '~/composables/useLadybugBalanceGame';
 
 const props = defineProps<{
@@ -27,7 +29,22 @@ const props = defineProps<{
   isStartCueVisible: boolean;
   windDir: 0 | -1 | 1;
   windWarningDir: 0 | -1 | 1;
+
+  /* エンドレスのときだけ（ステージのときは endlessLevel を null にする）
+     elapsedMs … たえた時間、endlessProgress … 次のレベルまでの進み具合（0 → 1） */
+  endlessLevel: number | null;
+  endlessProgress: number;
+  elapsedMs: number;
+
+  /* はしに着いてしまった てんとう虫の種類（幼虫なら「おちちゃった…」） */
+  lostKind: LadybugBalanceKind | null;
 }>();
+
+/* エンドレスで、たえた時間（「23.4」。0.1秒きざみで切り捨て） */
+const elapsedText = computed(() => (Math.floor(Math.max(0, props.elapsedMs) / 100) / 10).toFixed(1));
+
+/* おしまいのときの、まん中の文字（幼虫は飛べないので落ちる） */
+const failedCue = computed(() => (props.lostKind === 'larva' ? 'おちちゃった…' : 'とんでいっちゃった…'));
 
 /* 残り時間（「5.2」。0.1秒きざみで切り上げる。0 になるまで「0.0」を出さない） */
 const remainingText = computed(() => (Math.ceil(props.remainingMs / 100) / 10).toFixed(1));
@@ -47,8 +64,12 @@ const bugViews = computed(() =>
     const { nervousFrom, flyAt } = ladybugBalanceMotion;
     const nervous = Math.min(1, Math.max(0, (ratio - nervousFrom) / (flyAt - nervousFrom)));
 
+    const canFly = ladybugBalanceKinds[bug.kind].canFly;
+
     return {
       id: bug.id,
+      kind: bug.kind,
+      canFly,
       left: `${50 + (bug.x / props.branchLength) * 50}%`,
       facing: bug.walkDir,
       nervous,
@@ -58,6 +79,8 @@ const bugViews = computed(() =>
       isWindingUp: props.phase === 'playing' && bug.action === 'windup',
       isDashing: props.phase === 'playing' && bug.action === 'dash',
       isHopping: props.phase === 'playing' && bug.isHopping,
+      // エンドレスで、空から降りてきている最中
+      isLanding: props.phase === 'playing' && bug.isLanding,
     };
   }),
 );
@@ -74,7 +97,7 @@ const windStreaks = [
 <template>
   <div class="lb-field" :class="[`lb-field--${phase}`, { 'lb-field--windy': windDir !== 0 }]">
     <!-- HUD（ステージ番号と残り時間） -->
-    <div class="lb-hud">
+    <div v-if="endlessLevel === null" class="lb-hud">
       <span class="lb-hud__stage">ステージ {{ stageNumber }}</span>
       <span class="lb-hud__time" :class="{ 'lb-hud__time--low': remainingMs <= 3000 && phase === 'playing' && countdownNumber === null }">
         <span class="lb-hud__timeLabel">のこり</span>
@@ -83,6 +106,18 @@ const windStreaks = [
       </span>
       <span class="lb-hud__bar" aria-hidden="true">
         <span class="lb-hud__barFill" :style="{ transform: `scaleX(${remainingRatio})` }" />
+      </span>
+    </div>
+
+    <!-- HUD（エンドレス：レベルと、たえた時間。バーは次のレベルまで） -->
+    <div v-else class="lb-hud">
+      <span class="lb-hud__stage lb-hud__stage--endless">♾ エンドレス Lv.{{ endlessLevel }}</span>
+      <span class="lb-hud__time">
+        <b class="lb-hud__timeValue">{{ elapsedText }}</b>
+        <span class="lb-hud__timeUnit">びょう</span>
+      </span>
+      <span class="lb-hud__bar" aria-hidden="true">
+        <span class="lb-hud__barFill lb-hud__barFill--endless" :style="{ transform: `scaleX(${endlessProgress})` }" />
       </span>
     </div>
 
@@ -111,13 +146,16 @@ const windStreaks = [
         class="lb-bug"
         :class="{
           'lb-bug--nervous': bug.isNervous,
-          'lb-bug--flying': bug.isFlying,
+          'lb-bug--flying': bug.isFlying && bug.canFly,
+          'lb-bug--falling': bug.isFlying && !bug.canFly,
+          'lb-bug--landing': bug.isLanding,
           'lb-bug--still': phase !== 'playing' && !bug.isFlying,
+          [`lb-bug--${bug.kind}`]: true,
           'lb-bug--windup': bug.isWindingUp,
           'lb-bug--dash': bug.isDashing,
           'lb-bug--hop': bug.isHopping,
         }"
-        :style="{ left: bug.left, '--wing-open': bug.isFlying ? 1 : bug.nervous * 0.6, '--fly-dir': bug.facing }">
+        :style="{ left: bug.left, '--wing-open': bug.isFlying || bug.isLanding ? 1 : bug.nervous * 0.6, '--fly-dir': bug.facing }">
         <!-- 小走りの前の「！」（金色）／ あわてているときの「！」（赤） -->
         <span v-if="bug.isWindingUp" class="lb-bug__alert lb-bug__alert--dash">！</span>
         <span v-else-if="bug.nervous > 0.45 && !bug.isFlying" class="lb-bug__alert">！</span>
@@ -139,6 +177,30 @@ const windStreaks = [
                 <line class="lb-bug__leg lb-bug__leg--a" x1="40" y1="36" x2="44" y2="44" />
               </g>
 
+              <!-- ===== 幼虫（からも羽も無い。細長いからだに、オレンジの点とトゲ） ===== -->
+              <g v-if="bug.kind === 'larva'">
+                <path d="M6 32 Q7 22 18 21 L46 21 Q53 22 53 30 Q53 37 45 37 L14 37 Q6 37 6 32 Z" fill="#3b3850" stroke="#24222f" stroke-width="1.4" />
+                <g stroke="#24222f" stroke-width="1.2">
+                  <line x1="16" y1="22" x2="16" y2="36" />
+                  <line x1="25" y1="21.5" x2="25" y2="36.5" />
+                  <line x1="34" y1="21.5" x2="34" y2="36.5" />
+                  <line x1="43" y1="22" x2="43" y2="36" />
+                </g>
+                <circle cx="20.5" cy="27" r="2.8" fill="#f08a24" />
+                <circle cx="29.5" cy="27" r="2.8" fill="#f08a24" />
+                <g fill="#24222f">
+                  <circle cx="11" cy="23.5" r="1.6" />
+                  <circle cx="20.5" cy="20.5" r="1.6" />
+                  <circle cx="29.5" cy="20.5" r="1.6" />
+                  <circle cx="38.5" cy="20.5" r="1.6" />
+                  <circle cx="47" cy="22" r="1.6" />
+                </g>
+                <circle cx="55" cy="30" r="5.5" fill="#1f1d29" />
+                <circle cx="56.8" cy="28.6" r="1.6" fill="#fff" />
+              </g>
+
+              <!-- ===== てんとう虫（ナナホシ・ナミテントウ。色だけ ちがう） ===== -->
+              <template v-else>
               <!-- おなか（からの下の黒いところ） -->
               <ellipse cx="31" cy="33" rx="20" ry="6" fill="#2b2b2b" />
 
@@ -147,22 +209,32 @@ const windStreaks = [
                 <ellipse cx="22" cy="16" rx="18" ry="7" fill="rgb(205 228 250 / 92%)" stroke="#7f9fbf" stroke-width="1" />
               </g>
 
-              <!-- から（赤くて黒い点。前のほうを支点に、うしろが持ち上がって開く） -->
+              <!-- から（前のほうを支点に、うしろが持ち上がって開く）
+                   ナナホシ … 赤に黒い点、ナミテントウ … 黒に赤い紋（2つ） -->
               <g class="lb-bug__shell">
-                <path d="M9 34 A22 21 0 0 1 53 34 Z" fill="#e2393a" stroke="#a51f22" stroke-width="1.5" />
-                <circle cx="22" cy="22" r="3.6" fill="#2b2b2b" />
-                <circle cx="35" cy="18" r="3.2" fill="#2b2b2b" />
-                <circle cx="44" cy="28" r="3" fill="#2b2b2b" />
-                <circle cx="17" cy="30" r="2.6" fill="#2b2b2b" />
-                <circle cx="30" cy="29" r="2.8" fill="#2b2b2b" />
+                <template v-if="bug.kind === 'namitentou'">
+                  <path d="M9 34 A22 21 0 0 1 53 34 Z" fill="#2b2b2b" stroke="#111" stroke-width="1.5" />
+                  <circle cx="23" cy="24" r="5.4" fill="#e2393a" />
+                  <circle cx="40" cy="25" r="4.6" fill="#e2393a" />
+                </template>
+                <template v-else>
+                  <path d="M9 34 A22 21 0 0 1 53 34 Z" fill="#e2393a" stroke="#a51f22" stroke-width="1.5" />
+                  <circle cx="22" cy="22" r="3.6" fill="#2b2b2b" />
+                  <circle cx="35" cy="18" r="3.2" fill="#2b2b2b" />
+                  <circle cx="44" cy="28" r="3" fill="#2b2b2b" />
+                  <circle cx="17" cy="30" r="2.6" fill="#2b2b2b" />
+                  <circle cx="30" cy="29" r="2.8" fill="#2b2b2b" />
+                </template>
                 <path d="M18 17 Q26 11 34 12" fill="none" stroke="rgb(255 255 255 / 55%)" stroke-width="2.4" stroke-linecap="round" />
               </g>
 
-              <!-- 頭・目・しょっかく -->
+              <!-- 頭・目・しょっかく（ナミテントウは、頭に白い もようがある） -->
               <path d="M55 22 Q59 14 62 12" fill="none" stroke="#2b2b2b" stroke-width="1.6" stroke-linecap="round" />
               <circle cx="55" cy="30" r="7.5" fill="#2b2b2b" />
+              <ellipse v-if="bug.kind === 'namitentou'" cx="52" cy="25.5" rx="3" ry="1.8" fill="#f4f1e8" />
               <circle cx="57.5" cy="28" r="2.2" fill="#fff" />
               <circle cx="58.2" cy="28.2" r="1" fill="#2b2b2b" />
+              </template>
             </svg>
           </div>
         </div>
@@ -173,7 +245,7 @@ const windStreaks = [
     <p v-if="countdownNumber !== null" :key="`count-${countdownNumber}`" class="lb-cue lb-cue--count" aria-live="assertive">{{ countdownNumber }}</p>
     <p v-else-if="isStartCueVisible" class="lb-cue lb-cue--start">スタート！</p>
     <p v-else-if="phase === 'cleared'" class="lb-cue lb-cue--cleared">クリア！</p>
-    <p v-else-if="phase === 'failed'" class="lb-cue lb-cue--failed">とんでいっちゃった…</p>
+    <p v-else-if="phase === 'failed'" class="lb-cue lb-cue--failed">{{ failedCue }}</p>
   </div>
 </template>
 
@@ -240,6 +312,12 @@ const windStreaks = [
   line-height: 1.3;
 }
 
+/* エンドレスの札（金色。ステージの紫と見わけられるように） */
+.lb-hud__stage--endless {
+  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
+  color: #4a3208;
+}
+
 /* のこり3秒からは、赤っぽくして「もうすこし！」を伝える */
 .lb-hud__time--low {
   color: #d1495b;
@@ -260,6 +338,11 @@ const windStreaks = [
   border-radius: inherit;
   background: linear-gradient(90deg, #8f6ad4, #bd9bef);
   transform-origin: left center;
+}
+
+/* エンドレスの、次のレベルまでのバー（左から のびる） */
+.lb-hud__barFill--endless {
+  background: linear-gradient(90deg, #f5b83d, var(--gold));
 }
 
 /* ===== 地面と切り株 ===== */
@@ -525,6 +608,52 @@ const windStreaks = [
   animation: none;
 }
 
+/* 幼虫は飛べないので、はしから ころんと落ちる（長さは flyAway とそろえる） */
+.lb-bug--falling .lb-bug__fly {
+  animation: lb-bug-fall 1.2s ease-in forwards;
+}
+
+.lb-bug--falling .lb-bug__leg {
+  animation-duration: 0.07s;
+}
+
+@keyframes lb-bug-fall {
+  0% {
+    transform: translate(0, 0) rotate(0);
+  }
+
+  25% {
+    transform: translate(calc(var(--fly-dir) * 12px), -8px) rotate(calc(var(--fly-dir) * 30deg));
+  }
+
+  100% {
+    transform: translate(calc(var(--fly-dir) * 70px), 360px) rotate(calc(var(--fly-dir) * 240deg));
+  }
+}
+
+/* エンドレスの2匹目：羽を開いて、空から降りてくる（長さは data/ladybugBalance.ts の landing とそろえる） */
+.lb-bug--landing .lb-bug__fly {
+  animation: lb-bug-land 0.8s ease-out;
+}
+
+.lb-bug--landing .lb-bug__wing {
+  animation: lb-bug-flap 0.08s linear infinite alternate;
+}
+
+.lb-bug--landing .lb-bug__leg {
+  animation: none;
+}
+
+@keyframes lb-bug-land {
+  from {
+    transform: translate(calc(var(--fly-dir) * -40px), -300px) rotate(calc(var(--fly-dir) * 12deg));
+  }
+
+  to {
+    transform: translate(0, 0) rotate(0);
+  }
+}
+
 @keyframes lb-bug-bob {
   0%,
   100% {
@@ -766,6 +895,10 @@ const windStreaks = [
 
   .lb-bug--flying .lb-bug__fly {
     animation: lb-bug-fly 1.2s ease-in forwards !important;
+  }
+
+  .lb-bug--falling .lb-bug__fly {
+    animation: lb-bug-fall 1.2s ease-in forwards !important;
   }
 }
 </style>
