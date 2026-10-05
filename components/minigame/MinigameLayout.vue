@@ -16,11 +16,18 @@
      中身が画面に収まるときは、ふだんどおりの高さ。収まらないときだけ、画面の高さで止まる
      上のツールバーは いつも見えたまま。中身（<slot>）は残りの高さに収まるので、
      はみ出すぶんのスクロールは、ページ側が中身の中で用意する（とばないで！ が使う）
+
+   ■ 一時停止（遊んでいる最中のミニゲームだけ。状態を持つのは composables/useMinigamePause.ts）
+     ・canPause が true のあいだ、ツールバーのサウンドの左に「一時停止」ボタンを出す
+     ・止まっているあいだは、一時停止の画面（MinigamePauseOverlay.vue）を重ね、
+       全体の枠の中のCSSの動き（てんとう虫の足・こうちゃんの歩き など）も止める。枠の中は押せない（inert）
    ============================================================ */
 
 import { computed, ref } from 'vue';
 
 import SoundControl from '~/components/game/SoundControl.vue';
+import MinigamePauseOverlay from '~/components/minigame/MinigamePauseOverlay.vue';
+import type { MinigamePauseState } from '~/composables/useMinigamePause';
 
 withDefaults(
   defineProps<{
@@ -43,14 +50,21 @@ withDefaults(
 
     /* 全体の枠を、画面の高さより高くしないか（上の「■ fitScreen」を参照） */
     fitScreen?: boolean;
+
+    /* 一時停止（上の「■ 一時停止」を参照。一時停止の無いページは書かなくてよい） */
+    canPause?: boolean;
+    pauseState?: MinigamePauseState;
   }>(),
-  { backLabelShort: '← 戻る', variant: 'game', centered: false, fitScreen: false },
+  { backLabelShort: '← 戻る', variant: 'game', centered: false, fitScreen: false, canPause: false, pauseState: 'running' },
 );
 
 defineEmits<{
   back: [];
   toggleSound: [];
   volumeChange: [event: Event];
+  pause: [];
+  resume: [];
+  quit: [];
 }>();
 
 /* 上の行のボタン（矢印キーで移動するときの行き先として、ページ側から見えるようにしておく） */
@@ -62,9 +76,11 @@ defineExpose({ backButton, soundToggleButton });
 </script>
 
 <template>
-  <main class="minigame" :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu', 'minigame--fit': fitScreen }]">
+  <main
+    class="minigame"
+    :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu', 'minigame--fit': fitScreen, 'minigame--paused': pauseState !== 'running' }]">
     <!-- 全体の枠（上部ツールバー ＋ 中身） -->
-    <div class="mg-frame">
+    <div class="mg-frame" :inert="pauseState !== 'running' || undefined">
       <div class="mg-toolbar">
         <!-- スマホ幅では短い文字に入れかえる（読み上げは、どちらも aria-label だけ） -->
         <button ref="backButton" type="button" class="mg-back" :aria-label="backAriaLabel" @click="$emit('back')">
@@ -72,11 +88,19 @@ defineExpose({ backButton, soundToggleButton });
           <span class="mg-back__textShort" aria-hidden="true">{{ backLabelShort }}</span>
         </button>
 
+        <!-- 一時停止（遊んでいる最中だけ。キーボードでは Esc でも止められる） -->
+        <button v-if="canPause" type="button" class="mg-back mg-pause-button" title="一時停止（Esc）" @click="$emit('pause')">
+          <span aria-hidden="true">⏸</span> 一時停止
+        </button>
+
         <SoundControl ref="soundControl" :sound-enabled="soundEnabled" :sound-volume-percent="soundVolumePercent" @toggle="$emit('toggleSound')" @volume-change="$emit('volumeChange', $event)" />
       </div>
 
       <slot />
     </div>
+
+    <!-- 一時停止の画面（枠の外に置く。枠の中の動きを止めても、こちらは止めないため） -->
+    <MinigamePauseOverlay :state="pauseState" @resume="$emit('resume')" @quit="$emit('quit')" />
   </main>
 </template>
 
@@ -253,6 +277,19 @@ defineExpose({ backButton, soundToggleButton });
 .mg-back:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: 2px;
+}
+
+/* 一時停止ボタン（戻るボタンと同じ形。サウンドのとなり＝右へ寄せる） */
+.mg-pause-button {
+  gap: 4px;
+  margin-left: auto;
+}
+
+/* 止まっているあいだは、枠の中のCSSの動きも止める（ゲームの時計で動かしているものは、ゲーム側で止まる） */
+.minigame--paused .mg-frame :deep(*),
+.minigame--paused .mg-frame :deep(*::before),
+.minigame--paused .mg-frame :deep(*::after) {
+  animation-play-state: paused !important;
 }
 
 /* 戻るボタンの短い表示（「← 戻る」）。スマホ幅のときだけ入れかえる */
