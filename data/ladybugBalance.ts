@@ -314,16 +314,21 @@ export const ladybugBalanceEndless: LadybugBalanceEndless = {
    ボタンを押しているあいだは、その向きへ少しずつ速く傾いていく（いきなり傾かない）
    はなすと、ばねのように少しずつ水平へ戻る
    ・maxDeg          … いちばん傾いたときの角度（度）
+   ・drawMaxDeg      … いちばん傾いたときに、画面に描く角度（度）
+                       ゲームの計算は maxDeg のまま、絵だけを drawMaxDeg / maxDeg 倍に傾ける（難易度を変えずに、見た目だけ大きく傾ける）
+                       横に広くて背の低いフィールドでは、収まる角度までにする（maxDeg より小さくはしない。components/minigame/LadybugBalanceField.vue）
    ・pushAccel       … ボタンを押しているときに、傾きを速める強さ（度/秒²）
    ・returnStiffness … はなしたときに、水平へ戻ろうとする強さ（傾きが大きいほど強く戻る）
    ・damping         … 傾く速さのブレーキ（大きいほど、ゆれずに止まる）
    ============================================================ */
 export const ladybugBalanceTilt = {
   maxDeg: 28,
+  drawMaxDeg: 38,
   pushAccel: 190,
   returnStiffness: 6,
   damping: 5,
 };
+
 /* ============================================================
    てんとう虫の動き（どのステージも同じ）
 
