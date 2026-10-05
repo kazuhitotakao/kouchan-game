@@ -197,7 +197,6 @@ const isStartCueVisible = computed(() => phase.value === 'playing' && elapsed.va
 
 /* 次のステージがあるか（いまのステージをクリアしたときだけ「次のステージへ」を出す） */
 const hasNextStage = computed(() => stageIndex.value + 1 < stageCount);
-const isAllCleared = computed(() => phase.value === 'cleared' && !hasNextStage.value);
 
 /* 出てくる てんとう虫の説明（「🐞 ナナホシ ×2（ふつう）」のように、種類ごとに1行） */
 function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
@@ -217,7 +216,7 @@ function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
 /* はじまる前に出す、えらんだステージ（エンドレス）の説明 */
 const stageSummary = computed(() => {
   if (mode.value === 'endless') {
-    const parts = ['♾ どこまで たえられるかな？', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+    const parts = ['⏱ どこまで たえられるかな？', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
 
     if (endlessBestMs.value > 0) {
       parts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
@@ -243,15 +242,12 @@ const resultComment = computed(() => {
 
   if (phase.value === 'failed') {
     return lostKind.value === 'larva'
-      ? '幼虫が 枝のはしから 落ちちゃった。もういちど ちょうせんしよう！'
+      ? 'ようちゅうが 枝のはしから 落ちちゃった。もういちど ちょうせんしよう！'
       : 'てんとう虫が 枝のはしから 飛んでいっちゃった。もういちど ちょうせんしよう！';
   }
 
-  if (isAllCleared.value) {
-    return 'ぜんぶのステージをクリア！ こうちゃん、バランスの名人です！';
-  }
-
-  return 'てんとう虫は 枝の上で ごきげんです！';
+  // クリアしたときは、ステージごとの ひとこと（data/ladybugBalance.ts の clearComment）
+  return stage.value.clearComment;
 });
 
 /* ============================================================
@@ -296,7 +292,7 @@ function goToNextStage() {
   startStage(stageIndex.value + 1);
 }
 
-/* さいごのステージをクリアしたあとの「エンドレスに ちょうせん」 */
+/* さいごのステージをクリアしたあとの「⏱ なんびょう チャレンジへ」 */
 function goToEndless() {
   if (!canAcceptResultInput() || !isEndlessUnlocked.value) {
     return;
@@ -544,12 +540,16 @@ onUnmounted(() => {
           :class="{ 'lb-endless--selected': mode === 'endless' }"
           :aria-pressed="mode === 'endless'"
           @click="chooseEndless">
-          ♾ エンドレス
-          <span v-if="endlessBestMs > 0" class="lb-endless__best">じこベスト {{ formatSeconds(endlessBestMs) }}びょう</span>
+          ⏱ なんびょう チャレンジ
+          <!-- 自己ベストの札（書きかたと見た目は、ミニゲームの一覧のカードの自己ベストとそろえる） -->
+          <span v-if="endlessBestMs > 0" class="lb-endless__best">
+            じこベスト
+            <span>⏱ {{ formatSeconds(endlessBestMs) }}びょう</span>
+          </span>
         </button>
 
         <ul class="lb-summary">
-          <li class="lb-summary__title">{{ mode === 'endless' ? '♾ エンドレス' : `ステージ ${stageIndex + 1}` }}</li>
+          <li class="lb-summary__title">{{ mode === 'endless' ? '⏱ なんびょう チャレンジ' : `ステージ ${stageIndex + 1}` }}</li>
           <li v-for="part in stageSummary" :key="part">{{ part }}</li>
         </ul>
       </article>
@@ -611,7 +611,7 @@ onUnmounted(() => {
       <article v-else-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
         <!-- エンドレス：たえた時間とレベル -->
         <template v-if="mode === 'endless'">
-          <p class="place-card__flash">♾ エンドレス</p>
+          <p class="place-card__flash lb-result__flash">⏱ なんびょう チャレンジ</p>
           <p class="lb-record">
             <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
             <span class="lb-record__unit">びょう たえた！</span>
@@ -620,12 +620,14 @@ onUnmounted(() => {
           </p>
         </template>
 
-        <p v-else class="place-card__flash" :class="{ 'lb-result__flash--failed': phase === 'failed' }">
-          {{ phase === 'cleared' ? `ステージ ${stageIndex + 1} クリア！` : 'ざんねん…' }}
+        <!-- クリアしたときは、ステージの数字だけ大きくする（何番をクリアしたか すぐ分かるように） -->
+        <p v-else-if="phase === 'cleared'" class="place-card__flash lb-result__flash">
+          ステージ <span class="lb-result__stageNumber">{{ stageIndex + 1 }}</span> クリア！
         </p>
+        <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
         <p class="mg-text">{{ resultComment }}</p>
         <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
-        <p v-if="isNewEndlessUnlocked" class="lb-unlocked">♾ エンドレスが あそべるようになった！</p>
+        <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ なんびょう チャレンジが あそべるようになった！</p>
         <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
       </article>
 
@@ -636,7 +638,7 @@ onUnmounted(() => {
       <div v-else-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions">
         <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
         <!-- さいごのステージをクリアしたら、エンドレスへ -->
-        <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToEndless">♾ エンドレスに ちょうせん</button>
+        <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToEndless">⏱ なんびょう チャレンジへ</button>
         <button type="button" class="lb-nav" :class="phase === 'cleared' ? 'lb-sub' : 'mg-play lb-nav--primary'" @click="retry">もう一度あそぶ</button>
         <button type="button" class="lb-sub lb-nav" @click="backToStageSelect">ステージをえらぶ</button>
       </div>
@@ -757,10 +759,13 @@ onUnmounted(() => {
 }
 
 /* ===== ステージえらび ===== */
-/* 5つずつ2行にならべる（10ステージ。スマホ幅でも1行に5つ入る） */
+/* 5つずつ2行にならべる（10ステージ。スマホ幅でも1行に5つ入る）
+   カードの幅のまんなかに置く（左に寄っていると、下の横長の なんびょう チャレンジ とずれて見えるため） */
 .lb-stages {
   display: grid;
-  grid-template-columns: repeat(5, 48px);
+  /* ふだんは 48px。とても細い画面（幅 320px など）で入りきらないときだけ、そろって小さくなる */
+  grid-template-columns: repeat(5, minmax(0, 48px));
+  justify-content: center;
   gap: 8px;
   margin: 16px 0 0;
 }
@@ -770,8 +775,9 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  box-sizing: border-box;
+  width: 100%;
+  aspect-ratio: 1;
   border: 2px solid #cbb5f0;
   border-radius: 12px;
   background: #fff;
@@ -826,24 +832,27 @@ onUnmounted(() => {
   line-height: 1;
 }
 
-/* エンドレスのボタン（ステージのボタンの下に、横長で。金色） */
+/* エンドレス（なんびょう チャレンジ）のボタン（ステージのボタンの下に、横長で）
+   色は、ステージのボタン（.lb-stage）とそろえる（えらぶ前は白地に紫のふち、えらぶと紫でぬりつぶす）
+   中身（名前と自己ベストの札）は、上のステージのボタンと合わせて、まんなかに寄せる */
 .lb-endless {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 2px 12px;
   box-sizing: border-box;
   width: 100%;
   margin: 10px 0 0;
   padding: 10px 16px;
-  border: 2px solid #e8b23c;
+  border: 2px solid #cbb5f0;
   border-radius: 12px;
-  background: #fff8e6;
-  color: #7a5410;
+  background: #fff;
+  color: #6b4fb0;
   font-family: inherit;
   font-size: 18px;
   font-weight: 800;
-  text-align: left;
+  text-align: center;
   cursor: pointer;
   transition: transform 0.1s ease;
 }
@@ -853,9 +862,10 @@ onUnmounted(() => {
 }
 
 .lb-endless--selected {
-  background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
-  color: #4a3208;
-  box-shadow: 0 3px 0 rgb(232 178 60 / 45%);
+  border-color: #8f6ad4;
+  background: #8f6ad4;
+  color: #fff;
+  box-shadow: 0 3px 0 rgb(107 79 176 / 35%);
 }
 
 .lb-endless:focus-visible {
@@ -863,9 +873,20 @@ onUnmounted(() => {
   outline-offset: 2px;
 }
 
+/* 自己ベストの札（ミニゲームの一覧の .mg-card__best と同じ見た目。「じこベスト　⏱ 23.4びょう」） */
 .lb-endless__best {
-  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  column-gap: 1em;
+  padding: 1px 12px;
+  border-radius: 999px;
+  background: #fff6e0;
+  box-shadow: inset 0 0 0 1px #f5e2be;
+  color: #7a5410;
+  font-size: 13.5px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* えらんだステージの説明 */
@@ -1001,6 +1022,24 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 700;
 }
+
+/* 結果の画面の札（クリア ／ ざんねん… ／ なんびょう チャレンジ）
+   結果の画面では、この札がいちばん大事な知らせなので、ほかの画面の札（13px）より ひとまわり大きくする */
+.lb-result__flash {
+  margin-bottom: 10px;
+  padding: 6px 20px;
+  font-size: 17px;
+}
+
+/* 「ステージ 3 クリア！」の数字（まわりの文字より さらに大きく。札の高さが広がりすぎないよう line-height は 1） */
+.lb-result__stageNumber {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
 .lb-result__flash--failed {
   background: #dfe4ea;
   color: #4a5560;

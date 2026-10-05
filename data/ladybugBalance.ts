@@ -88,9 +88,11 @@ export type LadybugBalanceRule = {
   } | null;
 };
 
-/* ステージ1つぶん（きまり ＋ 何秒たえればクリアか） */
+/* ステージ1つぶん（きまり ＋ 何秒たえればクリアか ＋ クリアしたときの ひとこと）
+   clearComment … 結果の画面に出す ひとこと（そのステージで気をつけたこと ── 風・2匹・幼虫など ── にふれる。さいごのステージは、ぜんぶクリアのお祝い） */
 export type LadybugBalanceStage = LadybugBalanceRule & {
   seconds: number;
+  clearComment: string;
 };
 
 /* ステージの一覧（上から ステージ1, 2, …）
@@ -98,7 +100,16 @@ export type LadybugBalanceStage = LadybugBalanceRule & {
    ほうっておくと はしまで行ってしまうので、ずっと見ていないといけない */
 export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
   // ステージ1：長い枝（遊びかたを覚える）
-  { ladybugs: ['nanahoshi'], walkSpeed: 0.3, turnInterval: [2500, 4500], branchLength: 1, seconds: 6, wind: null, quirks: null },
+  {
+    ladybugs: ['nanahoshi'],
+    walkSpeed: 0.3,
+    turnInterval: [2500, 4500],
+    branchLength: 1,
+    seconds: 6,
+    clearComment: 'じょうずに 枝を かたむけられたよ！',
+    wind: null,
+    quirks: null,
+  },
 
   // ステージ2：速く歩く。ここから、ときどき急に向きを変えたり、小走りしたりする
   {
@@ -107,6 +118,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 1,
     seconds: 8,
+    clearComment: '小走りしても だいじょうぶ！ しっかり ついていけたよ！',
     wind: null,
     quirks: { interval: [1800, 3400], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -118,6 +130,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.75,
     seconds: 8,
+    clearComment: 'きまぐれな ナミテントウにも ついていけたよ！ すごい！',
     wind: null,
     quirks: { interval: [2200, 4000], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -129,6 +142,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.75,
     seconds: 9,
+    clearComment: '強い風にも びっくりしなかったよ！ じょうず！',
     wind: { strength: 60, interval: [1800, 3400], duration: 1500 },
     // 風と重なると きびしすぎるので、気まぐれな動きは ほかのステージより少なめ
     quirks: { interval: [3000, 5000], dashMultiplier: 2.2, dashDuration: 800 },
@@ -143,6 +157,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 1,
     seconds: 12,
+    clearComment: '2匹いっしょでも だいじょうぶ！ やった！',
     wind: null,
     quirks: { interval: [2400, 4200], dashMultiplier: 2, dashDuration: 700 },
   },
@@ -155,6 +170,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 1,
     seconds: 12,
+    clearComment: 'ナナホシも ようちゅうも さいごまで いっしょ！ ばっちり！',
     wind: { strength: 45, interval: [2400, 4000], duration: 1200 },
     quirks: { interval: [2600, 4400], dashMultiplier: 2, dashDuration: 700 },
   },
@@ -168,6 +184,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.85,
     seconds: 11,
+    clearComment: 'すばやい ナミテントウにも ついていけたよ！ すごい！',
     wind: null,
     quirks: { interval: [2000, 3600], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -180,6 +197,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.85,
     seconds: 12,
+    clearComment: '風に ゆられても へっちゃら！ うまく できたよ！',
     wind: { strength: 45, interval: [1800, 3200], duration: 1500 },
     quirks: { interval: [2600, 4400], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -192,6 +210,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 0.9,
     seconds: 13,
+    clearComment: 'きまぐれな 2匹にも ついていけたよ！ あとひとつ！',
     wind: null,
     quirks: { interval: [3600, 5600], dashMultiplier: 2.2, dashDuration: 700 },
   },
@@ -203,6 +222,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 0.9,
     seconds: 16,
+    clearComment: 'ぜんぶのステージを クリア！ やった！ てんとうむしマスターだ！',
     wind: { strength: 50, interval: [2200, 3800], duration: 1300 },
     quirks: { interval: [2800, 4600], dashMultiplier: 2, dashDuration: 700 },
   },

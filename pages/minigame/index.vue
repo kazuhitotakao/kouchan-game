@@ -17,7 +17,7 @@ import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
 import { minigames } from '~/data/minigames';
 import type { MinigameBestPart, MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
-import { loadMinigameBest, loadUnlockedMinigames } from '~/utils/minigameStorage';
+import { clearNewMinigames, loadMinigameBest, loadNewMinigames, loadUnlockedMinigames } from '~/utils/minigameStorage';
 // 絵の先読みと、中の絵が表示できるようになってから箱ごと出す目印（→ utils/imagePreload.ts）
 import { preloadSecretPathImages, vRevealWithImages } from '~/utils/imagePreload';
 
@@ -53,14 +53,19 @@ const {
 const isLoaded = ref(false);
 const unlockedIds = ref<MinigameId[]>([]);
 
+/* 本編で新しく解放して、この一覧ではじめて見るミニゲーム（カードに NEW を付ける）
+   読んだらすぐ保存のほうは消すので、NEW が出るのは この1回だけ（このページにいるあいだは残す） */
+const newIds = ref<MinigameId[]>([]);
+
 /* カードに出す自己ベストの項目（まだ遊んでいないものは入れない） */
 const bestParts = ref<Partial<Record<MinigameId, MinigameBestPart[]>>>({});
 
-/* 一覧のカード（上から順）。解放したかどうかと、自己ベストの文をつけておく */
+/* 一覧のカード（上から順）。解放したかどうか・NEW かどうかと、自己ベストの文をつけておく */
 const cards = computed(() =>
   minigames.map((minigame) => ({
     ...minigame,
     isUnlocked: unlockedIds.value.includes(minigame.id),
+    isNew: newIds.value.includes(minigame.id),
     bestParts: bestParts.value[minigame.id] ?? null,
   })),
 );
@@ -131,6 +136,8 @@ onMounted(async () => {
   window.addEventListener('keydown', resumeBgmOnFirstInput, { once: true });
 
   unlockedIds.value = loadUnlockedMinigames();
+  newIds.value = loadNewMinigames();
+  clearNewMinigames();
   bestParts.value = Object.fromEntries(
     minigames.flatMap((minigame) => {
       const parts = minigame.formatBest(loadMinigameBest(minigame.id));
@@ -188,6 +195,8 @@ onUnmounted(() => {
         <li v-for="card in cards" :key="card.id">
           <!-- 解放したミニゲーム（押すと、そのページへ） -->
           <button v-if="card.isUnlocked" type="button" class="mg-card" @click="goTo(`/minigame/${card.id}`)">
+            <!-- 本編で新しく解放したばかりのとき（左上の角。見た目はタイトルの「🎮 ミニゲーム」の NEW と同じ） -->
+            <span v-if="card.isNew" class="mg-card__new">NEW</span>
             <!-- アイコン：絵（iconImage）があれば絵、無ければ絵文字（icon） -->
             <span class="mg-card__icon" aria-hidden="true">
               <img v-if="card.iconImage" class="mg-card__iconImage" :src="card.iconImage" alt="" decoding="async" />
@@ -277,6 +286,9 @@ onUnmounted(() => {
   gap: 20px;
   box-sizing: border-box;
   width: 100%;
+  /* 高さは、いちばん中身が多いとき（解放して自己ベストもある、絵のアイコン）に合わせて先にとっておく
+     （本編で見つけて解放したり、記録が付いたりしても、カードが上下に広がらないように。中身は上下のまんなか） */
+  min-height: 124px;
   padding: 16px 18px 16px 32px;
   border: 2px solid #e6dbfa;
   border-left: 8px solid #8f6ad4;
@@ -320,13 +332,39 @@ button.mg-card:focus::before {
   transform: translateY(1px);
 }
 
+/* NEW の印（本編で新しく解放して、はじめてこの一覧を開いたときだけ）
+   見た目は、本編のタイトルの「🎮 ミニゲーム」・地図の秘密の小道の NEW とそろえる
+   カードの左上の角にかぶせるだけなので、中の並びは変わらない */
+.mg-card__new {
+  position: absolute;
+  z-index: 1;
+  top: -9px;
+  left: -10px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #ffcf4d;
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  color: #5a3b00;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
 /* キーボードで選んでいるときは、本編のコマンドの「選んでいる」ときと同じ水色の輪 */
 .mg-card:focus-visible {
   outline: 3px solid #67e8f9;
   outline-offset: 2px;
 }
 
+/* アイコンの置き場（絵・絵文字・🔒 のどれでも同じ幅。解放しても、右の文の書きだしが左右にずれないように）
+   幅は絵の大きさ（.mg-card__iconImage）と同じ */
 .mg-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 88px;
   font-size: 34px;
   line-height: 1;
 }
@@ -424,11 +462,15 @@ button.mg-card:focus::before {
   }
 
   .mg-card {
+    /* スマホは文が折り返すので、そのぶん高くとる（幅 375px で、解放しただけのカードが入りきる高さ）
+       自己ベストが付くと、そのぶんだけ広がる（記録が付いたときまで とっておくと、「？？？」のカードの余白が多すぎるため） */
+    min-height: 150px;
     gap: 16px;
     padding: 14px 14px 14px 28px;
   }
 
   .mg-card__icon {
+    width: 60px;
     font-size: 30px;
   }
 

@@ -64,9 +64,9 @@ export const minigames = [
     iconImage: undefined,
     title: 'てんとう虫バランス',
     description: '枝をかたむけて、てんとう虫が飛んでいかないようにしよう！',
-    lockedHint: '公園で、ちいさな生きものに出会えるかも…',
+    lockedHint: '公園のどこかで、てんとうむしに会えるかも…',
     /* どこまでクリアしたか（{ clearedStage: 3 } なら「ステージ 3/10 クリア」。分母はステージの数）
-       と、エンドレスの自己ベスト（{ endlessBestMs: 23400 } なら「♾ 23.4びょう」。遊んでいなければ出さない） */
+       と、エンドレスの自己ベスト（{ endlessBestMs: 23400 } なら「⏱ 23.4びょう」。遊んでいなければ出さない） */
     formatBest: (savedBest) => {
       const clearedStage = Math.min(Number(savedBest?.clearedStage) || 0, ladybugBalanceStages.length);
       const endlessBestMs = Number(savedBest?.endlessBestMs) || 0;
@@ -77,7 +77,7 @@ export const minigames = [
       }
 
       if (endlessBestMs > 0) {
-        parts.push({ text: `♾ ${(Math.floor(endlessBestMs / 100) / 10).toFixed(1)}びょう` });
+        parts.push({ text: `⏱ ${(Math.floor(endlessBestMs / 100) / 10).toFixed(1)}びょう` });
       }
 
       return parts.length > 0 ? parts : null;

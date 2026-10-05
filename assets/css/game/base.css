@@ -373,6 +373,29 @@
   gap: 8px;
 }
 
+/* 「🎮 ミニゲーム」の NEW の印（新しく解放して、まだ一覧で見ていないものがあるときだけ）
+   見た目は、地図の秘密の小道の NEW（park-map.css の .cmd__new）とそろえる
+   ボタンの左上の角にかぶせるだけなので、ボタンの幅は変わらない */
+.title-card__minigame {
+  position: relative;
+}
+
+.title-card__new {
+  position: absolute;
+  top: -9px;
+  left: -6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ffcf4d;
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  color: #5a3b00;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
 /* 「♪ サウンドトラック」（入りきる幅に合わせて、文字を出しわける）
    390px以上 … 「♪ サウンドトラック」／ 341〜389px … 「♪ サントラ」／ 340px以下 … 「♪」だけ（吹き出しで伝える） */
 .title-card__soundtrack {
