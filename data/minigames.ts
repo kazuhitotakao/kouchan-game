@@ -62,11 +62,11 @@ export const minigames = [
     icon: '🐞',
     /* 絵はまだ無いので、絵文字（icon）を出す（書いておかないと、一覧の型から iconImage が消えて、読む側がエラーになる） */
     iconImage: undefined,
-    title: 'とばないで！',
-    description: '枝をかたむけて、てんとうむしが とんでいかないようにしよう！',
-    lockedHint: '公園のどこかで、てんとうむしに会えるかも…',
+    title: 'まだだよ！てんとう虫',
+    description: '枝を傾けて、てんとう虫が飛んでいかないようにしよう！',
+    lockedHint: '公園のどこかで、てんとう虫に会えるかも…',
     /* どこまでクリアしたか（{ clearedStage: 3 } なら「ステージ 3/10 クリア」。分母はステージの数）
-       と、エンドレスの自己ベスト（{ endlessBestMs: 23400 } なら「⏱ 23.4びょう」。遊んでいなければ出さない） */
+       と、エンドレスの自己ベスト（{ endlessBestMs: 23400 } なら「⏱ 23.4秒」。遊んでいなければ出さない） */
     formatBest: (savedBest) => {
       const clearedStage = Math.min(Number(savedBest?.clearedStage) || 0, ladybugBalanceStages.length);
       const endlessBestMs = Number(savedBest?.endlessBestMs) || 0;
@@ -77,7 +77,7 @@ export const minigames = [
       }
 
       if (endlessBestMs > 0) {
-        parts.push({ text: `⏱ ${(Math.floor(endlessBestMs / 100) / 10).toFixed(1)}びょう` });
+        parts.push({ text: `⏱ ${(Math.floor(endlessBestMs / 100) / 10).toFixed(1)}秒` });
       }
 
       return parts.length > 0 ? parts : null;
@@ -101,10 +101,10 @@ export function splitMinigameTitle(title: string): string[] {
 }
 
 /* 本編の「ミニゲーム解放！」の本文を、折り返してよい区切りごとに分ける
-   「「とばないで！」が」「あそべるようになりました！」（かぎかっこと「が」は、名前の はしの区切りにつける） */
+   「「まだだよ！」「てんとう虫」が」「遊べるようになりました！」（かぎかっこと「が」は、名前の はしの区切りにつける） */
 export function buildMinigameUnlockPhrases(title: string): string[] {
   const parts = splitMinigameTitle(title);
   const quoted = parts.map((part, index) => `${index === 0 ? '「' : ''}${part}${index === parts.length - 1 ? '」が' : ''}`);
 
-  return [...quoted, 'あそべるようになりました！'];
+  return [...quoted, '遊べるようになりました！'];
 }

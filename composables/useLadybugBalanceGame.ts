@@ -1,5 +1,5 @@
 /* ============================================================
-   ミニゲーム「とばないで！」の「状態を持つ側」
+   ミニゲーム「まだだよ！てんとう虫」の「状態を持つ側」
 
    ■ ここがやること
      ・遊んでいる最中に変わる状態（枝の傾き・てんとう虫の位置・風・ゲームの時計）を持つ
@@ -32,7 +32,7 @@ import {
 import type { LadybugBalanceKind, LadybugBalanceRule } from '~/data/ladybugBalance';
 
 /* いまの進み具合
-   ready    … はじまる前（ステージをえらぶ）
+   ready    … はじまる前（ステージを選ぶ）
    playing  … 遊んでいる最中（カウントダウンもふくむ。ゲームの時計がマイナスのあいだがカウントダウン）
    flyaway  … てんとう虫が はしに着いて、飛んでいく（幼虫は落ちる）演出の最中（すぐに failed になる）
    cleared  … 時間までたえた（ステージだけ）
@@ -157,7 +157,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
 
   /* 風
      windDir        … いま吹いている向き（0 ＝ 吹いていない。-1 ＝ 左が下がる向き）
-     windWarningDir … もうすぐ吹く向き（「かぜがくる！」を出しているあいだだけ。0 ＝ 出していない） */
+     windWarningDir … もうすぐ吹く向き（「風が来る！」を出しているあいだだけ。0 ＝ 出していない） */
   const windDir = ref<0 | LadybugBalanceSide>(0);
   const windWarningDir = ref<0 | LadybugBalanceSide>(0);
   let nextWindAt = Infinity;
@@ -293,7 +293,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     return phase.value !== 'playing' && phase.value !== 'flyaway';
   }
 
-  /* ステージをえらぶ（はじまる前の画面で、てんとう虫の種類などを先に見せるため） */
+  /* ステージを選ぶ（はじまる前の画面で、てんとう虫の種類などを先に見せるため） */
   function selectStage(index: number) {
     if (!canChangeSelection() || !ladybugBalanceStages[index]) {
       return;
@@ -455,7 +455,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     }
   }
 
-  /* 風の予定（吹く少し前に「かぜがくる！」→ 吹く → やむ → 次の予定）
+  /* 風の予定（吹く少し前に「風が来る！」→ 吹く → やむ → 次の予定）
      エンドレスでは、とちゅうで風が吹きはじめたり、やんだりする */
   function advanceWind() {
     const { wind } = rule.value;
