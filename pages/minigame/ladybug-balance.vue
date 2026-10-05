@@ -232,26 +232,31 @@ function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
   });
 }
 
-/* はじまる前に出す、えらんだステージ（エンドレス）の説明 */
-const stageSummary = computed(() => {
-  if (mode.value === 'endless') {
-    // 1行目は、何が記録になるか（見出しの「とばさず どこまで？」と、同じことばが続かないように）
-    const parts = ['⏱ たえた じかんが きろくになる', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+/* はじまる前に出す、ステージ（エンドレス）の説明
+   えらんでいるものだけでなく、ぜんぶのステージとエンドレスのぶんを作る
+   （同じ場所に重ねて、えらんでいるものだけを見せる。いちばん長い説明の高さになるので、
+   えらびなおしても画面の高さが変わらない → template の .lb-summaries） */
+const stageSummaries = computed(() => {
+  const summaries = ladybugBalanceStages.map((stageInfo, index) => {
+    const parts = [...describeLadybugs(stageInfo.ladybugs), `⏱ ${stageInfo.seconds}びょう たえたらクリア`];
 
-    if (endlessBestMs.value > 0) {
-      parts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
+    if (stageInfo.wind) {
+      parts.push('💨 ときどき かぜが ふく');
     }
 
-    return parts;
+    return { key: `stage-${index}`, title: `ステージ ${index + 1}`, parts, isSelected: mode.value === 'stage' && index === stageIndex.value };
+  });
+
+  // 1行目は、何が記録になるか（見出しの「とばさず どこまで？」と、同じことばが続かないように）
+  const endlessParts = ['⏱ たえた じかんが きろくになる', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+
+  if (endlessBestMs.value > 0) {
+    endlessParts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
   }
 
-  const parts = [...describeLadybugs(stage.value.ladybugs), `⏱ ${stage.value.seconds}びょう たえたらクリア`];
+  summaries.push({ key: 'endless', title: '⏱ とばさず どこまで？', parts: endlessParts, isSelected: mode.value === 'endless' });
 
-  if (stage.value.wind) {
-    parts.push('💨 ときどき かぜが ふく');
-  }
-
-  return parts;
+  return summaries;
 });
 
 /* 結果の画面のひとこと（幼虫は飛べないので「おちちゃった」） */
@@ -611,10 +616,15 @@ onUnmounted(() => {
             </span>
           </button>
 
-          <ul class="lb-summary">
-            <li class="lb-summary__title">{{ mode === 'endless' ? '⏱ とばさず どこまで？' : `ステージ ${stageIndex + 1}` }}</li>
-            <li v-for="part in stageSummary" :key="part">{{ part }}</li>
-          </ul>
+          <!-- えらんでいるステージ（エンドレス）の説明
+               ぜんぶの説明を同じ場所に重ねて置き、えらんでいるものだけを見せる（ほかは visibility: hidden で、読み上げもしない）
+               枠はいちばん長い説明の高さになるので、えらびなおしても画面の高さが変わらない（細い画面で折り返したときも） -->
+          <div class="lb-summaries">
+            <ul v-for="summary in stageSummaries" :key="summary.key" class="lb-summary" :class="{ 'lb-summary--hidden': !summary.isSelected }">
+              <li class="lb-summary__title">{{ summary.title }}</li>
+              <li v-for="part in summary.parts" :key="part">{{ part }}</li>
+            </ul>
+          </div>
         </article>
 
         <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる） -->
@@ -1023,10 +1033,20 @@ onUnmounted(() => {
 
 /* えらんだステージの説明 */
 /* 1行に1つ（てんとう虫の種類の説明が長いので、横にならべると読みにくい） */
+/* 説明を重ねる場所（ぜんぶの .lb-summary を、同じマスに置く） */
+.lb-summaries {
+  display: grid;
+  margin: 12px 0 0;
+}
+
+/* 重ねた説明は、どれも いちばん高いものに そろう（枠の高さは いつも同じ）
+   align-content: start … 短い説明は、上から つめて並べる（行のあいだを広げない） */
 .lb-summary {
   display: grid;
+  grid-area: 1 / 1;
+  align-content: start;
   gap: 2px;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 8px 14px;
   border-radius: 12px;
   background: #fff;
@@ -1039,6 +1059,11 @@ onUnmounted(() => {
 
 .lb-summary__title {
   color: #7f5cc8;
+}
+
+/* えらんでいない説明（場所だけ取って、見せない） */
+.lb-summary--hidden {
+  visibility: hidden;
 }
 
 /* ===== フィールドの高さ（画面の高さに合わせる） ===== */
