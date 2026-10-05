@@ -315,7 +315,7 @@ const leavePlaceCommandIndex = 2;
 
 /* ===== ひとやすみ（ベンチ）のコマンドの番号 =====
 
-   0 休憩する ／ 1 おやつにする（残っているときだけ）／ 最後 ← 場所選びにもどる
+   0 きゅうけいする ／ 1 おやつにする（残っているときだけ）／ 最後 ← 場所選びにもどる
    おやつを食べきると「おやつにする」が消えるので、「← 場所選びにもどる」が1つくり上がる */
 const restBreakCommandIndex = 0;
 const restSnackCommandIndex = 1;
@@ -2161,7 +2161,7 @@ function runSelectedCommand() {
       }
       break;
 
-    /* ひとやすみ（0 休憩する／1 おやつにする（残っているときだけ）／最後 ← 場所選びにもどる）
+    /* ひとやすみ（0 きゅうけいする／1 おやつにする（残っているときだけ）／最後 ← 場所選びにもどる）
        「おやつにする」はバッグを開くだけ。snackLeft も見るので、食べきったあとに 1 を押しても、まちがって開かない */
     case 'restArea':
       if (index === restBreakCommandIndex) {
@@ -2920,7 +2920,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">ひとやすみ</h2>
 
-                <p class="place-card__text">ベンチでひと息。休憩する？ おやつにする？</p>
+                <p class="place-card__text">ベンチでひと息。きゅうけいする？ おやつにする？</p>
               </article>
 
               <ResultCard
@@ -2933,7 +2933,7 @@ onUnmounted(() => {
                 :status-changes="statusChanges"
                 :change-groups="changeGroups" />
 
-              <!-- コマンド欄（休憩する／おやつにする／← 場所選びにもどる） -->
+              <!-- コマンド欄（きゅうけいする／おやつにする／← 場所選びにもどる） -->
               <div class="command-area">
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
