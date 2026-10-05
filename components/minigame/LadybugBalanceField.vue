@@ -161,7 +161,7 @@ const windStreaks = [
 
     <!-- HUD（エンドレス：レベルと、たえた時間。バーは次のレベルまで） -->
     <div v-else class="lb-hud">
-      <span class="lb-hud__stage lb-hud__stage--endless">⏱ とばさず どこまで？ Lv.{{ endlessLevel }}</span>
+      <span class="lb-hud__stage lb-hud__stage--endless">⏱ ずっと ここにいて！ Lv.{{ endlessLevel }}</span>
       <span class="lb-hud__time">
         <b class="lb-hud__timeValue">{{ elapsedText }}</b>
         <span class="lb-hud__timeUnit">びょう</span>

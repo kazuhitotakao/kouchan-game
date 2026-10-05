@@ -255,14 +255,14 @@ const stageSummaries = computed(() => {
     return { key: `stage-${index}`, title: `ステージ ${index + 1}`, parts, isSelected: mode.value === 'stage' && index === stageIndex.value };
   });
 
-  // 1行目は、何が記録になるか（見出しの「とばさず どこまで？」と、同じことばが続かないように）
+  // 1行目は、何が記録になるか（見出しの「ずっと ここにいて！」と、同じことばが続かないように）
   const endlessParts = ['⏱ がんばった じかんが きろく', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
 
   if (endlessBestMs.value > 0) {
     endlessParts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
   }
 
-  summaries.push({ key: 'endless', title: '⏱ とばさず どこまで？', parts: endlessParts, isSelected: mode.value === 'endless' });
+  summaries.push({ key: 'endless', title: '⏱ ずっと ここにいて！', parts: endlessParts, isSelected: mode.value === 'endless' });
 
   return summaries;
 });
@@ -325,7 +325,7 @@ function goToNextStage() {
   startStage(stageIndex.value + 1);
 }
 
-/* さいごのステージをクリアしたあとの「⏱ とばさず どこまで？へ」 */
+/* さいごのステージをクリアしたあとの「⏱「ずっと ここにいて！」へ」 */
 function goToEndless() {
   if (!canAcceptResultInput() || !isEndlessUnlocked.value) {
     return;
@@ -520,7 +520,7 @@ watch(
 const unlockState = ref<'checking' | 'locked' | 'unlocked'>('checking');
 
 /* えらんでいるもの（ステージ ／ エンドレス）が変わったら、保存する（次に開いたときも、同じものを えらんだ状態から始めるため）
-   ・「次のステージへ」「⏱ とばさず どこまで？へ」で変わったときも、ここで保存される
+   ・「次のステージへ」「⏱「ずっと ここにいて！」へ」で変わったときも、ここで保存される
    ・保存した記録を読みおわる前（onMounted の前半）と、まだ解放していないページでは保存しない */
 let isSelectionRestored = false;
 
@@ -659,7 +659,7 @@ onUnmounted(() => {
             :class="{ 'lb-endless--selected': mode === 'endless' }"
             :aria-pressed="mode === 'endless'"
             @click="chooseEndless">
-            ⏱ とばさず どこまで？
+            ⏱ ずっと ここにいて！
             <!-- 自己ベストの札（書きかたと見た目は、ミニゲームの一覧のカードの自己ベストとそろえる） -->
             <span v-if="endlessBestMs > 0" class="lb-endless__best">
               じこベスト
@@ -712,7 +712,7 @@ onUnmounted(() => {
           <article v-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
             <!-- エンドレス：たえた時間とレベル -->
             <template v-if="mode === 'endless'">
-              <p class="place-card__flash lb-result__flash">⏱ とばさず どこまで？</p>
+              <p class="place-card__flash lb-result__flash">⏱ ずっと ここにいて！</p>
               <p class="lb-record">
                 <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
                 <span class="lb-record__unit">びょう がんばった！</span>
@@ -728,7 +728,7 @@ onUnmounted(() => {
             <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
             <p class="mg-text">{{ resultComment }}</p>
             <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
-            <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ とばさず どこまで？が あそべるようになった！</p>
+            <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ ずっと ここにいて！が あそべるようになった！</p>
             <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
           </article>
         </div>
@@ -775,13 +775,13 @@ onUnmounted(() => {
 
         <!-- 結果の画面のボタン
              ・クリア … 左に「もう一度あそぶ」、右に「次のステージへ」を横にならべる（先へ進むボタンは、進む向きの右に置く）
-                         さいごのステージは「⏱ とばさず どこまで？へ」が長くて半分の幅に入らないので、2つとも横いっぱいで たてにならべる（上が「⏱ とばさず どこまで？へ」）
+                         さいごのステージは「⏱「ずっと ここにいて！」へ」が長くて半分の幅に入らないので、2つとも横いっぱいで たてにならべる（上が「⏱「ずっと ここにいて！」へ」）
              ・失敗   … 「もう一度あそぶ」だけを横いっぱいに
              ※ 「ステージをえらぶ」は置かない（上の「← ステージえらびへ」（スマホでは「← 戻る」）と同じなので）
              ※ 見た目の順（上から・左から）と Tab の順がそろうよう、ボタンは見た目の順に書く -->
         <div v-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions" :class="{ 'lb-result-actions--stacked': phase === 'cleared' && !hasNextStage }">
           <!-- さいごのステージをクリアしたら、エンドレスへ -->
-          <button v-if="phase === 'cleared' && !hasNextStage && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary lb-result-actions__wide" @click="goToEndless">⏱ とばさず どこまで？へ</button>
+          <button v-if="phase === 'cleared' && !hasNextStage && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary lb-result-actions__wide" @click="goToEndless">⏱「ずっと ここにいて！」へ</button>
           <button
             type="button"
             class="lb-nav"
@@ -980,7 +980,7 @@ onUnmounted(() => {
 
 /* ===== ステージえらび ===== */
 /* 5つずつ2行にならべる（10ステージ。スマホ幅でも1行に5つ入る）
-   カードの幅のまんなかに置く（左に寄っていると、下の横長の とばさず どこまで？ とずれて見えるため） */
+   カードの幅のまんなかに置く（左に寄っていると、下の横長の ずっと ここにいて！ とずれて見えるため） */
 .lb-stages {
   display: grid;
   /* ふだんは 48px。とても細い画面（幅 320px など）で入りきらないときだけ、そろって小さくなる */
@@ -1052,7 +1052,7 @@ onUnmounted(() => {
   line-height: 1;
 }
 
-/* エンドレス（とばさず どこまで？）のボタン（ステージのボタンの下に、横長で）
+/* エンドレス（ずっと ここにいて！）のボタン（ステージのボタンの下に、横長で）
    色は、ステージのボタン（.lb-stage）とそろえる（えらぶ前は白地に紫のふち、えらぶと紫でぬりつぶす）
    中身（名前と自己ベストの札）は、上のステージのボタンと合わせて、まんなかに寄せる */
 .lb-endless {
@@ -1283,7 +1283,7 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-/* 結果の画面の札（クリア ／ ざんねん… ／ とばさず どこまで？）
+/* 結果の画面の札（クリア ／ ざんねん… ／ ずっと ここにいて！）
    結果の画面では、この札がいちばん大事な知らせなので、ほかの画面の札（13px）より ひとまわり大きくする */
 .lb-result__flash {
   margin-bottom: 8px;
@@ -1329,7 +1329,7 @@ onUnmounted(() => {
 }
 
 /* 横いっぱいに置くボタン
-   ・さいごのステージをクリアしたときの「⏱ とばさず どこまで？へ」「もう一度あそぶ」（長くて半分の幅に入らないため）
+   ・さいごのステージをクリアしたときの「⏱「ずっと ここにいて！」へ」「もう一度あそぶ」（長くて半分の幅に入らないため）
    ・失敗したときの「もう一度あそぶ」（ボタンが1つだけなので） */
 .lb-result-actions__wide {
   grid-column: 1 / -1;
