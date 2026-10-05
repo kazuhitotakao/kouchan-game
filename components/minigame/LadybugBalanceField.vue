@@ -111,7 +111,7 @@ const windStreaks = [
 
     <!-- HUD（エンドレス：レベルと、たえた時間。バーは次のレベルまで） -->
     <div v-else class="lb-hud">
-      <span class="lb-hud__stage lb-hud__stage--endless">⏱ なんびょう チャレンジ Lv.{{ endlessLevel }}</span>
+      <span class="lb-hud__stage lb-hud__stage--endless">⏱ とばさず どこまで？ Lv.{{ endlessLevel }}</span>
       <span class="lb-hud__time">
         <b class="lb-hud__timeValue">{{ elapsedText }}</b>
         <span class="lb-hud__timeUnit">びょう</span>
@@ -278,6 +278,19 @@ const windStreaks = [
   align-items: center;
   justify-content: space-between;
   gap: 6px 10px;
+  transition:
+    opacity 0.3s ease,
+    visibility 0.3s;
+}
+
+/* 結果の画面では、HUD を消す
+   結果の画面ではフィールドが低くなるので、HUD が2行になる細い画面（スマホのエンドレスなど）では、
+   まん中の「とんでいっちゃった…」「クリア！」と重なってしまうため
+   （ステージ・たえた時間・レベルは、下の結果のカードに出ている） */
+.lb-field--cleared .lb-hud,
+.lb-field--failed .lb-hud {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .lb-hud__stage {

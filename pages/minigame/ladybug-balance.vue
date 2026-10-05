@@ -12,10 +12,12 @@
      まだ解放していないブラウザで直接開いたときは、遊べるようになる条件だけを出す
 
    ■ 保存するもの（utils/minigameStorage.ts の「自己ベスト」の場所を使う）
-     { clearedStage: 3, endlessBestMs: 23400 }
+     { clearedStage: 3, endlessBestMs: 23400, selected: 2 }
        clearedStage  … ステージ3までクリアした（次はステージ4が遊べる）
        endlessBestMs … エンドレスで たえた時間の自己ベスト（ミリ秒。まだ遊んでいなければ 0）
-     ※ 2つを いっしょに保存する（片方だけ保存すると、もう片方が消えるため → saveProgress()）
+       selected      … さいごに えらんでいたもの（ステージの番号。エンドレスは 'endless'）
+                       次に開いたときも、同じものを えらんだ状態から始める（まだ無い・遊べないものなら、まだクリアしていない いちばん前のステージ）
+     ※ ぜんぶ いっしょに保存する（ひとつだけ保存すると、ほかが消えるため → saveProgress()）
 
    ■ ゲームの中身
      ・動き・操作 … composables/useLadybugBalanceGame.ts
@@ -30,7 +32,7 @@ import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { useLadybugBalanceGame } from '~/composables/useLadybugBalanceGame';
 import type { LadybugBalanceSide } from '~/composables/useLadybugBalanceGame';
-import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
+import { moveMinigameFocusSpatially } from '~/composables/useMinigameKeyboardNav';
 import { useMinigamePause } from '~/composables/useMinigamePause';
 import { ladybugBalanceEndless, ladybugBalanceKinds, ladybugBalanceStages } from '~/data/ladybugBalance';
 import type { LadybugBalanceKind } from '~/data/ladybugBalance';
@@ -106,7 +108,11 @@ function formatSeconds(ms: number) {
 
 /* クリアしたステージと、エンドレスの自己ベストを、いっしょに保存する */
 function saveProgress() {
-  saveMinigameBest(minigameId, { clearedStage: clearedStage.value, endlessBestMs: endlessBestMs.value });
+  saveMinigameBest(minigameId, {
+    clearedStage: clearedStage.value,
+    endlessBestMs: endlessBestMs.value,
+    selected: mode.value === 'endless' ? 'endless' : stageIndex.value + 1,
+  });
 }
 
 /* 結果の画面の知らせを消す（次を始めるとき・えらびなおすとき） */
@@ -204,10 +210,7 @@ const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinig
   isCountingDown,
   pauseGame,
   resumeGame,
-  quitGame: () => {
-    quitGame();
-    focusFirstMainButton();
-  },
+  quitGame: returnToStageSelect,
   playDecisionSound,
 });
 
@@ -235,25 +238,31 @@ function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
   });
 }
 
-/* はじまる前に出す、えらんだステージ（エンドレス）の説明 */
-const stageSummary = computed(() => {
-  if (mode.value === 'endless') {
-    const parts = ['⏱ どこまで たえられるかな？', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+/* はじまる前に出す、ステージ（エンドレス）の説明
+   えらんでいるものだけでなく、ぜんぶのステージとエンドレスのぶんを作る
+   （同じ場所に重ねて、えらんでいるものだけを見せる。いちばん長い説明の高さになるので、
+   えらびなおしても画面の高さが変わらない → template の .lb-summaries） */
+const stageSummaries = computed(() => {
+  const summaries = ladybugBalanceStages.map((stageInfo, index) => {
+    const parts = [...describeLadybugs(stageInfo.ladybugs), `⏱ ${stageInfo.seconds}びょう たえたらクリア`];
 
-    if (endlessBestMs.value > 0) {
-      parts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
+    if (stageInfo.wind) {
+      parts.push('💨 ときどき かぜが ふく');
     }
 
-    return parts;
+    return { key: `stage-${index}`, title: `ステージ ${index + 1}`, parts, isSelected: mode.value === 'stage' && index === stageIndex.value };
+  });
+
+  // 1行目は、何が記録になるか（見出しの「とばさず どこまで？」と、同じことばが続かないように）
+  const endlessParts = ['⏱ たえた じかんが きろくになる', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+
+  if (endlessBestMs.value > 0) {
+    endlessParts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
   }
 
-  const parts = [...describeLadybugs(stage.value.ladybugs), `⏱ ${stage.value.seconds}びょう たえたらクリア`];
+  summaries.push({ key: 'endless', title: '⏱ とばさず どこまで？', parts: endlessParts, isSelected: mode.value === 'endless' });
 
-  if (stage.value.wind) {
-    parts.push('💨 ときどき かぜが ふく');
-  }
-
-  return parts;
+  return summaries;
 });
 
 /* 結果の画面のひとこと（幼虫は飛べないので「おちちゃった」） */
@@ -314,7 +323,7 @@ function goToNextStage() {
   startStage(stageIndex.value + 1);
 }
 
-/* さいごのステージをクリアしたあとの「⏱ なんびょう チャレンジへ」 */
+/* さいごのステージをクリアしたあとの「⏱ とばさず どこまで？へ」 */
 function goToEndless() {
   if (!canAcceptResultInput() || !isEndlessUnlocked.value) {
     return;
@@ -326,42 +335,43 @@ function goToEndless() {
   start();
 }
 
-/* 「ステージをえらぶ」（はじまる前の画面へ戻る） */
-async function backToStageSelect() {
-  if (!canAcceptResultInput()) {
-    return;
-  }
-
-  playDecisionSound();
+/* えらんでいたステージ（エンドレス）の、はじまる前の画面へ戻す
+   （一時停止の「やめる」・遊んでいる最中と結果の画面の「← ステージえらびへ」で共通） */
+async function returnToStageSelect() {
   clearResultNotices();
-
-  if (mode.value === 'endless') {
-    selectEndless();
-  } else {
-    selectStage(stageIndex.value);
-  }
+  quitGame();
 
   await focusFirstMainButton();
 }
 
-/* はじまる前の画面で、ステージのボタンを押したとき */
+/* はじまる前の画面で、ステージのボタンを押したとき
+   えらんだら「はじめる」へフォーカスを移す（Enter / Space ですぐ始められるように）
+   もう えらんでいるステージを押したときも、「はじめる」へ移す（音は鳴らさない） */
 function chooseStage(index: number) {
-  if (index >= playableStageCount.value || (index === stageIndex.value && mode.value === 'stage')) {
+  if (index >= playableStageCount.value) {
     return;
   }
 
-  playDecisionSound();
-  selectStage(index);
+  if (index !== stageIndex.value || mode.value !== 'stage') {
+    playDecisionSound();
+    selectStage(index);
+  }
+
+  focusFirstMainButton();
 }
 
-/* はじまる前の画面で、エンドレスのボタンを押したとき */
+/* はじまる前の画面で、エンドレスのボタンを押したとき（ステージと同じく、えらんだら「はじめる」へ） */
 function chooseEndless() {
-  if (!isEndlessUnlocked.value || mode.value === 'endless') {
+  if (!isEndlessUnlocked.value) {
     return;
   }
 
-  playDecisionSound();
-  selectEndless();
+  if (mode.value !== 'endless') {
+    playDecisionSound();
+    selectEndless();
+  }
+
+  focusFirstMainButton();
 }
 
 /* 左右のボタン（押しているあいだだけ傾ける） */
@@ -375,6 +385,20 @@ function handleSidePointerDown(event: PointerEvent, side: LadybugBalanceSide) {
    ページの移動
    ============================================================ */
 let isLeavingPage = false;
+
+/* 上の「戻る」は、ひとつ前の画面へ
+   ・はじまる前（まだ解放していないページもふくむ） … ミニゲーム一覧へ
+   ・遊んでいる最中・飛んでいく演出・結果の画面 … ステージえらびへ（決定音は ほかの「戻る」と同じく鳴らさない） */
+const isBackToStageSelect = computed(() => unlockState.value === 'unlocked' && phase.value !== 'ready');
+
+function goBack() {
+  if (isBackToStageSelect.value) {
+    returnToStageSelect();
+    return;
+  }
+
+  goToList();
+}
 
 /* 「← ミニゲーム一覧へ」（決定音は鳴らさない。ほかのミニゲームの「戻る」と同じ） */
 async function goToList() {
@@ -392,13 +416,13 @@ async function goToList() {
 /* ============================================================
    キーボード
    ・遊んでいる最中 … ← → で傾ける（→ useLadybugBalanceGame.ts）
-   ・はじまる前・結果の画面 … 矢印キーでボタンを選ぶ（→ useMinigameKeyboardNav.ts）
+   ・はじまる前・結果の画面 … 矢印キーでボタンを選ぶ（ボタンが横にもならぶので、画面の位置で動かす → useMinigameKeyboardNav.ts の moveMinigameFocusSpatially()）
      Enter / Space は、ボタンにフォーカスが無いときだけ「はじめる」
    ============================================================ */
 const layoutRef = ref<InstanceType<typeof MinigameLayout> | null>(null);
 const stageRef = ref<HTMLElement | null>(null);
 
-/* 矢印キーで行き来するボタン（上から順。押せないボタンは入れない） */
+/* 矢印キーで行き来するボタン（上から・左から順。押せないボタンは入れない） */
 function getMainButtons() {
   return [...(stageRef.value?.querySelectorAll<HTMLButtonElement>('button.lb-nav:not(:disabled)') ?? [])];
 }
@@ -434,7 +458,7 @@ function handleKeydown(event: KeyboardEvent) {
 
     const topRow = [layoutRef.value?.backButton, layoutRef.value?.soundToggleButton];
 
-    if (moveMinigameFocusByArrow(event, topRow, getMainButtons())) {
+    if (moveMinigameFocusSpatially(event, topRow, getMainButtons())) {
       event.preventDefault();
     }
 
@@ -483,6 +507,17 @@ watch(
    ============================================================ */
 const unlockState = ref<'checking' | 'locked' | 'unlocked'>('checking');
 
+/* えらんでいるもの（ステージ ／ エンドレス）が変わったら、保存する（次に開いたときも、同じものを えらんだ状態から始めるため）
+   ・「次のステージへ」「⏱ とばさず どこまで？へ」で変わったときも、ここで保存される
+   ・保存した記録を読みおわる前（onMounted の前半）と、まだ解放していないページでは保存しない */
+let isSelectionRestored = false;
+
+watch([mode, stageIndex], () => {
+  if (isSelectionRestored && unlockState.value === 'unlocked') {
+    saveProgress();
+  }
+});
+
 onMounted(() => {
   restoreSoundSettings();
 
@@ -494,8 +529,20 @@ onMounted(() => {
   clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(savedBest?.clearedStage) || 0)));
   endlessBestMs.value = Math.max(0, Number(savedBest?.endlessBestMs) || 0);
 
-  // まだクリアしていない いちばん前のステージを、えらんでおく（ぜんぶクリアしていたら最後のステージ）
-  selectStage(Math.min(clearedStage.value, stageCount - 1));
+  // さいごに えらんでいたものを、えらんでおく
+  // まだ無い・いまは遊べないものなら、まだクリアしていない いちばん前のステージ（ぜんぶクリアしていたら最後のステージ）
+  const savedSelected = savedBest?.selected;
+  const savedStageNumber = Math.floor(Number(savedSelected));
+
+  if (savedSelected === 'endless' && isEndlessUnlocked.value) {
+    selectEndless();
+  } else if (savedStageNumber >= 1 && savedStageNumber <= playableStageCount.value) {
+    selectStage(savedStageNumber - 1);
+  } else {
+    selectStage(Math.min(clearedStage.value, stageCount - 1));
+  }
+
+  isSelectionRestored = true;
 
   window.addEventListener('keydown', handleKeydown);
 
@@ -515,15 +562,15 @@ onUnmounted(() => {
 <template>
   <MinigameLayout
     ref="layoutRef"
-    back-label="← ミニゲーム一覧へ"
-    back-aria-label="ミニゲーム一覧へ戻る"
+    :back-label="isBackToStageSelect ? '← ステージえらびへ' : '← ミニゲーム一覧へ'"
+    :back-aria-label="isBackToStageSelect ? 'ステージえらびへ戻る' : 'ミニゲーム一覧へ戻る'"
     centered
     fit-screen
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
     :can-pause="canPause"
     :pause-state="pauseState"
-    @back="goToList"
+    @back="goBack"
     @toggle-sound="toggleSound"
     @volume-change="changeSoundVolume"
     @pause="pauseByButton"
@@ -600,7 +647,7 @@ onUnmounted(() => {
             :class="{ 'lb-endless--selected': mode === 'endless' }"
             :aria-pressed="mode === 'endless'"
             @click="chooseEndless">
-            ⏱ なんびょう チャレンジ
+            ⏱ とばさず どこまで？
             <!-- 自己ベストの札（書きかたと見た目は、ミニゲームの一覧のカードの自己ベストとそろえる） -->
             <span v-if="endlessBestMs > 0" class="lb-endless__best">
               じこベスト
@@ -608,10 +655,15 @@ onUnmounted(() => {
             </span>
           </button>
 
-          <ul class="lb-summary">
-            <li class="lb-summary__title">{{ mode === 'endless' ? '⏱ なんびょう チャレンジ' : `ステージ ${stageIndex + 1}` }}</li>
-            <li v-for="part in stageSummary" :key="part">{{ part }}</li>
-          </ul>
+          <!-- えらんでいるステージ（エンドレス）の説明
+               ぜんぶの説明を同じ場所に重ねて置き、えらんでいるものだけを見せる（ほかは visibility: hidden で、読み上げもしない）
+               枠はいちばん長い説明の高さになるので、えらびなおしても画面の高さが変わらない（細い画面で折り返したときも） -->
+          <div class="lb-summaries">
+            <ul v-for="summary in stageSummaries" :key="summary.key" class="lb-summary" :class="{ 'lb-summary--hidden': !summary.isSelected }">
+              <li class="lb-summary__title">{{ summary.title }}</li>
+              <li v-for="part in summary.parts" :key="part">{{ part }}</li>
+            </ul>
+          </div>
         </article>
 
         <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる） -->
@@ -671,7 +723,7 @@ onUnmounted(() => {
         <article v-else-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
           <!-- エンドレス：たえた時間とレベル -->
           <template v-if="mode === 'endless'">
-            <p class="place-card__flash lb-result__flash">⏱ なんびょう チャレンジ</p>
+            <p class="place-card__flash lb-result__flash">⏱ とばさず どこまで？</p>
             <p class="lb-record">
               <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
               <span class="lb-record__unit">びょう たえた！</span>
@@ -687,17 +739,26 @@ onUnmounted(() => {
           <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
           <p class="mg-text">{{ resultComment }}</p>
           <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
-          <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ なんびょう チャレンジが あそべるようになった！</p>
+          <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ とばさず どこまで？が あそべるようになった！</p>
           <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
         </article>
 
-        <!-- 結果の画面のボタン -->
+        <!-- 結果の画面のボタン
+             ・クリア … 「次のステージへ」「もう一度あそぶ」を横にならべる
+                         さいごのステージは「⏱ とばさず どこまで？へ」が長くて半分の幅に入らないので、2つとも横いっぱいで たてにならべる
+             ・失敗   … 「もう一度あそぶ」だけを横いっぱいに
+             ※ 「ステージをえらぶ」は置かない（上の「← ステージえらびへ」（スマホでは「← 戻る」）と同じなので） -->
         <div v-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions">
           <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
           <!-- さいごのステージをクリアしたら、エンドレスへ -->
-          <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToEndless">⏱ なんびょう チャレンジへ</button>
-          <button type="button" class="lb-nav" :class="phase === 'cleared' ? 'lb-sub' : 'mg-play lb-nav--primary'" @click="retry">もう一度あそぶ</button>
-          <button type="button" class="lb-sub lb-nav" @click="backToStageSelect">ステージをえらぶ</button>
+          <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary lb-result-actions__wide" @click="goToEndless">⏱ とばさず どこまで？へ</button>
+          <button
+            type="button"
+            class="lb-nav"
+            :class="phase === 'cleared' ? ['lb-sub', { 'lb-result-actions__wide': !hasNextStage }] : 'mg-play lb-nav--primary lb-result-actions__wide'"
+            @click="retry">
+            もう一度あそぶ
+          </button>
         </div>
       </div>
 
@@ -880,7 +941,7 @@ onUnmounted(() => {
 
 /* ===== ステージえらび ===== */
 /* 5つずつ2行にならべる（10ステージ。スマホ幅でも1行に5つ入る）
-   カードの幅のまんなかに置く（左に寄っていると、下の横長の なんびょう チャレンジ とずれて見えるため） */
+   カードの幅のまんなかに置く（左に寄っていると、下の横長の とばさず どこまで？ とずれて見えるため） */
 .lb-stages {
   display: grid;
   /* ふだんは 48px。とても細い画面（幅 320px など）で入りきらないときだけ、そろって小さくなる */
@@ -952,7 +1013,7 @@ onUnmounted(() => {
   line-height: 1;
 }
 
-/* エンドレス（なんびょう チャレンジ）のボタン（ステージのボタンの下に、横長で）
+/* エンドレス（とばさず どこまで？）のボタン（ステージのボタンの下に、横長で）
    色は、ステージのボタン（.lb-stage）とそろえる（えらぶ前は白地に紫のふち、えらぶと紫でぬりつぶす）
    中身（名前と自己ベストの札）は、上のステージのボタンと合わせて、まんなかに寄せる */
 .lb-endless {
@@ -1011,10 +1072,20 @@ onUnmounted(() => {
 
 /* えらんだステージの説明 */
 /* 1行に1つ（てんとう虫の種類の説明が長いので、横にならべると読みにくい） */
+/* 説明を重ねる場所（ぜんぶの .lb-summary を、同じマスに置く） */
+.lb-summaries {
+  display: grid;
+  margin: 12px 0 0;
+}
+
+/* 重ねた説明は、どれも いちばん高いものに そろう（枠の高さは いつも同じ）
+   align-content: start … 短い説明は、上から つめて並べる（行のあいだを広げない） */
 .lb-summary {
   display: grid;
+  grid-area: 1 / 1;
+  align-content: start;
   gap: 2px;
-  margin: 12px 0 0;
+  margin: 0;
   padding: 8px 14px;
   border-radius: 12px;
   background: #fff;
@@ -1027,6 +1098,11 @@ onUnmounted(() => {
 
 .lb-summary__title {
   color: #7f5cc8;
+}
+
+/* えらんでいない説明（場所だけ取って、見せない） */
+.lb-summary--hidden {
+  visibility: hidden;
 }
 
 /* ===== フィールドの高さ（画面の高さに合わせる） ===== */
@@ -1143,17 +1219,17 @@ onUnmounted(() => {
   font-weight: 700;
 }
 
-/* 結果の画面の札（クリア ／ ざんねん… ／ なんびょう チャレンジ）
+/* 結果の画面の札（クリア ／ ざんねん… ／ とばさず どこまで？）
    結果の画面では、この札がいちばん大事な知らせなので、ほかの画面の札（13px）より ひとまわり大きくする */
 .lb-result__flash {
-  margin-bottom: 10px;
-  padding: 6px 20px;
-  font-size: 17px;
+  margin-bottom: 8px;
+  padding: 3px 14px;
+  font-size: 15px;
 }
 
 /* 「ステージ 3 クリア！」の数字（まわりの文字より さらに大きく。札の高さが広がりすぎないよう line-height は 1） */
 .lb-result__stageNumber {
-  font-size: 26px;
+  font-size: 21px;
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0;
@@ -1176,9 +1252,23 @@ onUnmounted(() => {
   animation: found-in 0.4s ease-out 0.2s backwards;
 }
 
+/* 結果の画面のボタン（2列。横にならべた2つは、同じ幅・同じ高さになる） */
 .lb-result-actions {
+  container-type: inline-size; /* スマホ幅で、文字の大きさを この並びの幅から決める（下の cqi） */
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
+}
+
+.lb-result-actions > button {
+  white-space: nowrap;
+}
+
+/* 横いっぱいに置くボタン
+   ・さいごのステージをクリアしたときの「⏱ とばさず どこまで？へ」「もう一度あそぶ」（長くて半分の幅に入らないため）
+   ・失敗したときの「もう一度あそぶ」（ボタンが1つだけなので） */
+.lb-result-actions__wide {
+  grid-column: 1 / -1;
 }
 
 /* 2番目より下のボタン（白っぽい、ひかえめなボタン） */
@@ -1385,6 +1475,24 @@ onUnmounted(() => {
 
   .mg-lead__break--sp {
     display: revert;
+  }
+
+  /* 横にならべた結果のボタン（クリアしたときの「次のステージへ」「もう一度あそぶ」）は、1行に収まるよう、左右の余白をつめて、文字をボタンの幅に合わせる
+     ボタン1つの中の幅 ＝ 並びの幅の半分 − 5px（すき間の半分）− 20px（余白とふち）
+     どちらも7文字なので、7文字が入る大きさ（幅 375px 以上は 16px のまま。幅 320px（初代 iPhone SE）で 15.5px ほど）
+     ・1行目 … cqi が使えない古いブラウザ向け（画面の幅から計算する）
+     ・2行目 … 並びの幅から計算する（パソコンの細い窓でスクロールバーが出て、幅がせまくなっても はみ出さない） */
+  .lb-result-actions > button:not(.lb-result-actions__wide) {
+    padding-right: 8px;
+    padding-left: 8px;
+    font-size: min(16px, calc((50vw - 48px) / 7.2));
+    font-size: min(16px, calc((50cqi - 25px) / 7.2));
+  }
+
+  /* 横にならべた金色のボタン（「次のステージへ」）には、▶（選択カーソル）を出さない
+     半分の幅では文字に重なるため（ふちの水色の光で、選ばれていることは分かる） */
+  .lb-result-actions > .mg-play:not(.lb-result-actions__wide)::before {
+    display: none;
   }
 }
 
