@@ -248,7 +248,7 @@ function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
    えらびなおしても画面の高さが変わらない → template の .lb-summaries） */
 const stageSummaries = computed(() => {
   const summaries = ladybugBalanceStages.map((stageInfo, index) => {
-    const parts = [...describeLadybugs(stageInfo.ladybugs), `⏱ ${stageInfo.seconds}びょう たえたらクリア`];
+    const parts = [...describeLadybugs(stageInfo.ladybugs), `⏱ ${stageInfo.seconds}びょう とばさなければクリア`];
 
     if (stageInfo.wind) {
       parts.push('💨 ときどき かぜが ふく');
@@ -258,7 +258,7 @@ const stageSummaries = computed(() => {
   });
 
   // 1行目は、何が記録になるか（見出しの「とばさず どこまで？」と、同じことばが続かないように）
-  const endlessParts = ['⏱ たえた じかんが きろくになる', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
+  const endlessParts = ['⏱ がんばった じかんが きろく', `⏫ ${ladybugBalanceEndless.levelSeconds}びょうごとに むずかしくなる`];
 
   if (endlessBestMs.value > 0) {
     endlessParts.push(`🏆 じこベスト ${formatSeconds(endlessBestMs.value)}びょう`);
@@ -272,13 +272,13 @@ const stageSummaries = computed(() => {
 /* 結果の画面のひとこと（幼虫は飛べないので「おちちゃった」） */
 const resultComment = computed(() => {
   if (phase.value === 'failed' && mode.value === 'endless') {
-    return isNewEndlessBest.value ? 'じこベスト更新！ すごい、よく たえました！' : 'もういちど ちょうせんして、記録をのばそう！';
+    return isNewEndlessBest.value ? 'じこベスト こうしん！ すごい！' : 'もういちど やって、きろくを のばそう！';
   }
 
   if (phase.value === 'failed') {
     return lostKind.value === 'larva'
-      ? 'ようちゅうが 枝のはしから おちちゃった。もういちど ちょうせんしよう！'
-      : 'てんとうむしが 枝のはしから とんでいっちゃった。もういちど ちょうせんしよう！';
+      ? 'ようちゅうが おちちゃった。もういちど やってみよう！'
+      : 'てんとうむしが とんでいっちゃった。もういちど やってみよう！';
   }
 
   // クリアしたときは、ステージごとの ひとこと（data/ladybugBalance.ts の clearComment）
@@ -629,10 +629,10 @@ onUnmounted(() => {
           </p>
 
           <ul class="mg-rules">
-            <li class="mg-for-pc">← → キー・ボタンを押しているあいだ、枝がかたむく</li>
-            <li class="mg-for-touch">◀ ▶ ボタンや 画面の左右を押しているあいだ、枝がかたむく（フリックでも かたむく）</li>
-            <li>てんとうむしは、高いほうへ のぼっていく</li>
-            <li>はしまで行くと、とんでいっちゃう！ 近づいた側を下げよう</li>
+            <li class="mg-for-pc">← → キーか ボタンで、枝をかたむける</li>
+            <li class="mg-for-touch">◀ ▶ か 画面の左右をおして、枝をかたむける</li>
+            <li>てんとうむしは、高いほうへ あるく</li>
+            <li>はしに近づいたら、そっちを下げよう！</li>
           </ul>
 
           <!-- ステージえらび（まだ遊べないステージは 🔒） -->
@@ -718,7 +718,7 @@ onUnmounted(() => {
               <p class="place-card__flash lb-result__flash">⏱ とばさず どこまで？</p>
               <p class="lb-record">
                 <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
-                <span class="lb-record__unit">びょう たえた！</span>
+                <span class="lb-record__unit">びょう がんばった！</span>
                 <span class="lb-record__level">Lv.{{ endlessLevel }}</span>
                 <span v-if="isNewEndlessBest" class="lb-record__new">じこベスト！</span>
               </p>
@@ -1233,7 +1233,7 @@ onUnmounted(() => {
 
 /* ===== 結果 ===== */
 
-/* エンドレスの記録（「23.4 びょう たえた！ Lv.3 じこベスト！」） */
+/* エンドレスの記録（「23.4 びょう がんばった！ Lv.3 じこベスト！」） */
 .lb-record {
   display: flex;
   flex-wrap: wrap;

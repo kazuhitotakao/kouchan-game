@@ -46,10 +46,10 @@ export const ladybugBalanceKinds: Record<LadybugBalanceKind, LadybugBalanceKindI
   nanahoshi: { name: 'ナナホシ', trait: 'ふつう', walk: 1, climb: 1, quirkInterval: 1, dashChance: 0.5, canFly: true },
 
   // ナミテントウ（黒に赤い紋。気まぐれで、小走りが多い）
-  namitentou: { name: 'ナミテントウ', trait: 'きまぐれ・小走りが多い', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
+  namitentou: { name: 'ナミテントウ', trait: 'きまぐれで よく走る', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
 
   // 幼虫（歩くのは遅いけれど、のぼるのが得意。飛べない）
-  larva: { name: 'ようちゅう', trait: 'おそいけど のぼるのが得意', walk: 0.7, climb: 1.4, quirkInterval: 1, dashChance: 0.5, canFly: false },
+  larva: { name: 'ようちゅう', trait: 'おそいけど のぼるのが はやい', walk: 0.7, climb: 1.4, quirkInterval: 1, dashChance: 0.5, canFly: false },
 };
 
 /* ============================================================
