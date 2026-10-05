@@ -17,6 +17,7 @@
      suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
    ============================================================ */
 
+import { buildMinigameUnlockPhrases } from '~/data/minigames';
 import { itemImages, placeItems } from '~/data/places';
 import { splitItemName } from '~/utils/itemName';
 import type { ChangeGroup, SceneVariant, StatusChanges } from '~/types/game';
@@ -144,7 +145,9 @@ function itemReaction(itemName: string) {
       <div v-if="unlockedMinigameTitle" class="event-flash event-flash--minigame" role="status">
         <p class="event-flash__label">🎮 ミニゲーム解放！</p>
 
-        <p class="event-flash__text"><span class="event-flash__phrase">「{{ unlockedMinigameTitle }}」が</span><span class="event-flash__phrase">あそべるようになりました！</span></p>
+        <p class="event-flash__text">
+          <span v-for="phrase in buildMinigameUnlockPhrases(unlockedMinigameTitle)" :key="phrase" class="event-flash__phrase">{{ phrase }}</span>
+        </p>
 
         <p class="event-flash__note"><span class="event-flash__phrase">はじめの画面の「🎮 ミニゲーム」から</span><span class="event-flash__phrase">あそべます</span></p>
       </div>

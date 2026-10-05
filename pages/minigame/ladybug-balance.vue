@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* ============================================================
-   ミニゲーム「てんとう虫バランス」（/minigame/ladybug-balance）
+   ミニゲーム「とばないで！」（/minigame/ladybug-balance）
 
    枝の上を勝手に歩くてんとう虫が、はしまで行って飛んでいかないように、左右のボタンで枝を傾けてバランスをとる
    ステージ制（ステージの中身は data/ladybugBalance.ts）。前のステージをクリアすると、次のステージが遊べる
@@ -33,7 +33,7 @@ import type { LadybugBalanceSide } from '~/composables/useLadybugBalanceGame';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
 import { ladybugBalanceEndless, ladybugBalanceKinds, ladybugBalanceStages } from '~/data/ladybugBalance';
 import type { LadybugBalanceKind } from '~/data/ladybugBalance';
-import { minigames } from '~/data/minigames';
+import { minigames, splitMinigameTitle } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
@@ -234,7 +234,7 @@ const stageSummary = computed(() => {
   return parts;
 });
 
-/* 結果の画面のひとこと（幼虫は飛べないので「落ちちゃった」） */
+/* 結果の画面のひとこと（幼虫は飛べないので「おちちゃった」） */
 const resultComment = computed(() => {
   if (phase.value === 'failed' && mode.value === 'endless') {
     return isNewEndlessBest.value ? 'じこベスト更新！ すごい、よく たえました！' : 'もういちど ちょうせんして、記録をのばそう！';
@@ -242,8 +242,8 @@ const resultComment = computed(() => {
 
   if (phase.value === 'failed') {
     return lostKind.value === 'larva'
-      ? 'ようちゅうが 枝のはしから 落ちちゃった。もういちど ちょうせんしよう！'
-      : 'てんとう虫が 枝のはしから 飛んでいっちゃった。もういちど ちょうせんしよう！';
+      ? 'ようちゅうが 枝のはしから おちちゃった。もういちど ちょうせんしよう！'
+      : 'てんとうむしが 枝のはしから とんでいっちゃった。もういちど ちょうせんしよう！';
   }
 
   // クリアしたときは、ステージごとの ひとこと（data/ladybugBalance.ts の clearComment）
@@ -518,19 +518,28 @@ onUnmounted(() => {
       <div ref="scrollRef" class="lb-scroll">
         <!-- はじまる前（遊びかたと、ステージえらび） -->
         <article v-if="phase === 'ready'" class="place-card">
-          <h1 class="place-card__title">🐞 てんとう虫バランス</h1>
+          <!-- アイコン（🐞）と名前を ひとまとまりにして、カードのまん中に置く（.mg-title。どこまで行ける？ の見出しと同じ置きかた）
+               名前は、ことばの区切りごとに まとめて出す（細い画面で、ことばの途中で切れないように） -->
+          <h1 class="place-card__title mg-title">
+            <span class="mg-title__icon" aria-hidden="true">🐞</span>
+            <span class="mg-title__text">
+              <span v-for="part in splitMinigameTitle(minigameInfo.title)" :key="part" class="lb-titlePart">{{ part }}</span>
+            </span>
+          </h1>
 
+          <!-- いつも2行で出す（行の中では折り返さない。.mg-lead__line）
+               PC   … 「枝をかたむけて、」／「てんとうむしをとばさないようにしよう！」（--pc の改行）
+               スマホ … 「枝をかたむけて、てんとうむしを」／「とばさないようにしよう！」（--sp の改行）
+               スマホで PC と同じ分けかたにすると、2行目が長すぎて、iPhone SE では文字をとても小さくしないと入らないため -->
           <p class="mg-lead">
-            枝をかたむけて、てんとう虫が
-            <br />
-            はしから飛んでいかないようにしよう！
+            <span class="mg-lead__line">枝をかたむけて、<br class="mg-lead__break mg-lead__break--pc" />てんとうむしを</span><br class="mg-lead__break mg-lead__break--sp" /><span class="mg-lead__line">とばさないようにしよう！</span>
           </p>
 
           <ul class="mg-rules">
             <li class="mg-for-pc">← → キー・ボタンを押しているあいだ、枝がかたむく</li>
             <li class="mg-for-touch">◀ ▶ ボタンを押しているあいだ、枝がかたむく</li>
-            <li>てんとう虫は、高いほうへ のぼっていく</li>
-            <li>はしまで行くと、飛んでいっちゃう！ 近づいた側を下げよう</li>
+            <li>てんとうむしは、高いほうへ のぼっていく</li>
+            <li>はしまで行くと、とんでいっちゃう！ 近づいた側を下げよう</li>
           </ul>
 
           <!-- ステージえらび（まだ遊べないステージは 🔒） -->
@@ -738,6 +747,19 @@ onUnmounted(() => {
   line-height: 1.4;
 }
 
+/* 見出し（アイコンと名前を ひとまとまりにして、カードのまん中に置く。どこまで行ける？ の .mg-title と同じ置きかた） */
+.mg-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* 見出しの名前の区切りひとつぶん（入りきるなら1行のまま。入りきらないときは、区切りのところで折り返す） */
+.lb-titlePart {
+  display: inline-block;
+}
+
 .place-card__flash {
   display: inline-block;
   margin: 0 0 8px;
@@ -771,6 +793,16 @@ onUnmounted(() => {
   font-weight: 700;
   line-height: 1.6;
   text-align: center;
+}
+
+/* 行の中では折り返さない（行の分けかたは、下の改行で決める） */
+.mg-lead__line {
+  white-space: nowrap;
+}
+
+/* スマホ用の改行は、PC では使わない（スマホ幅で入れかえる） */
+.mg-lead__break--sp {
+  display: none;
 }
 
 .mg-rules {
@@ -1300,6 +1332,27 @@ onUnmounted(() => {
 
   .mg-play {
     padding: 11px 20px;
+  }
+}
+
+/* スマホ幅：説明（.mg-lead）を「枝をかたむけて、てんとうむしを」／「とばさないようにしよう！」の2行にする
+   ・PC 用の改行をやめて、スマホ用の改行を使う
+   ・長いほうの1行目（15文字）が入りきるよう、左右の余白を少しつめ、細い画面では文字を少し小さくする
+     （幅 375px 以上は 15〜16px のまま。幅 320px（初代 iPhone SE）で 14px ほど）
+   ※ 背の低いスマホの指定（上）より あとに書く（文字の大きさと余白を上書きするため） */
+@media (max-width: 700px) {
+  .mg-lead {
+    padding-right: 8px;
+    padding-left: 8px;
+    font-size: min(16px, calc((100vw - 96px) / 15.4));
+  }
+
+  .mg-lead__break--pc {
+    display: none;
+  }
+
+  .mg-lead__break--sp {
+    display: revert;
   }
 }
 

@@ -14,7 +14,7 @@ import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
-import { minigames } from '~/data/minigames';
+import { minigames, splitMinigameTitle } from '~/data/minigames';
 import type { MinigameBestPart, MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { clearNewMinigames, loadMinigameBest, loadNewMinigames, loadUnlockedMinigames } from '~/utils/minigameStorage';
@@ -67,6 +67,8 @@ const cards = computed(() =>
     isUnlocked: unlockedIds.value.includes(minigame.id),
     isNew: newIds.value.includes(minigame.id),
     bestParts: bestParts.value[minigame.id] ?? null,
+    // 名前は、ことばの区切りごとに分けておく（細い画面で、ことばの途中で折り返さないように）
+    titleParts: splitMinigameTitle(minigame.title),
   })),
 );
 
@@ -203,7 +205,9 @@ onUnmounted(() => {
               <template v-else>{{ card.icon }}</template>
             </span>
             <span class="mg-card__body">
-              <span class="mg-card__title">{{ card.title }}</span>
+              <span class="mg-card__title">
+                <span v-for="part in card.titleParts" :key="part" class="mg-card__titlePart">{{ part }}</span>
+              </span>
               <span class="mg-card__text">{{ card.description }}</span>
               <!-- 自己ベスト（「じこベスト　🏁 97m　［こもれびの絵］ 8」） -->
               <span v-if="card.bestParts" class="mg-card__best">
@@ -394,6 +398,11 @@ button.mg-card:focus::before {
   line-height: 1.4;
 }
 
+/* 名前の区切りひとつぶん（入りきるなら1行のまま。入りきらないときは、区切りのところで折り返す） */
+.mg-card__titlePart {
+  display: inline-block;
+}
+
 .mg-card__text {
   font-size: 14.5px;
   line-height: 1.6;
@@ -481,6 +490,42 @@ button.mg-card:focus::before {
 
   .mg-card__title {
     font-size: 18px;
+  }
+}
+
+/* ===== 細いスマホ（幅 400px 以下） =====
+   アイコンの右の文の列がせまく、自己ベストの札が入りきらずに、カードの右からはみ出していたので、
+   札だけをカードの下に、カードの幅いっぱいで置く
+   ・.mg-card__body を display: contents にして、名前・説明・札を、カードの格子に じかに並べる
+     （アイコンは名前と説明の2行ぶん。札は3行目で、アイコンの下から右はしまで）
+   ・札が2行以上になるときは、丸すぎる形にならないよう、角の丸みを小さくする */
+@media (max-width: 400px) {
+  .mg-card {
+    row-gap: 2px;
+  }
+
+  .mg-card__body {
+    display: contents;
+  }
+
+  .mg-card__icon {
+    grid-row: 1 / span 2;
+  }
+
+  .mg-card__title,
+  .mg-card__text {
+    grid-column: 2;
+  }
+
+  .mg-card__best {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+    border-radius: 12px;
+    white-space: normal;
+  }
+
+  .mg-card__bestPart {
+    white-space: nowrap;
   }
 }
 

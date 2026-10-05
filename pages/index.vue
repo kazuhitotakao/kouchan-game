@@ -73,7 +73,7 @@ import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/pla
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
-import { minigames } from '~/data/minigames';
+import { buildMinigameUnlockPhrases, minigames } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import { maxSnackCount, snackBagImage, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
@@ -1252,7 +1252,7 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
   }
 });
 
-/* ミニゲーム「てんとう虫バランス」の解放（とつぜんのできごとで、テントウムシを見つけたら、このブラウザに保存する）
+/* ミニゲーム「とばないで！」の解放（とつぜんのできごとで、テントウムシを見つけたら、このブラウザに保存する）
    お知らせは、場面を移ったら消す（ほかの場面に持ちこさない。消えていく画面は描きなおされないので、途中で消えて見えることはない）
    テントウムシのお知らせは、できごとの絵と文をじゃましないよう、選んだあとの結果カードに出す */
 watch(currentEvent, (event) => {
@@ -3271,7 +3271,9 @@ onUnmounted(() => {
                 <div v-if="unlockedMinigameNotice" class="event-flash event-flash--minigame" role="status">
                   <p class="event-flash__label">🎮 ミニゲーム解放！</p>
 
-                  <p class="event-flash__text"><span class="event-flash__phrase">「{{ unlockedMinigameNotice }}」が</span><span class="event-flash__phrase">あそべるようになりました！</span></p>
+                  <p class="event-flash__text">
+                    <span v-for="phrase in buildMinigameUnlockPhrases(unlockedMinigameNotice)" :key="phrase" class="event-flash__phrase">{{ phrase }}</span>
+                  </p>
 
                   <p class="event-flash__note"><span class="event-flash__phrase">はじめの画面の「🎮 ミニゲーム」から</span><span class="event-flash__phrase">あそべます</span></p>
                 </div>

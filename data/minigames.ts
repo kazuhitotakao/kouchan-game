@@ -62,8 +62,8 @@ export const minigames = [
     icon: '🐞',
     /* 絵はまだ無いので、絵文字（icon）を出す（書いておかないと、一覧の型から iconImage が消えて、読む側がエラーになる） */
     iconImage: undefined,
-    title: 'てんとう虫バランス',
-    description: '枝をかたむけて、てんとう虫が飛んでいかないようにしよう！',
+    title: 'とばないで！',
+    description: '枝をかたむけて、てんとうむしが とんでいかないようにしよう！',
     lockedHint: '公園のどこかで、てんとうむしに会えるかも…',
     /* どこまでクリアしたか（{ clearedStage: 3 } なら「ステージ 3/10 クリア」。分母はステージの数）
        と、エンドレスの自己ベスト（{ endlessBestMs: 23400 } なら「⏱ 23.4びょう」。遊んでいなければ出さない） */
@@ -91,4 +91,20 @@ export type MinigameId = (typeof minigames)[number]['id'];
 /* 保存してあった文字が、いまあるミニゲームの id かどうか（知らない id は読みとばせるように） */
 export function isMinigameId(value: unknown): value is MinigameId {
   return minigames.some((minigame) => minigame.id === value);
+}
+
+/* 名前を「！」「？」のあとで区切る（「〇〇！△△」→「〇〇！」「△△」。区切りが無い名前は、そのまま1つ）
+   細い画面で折り返すときに、ことばの途中で切れないよう、区切りごとに まとめて出すのに使う
+   （一覧のカード・それぞれのミニゲームの見出し・本編の「ミニゲーム解放！」） */
+export function splitMinigameTitle(title: string): string[] {
+  return title.split(/(?<=[！？])/);
+}
+
+/* 本編の「ミニゲーム解放！」の本文を、折り返してよい区切りごとに分ける
+   「「とばないで！」が」「あそべるようになりました！」（かぎかっこと「が」は、名前の はしの区切りにつける） */
+export function buildMinigameUnlockPhrases(title: string): string[] {
+  const parts = splitMinigameTitle(title);
+  const quoted = parts.map((part, index) => `${index === 0 ? '「' : ''}${part}${index === parts.length - 1 ? '」が' : ''}`);
+
+  return [...quoted, 'あそべるようになりました！'];
 }
