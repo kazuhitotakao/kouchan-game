@@ -248,11 +248,11 @@ onMounted(() => {
       </span>
     </div>
 
-    <!-- 自己ベストまでのバー（「じこベスト 🏁 97m」／バー／「あと 12m」→ こえたら「🎉 更新中！」）
+    <!-- 自己ベストまでのバー（「自己ベスト 🏁 97m」／バー／「あと 12m」→ こえたら「🎉 更新中！」）
          aria-live … 「更新中！」に変わったことを、読み上げでも伝える -->
     <div v-if="hasBestDistance" class="secret-path-best" :class="{ 'secret-path-best--record': isDistanceRecord }" aria-live="polite">
       <span class="secret-path-best__label">
-        じこベスト
+        自己ベスト
         <b class="secret-path-best__value" :class="{ 'secret-path-best__value--beaten': isDistanceRecord }">🏁 {{ bestDistance }}m</b>
         <b v-if="bestSunlight !== undefined" class="secret-path-best__value" :class="{ 'secret-path-best__value--beaten': isSunlightRecord }">
           <SecretPathIcon kind="sunlight" alt="こもれび" />
@@ -300,7 +300,7 @@ onMounted(() => {
 
       <!-- 自己ベストの線（近づくと上から下りてきて、こうちゃんの所を通りすぎた瞬間が記録の更新） -->
       <div v-if="bestLineTop !== null" class="secret-path-bestline" :class="{ 'secret-path-bestline--passed': isDistanceRecord }" :style="{ top: `${bestLineTop}%` }">
-        <span class="secret-path-bestline__label">🏁 じこベスト {{ bestDistance }}m</span>
+        <span class="secret-path-bestline__label">🏁 自己ベスト {{ bestDistance }}m</span>
       </div>
 
       <span

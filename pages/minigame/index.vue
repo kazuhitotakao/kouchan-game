@@ -209,9 +209,9 @@ onUnmounted(() => {
                 <span v-for="part in card.titleParts" :key="part" class="mg-card__titlePart">{{ part }}</span>
               </span>
               <span class="mg-card__text">{{ card.description }}</span>
-              <!-- 自己ベスト（「じこベスト　🏁 97m　［こもれびの絵］ 8」） -->
+              <!-- 自己ベスト（「自己ベスト　🏁 97m　［こもれびの絵］ 8」） -->
               <span v-if="card.bestParts" class="mg-card__best">
-                じこベスト
+                自己ベスト
                 <span v-for="(part, index) in card.bestParts" :key="index" class="mg-card__bestPart">
                   <SecretPathIcon v-if="part.icon" :kind="part.icon" :alt="part.iconAlt" />
                   {{ part.text }}
