@@ -11,6 +11,11 @@
      ・サウンドは、親の useAudio() の値と操作を SoundControl.vue へそのまま渡す
 
    ■ 色の名前（--navy など）は、いちばん外の .minigame が決める（中の部品もこの色を使う）
+
+   ■ fitScreen … 全体の枠を、画面の高さより高くしない（ページ全体はスクロールさせない）
+     中身が画面に収まるときは、ふだんどおりの高さ。収まらないときだけ、画面の高さで止まる
+     上のツールバーは いつも見えたまま。中身（<slot>）は残りの高さに収まるので、
+     はみ出すぶんのスクロールは、ページ側が中身の中で用意する（てんとう虫バランスが使う）
    ============================================================ */
 
 import { computed, ref } from 'vue';
@@ -35,8 +40,11 @@ withDefaults(
 
     /* 全体の枠を、画面の上下まん中に置くか（menu のときは、いつも まん中） */
     centered?: boolean;
+
+    /* 全体の枠を、画面の高さより高くしないか（上の「■ fitScreen」を参照） */
+    fitScreen?: boolean;
   }>(),
-  { backLabelShort: '← 戻る', variant: 'game', centered: false },
+  { backLabelShort: '← 戻る', variant: 'game', centered: false, fitScreen: false },
 );
 
 defineEmits<{
@@ -54,7 +62,7 @@ defineExpose({ backButton, soundToggleButton });
 </script>
 
 <template>
-  <main class="minigame" :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu' }]">
+  <main class="minigame" :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu', 'minigame--fit': fitScreen }]">
     <!-- 全体の枠（上部ツールバー ＋ 中身） -->
     <div class="mg-frame">
       <div class="mg-toolbar">
@@ -148,6 +156,26 @@ defineExpose({ backButton, soundToggleButton });
   border-radius: 20px;
   background: var(--paper);
   box-shadow: 0 12px 0 rgb(127 92 200 / 18%);
+}
+
+/* 画面の高さより高くしない（fitScreen）
+   ・ページは画面の高さで止める
+   ・枠は中身の高さのまま（背の高い画面で、下に大きな空白ができないように）。
+     画面に入りきらないときだけ縮む（min-height: 0。はみ出すぶんは、中身の中でスクロールする）
+   ・枠の上下の あき（margin）と、上下まん中に置くかどうか（centered）は、ふだんと同じ
+   ・ツールバーは縮めない（いつも同じ大きさで、上に見えたまま） */
+.minigame--fit {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.minigame--fit .mg-frame {
+  flex: 0 1 auto;
+  min-height: 0;
+}
+
+.minigame--fit .mg-toolbar {
+  flex: none;
 }
 
 /* メニュー（ミニゲームの一覧）の枠は、はじめの画面のカードと同じ大きさ・置きかた

@@ -438,6 +438,19 @@ watch(phase, (next) => {
   }
 });
 
+/* 画面（はじまる前 → 遊んでいる最中 → 結果）が切りかわったら、スクロールをいちばん上に戻す
+   （説明を下までスクロールしてから「はじめる」を押すと、フィールドが途中から見えてしまうため）
+   flush: 'post' … 中身が入れかわってから戻す（結果のボタンへのフォーカスは、このあと nextTick で当たる） */
+const scrollRef = ref<HTMLElement | null>(null);
+
+watch(
+  phase,
+  () => {
+    scrollRef.value?.scrollTo({ top: 0 });
+  },
+  { flush: 'post' },
+);
+
 /* ============================================================
    解放されているか（secret-path.vue と同じ3つ）
    ============================================================ */
@@ -478,6 +491,7 @@ onUnmounted(() => {
     back-label="← ミニゲーム一覧へ"
     back-aria-label="ミニゲーム一覧へ戻る"
     centered
+    fit-screen
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
     @back="goToList"
@@ -485,7 +499,10 @@ onUnmounted(() => {
     @volume-change="changeSoundVolume">
     <!-- 外枠（背景 ＋ 上部ツールバー）は、ミニゲームの一覧と同じ部品
          ※ このコメントを <MinigameLayout> の外に書かないこと
-           開発中はコメントも残って、いちばん外の要素が2つになり、ページを移るときのフェードがこわれて画面がまっ暗になる -->
+           開発中はコメントも残って、いちばん外の要素が2つになり、ページを移るときのフェードがこわれて画面がまっ暗になる
+         ※ fit-screen … 全体を画面の高さより高くしない。上の「← ミニゲーム一覧へ」と下の「はじめる」は動かさず、
+           あいだ（.lb-scroll）だけをスクロールさせる（iPhone SE など背の低い画面で、ステージをえらんだあと
+           下までスクロールしないと「はじめる」を押せなかったため） -->
 
     <!-- まだ解放していないブラウザで、直接開いたとき -->
     <section v-if="unlockState === 'locked'" class="mg-stage">
@@ -496,151 +513,156 @@ onUnmounted(() => {
       </article>
     </section>
 
-    <section v-else-if="unlockState === 'unlocked'" ref="stageRef" class="mg-stage">
-      <!-- はじまる前（遊びかたと、ステージえらび） -->
-      <article v-if="phase === 'ready'" class="place-card">
-        <h1 class="place-card__title">🐞 てんとう虫バランス</h1>
+    <section v-else-if="unlockState === 'unlocked'" ref="stageRef" class="mg-stage lb-screen">
+      <!-- スクロールする部分（はじまる前の説明・遊んでいる最中・結果） -->
+      <div ref="scrollRef" class="lb-scroll">
+        <!-- はじまる前（遊びかたと、ステージえらび） -->
+        <article v-if="phase === 'ready'" class="place-card">
+          <h1 class="place-card__title">🐞 てんとう虫バランス</h1>
 
-        <p class="mg-lead">
-          枝をかたむけて、てんとう虫が
-          <br />
-          はしから飛んでいかないようにしよう！
-        </p>
-
-        <ul class="mg-rules">
-          <li class="mg-for-pc">← → キー・ボタンを押しているあいだ、枝がかたむく</li>
-          <li class="mg-for-touch">◀ ▶ ボタンを押しているあいだ、枝がかたむく</li>
-          <li>てんとう虫は、高いほうへ のぼっていく</li>
-          <li>はしまで行くと、飛んでいっちゃう！ 近づいた側を下げよう</li>
-        </ul>
-
-        <!-- ステージえらび（まだ遊べないステージは 🔒） -->
-        <div class="lb-stages" role="group" aria-label="ステージをえらぶ">
-          <button
-            v-for="(_, index) in ladybugBalanceStages"
-            :key="index"
-            type="button"
-            class="lb-stage lb-nav"
-            :class="{ 'lb-stage--selected': index === stageIndex && mode === 'stage', 'lb-stage--cleared': index < clearedStage }"
-            :disabled="index >= playableStageCount"
-            :aria-pressed="index === stageIndex && mode === 'stage'"
-            :aria-label="index >= playableStageCount ? `ステージ${index + 1}（まだ遊べません）` : `ステージ${index + 1}${index < clearedStage ? '（クリアずみ）' : ''}`"
-            @click="chooseStage(index)">
-            <span v-if="index >= playableStageCount" aria-hidden="true">🔒</span>
-            <template v-else>{{ index + 1 }}</template>
-            <span v-if="index < clearedStage" class="lb-stage__check" aria-hidden="true">✓</span>
-          </button>
-        </div>
-
-        <!-- エンドレス（ぜんぶのステージをクリアすると出てくる） -->
-        <button
-          v-if="isEndlessUnlocked"
-          type="button"
-          class="lb-endless lb-nav"
-          :class="{ 'lb-endless--selected': mode === 'endless' }"
-          :aria-pressed="mode === 'endless'"
-          @click="chooseEndless">
-          ⏱ なんびょう チャレンジ
-          <!-- 自己ベストの札（書きかたと見た目は、ミニゲームの一覧のカードの自己ベストとそろえる） -->
-          <span v-if="endlessBestMs > 0" class="lb-endless__best">
-            じこベスト
-            <span>⏱ {{ formatSeconds(endlessBestMs) }}びょう</span>
-          </span>
-        </button>
-
-        <ul class="lb-summary">
-          <li class="lb-summary__title">{{ mode === 'endless' ? '⏱ なんびょう チャレンジ' : `ステージ ${stageIndex + 1}` }}</li>
-          <li v-for="part in stageSummary" :key="part">{{ part }}</li>
-        </ul>
-      </article>
-
-      <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる） -->
-      <LadybugBalanceField
-        v-else
-        class="lb-play-field"
-        :class="{ 'lb-play-field--result': phase === 'cleared' || phase === 'failed' }"
-        :phase="phase"
-        :stage-number="stageIndex + 1"
-        :tilt="tilt"
-        :branch-length="rule.branchLength"
-        :ladybugs="ladybugs"
-        :remaining-ms="remainingMs"
-        :total-ms="stage.seconds * 1000"
-        :countdown-number="countdownNumber"
-        :is-start-cue-visible="isStartCueVisible"
-        :wind-dir="windDir"
-        :wind-warning-dir="windWarningDir"
-        :endless-level="mode === 'endless' ? endlessLevel : null"
-        :endless-progress="endlessLevelProgress"
-        :elapsed-ms="elapsed"
-        :lost-kind="lostKind" />
-
-      <!-- 左右のボタン（遊んでいる最中・飛んでいくあいだ） -->
-      <nav v-if="phase === 'playing' || phase === 'flyaway'" class="mg-command lb-controls" aria-label="枝をかたむける">
-        <button
-          type="button"
-          class="lb-side"
-          :class="{ 'lb-side--held': isLeftHeld }"
-          tabindex="-1"
-          aria-label="左へかたむける"
-          @pointerdown="handleSidePointerDown($event, -1)"
-          @pointerup="releasePointer(-1)"
-          @pointercancel="releasePointer(-1)"
-          @pointerleave="releasePointer(-1)"
-          @contextmenu.prevent>
-          <span class="lb-side__arrow" aria-hidden="true">◀</span>
-          <span class="lb-side__text">ひだり</span>
-        </button>
-        <button
-          type="button"
-          class="lb-side"
-          :class="{ 'lb-side--held': isRightHeld }"
-          tabindex="-1"
-          aria-label="右へかたむける"
-          @pointerdown="handleSidePointerDown($event, 1)"
-          @pointerup="releasePointer(1)"
-          @pointercancel="releasePointer(1)"
-          @pointerleave="releasePointer(1)"
-          @contextmenu.prevent>
-          <span class="lb-side__text">みぎ</span>
-          <span class="lb-side__arrow" aria-hidden="true">▶</span>
-        </button>
-      </nav>
-
-      <!-- 結果（クリア ／ おしまい） -->
-      <article v-else-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
-        <!-- エンドレス：たえた時間とレベル -->
-        <template v-if="mode === 'endless'">
-          <p class="place-card__flash lb-result__flash">⏱ なんびょう チャレンジ</p>
-          <p class="lb-record">
-            <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
-            <span class="lb-record__unit">びょう たえた！</span>
-            <span class="lb-record__level">Lv.{{ endlessLevel }}</span>
-            <span v-if="isNewEndlessBest" class="lb-record__new">じこベスト！</span>
+          <p class="mg-lead">
+            枝をかたむけて、てんとう虫が
+            <br />
+            はしから飛んでいかないようにしよう！
           </p>
-        </template>
 
-        <!-- クリアしたときは、ステージの数字だけ大きくする（何番をクリアしたか すぐ分かるように） -->
-        <p v-else-if="phase === 'cleared'" class="place-card__flash lb-result__flash">
-          ステージ <span class="lb-result__stageNumber">{{ stageIndex + 1 }}</span> クリア！
-        </p>
-        <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
-        <p class="mg-text">{{ resultComment }}</p>
-        <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
-        <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ なんびょう チャレンジが あそべるようになった！</p>
-        <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
-      </article>
+          <ul class="mg-rules">
+            <li class="mg-for-pc">← → キー・ボタンを押しているあいだ、枝がかたむく</li>
+            <li class="mg-for-touch">◀ ▶ ボタンを押しているあいだ、枝がかたむく</li>
+            <li>てんとう虫は、高いほうへ のぼっていく</li>
+            <li>はしまで行くと、飛んでいっちゃう！ 近づいた側を下げよう</li>
+          </ul>
 
-      <!-- 「はじめる」（はじまる前） -->
-      <button v-if="phase === 'ready'" type="button" class="mg-play lb-nav lb-nav--primary" :disabled="!canPlaySelected" @click="play">はじめる</button>
+          <!-- ステージえらび（まだ遊べないステージは 🔒） -->
+          <div class="lb-stages" role="group" aria-label="ステージをえらぶ">
+            <button
+              v-for="(_, index) in ladybugBalanceStages"
+              :key="index"
+              type="button"
+              class="lb-stage lb-nav"
+              :class="{ 'lb-stage--selected': index === stageIndex && mode === 'stage', 'lb-stage--cleared': index < clearedStage }"
+              :disabled="index >= playableStageCount"
+              :aria-pressed="index === stageIndex && mode === 'stage'"
+              :aria-label="index >= playableStageCount ? `ステージ${index + 1}（まだ遊べません）` : `ステージ${index + 1}${index < clearedStage ? '（クリアずみ）' : ''}`"
+              @click="chooseStage(index)">
+              <span v-if="index >= playableStageCount" aria-hidden="true">🔒</span>
+              <template v-else>{{ index + 1 }}</template>
+              <span v-if="index < clearedStage" class="lb-stage__check" aria-hidden="true">✓</span>
+            </button>
+          </div>
 
-      <!-- 結果の画面のボタン -->
-      <div v-else-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions">
-        <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
-        <!-- さいごのステージをクリアしたら、エンドレスへ -->
-        <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToEndless">⏱ なんびょう チャレンジへ</button>
-        <button type="button" class="lb-nav" :class="phase === 'cleared' ? 'lb-sub' : 'mg-play lb-nav--primary'" @click="retry">もう一度あそぶ</button>
-        <button type="button" class="lb-sub lb-nav" @click="backToStageSelect">ステージをえらぶ</button>
+          <!-- エンドレス（ぜんぶのステージをクリアすると出てくる） -->
+          <button
+            v-if="isEndlessUnlocked"
+            type="button"
+            class="lb-endless lb-nav"
+            :class="{ 'lb-endless--selected': mode === 'endless' }"
+            :aria-pressed="mode === 'endless'"
+            @click="chooseEndless">
+            ⏱ なんびょう チャレンジ
+            <!-- 自己ベストの札（書きかたと見た目は、ミニゲームの一覧のカードの自己ベストとそろえる） -->
+            <span v-if="endlessBestMs > 0" class="lb-endless__best">
+              じこベスト
+              <span>⏱ {{ formatSeconds(endlessBestMs) }}びょう</span>
+            </span>
+          </button>
+
+          <ul class="lb-summary">
+            <li class="lb-summary__title">{{ mode === 'endless' ? '⏱ なんびょう チャレンジ' : `ステージ ${stageIndex + 1}` }}</li>
+            <li v-for="part in stageSummary" :key="part">{{ part }}</li>
+          </ul>
+        </article>
+
+        <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる） -->
+        <LadybugBalanceField
+          v-else
+          class="lb-play-field"
+          :class="{ 'lb-play-field--result': phase === 'cleared' || phase === 'failed' }"
+          :phase="phase"
+          :stage-number="stageIndex + 1"
+          :tilt="tilt"
+          :branch-length="rule.branchLength"
+          :ladybugs="ladybugs"
+          :remaining-ms="remainingMs"
+          :total-ms="stage.seconds * 1000"
+          :countdown-number="countdownNumber"
+          :is-start-cue-visible="isStartCueVisible"
+          :wind-dir="windDir"
+          :wind-warning-dir="windWarningDir"
+          :endless-level="mode === 'endless' ? endlessLevel : null"
+          :endless-progress="endlessLevelProgress"
+          :elapsed-ms="elapsed"
+          :lost-kind="lostKind" />
+
+        <!-- 左右のボタン（遊んでいる最中・飛んでいくあいだ） -->
+        <nav v-if="phase === 'playing' || phase === 'flyaway'" class="mg-command lb-controls" aria-label="枝をかたむける">
+          <button
+            type="button"
+            class="lb-side"
+            :class="{ 'lb-side--held': isLeftHeld }"
+            tabindex="-1"
+            aria-label="左へかたむける"
+            @pointerdown="handleSidePointerDown($event, -1)"
+            @pointerup="releasePointer(-1)"
+            @pointercancel="releasePointer(-1)"
+            @pointerleave="releasePointer(-1)"
+            @contextmenu.prevent>
+            <span class="lb-side__arrow" aria-hidden="true">◀</span>
+            <span class="lb-side__text">ひだり</span>
+          </button>
+          <button
+            type="button"
+            class="lb-side"
+            :class="{ 'lb-side--held': isRightHeld }"
+            tabindex="-1"
+            aria-label="右へかたむける"
+            @pointerdown="handleSidePointerDown($event, 1)"
+            @pointerup="releasePointer(1)"
+            @pointercancel="releasePointer(1)"
+            @pointerleave="releasePointer(1)"
+            @contextmenu.prevent>
+            <span class="lb-side__text">みぎ</span>
+            <span class="lb-side__arrow" aria-hidden="true">▶</span>
+          </button>
+        </nav>
+
+        <!-- 結果（クリア ／ おしまい） -->
+        <article v-else-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
+          <!-- エンドレス：たえた時間とレベル -->
+          <template v-if="mode === 'endless'">
+            <p class="place-card__flash lb-result__flash">⏱ なんびょう チャレンジ</p>
+            <p class="lb-record">
+              <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
+              <span class="lb-record__unit">びょう たえた！</span>
+              <span class="lb-record__level">Lv.{{ endlessLevel }}</span>
+              <span v-if="isNewEndlessBest" class="lb-record__new">じこベスト！</span>
+            </p>
+          </template>
+
+          <!-- クリアしたときは、ステージの数字だけ大きくする（何番をクリアしたか すぐ分かるように） -->
+          <p v-else-if="phase === 'cleared'" class="place-card__flash lb-result__flash">
+            ステージ <span class="lb-result__stageNumber">{{ stageIndex + 1 }}</span> クリア！
+          </p>
+          <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
+          <p class="mg-text">{{ resultComment }}</p>
+          <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
+          <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ なんびょう チャレンジが あそべるようになった！</p>
+          <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
+        </article>
+
+        <!-- 結果の画面のボタン -->
+        <div v-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions">
+          <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
+          <!-- さいごのステージをクリアしたら、エンドレスへ -->
+          <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToEndless">⏱ なんびょう チャレンジへ</button>
+          <button type="button" class="lb-nav" :class="phase === 'cleared' ? 'lb-sub' : 'mg-play lb-nav--primary'" @click="retry">もう一度あそぶ</button>
+          <button type="button" class="lb-sub lb-nav" @click="backToStageSelect">ステージをえらぶ</button>
+        </div>
+      </div>
+
+      <!-- 「はじめる」（はじまる前）。スクロールの外に置いて、いつも画面の下に見えるようにする -->
+      <div v-if="phase === 'ready'" class="lb-footer">
+        <button type="button" class="mg-play lb-nav lb-nav--primary" :disabled="!canPlaySelected" @click="play">はじめる</button>
       </div>
     </section>
   </MinigameLayout>
@@ -662,6 +684,40 @@ onUnmounted(() => {
   max-width: 620px;
   margin: 0 auto;
   padding: 18px 20px 24px;
+}
+
+/* ===== 画面に入りきらないときの、まん中と下（MinigameLayout の fit-screen） =====
+   ・.lb-screen … 枠の残りの高さいっぱい。外がわの余白は中の2つが持つ
+   ・.lb-scroll … まん中（説明・フィールド・結果）。入りきらないときは、ここだけスクロールする
+     overscroll-behavior … いちばん下まで行っても、ページごと引っぱられないように
+     > * の flex-shrink: 0 … 高さの決まったフィールドが、縮められて つぶれないように
+   ・.lb-footer … 「はじめる」の置き場（スクロールしないので、いつも画面の下に見える）
+     上の うすい線で、ここから下はスクロールしない場所だと分かるようにする */
+.lb-screen {
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+}
+
+.lb-scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  padding: 18px 20px 24px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.lb-scroll > * {
+  flex-shrink: 0;
+}
+
+.lb-footer {
+  flex: none;
+  padding: 12px 20px 16px;
+  border-top: 1px solid #ece4fb;
 }
 
 /* ===== カード（紫のカード） ===== */
@@ -1164,6 +1220,21 @@ onUnmounted(() => {
   .mg-stage {
     gap: 12px;
     padding: 12px 12px 16px;
+  }
+
+  /* 余白は、まん中（.lb-scroll）と下（.lb-footer）が持つ（上の .mg-stage の余白を 0 に戻す） */
+  .lb-screen {
+    gap: 0;
+    padding: 0;
+  }
+
+  .lb-scroll {
+    gap: 12px;
+    padding: 12px 12px 16px;
+  }
+
+  .lb-footer {
+    padding: 10px 12px 12px;
   }
 
   .place-card {
