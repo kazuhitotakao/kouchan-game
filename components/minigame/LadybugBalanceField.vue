@@ -11,9 +11,9 @@
    動き・判定は composables/useLadybugBalanceGame.ts。ここは受けとった値を絵にするだけ
    ============================================================ */
 
-import { computed } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 
-import { ladybugBalanceKinds, ladybugBalanceMotion } from '~/data/ladybugBalance';
+import { ladybugBalanceKinds, ladybugBalanceMotion, ladybugBalanceTilt } from '~/data/ladybugBalance';
 import type { LadybugBalanceKind } from '~/data/ladybugBalance';
 import type { LadybugBalanceBug, LadybugBalancePhase } from '~/composables/useLadybugBalanceGame';
 
@@ -53,7 +53,57 @@ const remainingText = computed(() => (Math.ceil(props.remainingMs / 100) / 10).t
 const remainingRatio = computed(() => (props.totalMs > 0 ? props.remainingMs / props.totalMs : 0));
 
 /* 枝の長さ（フィールドの幅に対する割合。いちばん長い枝で 86%） */
-const branchWidth = computed(() => `${86 * props.branchLength}%`);
+const branchWidthPercent = 86;
+const branchWidth = computed(() => `${branchWidthPercent * props.branchLength}%`);
+
+/* フィールドの大きさ（枝を どこまで傾けて描けるかを決めるため） */
+const fieldRef = ref<HTMLElement | null>(null);
+const fieldSize = ref({ width: 0, height: 0 });
+let resizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  const field = fieldRef.value;
+
+  if (!field) {
+    return;
+  }
+
+  const update = () => {
+    fieldSize.value = { width: field.clientWidth, height: field.clientHeight };
+  };
+
+  update();
+  resizeObserver = new ResizeObserver(update);
+  resizeObserver.observe(field);
+});
+
+onUnmounted(() => {
+  resizeObserver?.disconnect();
+});
+
+/* いちばん傾いたときに描く角度（度）
+   data/ladybugBalance.ts の drawMaxDeg まで傾けたいが、横に広くて背の低いフィールド（PC の低い窓）では、
+   高いほうのてんとう虫がフィールドの上から、低いほうの枝の先が下から はみ出してしまうので、収まる角度までにする
+   ・上 … 枝の支点（上から 58%）から、枝の先と てんとう虫の絵（「！」まで 約52px）が、フィールドの上に収まる
+   ・下 … 枝の支点から、枝の先（太さの半分と影 約10px）が、フィールドの下に収まる
+   ただし、ゲームの計算の角度（maxDeg）より小さくはしない（もとの見た目より傾きが小さくならないように） */
+const drawMaxDeg = computed(() => {
+  const { maxDeg, drawMaxDeg: wantedDeg } = ladybugBalanceTilt;
+  const { width, height } = fieldSize.value;
+  const halfLength = (width * branchWidthPercent * props.branchLength) / 200;
+
+  if (halfLength <= 0) {
+    return wantedDeg;
+  }
+
+  const room = Math.min(height * 0.58 - 52, height * 0.42 - 10);
+  const fitDeg = (Math.asin(Math.min(1, Math.max(0, room / halfLength))) * 180) / Math.PI;
+
+  return Math.min(wantedDeg, Math.max(maxDeg, fitDeg));
+});
+
+/* 画面に描く枝の角度（ゲームの計算の角度を、上の drawMaxDeg まで大きくする。絵だけなので難易度は変わらない） */
+const drawTilt = computed(() => (props.tilt * drawMaxDeg.value) / ladybugBalanceTilt.maxDeg);
 
 /* てんとう虫1匹ぶんの見た目の値
    left    … 枝の左はし 0% 〜 右はし 100%
@@ -95,7 +145,7 @@ const windStreaks = [
 </script>
 
 <template>
-  <div class="lb-field" :class="[`lb-field--${phase}`, { 'lb-field--windy': windDir !== 0 }]">
+  <div ref="fieldRef" class="lb-field" :class="[`lb-field--${phase}`, { 'lb-field--windy': windDir !== 0 }]">
     <!-- HUD（ステージ番号と残り時間） -->
     <div v-if="endlessLevel === null" class="lb-hud">
       <span class="lb-hud__stage">ステージ {{ stageNumber }}</span>
@@ -135,7 +185,7 @@ const windStreaks = [
     <div class="lb-stump" aria-hidden="true" />
 
     <!-- 枝（まん中を中心に回す）。てんとう虫は枝の上にのせる -->
-    <div class="lb-branch" :style="{ width: branchWidth, transform: `translate(-50%, -50%) rotate(${tilt}deg)` }" aria-hidden="true">
+    <div class="lb-branch" :style="{ width: branchWidth, transform: `translate(-50%, -50%) rotate(${drawTilt}deg)` }" aria-hidden="true">
       <span class="lb-branch__leaf lb-branch__leaf--left" />
       <span class="lb-branch__leaf lb-branch__leaf--right" />
       <span class="lb-branch__twig" />
