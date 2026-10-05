@@ -65,11 +65,22 @@ export const minigames = [
     title: 'てんとう虫バランス',
     description: '枝をかたむけて、てんとう虫が飛んでいかないようにしよう！',
     lockedHint: '公園で、ちいさな生きものに出会えるかも…',
-    /* 自己ベストのかわりに、どこまでクリアしたか（{ clearedStage: 3 } なら「ステージ 3/5 クリア」） */
+    /* どこまでクリアしたか（{ clearedStage: 3 } なら「ステージ 3/10 クリア」。分母はステージの数）
+       と、エンドレスの自己ベスト（{ endlessBestMs: 23400 } なら「♾ 23.4びょう」。遊んでいなければ出さない） */
     formatBest: (savedBest) => {
       const clearedStage = Math.min(Number(savedBest?.clearedStage) || 0, ladybugBalanceStages.length);
+      const endlessBestMs = Number(savedBest?.endlessBestMs) || 0;
+      const parts = [];
 
-      return clearedStage > 0 ? [{ text: `🐞 ステージ ${clearedStage}/${ladybugBalanceStages.length} クリア` }] : null;
+      if (clearedStage > 0) {
+        parts.push({ text: `🐞 ステージ ${clearedStage}/${ladybugBalanceStages.length} クリア` });
+      }
+
+      if (endlessBestMs > 0) {
+        parts.push({ text: `♾ ${(Math.floor(endlessBestMs / 100) / 10).toFixed(1)}びょう` });
+      }
+
+      return parts.length > 0 ? parts : null;
     },
   },
 ] as const satisfies readonly MinigameInfo[];
