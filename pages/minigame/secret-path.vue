@@ -27,6 +27,7 @@ import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
 import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
+import { useMinigamePause } from '~/composables/useMinigamePause';
 import { useSecretPathGame } from '~/composables/useSecretPathGame';
 import { minigames } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
@@ -131,6 +132,11 @@ const {
   secretPathHoverDestination,
   startSecretPathGame,
   restartSecretPathGame,
+  resetSecretPathGame,
+  canPauseSecretPath,
+  isSecretPathCountingDown,
+  pauseSecretPathGame,
+  resumeSecretPathGame,
   handleSecretPathKeydown,
   handleSecretPathPointerDown,
   handleSecretPathPointerMove,
@@ -154,6 +160,28 @@ const {
   playCountdownSound,
   playCountdownStartSound,
 });
+
+/* ============================================================
+   一時停止（とばないで！ と共通 → composables/useMinigamePause.ts）
+   「やめる」は、はじまる前の画面へ戻す（記録は残さない）
+   ============================================================ */
+const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinigamePause({
+  canPause: canPauseSecretPath,
+  isCountingDown: isSecretPathCountingDown,
+  pauseGame: pauseSecretPathGame,
+  resumeGame: resumeSecretPathGame,
+  quitGame: quitToReady,
+  playDecisionSound,
+});
+
+/* 一時停止の「やめる」
+   ご褒美を解放したときの知らせは、次のプレイの結果には持ちこさない（解放そのものは、そのまま残る。「もう一回」と同じ） */
+function quitToReady() {
+  resetSecretPathGame();
+  hideCommandNotice();
+  isNewlyUnlockedSecretVocalSong.value = false;
+  focusPlayButton();
+}
 
 /* ============================================================
    解放されているか
@@ -277,10 +305,16 @@ function showCommandNotice(kind: CommandNotice['kind'], text: string) {
     clearTimeout(commandNoticeTimer);
   }
 
-  commandNoticeTimer = setTimeout(() => {
-    commandNotice.value = null;
+  commandNoticeTimer = setTimeout(hideCommandNotice, commandNoticeDuration);
+}
+
+function hideCommandNotice() {
+  if (commandNoticeTimer !== null) {
+    clearTimeout(commandNoticeTimer);
     commandNoticeTimer = null;
-  }, commandNoticeDuration);
+  }
+
+  commandNotice.value = null;
 }
 
 /* レベルが上がった瞬間の知らせ（「⏫ スピードアップ！ Lv.3」）
@@ -428,6 +462,11 @@ async function goToList() {
 const layoutRef = ref<InstanceType<typeof MinigameLayout> | null>(null);
 
 function handleKeydown(event: KeyboardEvent) {
+  // 一時停止（Esc）と、止まっているあいだのキーは、ゲームの操作へ回さない
+  if (handlePauseKeydown(event)) {
+    return;
+  }
+
   if (isSecretPathPlaying.value) {
     handleSecretPathKeydown(event);
     return;
@@ -528,9 +567,14 @@ onUnmounted(() => {
     :class="{ 'mg-fit': secretPathPhase === 'playing' }"
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
+    :can-pause="canPauseSecretPath"
+    :pause-state="pauseState"
     @back="goToList"
     @toggle-sound="toggleSound"
-    @volume-change="changeSoundVolume">
+    @volume-change="changeSoundVolume"
+    @pause="pauseByButton"
+    @resume="resume"
+    @quit="quit">
     <!-- 外枠（背景 ＋ 上部ツールバー）は、ミニゲームの一覧と同じ部品
          ※ このコメントを <MinigameLayout> の外に書かないこと
            開発中はコメントも残って、いちばん外の要素が2つになり、ページを移るときのフェードがこわれて画面がまっ暗になる -->

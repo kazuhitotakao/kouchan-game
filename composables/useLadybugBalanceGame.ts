@@ -173,8 +173,17 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
 
   const isPlaying = computed(() => phase.value === 'playing');
 
+  /* 一時停止しているか（「よーい！」のあいだもふくむ。止める・動かすのは composables/useMinigamePause.ts から） */
+  const isPaused = ref(false);
+
+  /* 一時停止できるか（遊んでいる最中だけ。飛んでいく演出の最中は、すぐ結果になるので止めない） */
+  const canPause = computed(() => isPlaying.value);
+
   /* カウントダウンに出す数字（3 → 2 → 1。はじめの間と、始まったあとは null） */
   const countdownNumber = computed(() => getCountdownNumber(elapsed.value));
+
+  /* はじまる前のカウントダウン中か（ゲームの時計がマイナスのあいだ。はじめの間もふくむ） */
+  const isCountingDown = computed(() => isPlaying.value && elapsed.value < 0);
 
   /* 残り時間（ミリ秒。カウントダウン中はステージの時間のまま。エンドレスでは使わない） */
   const remainingMs = computed(() => Math.max(0, stage.value.seconds * 1000 - Math.max(0, elapsed.value)));
@@ -259,6 +268,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     cancelFlyAway();
     releaseControls();
 
+    isPaused.value = false;
     phase.value = 'ready';
     elapsed.value = 0;
     tilt.value = 0;
@@ -325,7 +335,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
   function runFrame(timestamp: number) {
     frameId = null;
 
-    if (!isPlaying.value) {
+    if (!isPlaying.value || isPaused.value) {
       stopLoop();
       return;
     }
@@ -336,9 +346,39 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
 
     advance(delta);
 
-    if (isPlaying.value) {
+    if (isPlaying.value && !isPaused.value) {
       frameId = requestAnimationFrame(runFrame);
     }
+  }
+
+  /* 一時停止（ゲームの時計ごと止める。押している状態も戻す）
+     止まっているあいだは requestAnimationFrame を予約しないので、枝・てんとう虫・風・残り時間は、どれも動かない */
+  function pause() {
+    if (!canPause.value) {
+      return;
+    }
+
+    isPaused.value = true;
+    stopLoop();
+    releaseControls();
+  }
+
+  /* 一時停止から動かす（前のコマの時刻は stopLoop() で忘れているので、止まっていたあいだの時間は進まない） */
+  function resume() {
+    if (!isPaused.value) {
+      return;
+    }
+
+    isPaused.value = false;
+
+    if (isPlaying.value && frameId === null) {
+      frameId = requestAnimationFrame(runFrame);
+    }
+  }
+
+  /* 一時停止の「やめる」（えらんでいるステージ ／ エンドレスの、はじまる前の画面へ戻す） */
+  function quit() {
+    resetGame();
   }
 
   /* ゲームの時計を delta ミリ秒進める */
@@ -662,7 +702,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
 
   /* 画面の左右ボタン（押しているあいだだけ傾ける） */
   function pressPointer(side: LadybugBalanceSide) {
-    if (!isPlaying.value) {
+    if (!isPlaying.value || isPaused.value) {
       return;
     }
 
@@ -699,7 +739,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
       event.preventDefault();
     }
 
-    if (side !== null && isPlaying.value) {
+    if (side !== null && isPlaying.value && !isPaused.value) {
       keyHeld.value = { ...keyHeld.value, [sideKey(side)]: true };
     }
   }
@@ -755,6 +795,8 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     isLeftHeld,
     isRightHeld,
     isPlaying,
+    canPause,
+    isCountingDown,
     countdownNumber,
     remainingMs,
     selectStage,
@@ -765,5 +807,8 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     pressPointer,
     releasePointer,
     handleGameKeydown,
+    pause,
+    resume,
+    quit,
   };
 }

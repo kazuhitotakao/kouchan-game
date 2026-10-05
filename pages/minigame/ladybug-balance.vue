@@ -31,6 +31,7 @@ import { useAudio } from '~/composables/useAudio';
 import { useLadybugBalanceGame } from '~/composables/useLadybugBalanceGame';
 import type { LadybugBalanceSide } from '~/composables/useLadybugBalanceGame';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
+import { useMinigamePause } from '~/composables/useMinigamePause';
 import { ladybugBalanceEndless, ladybugBalanceKinds, ladybugBalanceStages } from '~/data/ladybugBalance';
 import type { LadybugBalanceKind } from '~/data/ladybugBalance';
 import { minigames, splitMinigameTitle } from '~/data/minigames';
@@ -138,9 +139,14 @@ const {
   start,
   startStage,
   canAcceptResultInput,
+  canPause,
+  isCountingDown,
   pressPointer,
   releasePointer,
   handleGameKeydown,
+  pause: pauseGame,
+  resume: resumeGame,
+  quit: quitGame,
 } = useLadybugBalanceGame({
   playCountdownSound,
   playCountdownStartSound,
@@ -187,6 +193,22 @@ const {
     playCountdownSound();
     playCountdownSound(0.1);
   },
+});
+
+/* ============================================================
+   一時停止（どこまで行ける？ と共通 → composables/useMinigamePause.ts）
+   「やめる」は、えらんでいたステージ（エンドレス）の、はじまる前の画面へ戻す
+   ============================================================ */
+const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinigamePause({
+  canPause,
+  isCountingDown,
+  pauseGame,
+  resumeGame,
+  quitGame: () => {
+    quitGame();
+    focusFirstMainButton();
+  },
+  playDecisionSound,
 });
 
 /* 遊んでいる・飛んでいく・結果のあいだは、フィールドを出す */
@@ -393,6 +415,11 @@ function handleKeydown(event: KeyboardEvent) {
     return;
   }
 
+  // 一時停止（Esc）と、止まっているあいだのキーは、ゲームの操作へ回さない
+  if (handlePauseKeydown(event)) {
+    return;
+  }
+
   if (phase.value === 'playing' || phase.value === 'flyaway') {
     handleGameKeydown(event);
     return;
@@ -494,9 +521,14 @@ onUnmounted(() => {
     fit-screen
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
+    :can-pause="canPause"
+    :pause-state="pauseState"
     @back="goToList"
     @toggle-sound="toggleSound"
-    @volume-change="changeSoundVolume">
+    @volume-change="changeSoundVolume"
+    @pause="pauseByButton"
+    @resume="resume"
+    @quit="quit">
     <!-- 外枠（背景 ＋ 上部ツールバー）は、ミニゲームの一覧と同じ部品
          ※ このコメントを <MinigameLayout> の外に書かないこと
            開発中はコメントも残って、いちばん外の要素が2つになり、ページを移るときのフェードがこわれて画面がまっ暗になる

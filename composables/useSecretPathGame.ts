@@ -222,6 +222,13 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      フィールドは出したまま、ループは止め、こうちゃんも動かせない（長さは secretPathEndlessGameOverDelay） */
   const isSecretPathGameOverWaiting = ref(false);
 
+  /* 一時停止しているか（「どこまで行ける？」だけ。「よーい！」のあいだもふくむ。止める・動かすのは composables/useMinigamePause.ts から）
+     止まっているあいだは、ループを止めて、こうちゃんも動かせない */
+  const isSecretPathPaused = ref(false);
+
+  /* 一時停止できるか（遊んでいる最中だけ。カウントダウン中もふくむ。最後の ❤ をなくしたあとは、すぐ結果になるので止めない） */
+  const canPauseSecretPath = computed(() => isSecretPathPlaying.value && !isSecretPathGameOverWaiting.value);
+
   /* はじまる前のカウントダウン中かどうか（ゲームの時計がまだマイナスのあいだ） */
   const isSecretPathCountingDown = computed(() => isSecretPathPlaying.value && secretPathElapsed.value < 0);
 
@@ -366,6 +373,7 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     releaseSecretPathControls();
     cancelSecretPathGameOver();
 
+    isSecretPathPaused.value = false;
     secretPathPhase.value = 'ready';
     secretPathPlayerLane.value = 1;
     secretPathItems.value = [];
@@ -436,6 +444,12 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
       return;
     }
 
+    // 一時停止したあとに、予約が残っていたときも、ここで止まる（動かすのは resumeSecretPathGame()）
+    if (isSecretPathPaused.value) {
+      stopSecretPathLoop();
+      return;
+    }
+
     /* 前のコマからの時間（最大50ミリ秒。重くなったときに、枝がこうちゃんを「すり抜けて」しまわないように） */
     const delta = secretPathLastTimestamp === null ? 0 : Math.min(Math.max(timestamp - secretPathLastTimestamp, 0), 50);
 
@@ -464,6 +478,32 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     // （当たりを見たあとに近づけるので、とちゅうのレーンでも、かならず1コマは当たりを見る）
     if (isSecretPathPlaying.value && !isSecretPathGameOverWaiting.value) {
       followSecretPathDragTarget();
+      secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
+    }
+  }
+
+  /* 一時停止（「どこまで行ける？」だけ。ゲームの時計ごと止める。はやく進む・押している状態も戻す）
+     止まっているあいだは requestAnimationFrame を予約しないので、枝・こもれび・距離は、どれも動かない */
+  function pauseSecretPathGame() {
+    if (!canPauseSecretPath.value) {
+      return;
+    }
+
+    isSecretPathPaused.value = true;
+    stopSecretPathLoop();
+    releaseSecretPathControls();
+    secretPathHoverLane.value = null;
+  }
+
+  /* 一時停止から動かす（前のコマの時刻は stopSecretPathLoop() で忘れているので、止まっていたあいだの時間は進まない） */
+  function resumeSecretPathGame() {
+    if (!isSecretPathPaused.value) {
+      return;
+    }
+
+    isSecretPathPaused.value = false;
+
+    if (isSecretPathPlaying.value && secretPathFrameId === null) {
       secretPathFrameId = requestAnimationFrame(runSecretPathFrame);
     }
   }
@@ -701,8 +741,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
   /* こうちゃんを左（-1）か右（+1）へ、1レーンだけ動かす（はしでは、その場のまま）
      枝に当たった直後も、ふつうに動ける */
   function moveSecretPathPlayer(direction: -1 | 1) {
-    // 結果の画面を待っているあいだも動かさない（キー・タップ・ドラッグのどれも、ここを通る）
-    if (!isSecretPathPlaying.value || isSecretPathGameOverWaiting.value) {
+    // 結果の画面を待っているあいだ・一時停止しているあいだも動かさない（キー・タップ・ドラッグのどれも、ここを通る）
+    if (!isSecretPathPlaying.value || isSecretPathGameOverWaiting.value || isSecretPathPaused.value) {
       return;
     }
 
@@ -790,8 +830,8 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
      ※ setPointerCapture … 押したままフィールドの外へ出ても、pointerup を受け取るため
      ※ 最初に押したポインターだけで操作する（2本目の指は使わない） */
   function handleSecretPathPointerDown(event: PointerEvent) {
-    // 右クリック・遊んでいる最中以外・結果の画面を待っているあいだは、押したことにしない
-    if (event.button !== 0 || !isSecretPathPlaying.value || isSecretPathGameOverWaiting.value) {
+    // 右クリック・遊んでいる最中以外・結果の画面を待っているあいだ・一時停止しているあいだは、押したことにしない
+    if (event.button !== 0 || !isSecretPathPlaying.value || isSecretPathGameOverWaiting.value || isSecretPathPaused.value) {
       return;
     }
 
@@ -1106,6 +1146,12 @@ export function useSecretPathGame(options: UseSecretPathGameOptions) {
     leaveSecretPathToEntrance,
     enterSecretSpotFromPath,
     restartSecretPathGame, // 「どこまで行ける？」だけ（もう一回）
+
+    /* ===== 一時停止（「どこまで行ける？」だけ。composables/useMinigamePause.ts から呼ばれる） ===== */
+    canPauseSecretPath,
+    isSecretPathCountingDown,
+    pauseSecretPathGame,
+    resumeSecretPathGame,
 
     /* ===== キー操作（composables/useKeyboardControls.ts から呼ばれる） ===== */
     handleSecretPathKeydown,
