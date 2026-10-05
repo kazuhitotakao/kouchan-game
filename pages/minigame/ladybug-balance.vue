@@ -12,10 +12,12 @@
      まだ解放していないブラウザで直接開いたときは、遊べるようになる条件だけを出す
 
    ■ 保存するもの（utils/minigameStorage.ts の「自己ベスト」の場所を使う）
-     { clearedStage: 3, endlessBestMs: 23400 }
+     { clearedStage: 3, endlessBestMs: 23400, selected: 2 }
        clearedStage  … ステージ3までクリアした（次はステージ4が遊べる）
        endlessBestMs … エンドレスで たえた時間の自己ベスト（ミリ秒。まだ遊んでいなければ 0）
-     ※ 2つを いっしょに保存する（片方だけ保存すると、もう片方が消えるため → saveProgress()）
+       selected      … さいごに えらんでいたもの（ステージの番号。エンドレスは 'endless'）
+                       次に開いたときも、同じものを えらんだ状態から始める（まだ無い・遊べないものなら、まだクリアしていない いちばん前のステージ）
+     ※ ぜんぶ いっしょに保存する（ひとつだけ保存すると、ほかが消えるため → saveProgress()）
 
    ■ ゲームの中身
      ・動き・操作 … composables/useLadybugBalanceGame.ts
@@ -30,7 +32,7 @@ import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { useLadybugBalanceGame } from '~/composables/useLadybugBalanceGame';
 import type { LadybugBalanceSide } from '~/composables/useLadybugBalanceGame';
-import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
+import { moveMinigameFocusSpatially } from '~/composables/useMinigameKeyboardNav';
 import { useMinigamePause } from '~/composables/useMinigamePause';
 import { ladybugBalanceEndless, ladybugBalanceKinds, ladybugBalanceStages } from '~/data/ladybugBalance';
 import type { LadybugBalanceKind } from '~/data/ladybugBalance';
@@ -106,7 +108,11 @@ function formatSeconds(ms: number) {
 
 /* クリアしたステージと、エンドレスの自己ベストを、いっしょに保存する */
 function saveProgress() {
-  saveMinigameBest(minigameId, { clearedStage: clearedStage.value, endlessBestMs: endlessBestMs.value });
+  saveMinigameBest(minigameId, {
+    clearedStage: clearedStage.value,
+    endlessBestMs: endlessBestMs.value,
+    selected: mode.value === 'endless' ? 'endless' : stageIndex.value + 1,
+  });
 }
 
 /* 結果の画面の知らせを消す（次を始めるとき・えらびなおすとき） */
@@ -338,24 +344,34 @@ async function returnToStageSelect() {
   await focusFirstMainButton();
 }
 
-/* はじまる前の画面で、ステージのボタンを押したとき */
+/* はじまる前の画面で、ステージのボタンを押したとき
+   えらんだら「はじめる」へフォーカスを移す（Enter / Space ですぐ始められるように）
+   もう えらんでいるステージを押したときも、「はじめる」へ移す（音は鳴らさない） */
 function chooseStage(index: number) {
-  if (index >= playableStageCount.value || (index === stageIndex.value && mode.value === 'stage')) {
+  if (index >= playableStageCount.value) {
     return;
   }
 
-  playDecisionSound();
-  selectStage(index);
+  if (index !== stageIndex.value || mode.value !== 'stage') {
+    playDecisionSound();
+    selectStage(index);
+  }
+
+  focusFirstMainButton();
 }
 
-/* はじまる前の画面で、エンドレスのボタンを押したとき */
+/* はじまる前の画面で、エンドレスのボタンを押したとき（ステージと同じく、えらんだら「はじめる」へ） */
 function chooseEndless() {
-  if (!isEndlessUnlocked.value || mode.value === 'endless') {
+  if (!isEndlessUnlocked.value) {
     return;
   }
 
-  playDecisionSound();
-  selectEndless();
+  if (mode.value !== 'endless') {
+    playDecisionSound();
+    selectEndless();
+  }
+
+  focusFirstMainButton();
 }
 
 /* 左右のボタン（押しているあいだだけ傾ける） */
@@ -400,13 +416,13 @@ async function goToList() {
 /* ============================================================
    キーボード
    ・遊んでいる最中 … ← → で傾ける（→ useLadybugBalanceGame.ts）
-   ・はじまる前・結果の画面 … 矢印キーでボタンを選ぶ（→ useMinigameKeyboardNav.ts）
+   ・はじまる前・結果の画面 … 矢印キーでボタンを選ぶ（ボタンが横にもならぶので、画面の位置で動かす → useMinigameKeyboardNav.ts の moveMinigameFocusSpatially()）
      Enter / Space は、ボタンにフォーカスが無いときだけ「はじめる」
    ============================================================ */
 const layoutRef = ref<InstanceType<typeof MinigameLayout> | null>(null);
 const stageRef = ref<HTMLElement | null>(null);
 
-/* 矢印キーで行き来するボタン（上から順。押せないボタンは入れない） */
+/* 矢印キーで行き来するボタン（上から・左から順。押せないボタンは入れない） */
 function getMainButtons() {
   return [...(stageRef.value?.querySelectorAll<HTMLButtonElement>('button.lb-nav:not(:disabled)') ?? [])];
 }
@@ -442,7 +458,7 @@ function handleKeydown(event: KeyboardEvent) {
 
     const topRow = [layoutRef.value?.backButton, layoutRef.value?.soundToggleButton];
 
-    if (moveMinigameFocusByArrow(event, topRow, getMainButtons())) {
+    if (moveMinigameFocusSpatially(event, topRow, getMainButtons())) {
       event.preventDefault();
     }
 
@@ -491,6 +507,17 @@ watch(
    ============================================================ */
 const unlockState = ref<'checking' | 'locked' | 'unlocked'>('checking');
 
+/* えらんでいるもの（ステージ ／ エンドレス）が変わったら、保存する（次に開いたときも、同じものを えらんだ状態から始めるため）
+   ・「次のステージへ」「⏱ とばさず どこまで？へ」で変わったときも、ここで保存される
+   ・保存した記録を読みおわる前（onMounted の前半）と、まだ解放していないページでは保存しない */
+let isSelectionRestored = false;
+
+watch([mode, stageIndex], () => {
+  if (isSelectionRestored && unlockState.value === 'unlocked') {
+    saveProgress();
+  }
+});
+
 onMounted(() => {
   restoreSoundSettings();
 
@@ -502,8 +529,20 @@ onMounted(() => {
   clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(savedBest?.clearedStage) || 0)));
   endlessBestMs.value = Math.max(0, Number(savedBest?.endlessBestMs) || 0);
 
-  // まだクリアしていない いちばん前のステージを、えらんでおく（ぜんぶクリアしていたら最後のステージ）
-  selectStage(Math.min(clearedStage.value, stageCount - 1));
+  // さいごに えらんでいたものを、えらんでおく
+  // まだ無い・いまは遊べないものなら、まだクリアしていない いちばん前のステージ（ぜんぶクリアしていたら最後のステージ）
+  const savedSelected = savedBest?.selected;
+  const savedStageNumber = Math.floor(Number(savedSelected));
+
+  if (savedSelected === 'endless' && isEndlessUnlocked.value) {
+    selectEndless();
+  } else if (savedStageNumber >= 1 && savedStageNumber <= playableStageCount.value) {
+    selectStage(savedStageNumber - 1);
+  } else {
+    selectStage(Math.min(clearedStage.value, stageCount - 1));
+  }
+
+  isSelectionRestored = true;
 
   window.addEventListener('keydown', handleKeydown);
 
