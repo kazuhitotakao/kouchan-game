@@ -204,10 +204,7 @@ const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinig
   isCountingDown,
   pauseGame,
   resumeGame,
-  quitGame: () => {
-    quitGame();
-    focusFirstMainButton();
-  },
+  quitGame: returnToStageSelect,
   playDecisionSound,
 });
 
@@ -333,13 +330,14 @@ async function backToStageSelect() {
   }
 
   playDecisionSound();
-  clearResultNotices();
+  await returnToStageSelect();
+}
 
-  if (mode.value === 'endless') {
-    selectEndless();
-  } else {
-    selectStage(stageIndex.value);
-  }
+/* えらんでいたステージ（エンドレス）の、はじまる前の画面へ戻す
+   （結果の画面の「ステージをえらぶ」・一時停止の「やめる」・遊んでいる最中と結果の画面の「← ステージえらびへ」で共通） */
+async function returnToStageSelect() {
+  clearResultNotices();
+  quitGame();
 
   await focusFirstMainButton();
 }
@@ -375,6 +373,20 @@ function handleSidePointerDown(event: PointerEvent, side: LadybugBalanceSide) {
    ページの移動
    ============================================================ */
 let isLeavingPage = false;
+
+/* 上の「戻る」は、ひとつ前の画面へ
+   ・はじまる前（まだ解放していないページもふくむ） … ミニゲーム一覧へ
+   ・遊んでいる最中・飛んでいく演出・結果の画面 … ステージえらびへ（決定音は ほかの「戻る」と同じく鳴らさない） */
+const isBackToStageSelect = computed(() => unlockState.value === 'unlocked' && phase.value !== 'ready');
+
+function goBack() {
+  if (isBackToStageSelect.value) {
+    returnToStageSelect();
+    return;
+  }
+
+  goToList();
+}
 
 /* 「← ミニゲーム一覧へ」（決定音は鳴らさない。ほかのミニゲームの「戻る」と同じ） */
 async function goToList() {
@@ -515,15 +527,15 @@ onUnmounted(() => {
 <template>
   <MinigameLayout
     ref="layoutRef"
-    back-label="← ミニゲーム一覧へ"
-    back-aria-label="ミニゲーム一覧へ戻る"
+    :back-label="isBackToStageSelect ? '← ステージえらびへ' : '← ミニゲーム一覧へ'"
+    :back-aria-label="isBackToStageSelect ? 'ステージえらびへ戻る' : 'ミニゲーム一覧へ戻る'"
     centered
     fit-screen
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
     :can-pause="canPause"
     :pause-state="pauseState"
-    @back="goToList"
+    @back="goBack"
     @toggle-sound="toggleSound"
     @volume-change="changeSoundVolume"
     @pause="pauseByButton"

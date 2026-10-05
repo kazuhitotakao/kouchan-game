@@ -170,16 +170,25 @@ const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinig
   isCountingDown: isSecretPathCountingDown,
   pauseGame: pauseSecretPathGame,
   resumeGame: resumeSecretPathGame,
-  quitGame: quitToReady,
+  quitGame: backToReady,
   playDecisionSound,
 });
 
-/* 一時停止の「やめる」
-   ご褒美を解放したときの知らせは、次のプレイの結果には持ちこさない（解放そのものは、そのまま残る。「もう一回」と同じ） */
-function quitToReady() {
+/* はじまる前の画面へ戻す（一時停止の「やめる」と、遊んでいる最中・結果の画面の「← どこまで行ける？へ」）
+   ・ご褒美を解放したときの知らせは、次のプレイの結果には持ちこさない（解放そのものは、そのまま残る。「もう一回」と同じ）
+   ・結果の画面からは、GAME OVER の曲を止めて、「こもれびの奥で」を最初から鳴らしなおす */
+function backToReady() {
+  const wasFinished = secretPathPhase.value === 'finished';
+
   resetSecretPathGame();
   hideCommandNotice();
   isNewlyUnlockedSecretVocalSong.value = false;
+
+  if (wasFinished) {
+    stopGameOverBgm();
+    playSecretBgmSoon();
+  }
+
   focusPlayButton();
 }
 
@@ -432,6 +441,20 @@ watch(bgmPlaybackRate, (rate) => setSecretBgmPlaybackRate(rate), { immediate: tr
 /* もうページを移動しはじめたか（連打よけ） */
 let isLeavingPage = false;
 
+/* 上の「戻る」は、ひとつ前の画面へ
+   ・はじまる前（まだ解放していないページもふくむ） … ミニゲーム一覧へ
+   ・遊んでいる最中・結果の画面 … はじまる前の画面へ（記録は残さない。決定音は ほかの「戻る」と同じく鳴らさない） */
+const isBackToReady = computed(() => unlockState.value === 'unlocked' && secretPathPhase.value !== 'ready');
+
+function goBack() {
+  if (isBackToReady.value) {
+    backToReady();
+    return;
+  }
+
+  goToList();
+}
+
 /* 「← ミニゲーム一覧へ」（サウンドトラックのページの「はじめの画面へ戻る」と同じ手順） */
 async function goToList() {
   if (isLeavingPage) {
@@ -561,15 +584,15 @@ onUnmounted(() => {
 <template>
   <MinigameLayout
     ref="layoutRef"
-    back-label="← ミニゲーム一覧へ"
-    back-aria-label="ミニゲーム一覧へ戻る"
+    :back-label="isBackToReady ? '← どこまで行ける？へ' : '← ミニゲーム一覧へ'"
+    :back-aria-label="isBackToReady ? 'はじまる前の画面へ戻る' : 'ミニゲーム一覧へ戻る'"
     centered
     :class="{ 'mg-fit': secretPathPhase === 'playing' }"
     :sound-enabled="soundEnabled"
     :sound-volume-percent="soundVolumePercent"
     :can-pause="canPauseSecretPath"
     :pause-state="pauseState"
-    @back="goToList"
+    @back="goBack"
     @toggle-sound="toggleSound"
     @volume-change="changeSoundVolume"
     @pause="pauseByButton"
