@@ -78,7 +78,7 @@ defineExpose({ backButton, soundToggleButton });
 <template>
   <main
     class="minigame"
-    :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu', 'minigame--fit': fitScreen, 'minigame--paused': pauseState !== 'running' }]">
+    :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu', 'minigame--fit': fitScreen, 'minigame--pausable': canPause, 'minigame--paused': pauseState !== 'running' }]">
     <!-- 全体の枠（上部ツールバー ＋ 中身） -->
     <div class="mg-frame" :inert="pauseState !== 'running' || undefined">
       <div class="mg-toolbar">
@@ -302,6 +302,15 @@ defineExpose({ backButton, soundToggleButton });
   --sound-button-size: 38px;
   --sound-icon-size: 20px;
   --sound-slider-width: 110px;
+}
+
+/* 「一時停止」ボタンを出しているときの、細い画面（幅 400px まで）は、音量スライダーを出さない
+   ボタンが1つふえたぶん、パソコンの細い窓ではツールバーに入りきらず、右へはみ出すため（はみ出すのは幅 370px ほどから）
+   ミュートボタンは出したまま（スマホ・タブレットは、もともとスライダーを出さない → SoundControl.vue） */
+@media (max-width: 400px) {
+  .minigame--pausable .mg-toolbar :deep(.sound-control__sliderWrap) {
+    display: none;
+  }
 }
 
 /* ===== スマホ幅 ===== */
