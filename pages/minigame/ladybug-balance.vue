@@ -149,6 +149,10 @@ const {
   isCountingDown,
   pressPointer,
   releasePointer,
+  handleFieldPointerDown,
+  handleFieldPointerMove,
+  handleFieldPointerUp,
+  handleFieldPointerCancel,
   handleGameKeydown,
   pause: pauseGame,
   resume: resumeGame,
@@ -376,9 +380,19 @@ function chooseEndless() {
 
 /* 左右のボタン（押しているあいだだけ傾ける） */
 function handleSidePointerDown(event: PointerEvent, side: LadybugBalanceSide) {
-  // 長押しで文字が選ばれたり、メニューが出たりしないように
+  // 長押しで文字が選ばれたり、メニューが出たりしないように（PC のマウス向け。iPhone は nav の touchstart で止める）
   event.preventDefault();
   pressPointer(side);
+}
+
+/* フィールドをさわって傾けるか（遊んでいる最中・飛んでいくあいだ。結果の画面では、ふつうにスクロールできるようにする） */
+const isFieldTouchable = computed(() => phase.value === 'playing' || phase.value === 'flyaway');
+
+/* フィールドの touchstart（左右のボタンと同じく、iPhone の長押し・ダブルタップを止める） */
+function handleFieldTouchStart(event: TouchEvent) {
+  if (isFieldTouchable.value) {
+    event.preventDefault();
+  }
 }
 
 /* ============================================================
@@ -592,7 +606,7 @@ onUnmounted(() => {
       </article>
     </section>
 
-    <section v-else-if="unlockState === 'unlocked'" ref="stageRef" class="mg-stage lb-screen">
+    <section v-else-if="unlockState === 'unlocked'" ref="stageRef" class="mg-stage lb-screen" :class="{ 'lb-screen--inGame': phase !== 'ready' }">
       <!-- スクロールする部分（はじまる前の説明・遊んでいる最中・結果） -->
       <div ref="scrollRef" class="lb-scroll">
         <!-- はじまる前（遊びかたと、ステージえらび） -->
@@ -616,7 +630,7 @@ onUnmounted(() => {
 
           <ul class="mg-rules">
             <li class="mg-for-pc">← → キー・ボタンを押しているあいだ、枝がかたむく</li>
-            <li class="mg-for-touch">◀ ▶ ボタンを押しているあいだ、枝がかたむく</li>
+            <li class="mg-for-touch">◀ ▶ ボタンや 画面の左右を押しているあいだ、枝がかたむく（フリックでも かたむく）</li>
             <li>てんとうむしは、高いほうへ のぼっていく</li>
             <li>はしまで行くと、とんでいっちゃう！ 近づいた側を下げよう</li>
           </ul>
@@ -657,7 +671,8 @@ onUnmounted(() => {
 
           <!-- えらんでいるステージ（エンドレス）の説明
                ぜんぶの説明を同じ場所に重ねて置き、えらんでいるものだけを見せる（ほかは visibility: hidden で、読み上げもしない）
-               枠はいちばん長い説明の高さになるので、えらびなおしても画面の高さが変わらない（細い画面で折り返したときも） -->
+               枠はいちばん長い説明の高さになるので、えらびなおしても画面の高さが変わらない（細い画面で折り返したときも）
+               ※ 背の低いスマホでは そろえない（えらんでいる説明の高さだけにする。CSS の .lb-summary--hidden） -->
           <div class="lb-summaries">
             <ul v-for="summary in stageSummaries" :key="summary.key" class="lb-summary" :class="{ 'lb-summary--hidden': !summary.isSelected }">
               <li class="lb-summary__title">{{ summary.title }}</li>
@@ -666,29 +681,71 @@ onUnmounted(() => {
           </div>
         </article>
 
-        <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる） -->
-        <LadybugBalanceField
-          v-else
-          class="lb-play-field"
-          :class="{ 'lb-play-field--result': phase === 'cleared' || phase === 'failed' }"
-          :phase="phase"
-          :stage-number="stageIndex + 1"
-          :tilt="tilt"
-          :branch-length="rule.branchLength"
-          :ladybugs="ladybugs"
-          :remaining-ms="remainingMs"
-          :total-ms="stage.seconds * 1000"
-          :countdown-number="countdownNumber"
-          :is-start-cue-visible="isStartCueVisible"
-          :wind-dir="windDir"
-          :wind-warning-dir="windWarningDir"
-          :endless-level="mode === 'endless' ? endlessLevel : null"
-          :endless-progress="endlessLevelProgress"
-          :elapsed-ms="elapsed"
-          :lost-kind="lostKind" />
+        <!-- フィールドと結果のカードの箱（遊んでいる最中・結果）
+             スマホでは、結果のカードをフィールドの下のほうに重ねて、フィールドの大きさを変えない（CSS の .lb-playArea） -->
+        <div v-else class="lb-playArea">
+          <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる）
+               フィールドをさわっても傾けられる（右半分・左半分をおさえる、フリックする。中身は useLadybugBalanceGame.ts） -->
+          <LadybugBalanceField
+            class="lb-play-field"
+            :class="{ 'lb-play-field--result': phase === 'cleared' || phase === 'failed', 'lb-play-field--touchable': isFieldTouchable }"
+            @pointerdown="handleFieldPointerDown"
+            @pointermove="handleFieldPointerMove"
+            @pointerup="handleFieldPointerUp"
+            @pointercancel="handleFieldPointerCancel"
+            @touchstart="handleFieldTouchStart"
+            @contextmenu.prevent
+            :phase="phase"
+            :stage-number="stageIndex + 1"
+            :tilt="tilt"
+            :branch-length="rule.branchLength"
+            :ladybugs="ladybugs"
+            :remaining-ms="remainingMs"
+            :total-ms="stage.seconds * 1000"
+            :countdown-number="countdownNumber"
+            :is-start-cue-visible="isStartCueVisible"
+            :wind-dir="windDir"
+            :wind-warning-dir="windWarningDir"
+            :endless-level="mode === 'endless' ? endlessLevel : null"
+            :endless-progress="endlessLevelProgress"
+            :elapsed-ms="elapsed"
+            :lost-kind="lostKind" />
 
-        <!-- 左右のボタン（遊んでいる最中・飛んでいくあいだ） -->
-        <nav v-if="phase === 'playing' || phase === 'flyaway'" class="mg-command lb-controls" aria-label="枝をかたむける">
+          <!-- 結果（クリア ／ おしまい） -->
+          <article v-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
+            <!-- エンドレス：たえた時間とレベル -->
+            <template v-if="mode === 'endless'">
+              <p class="place-card__flash lb-result__flash">⏱ とばさず どこまで？</p>
+              <p class="lb-record">
+                <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
+                <span class="lb-record__unit">びょう たえた！</span>
+                <span class="lb-record__level">Lv.{{ endlessLevel }}</span>
+                <span v-if="isNewEndlessBest" class="lb-record__new">じこベスト！</span>
+              </p>
+            </template>
+
+            <!-- クリアしたときは、ステージの数字だけ大きくする（何番をクリアしたか すぐ分かるように） -->
+            <p v-else-if="phase === 'cleared'" class="place-card__flash lb-result__flash">
+              ステージ <span class="lb-result__stageNumber">{{ stageIndex + 1 }}</span> クリア！
+            </p>
+            <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
+            <p class="mg-text">{{ resultComment }}</p>
+            <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
+            <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ とばさず どこまで？が あそべるようになった！</p>
+            <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
+          </article>
+        </div>
+
+        <!-- 左右のボタン（遊んでいる最中・飛んでいくあいだ）
+             touchstart.prevent … iPhone で、長押し（文字えらび・虫めがね・メニュー）やダブルタップ（拡大）が起きないように
+               pointerdown の preventDefault や touch-action では止まらないため、touchstart で止める
+               ボタンは pointerdown / pointerup で見ているので、click が来なくなっても動きは変わらない
+               ボタンのあいだの すきまも ふくめるため、nav に付ける -->
+        <nav
+          v-if="phase === 'playing' || phase === 'flyaway'"
+          class="mg-command lb-controls"
+          aria-label="枝をかたむける"
+          @touchstart.prevent>
           <button
             type="button"
             class="lb-side"
@@ -719,36 +776,12 @@ onUnmounted(() => {
           </button>
         </nav>
 
-        <!-- 結果（クリア ／ おしまい） -->
-        <article v-else-if="phase === 'cleared' || phase === 'failed'" class="place-card lb-result" aria-live="polite">
-          <!-- エンドレス：たえた時間とレベル -->
-          <template v-if="mode === 'endless'">
-            <p class="place-card__flash lb-result__flash">⏱ とばさず どこまで？</p>
-            <p class="lb-record">
-              <b class="lb-record__value">{{ formatSeconds(endlessRecordMs) }}</b>
-              <span class="lb-record__unit">びょう たえた！</span>
-              <span class="lb-record__level">Lv.{{ endlessLevel }}</span>
-              <span v-if="isNewEndlessBest" class="lb-record__new">じこベスト！</span>
-            </p>
-          </template>
-
-          <!-- クリアしたときは、ステージの数字だけ大きくする（何番をクリアしたか すぐ分かるように） -->
-          <p v-else-if="phase === 'cleared'" class="place-card__flash lb-result__flash">
-            ステージ <span class="lb-result__stageNumber">{{ stageIndex + 1 }}</span> クリア！
-          </p>
-          <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">ざんねん…</p>
-          <p class="mg-text">{{ resultComment }}</p>
-          <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が あそべるようになった！</p>
-          <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ とばさず どこまで？が あそべるようになった！</p>
-          <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 じこベスト {{ formatSeconds(endlessBestMs) }}びょう</p>
-        </article>
-
         <!-- 結果の画面のボタン
              ・クリア … 「次のステージへ」「もう一度あそぶ」を横にならべる
                          さいごのステージは「⏱ とばさず どこまで？へ」が長くて半分の幅に入らないので、2つとも横いっぱいで たてにならべる
              ・失敗   … 「もう一度あそぶ」だけを横いっぱいに
              ※ 「ステージをえらぶ」は置かない（上の「← ステージえらびへ」（スマホでは「← 戻る」）と同じなので） -->
-        <div v-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions">
+        <div v-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions" :class="{ 'lb-result-actions--stacked': phase === 'cleared' && !hasNextStage }">
           <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
           <!-- さいごのステージをクリアしたら、エンドレスへ -->
           <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary lb-result-actions__wide" @click="goToEndless">⏱ とばさず どこまで？へ</button>
@@ -814,6 +847,14 @@ onUnmounted(() => {
 
 .lb-scroll > * {
   flex-shrink: 0;
+}
+
+/* 遊んでいる最中から結果まで（フィールドを出しているあいだ）
+   ボタンからはみ出た指でフィールドや文字を長押ししても、文字がえらばれたり、iPhone のメニューが出たりしないように */
+.lb-screen--inGame {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .lb-footer {
@@ -1105,15 +1146,40 @@ onUnmounted(() => {
   visibility: hidden;
 }
 
+/* ===== フィールドと結果のカードの箱 =====
+   PC では、フィールドの下に結果のカードを ならべる（すき間は .lb-scroll と同じ）
+   スマホでは、結果のカードをフィールドに重ねる（下の @media (max-width: 700px)） */
+.lb-playArea {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+
+.lb-playArea > * {
+  flex-shrink: 0;
+}
+
 /* ===== フィールドの高さ（画面の高さに合わせる） ===== */
 .lb-play-field {
   height: clamp(260px, calc(100dvh - 400px), 440px);
-  transition: height 0.3s ease;
 }
 
-/* 結果の画面では、下に出す説明とボタンが画面に収まるよう、フィールドを低くする */
-.lb-play-field--result {
-  height: clamp(200px, calc(100dvh - 560px), 340px);
+/* 結果の画面では、下に出す説明とボタンが画面に収まるよう、フィールドを低くする（PC だけ）
+   スマホでは低くしない。高さが変わると、画面の枠ごと上下に動いて カクつくため（結果のカードはフィールドに重ねる） */
+@media (min-width: 701px) {
+  .lb-play-field {
+    transition: height 0.3s ease;
+  }
+
+  .lb-play-field--result {
+    height: clamp(200px, calc(100dvh - 560px), 340px);
+  }
+}
+
+/* さわって傾けられるあいだ（指を左右にずらしても、スクロールや拡大をしない） */
+.lb-play-field--touchable {
+  touch-action: none;
 }
 
 /* ===== 左右のボタン（下の紺色の枠） ===== */
@@ -1407,18 +1473,59 @@ onUnmounted(() => {
     font-size: 15px;
   }
 
-  /* ツールバー・左右のボタンを引いた残りをフィールドにする */
+  /* ツールバー・左右のボタンを引いた残りをフィールドにする（結果の画面でも同じ高さ） */
   .lb-play-field {
     height: clamp(240px, calc(100dvh - 300px), 420px);
-  }
-
-  .lb-play-field--result {
-    height: clamp(180px, calc(100dvh - 540px), 320px);
   }
 
   .lb-side {
     min-height: 68px;
     font-size: 17px;
+  }
+
+  /* ===== 結果の画面（遊んでいる最中と、画面の高さを変えない） =====
+     ・結果のカード … フィールドの下のほう（地面のあたり）に重ねる。中の文字は少し小さく、すき間もつめる
+     ・結果のボタン … 左右のボタンの枠（.lb-controls）と同じ高さの場所に置く
+       98px ＝ 左右のボタン 68px ＋ 枠の padding 12px × 2 ＋ ふち 3px × 2 */
+  .lb-result {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    z-index: 5;
+    padding: 12px 14px 12px 12px;
+    box-shadow: 0 6px 18px rgb(16 29 44 / 22%);
+  }
+
+  .lb-result .mg-text {
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .lb-result .lb-unlocked {
+    margin-top: 8px;
+    padding: 6px 12px;
+    font-size: 14px;
+  }
+
+  .lb-result-actions {
+    align-content: center;
+    min-height: 98px;
+  }
+
+  /* さいごのステージをクリアしたとき（横いっぱいのボタンを2つ、たてにならべる）も 98px に収める */
+  .lb-result-actions--stacked {
+    gap: 8px;
+  }
+
+  .lb-result-actions--stacked > .mg-play {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
+  .lb-result-actions--stacked > .lb-sub {
+    padding-top: 5px;
+    padding-bottom: 5px;
   }
 }
 
@@ -1448,12 +1555,20 @@ onUnmounted(() => {
     height: clamp(200px, calc(100dvh - 270px), 420px);
   }
 
-  .lb-play-field--result {
-    height: 180px;
+  /* 結果の画面：重ねたカードがフィールドの半分ほどを おおうので、
+     まん中の大きな文字（「クリア！」「とんでいっちゃった…」）を上へ寄せて、かくれないようにする */
+  .lb-play-field--result :deep(.lb-cue) {
+    top: 17%;
   }
 
   .mg-play {
     padding: 11px 20px;
+  }
+
+  /* ステージの説明は、えらんでいるものの高さにする（いちばん長い説明の高さに そろえない）
+     どうせスクロールする画面なので、えらびなおしたときに高さが変わるより、よけいな すき間が無いほうを とる */
+  .lb-summary--hidden {
+    display: none;
   }
 }
 
