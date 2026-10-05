@@ -777,14 +777,14 @@ onUnmounted(() => {
         </nav>
 
         <!-- 結果の画面のボタン
-             ・クリア … 「次のステージへ」「もう一度あそぶ」を横にならべる
-                         さいごのステージは「⏱ とばさず どこまで？へ」が長くて半分の幅に入らないので、2つとも横いっぱいで たてにならべる
+             ・クリア … 左に「もう一度あそぶ」、右に「次のステージへ」を横にならべる（先へ進むボタンは、進む向きの右に置く）
+                         さいごのステージは「⏱ とばさず どこまで？へ」が長くて半分の幅に入らないので、2つとも横いっぱいで たてにならべる（上が「⏱ とばさず どこまで？へ」）
              ・失敗   … 「もう一度あそぶ」だけを横いっぱいに
-             ※ 「ステージをえらぶ」は置かない（上の「← ステージえらびへ」（スマホでは「← 戻る」）と同じなので） -->
+             ※ 「ステージをえらぶ」は置かない（上の「← ステージえらびへ」（スマホでは「← 戻る」）と同じなので）
+             ※ 見た目の順（上から・左から）と Tab の順がそろうよう、ボタンは見た目の順に書く -->
         <div v-if="phase === 'cleared' || phase === 'failed'" class="lb-result-actions" :class="{ 'lb-result-actions--stacked': phase === 'cleared' && !hasNextStage }">
-          <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
           <!-- さいごのステージをクリアしたら、エンドレスへ -->
-          <button v-else-if="phase === 'cleared' && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary lb-result-actions__wide" @click="goToEndless">⏱ とばさず どこまで？へ</button>
+          <button v-if="phase === 'cleared' && !hasNextStage && isEndlessUnlocked" type="button" class="mg-play lb-nav lb-nav--primary lb-result-actions__wide" @click="goToEndless">⏱ とばさず どこまで？へ</button>
           <button
             type="button"
             class="lb-nav"
@@ -792,6 +792,7 @@ onUnmounted(() => {
             @click="retry">
             もう一度あそぶ
           </button>
+          <button v-if="phase === 'cleared' && hasNextStage" type="button" class="mg-play lb-nav lb-nav--primary" @click="goToNextStage">次のステージへ</button>
         </div>
       </div>
 
@@ -1592,7 +1593,7 @@ onUnmounted(() => {
     display: revert;
   }
 
-  /* 横にならべた結果のボタン（クリアしたときの「次のステージへ」「もう一度あそぶ」）は、1行に収まるよう、左右の余白をつめて、文字をボタンの幅に合わせる
+  /* 横にならべた結果のボタン（クリアしたときの「もう一度あそぶ」「次のステージへ」）は、1行に収まるよう、左右の余白をつめて、文字をボタンの幅に合わせる
      ボタン1つの中の幅 ＝ 並びの幅の半分 − 5px（すき間の半分）− 20px（余白とふち）
      どちらも7文字なので、7文字が入る大きさ（幅 375px 以上は 16px のまま。幅 320px（初代 iPhone SE）で 15.5px ほど）
      ・1行目 … cqi が使えない古いブラウザ向け（画面の幅から計算する）
