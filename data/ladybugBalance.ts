@@ -1,5 +1,5 @@
 /* ============================================================
-   ミニゲーム「とばないで！」（/minigame/ladybug-balance）の設定（ゲーム中に変わらないデータ）
+   ミニゲーム「まだだよ！てんとう虫」（/minigame/ladybug-balance）の設定（ゲーム中に変わらないデータ）
 
    ■ 遊びかた
      てんとう虫は枝の上を、勝手に左右へ歩く
@@ -43,13 +43,15 @@ export type LadybugBalanceKindInfo = {
 
 export const ladybugBalanceKinds: Record<LadybugBalanceKind, LadybugBalanceKindInfo> = {
   // ナナホシテントウ（赤に黒い点。いちばん ふつう）
-  nanahoshi: { name: 'ナナホシ', trait: 'ふつう', walk: 1, climb: 1, quirkInterval: 1, dashChance: 0.5, canFly: true },
+  nanahoshi: { name: 'ナナホシ', trait: '普通', walk: 1, climb: 1, quirkInterval: 1, dashChance: 0.5, canFly: true },
 
   // ナミテントウ（黒に赤い紋。気まぐれで、小走りが多い）
-  namitentou: { name: 'ナミテントウ', trait: 'きまぐれで よく走る', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
+  namitentou: { name: 'ナミテントウ', trait: '気まぐれで よく走る', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
 
-  // 幼虫（歩くのは遅いけれど、のぼるのが得意。飛べない）
-  larva: { name: 'ようちゅう', trait: 'おそいけど のぼるのが はやい', walk: 0.7, climb: 1.4, quirkInterval: 1, dashChance: 0.5, canFly: false },
+  // 幼虫（枝が平らなときは ゆっくり歩くが、傾くと 高いほうへ速く登る。飛べない）
+  //   歩く速さと登る速さは足し算なので、walk を下げたぶん climb を大きく上げないと、傾けても ナナホシと ほとんど同じ速さになる
+  //   平らなときは小走りしない（dashChance 0。気まぐれは「急に向きを変える」だけ）。のそのそ歩くのが見て分かるように
+  larva: { name: '幼虫', trait: '平らだとゆっくり、傾くと速い', walk: 0.5, climb: 1.7, quirkInterval: 1, dashChance: 0, canFly: false },
 };
 
 /* ============================================================
@@ -106,7 +108,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2500, 4500],
     branchLength: 1,
     seconds: 6,
-    clearComment: 'じょうずに 枝を かたむけられたよ！',
+    clearComment: '上手に枝を傾けられたよ！',
     wind: null,
     quirks: null,
   },
@@ -118,7 +120,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 1,
     seconds: 8,
-    clearComment: '小走りしても だいじょうぶ！ しっかり ついていけたよ！',
+    clearComment: '小走りしても大丈夫！ しっかりついていけたよ！',
     wind: null,
     quirks: { interval: [1800, 3400], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -130,7 +132,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.75,
     seconds: 8,
-    clearComment: 'きまぐれな ナミテントウにも ついていけたよ！ すごい！',
+    clearComment: '気まぐれなナミテントウにも ついていけたよ！ すごい！',
     wind: null,
     quirks: { interval: [2200, 4000], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -142,7 +144,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.75,
     seconds: 9,
-    clearComment: '強い風にも びっくりしなかったよ！ じょうず！',
+    clearComment: '強い風にも びっくりしなかったよ！ 上手！',
     wind: { strength: 60, interval: [1800, 3400], duration: 1500 },
     // 風と重なると きびしすぎるので、気まぐれな動きは ほかのステージより少なめ
     quirks: { interval: [3000, 5000], dashMultiplier: 2.2, dashDuration: 800 },
@@ -157,7 +159,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 1,
     seconds: 12,
-    clearComment: '2匹いっしょでも だいじょうぶ！ やった！',
+    clearComment: '2匹一緒でも大丈夫！ やった！',
     wind: null,
     quirks: { interval: [2400, 4200], dashMultiplier: 2, dashDuration: 700 },
   },
@@ -170,7 +172,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 1,
     seconds: 12,
-    clearComment: 'ナナホシも ようちゅうも さいごまで いっしょ！ ばっちり！',
+    clearComment: 'ナナホシも幼虫も 最後まで一緒！ ばっちり！',
     wind: { strength: 45, interval: [2400, 4000], duration: 1200 },
     quirks: { interval: [2600, 4400], dashMultiplier: 2, dashDuration: 700 },
   },
@@ -184,7 +186,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.85,
     seconds: 11,
-    clearComment: 'すばやい ナミテントウにも ついていけたよ！ すごい！',
+    clearComment: '素早いナミテントウにも ついていけたよ！ すごい！',
     wind: null,
     quirks: { interval: [2000, 3600], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -197,7 +199,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [3000, 5000],
     branchLength: 0.85,
     seconds: 12,
-    clearComment: '風に ゆられても へっちゃら！ うまく できたよ！',
+    clearComment: '風に揺られても へっちゃら！ うまくできたよ！',
     wind: { strength: 45, interval: [1800, 3200], duration: 1500 },
     quirks: { interval: [2600, 4400], dashMultiplier: 2.2, dashDuration: 800 },
   },
@@ -210,7 +212,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 0.9,
     seconds: 13,
-    clearComment: 'きまぐれな 2匹にも ついていけたよ！ あとひとつ！',
+    clearComment: '気まぐれな2匹にも ついていけたよ！ あと1つ！',
     wind: null,
     quirks: { interval: [3600, 5600], dashMultiplier: 2.2, dashDuration: 700 },
   },
@@ -222,7 +224,7 @@ export const ladybugBalanceStages: readonly LadybugBalanceStage[] = [
     turnInterval: [2000, 3600],
     branchLength: 0.9,
     seconds: 16,
-    clearComment: 'ぜんぶのステージを クリア！ やった！ てんとうむしマスターだ！',
+    clearComment: '全部のステージをクリア！ やった！ てんとう虫マスターだ！',
     wind: { strength: 50, interval: [2200, 3800], duration: 1300 },
     quirks: { interval: [2800, 4600], dashMultiplier: 2, dashDuration: 700 },
   },
@@ -339,6 +341,8 @@ export const ladybugBalanceTilt = {
    ・nervousFrom  … はしから どれくらいの所で、あわてはじめるか（まん中 0 → はし 1 の割合）
    ・flyAt        … ここまで来たら飛んでいく（はし 1 より少し手前。羽を開いたところが枝の先に重なるように）
    ・bumpDistance … 2匹が この近さまで来たら、おたがいに向きを変える
+   ・larvaClimbCueSpeed … 幼虫が この速さ（1秒に進む長さ）より速く進んでいるあいだは、「ぐんぐん登る」見た目にする
+                          （平らなときの幼虫は 0.2 くらいまで。枝を半分くらい傾けると、これをこえる）
    ============================================================ */
 export const ladybugBalanceMotion = {
   climbSpeed: 0.6,
@@ -347,12 +351,13 @@ export const ladybugBalanceMotion = {
   nervousFrom: 0.62,
   flyAt: 0.96,
   bumpDistance: 0.16,
+  larvaClimbCueSpeed: 0.5,
 };
 
 /* ============================================================
    時間（ミリ秒）
    ・countdownLeadIn / countdownDuration … 「3」「2」「1」の前の間と、3つ数える長さ（どこまで行ける？ と同じ）
-   ・windWarning … 風が吹く何ミリ秒前に「かぜがくる！」を出すか
+   ・windWarning … 風が吹く何ミリ秒前に「風が来る！」を出すか
    ・flyAway     … てんとう虫が飛んでいく（幼虫は落ちる）演出の長さ（このあと結果を出す。CSS のアニメーションとそろえる）
    ・resultGuard … 結果が出てすぐのボタンを受けつけない時間（左右ボタンを押していた指で、すぐ押されないように）
    ・dashWindup  … 小走りの前に「！」を出して、うずうずしている時間（いきなり走りだして、よけられないことがないように）

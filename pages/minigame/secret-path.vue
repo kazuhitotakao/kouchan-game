@@ -162,7 +162,7 @@ const {
 });
 
 /* ============================================================
-   一時停止（とばないで！ と共通 → composables/useMinigamePause.ts）
+   一時停止（まだだよ！てんとう虫 と共通 → composables/useMinigamePause.ts）
    「やめる」は、はじまる前の画面へ戻す（記録は残さない）
    ============================================================ */
 const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinigamePause({
@@ -206,7 +206,7 @@ const unlockState = ref<'checking' | 'locked' | 'unlocked'>('checking');
    ============================================================ */
 const best = ref<SecretPathBest>({ distance: 0, sunlight: 0 });
 
-/* いま終わったプレイで、自己ベストを更新したか（結果の画面の「じこベスト！」に使う） */
+/* いま終わったプレイで、自己ベストを更新したか（結果の画面の「自己ベスト！」に使う） */
 const isNewDistanceBest = ref(false);
 const isNewSunlightBest = ref(false);
 
@@ -236,11 +236,11 @@ const comboLadderText = secretPathEndlessBoostComboTiers.map((tier) => `×${tier
 const isBeatingDistanceBest = computed(() => best.value.distance > 0 && distanceMeters.value > best.value.distance);
 const isBeatingSunlightBest = computed(() => best.value.sunlight > 0 && secretPathSunlightCount.value > best.value.sunlight);
 
-/* 距離の自己ベストをこえた瞬間だけ（1回のプレイで1回）、キラリン♪ と「🎉 じこベスト更新！」 */
+/* 距離の自己ベストをこえた瞬間だけ（1回のプレイで1回）、キラリン♪ と「🎉 自己ベスト更新！」 */
 watch(isBeatingDistanceBest, (isBeating) => {
   if (isBeating && isSecretPathPlaying.value) {
     playItemSound();
-    showCommandNotice('record', '🎉 じこベスト更新！');
+    showCommandNotice('record', '🎉 自己ベスト更新！');
   }
 });
 
@@ -651,7 +651,7 @@ onUnmounted(() => {
         </ul>
 
         <p v-if="best.distance > 0 || best.sunlight > 0" class="mg-best">
-          じこベスト
+          自己ベスト
           <span class="mg-best__item">🏁 {{ best.distance }}m</span>
           <span class="mg-best__item"><SecretPathIcon kind="sunlight" alt="こもれび" /> {{ best.sunlight }}</span>
         </p>
@@ -709,7 +709,7 @@ onUnmounted(() => {
             <span class="mg-result__unit">m</span>
             <!-- とどいたレベル（「Lv.4 まで」） -->
             <span class="mg-result__level">Lv.{{ secretPathLevel }}</span>
-            <span v-if="isNewDistanceBest" class="mg-result__new">じこベスト！</span>
+            <span v-if="isNewDistanceBest" class="mg-result__new">自己ベスト！</span>
           </span>
           <span class="mg-result__item">
             <span class="mg-result__icon" aria-hidden="true"><SecretPathIcon kind="sunlight" /></span>
@@ -718,7 +718,7 @@ onUnmounted(() => {
             <span class="mg-result__unit">こ</span>
             <!-- こもれびぶんの距離ボーナス（上の「きょり」にふくまれている。1つも取れなかったときは出さない） -->
             <span v-if="secretPathSunlightBonusMeters > 0" class="mg-result__bonus">🏁 +{{ secretPathSunlightBonusMeters }}m</span>
-            <span v-if="isNewSunlightBest" class="mg-result__new">じこベスト！</span>
+            <span v-if="isNewSunlightBest" class="mg-result__new">自己ベスト！</span>
           </span>
         </p>
 
@@ -734,7 +734,7 @@ onUnmounted(() => {
         <p v-else-if="!hasUnlockedSecretVocalSong" class="mg-reward mg-reward--locked">🔒 {{ secretVocalSongUnlockDistance }}m まで行くと、なにかあるみたい…</p>
 
         <p class="mg-best">
-          じこベスト
+          自己ベスト
           <span class="mg-best__item">🏁 {{ best.distance }}m</span>
           <span class="mg-best__item"><SecretPathIcon kind="sunlight" alt="こもれび" /> {{ best.sunlight }}</span>
         </p>
@@ -1115,7 +1115,7 @@ onUnmounted(() => {
   background: linear-gradient(180deg, #ffd370 0%, var(--gold) 100%);
 }
 
-/* じこベスト更新 … クリーム色の板を金色のふちでかこむ（スピードアップの板と見分けられるように） */
+/* 自己ベスト更新 … クリーム色の板を金色のふちでかこむ（スピードアップの板と見分けられるように） */
 .mg-notice--record {
   background: linear-gradient(180deg, #fffaf0 0%, #fff0c4 100%);
   box-shadow:

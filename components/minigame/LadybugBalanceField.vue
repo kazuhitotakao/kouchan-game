@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* ============================================================
-   ミニゲーム「とばないで！」のフィールド（見た目だけ）
+   ミニゲーム「まだだよ！てんとう虫」のフィールド（見た目だけ）
 
    ・切り株の上に、横向きの枝がのっている（まん中を支点に、左右へ傾く）
    ・てんとう虫は枝の上にいるので、枝といっしょに傾く（枝の箱の中に置いている）
@@ -36,7 +36,7 @@ const props = defineProps<{
   endlessProgress: number;
   elapsedMs: number;
 
-  /* はしに着いてしまった てんとう虫の種類（幼虫なら「おちちゃった…」） */
+  /* はしに着いてしまった てんとう虫の種類（幼虫なら「落ちちゃった…」） */
   lostKind: LadybugBalanceKind | null;
 }>();
 
@@ -44,7 +44,7 @@ const props = defineProps<{
 const elapsedText = computed(() => (Math.floor(Math.max(0, props.elapsedMs) / 100) / 10).toFixed(1));
 
 /* おしまいのときの、まん中の文字（幼虫は飛べないので落ちる） */
-const failedCue = computed(() => (props.lostKind === 'larva' ? 'おちちゃった…' : 'とんでいっちゃった…'));
+const failedCue = computed(() => (props.lostKind === 'larva' ? '落ちちゃった…' : '飛んでいっちゃった…'));
 
 /* 残り時間（「5.2」。0.1秒きざみで切り上げる。0 になるまで「0.0」を出さない） */
 const remainingText = computed(() => (Math.ceil(props.remainingMs / 100) / 10).toFixed(1));
@@ -108,13 +108,32 @@ const drawTilt = computed(() => (props.tilt * drawMaxDeg.value) / ladybugBalance
 /* てんとう虫1匹ぶんの見た目の値
    left    … 枝の左はし 0% 〜 右はし 100%
    nervous … はしに近いほど 0 → 1（羽を少し開く・あわてる） */
+/* 幼虫が「ぐんぐん登る」見た目になっているか（てんとう虫の id ごと）
+   速さが きりの値のあたりを行ったり来たりしても、見た目がちらつかないよう、
+   なるのは larvaClimbCueSpeed から、もどるのは その 8割を下回ってから */
+const climbingIds = new Set<number>();
+
 const bugViews = computed(() =>
   props.ladybugs.map((bug) => {
     const ratio = Math.abs(bug.x) / props.branchLength;
-    const { nervousFrom, flyAt } = ladybugBalanceMotion;
+    const { nervousFrom, flyAt, larvaClimbCueSpeed } = ladybugBalanceMotion;
     const nervous = Math.min(1, Math.max(0, (ratio - nervousFrom) / (flyAt - nervousFrom)));
 
     const canFly = ladybugBalanceKinds[bug.kind].canFly;
+
+    // 向いている方へ進んでいて（風や傾きで うしろへ流されているときは ちがう）、じゅうぶん速いとき
+    const forwardSpeed = bug.velocity * bug.walkDir;
+    const isClimbing =
+      props.phase === 'playing' &&
+      bug.kind === 'larva' &&
+      !bug.isLanding &&
+      forwardSpeed >= (climbingIds.has(bug.id) ? larvaClimbCueSpeed * 0.8 : larvaClimbCueSpeed);
+
+    if (isClimbing) {
+      climbingIds.add(bug.id);
+    } else {
+      climbingIds.delete(bug.id);
+    }
 
     return {
       id: bug.id,
@@ -129,6 +148,8 @@ const bugViews = computed(() =>
       isWindingUp: props.phase === 'playing' && bug.action === 'windup',
       isDashing: props.phase === 'playing' && bug.action === 'dash',
       isHopping: props.phase === 'playing' && bug.isHopping,
+      // 幼虫が傾いた枝を ぐんぐん登っているとき（あしを速く動かし、勢いの線を出す）
+      isClimbing,
       // エンドレスで、空から降りてきている最中
       isLanding: props.phase === 'playing' && bug.isLanding,
     };
@@ -150,9 +171,9 @@ const windStreaks = [
     <div v-if="endlessLevel === null" class="lb-hud">
       <span class="lb-hud__stage">ステージ {{ stageNumber }}</span>
       <span class="lb-hud__time" :class="{ 'lb-hud__time--low': remainingMs <= 3000 && phase === 'playing' && countdownNumber === null }">
-        <span class="lb-hud__timeLabel">のこり</span>
+        <span class="lb-hud__timeLabel">残り</span>
         <b class="lb-hud__timeValue">{{ remainingText }}</b>
-        <span class="lb-hud__timeUnit">びょう</span>
+        <span class="lb-hud__timeUnit">秒</span>
       </span>
       <span class="lb-hud__bar" aria-hidden="true">
         <span class="lb-hud__barFill" :style="{ transform: `scaleX(${remainingRatio})` }" />
@@ -164,7 +185,7 @@ const windStreaks = [
       <span class="lb-hud__stage lb-hud__stage--endless">⏱ ずっと ここにいて！ Lv.{{ endlessLevel }}</span>
       <span class="lb-hud__time">
         <b class="lb-hud__timeValue">{{ elapsedText }}</b>
-        <span class="lb-hud__timeUnit">びょう</span>
+        <span class="lb-hud__timeUnit">秒</span>
       </span>
       <span class="lb-hud__bar" aria-hidden="true">
         <span class="lb-hud__barFill lb-hud__barFill--endless" :style="{ transform: `scaleX(${endlessProgress})` }" />
@@ -173,7 +194,7 @@ const windStreaks = [
 
     <!-- 風（もうすぐ吹く知らせ ／ 吹いているあいだの、すじ） -->
     <p v-if="windWarningDir !== 0" class="lb-wind-label lb-wind-label--warning" aria-live="polite">
-      💨 かぜがくる！ {{ windWarningDir === 1 ? '→' : '←' }}
+      💨 風が来る！ {{ windWarningDir === 1 ? '→' : '←' }}
     </p>
     <p v-else-if="windDir !== 0" class="lb-wind-label">💨 びゅーっ {{ windDir === 1 ? '→' : '←' }}</p>
     <div v-if="windDir !== 0" class="lb-wind" :class="{ 'lb-wind--left': windDir === -1 }" aria-hidden="true">
@@ -204,6 +225,7 @@ const windStreaks = [
           'lb-bug--windup': bug.isWindingUp,
           'lb-bug--dash': bug.isDashing,
           'lb-bug--hop': bug.isHopping,
+          'lb-bug--climb': bug.isClimbing,
         }"
         :style="{ left: bug.left, '--wing-open': bug.isFlying || bug.isLanding ? 1 : bug.nervous * 0.6, '--fly-dir': bug.facing }">
         <!-- 小走りの前の「！」（金色）／ あわてているときの「！」（赤） -->
@@ -213,8 +235,8 @@ const windStreaks = [
         <div class="lb-bug__fly">
           <!-- 顔の向き（絵は右向き。左へ歩いているときは左右を入れかえる） -->
           <div class="lb-bug__face" :style="{ transform: `scaleX(${bug.facing})` }">
-            <!-- 小走りの勢いの線（からだのうしろ。顔の向きといっしょに入れかわる） -->
-            <span v-if="bug.isDashing" class="lb-bug__dash" aria-hidden="true">
+            <!-- 小走り・幼虫が ぐんぐん登るときの、勢いの線（からだのうしろ。顔の向きといっしょに入れかわる） -->
+            <span v-if="bug.isDashing || bug.isClimbing" class="lb-bug__dash" aria-hidden="true">
               <span class="lb-bug__dashLine" />
               <span class="lb-bug__dashLine" />
               <span class="lb-bug__dashLine" />
@@ -335,7 +357,7 @@ const windStreaks = [
 
 /* 結果の画面では、HUD を消す
    結果の画面ではフィールドが低くなるので、HUD が2行になる細い画面（スマホのエンドレスなど）では、
-   まん中の「とんでいっちゃった…」「クリア！」と重なってしまうため
+   まん中の「飛んでいっちゃった…」「クリア！」と重なってしまうため
    （ステージ・たえた時間・レベルは、下の結果のカードに出ている） */
 .lb-field--cleared .lb-hud,
 .lb-field--failed .lb-hud {
@@ -552,6 +574,16 @@ const windStreaks = [
   animation-direction: alternate-reverse;
 }
 
+/* 幼虫：ふだんは のそのそ（あしも、からだの上下も ゆっくり。ナナホシより遅いのが見て分かるように）
+   あわてている・登っているときは、下の .lb-bug--nervous・.lb-bug--climb が上書きする */
+.lb-bug--larva .lb-bug__leg {
+  animation-duration: 0.6s;
+}
+
+.lb-bug--larva .lb-bug__fly {
+  animation-duration: 1s;
+}
+
 /* はしに近いとき：小きざみにふるえて、あしも速く動く */
 .lb-bug--nervous .lb-bug__fly {
   animation: lb-bug-shiver 0.12s linear infinite;
@@ -584,12 +616,14 @@ const windStreaks = [
   text-shadow: 0 0 4px #fff;
 }
 
-/* 小走り：あしをとても速く動かし、からだを少し前へかたむける */
-.lb-bug--dash .lb-bug__leg {
+/* 小走り・幼虫が ぐんぐん登るとき：あしをとても速く動かし、からだを少し前へ傾ける */
+.lb-bug--dash .lb-bug__leg,
+.lb-bug--climb .lb-bug__leg {
   animation-duration: 0.07s;
 }
 
-.lb-bug--dash .lb-bug__svg {
+.lb-bug--dash .lb-bug__svg,
+.lb-bug--climb .lb-bug__svg {
   transform: rotate(4deg);
 }
 
@@ -830,7 +864,7 @@ const windStreaks = [
   }
 }
 
-/* 「かぜがくる！」「びゅーっ」（HUD の下） */
+/* 「風が来る！」「びゅーっ」（HUD の下） */
 .lb-wind-label {
   position: absolute;
   top: 66px;

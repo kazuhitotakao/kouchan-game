@@ -2277,7 +2277,7 @@ export function useAudio(options: UseAudioOptions) {
     /* ===== 公園のBGM ===== */
     playParkBgmSoon,
     stopParkBgm,
-    resumeParkBgm, // ミニゲーム「とばないで！」で、開いたときに鳴らせなかった曲を「はじめる」で鳴らす
+    resumeParkBgm, // ミニゲーム「まだだよ！てんとう虫」で、開いたときに鳴らせなかった曲を「はじめる」で鳴らす
     switchParkBgmForCurrentTime,
 
     /* 10:30を過ぎたか（公園入口の文章の出しわけにも使う → parkEntranceText） */
