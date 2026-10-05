@@ -150,9 +150,7 @@ const {
   pressPointer,
   releasePointer,
   handleFieldPointerDown,
-  handleFieldPointerMove,
   handleFieldPointerUp,
-  handleFieldPointerCancel,
   handleGameKeydown,
   pause: pauseGame,
   resume: resumeGame,
@@ -685,14 +683,13 @@ onUnmounted(() => {
              スマホでは、結果のカードをフィールドの下のほうに重ねて、フィールドの大きさを変えない（CSS の .lb-playArea） -->
         <div v-else class="lb-playArea">
           <!-- 遊んでいる最中・結果（フィールドは出したままにして、飛んでいく様子・クリアの様子を見せる）
-               フィールドをさわっても傾けられる（右半分・左半分をおさえる、フリックする。中身は useLadybugBalanceGame.ts） -->
+               フィールドをさわっても傾けられる（右半分・左半分をおさえる。左右のボタンと同じく、はなすまで傾く。中身は useLadybugBalanceGame.ts） -->
           <LadybugBalanceField
             class="lb-play-field"
             :class="{ 'lb-play-field--result': phase === 'cleared' || phase === 'failed', 'lb-play-field--touchable': isFieldTouchable }"
             @pointerdown="handleFieldPointerDown"
-            @pointermove="handleFieldPointerMove"
             @pointerup="handleFieldPointerUp"
-            @pointercancel="handleFieldPointerCancel"
+            @pointercancel="handleFieldPointerUp"
             @touchstart="handleFieldTouchStart"
             @contextmenu.prevent
             :phase="phase"

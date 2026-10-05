@@ -4,7 +4,7 @@
    ■ ここがやること
      ・遊んでいる最中に変わる状態（枝の傾き・てんとう虫の位置・風・ゲームの時計）を持つ
      ・requestAnimationFrame の1コマごとの処理（傾ける・歩かせる・風を吹かせる・はしに着いたかを見る）
-     ・左右の操作（画面のボタンの長押し・← → キー・フィールドをさわる／フリックする）
+     ・左右の操作（画面のボタンの長押し・← → キー・フィールドをさわる）
 
    ■ 2つの遊びかた（mode）
      ・stage   … ステージ（時間までたえたらクリア）
@@ -28,7 +28,6 @@ import {
   ladybugBalanceStages,
   ladybugBalanceTilt,
   ladybugBalanceTiming,
-  ladybugBalanceTouch,
 } from '~/data/ladybugBalance';
 import type { LadybugBalanceKind, LadybugBalanceRule } from '~/data/ladybugBalance';
 
@@ -166,7 +165,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
   let windEndAt = 0;
 
   /* 左右を押しているか（画面のボタン・キー・フィールドは別々に覚える。片方をはなしても、ほかで押していれば押したまま）
-     fieldHeld … フィールドをさわって押している向き（0 ＝ 押していない。フリックのあと押しつづけているあいだもふくむ） */
+     fieldHeld … フィールドをさわって押している向き（0 ＝ 押していない） */
   const pointerHeld = ref({ left: false, right: false });
   const keyHeld = ref({ left: false, right: false });
   const fieldHeld = ref<0 | LadybugBalanceSide>(0);
@@ -174,11 +173,8 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
   const isLeftHeld = computed(() => pointerHeld.value.left || keyHeld.value.left || fieldHeld.value === -1);
   const isRightHeld = computed(() => pointerHeld.value.right || keyHeld.value.right || fieldHeld.value === 1);
 
-  /* フィールドをさわっている指（あとからさわった指を優先する。null ＝ さわっていない）
-     startX・startTime … さわりはじめた場所と時刻（ずらした向き・フリックを見るため）
-     flickHoldUntil    … フリックのあと、いつまで押しつづけるか（ゲームの時計） */
-  let fieldTouch: { pointerId: number; startX: number; startTime: number } | null = null;
-  let flickHoldUntil = -Infinity;
+  /* フィールドをさわっている指（あとからさわった指を優先する。null ＝ さわっていない） */
+  let fieldPointerId: number | null = null;
 
   const isPlaying = computed(() => phase.value === 'playing');
 
@@ -233,8 +229,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     pointerHeld.value = { left: false, right: false };
     keyHeld.value = { left: false, right: false };
     fieldHeld.value = 0;
-    fieldTouch = null;
-    flickHoldUntil = -Infinity;
+    fieldPointerId = null;
   }
 
   /* てんとう虫を1匹つくる（気まぐれな動きの予定は、種類で間かくを変える） */
@@ -399,11 +394,6 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     const previousLevel = endlessLevel.value;
 
     elapsed.value += delta;
-
-    // フリックのあと押しつづける時間が終わったら、はなす（指でさわっているあいだは、指のほうを優先）
-    if (fieldTouch === null && fieldHeld.value !== 0 && elapsed.value >= flickHoldUntil) {
-      fieldHeld.value = 0;
-    }
 
     // ===== カウントダウン（数字が変わったときに「ピッ」、0 をこえたときに「ピーン♪」） =====
     if (previousElapsed < 0) {
@@ -730,8 +720,8 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     pointerHeld.value = { ...pointerHeld.value, [sideKey(side)]: false };
   }
 
-  /* フィールドをさわったとき（右半分なら右、左半分なら左へ傾ける。数字は data/ladybugBalance.ts の ladybugBalanceTouch）
-     指がフィールドの外へ出ても pointermove・pointerup が届くように、指をつかまえておく（setPointerCapture） */
+  /* フィールドをさわったとき（左右のボタンと同じ。右半分なら右、左半分なら左へ、はなすまで傾ける。指をずらしても向きは変えない）
+     指がフィールドの外へ出ても pointerup が届くように、指をつかまえておく（setPointerCapture） */
   function handleFieldPointerDown(event: PointerEvent) {
     if (!isPlaying.value || isPaused.value || !(event.currentTarget instanceof HTMLElement)) {
       return;
@@ -740,50 +730,17 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     const rect = event.currentTarget.getBoundingClientRect();
 
     event.currentTarget.setPointerCapture(event.pointerId);
-    fieldTouch = { pointerId: event.pointerId, startX: event.clientX, startTime: event.timeStamp };
+    fieldPointerId = event.pointerId;
     fieldHeld.value = event.clientX < rect.left + rect.width / 2 ? -1 : 1;
   }
 
-  /* さわったまま指をずらしたとき（さわりはじめた場所から、ずらした向きへ切りかえる） */
-  function handleFieldPointerMove(event: PointerEvent) {
-    if (fieldTouch?.pointerId !== event.pointerId || !isPlaying.value || isPaused.value) {
-      return;
-    }
-
-    const dx = event.clientX - fieldTouch.startX;
-
-    if (Math.abs(dx) >= ladybugBalanceTouch.switchDistance) {
-      fieldHeld.value = dx < 0 ? -1 : 1;
-    }
-  }
-
-  /* 指をはなしたとき（すばやく払っていたらフリック。少しのあいだ、払った向きへ押しつづける） */
+  /* 指をはなしたとき・とちゅうで取り消されたとき（すぐにはなす） */
   function handleFieldPointerUp(event: PointerEvent) {
-    if (fieldTouch?.pointerId !== event.pointerId) {
+    if (fieldPointerId !== event.pointerId) {
       return;
     }
 
-    const dx = event.clientX - fieldTouch.startX;
-    const isFlick = Math.abs(dx) >= ladybugBalanceTouch.flickDistance && event.timeStamp - fieldTouch.startTime <= ladybugBalanceTouch.flickTime;
-
-    fieldTouch = null;
-
-    if (isFlick && isPlaying.value && !isPaused.value) {
-      fieldHeld.value = dx < 0 ? -1 : 1;
-      flickHoldUntil = elapsed.value + ladybugBalanceTouch.flickHold;
-      return;
-    }
-
-    fieldHeld.value = 0;
-  }
-
-  /* 指がとちゅうで取り消されたとき（フリックとは見なさず、すぐにはなす） */
-  function handleFieldPointerCancel(event: PointerEvent) {
-    if (fieldTouch?.pointerId !== event.pointerId) {
-      return;
-    }
-
-    fieldTouch = null;
+    fieldPointerId = null;
     fieldHeld.value = 0;
   }
 
@@ -881,9 +838,7 @@ export function useLadybugBalanceGame(options: UseLadybugBalanceGameOptions) {
     pressPointer,
     releasePointer,
     handleFieldPointerDown,
-    handleFieldPointerMove,
     handleFieldPointerUp,
-    handleFieldPointerCancel,
     handleGameKeydown,
     pause,
     resume,
