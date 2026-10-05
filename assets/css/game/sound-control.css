@@ -77,10 +77,25 @@
   transform: translateY(1px);
 }
 
-/* Tabキーで来たときの輪（外に出すと、外がわの枠と二重の輪になるので、内がわに出す） */
+/* キーボードで ミュートボタンを選んでいるとき
+   アイコンのまわりだけでなく、まとまり全体（丸い枠）の色を変えて、外に輪を出す（となりの「← 戻る」などを選んだときと同じ輪）
+   ・:has() が使えない古いブラウザでは、これまでどおりアイコンのまわりに輪を出す（下の @supports の外）
+   ・スライダーを選んでいるときは、スライダーのまわりの輪のまま（どちらを選んでいるか分かるように） */
 .sound-toggle:focus-visible {
   outline: 2px solid var(--navy);
   outline-offset: -1px;
+}
+
+@supports selector(:has(*)) {
+  .sound-control:has(.sound-toggle:focus-visible) {
+    border-color: var(--navy);
+    outline: 2px solid var(--navy);
+    outline-offset: 2px;
+  }
+
+  .sound-toggle:focus-visible {
+    outline: none;
+  }
 }
 
 /* スピーカーと「×」を、横にならべる入れもの（🔊×）
@@ -250,6 +265,13 @@
 /* Tabで来たときの輪・ミュートの「×」・スライダーも、濃い青の上で見えるよう明るくする */
 .sound-toggle--bar:focus-visible {
   outline-color: #eef9ff;
+}
+
+@supports selector(:has(*)) {
+  .sound-control--bar:has(.sound-toggle:focus-visible) {
+    border-color: #eef9ff;
+    outline-color: #eef9ff;
+  }
 }
 
 .sound-control--bar .sound-toggle__muteMark {

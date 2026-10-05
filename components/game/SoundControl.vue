@@ -55,10 +55,32 @@ const isTouchOnly = ref(false);
 onMounted(() => {
   isTouchOnly.value = isTouchOnlyDevice();
 });
+
+/* Tab で、ミュートボタンと音量スライダーを行き来する
+   ・ミュートボタンで Tab → 音量スライダー ／ 音量スライダーで Shift + Tab → ミュートボタン
+   ブラウザにまかせると、Safari（はじめの設定）では Tab がボタンやスライダーに止まらず、スライダーへ行けないため
+   ※ stopPropagation … ページ側の Tab の回りこみ（いちばん後ろで Tab → いちばん前へ）が、
+     動かしたあとのフォーカスを見て、もう一度動かしてしまわないように（ここで動かすのは、まとまりの中だけ） */
+function handleKeydown(event: KeyboardEvent) {
+  // スライダーが無い・CSS でかくしている（細い画面など）ときは、ブラウザにまかせる
+  if (event.key !== 'Tab' || !volumeSlider.value || !toggleButton.value || volumeSlider.value.getClientRects().length === 0) {
+    return;
+  }
+
+  const next = !event.shiftKey && event.target === toggleButton.value ? volumeSlider.value : event.shiftKey && event.target === volumeSlider.value ? toggleButton.value : null;
+
+  if (!next) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+  next.focus();
+}
 </script>
 
 <template>
-  <div class="sound-control" :class="{ 'sound-control--bar': variant === 'status' }">
+  <div class="sound-control" :class="{ 'sound-control--bar': variant === 'status' }" @keydown="handleKeydown">
     <button
       ref="toggleButton"
       type="button"
