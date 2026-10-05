@@ -17,6 +17,7 @@
      suddenEvent … とつぜんのできごと（救急車・テントウムシなど）
    ============================================================ */
 
+import { buildMinigameUnlockPhrases } from '~/data/minigames';
 import { itemImages, placeItems } from '~/data/places';
 import { splitItemName } from '~/utils/itemName';
 import type { ChangeGroup, SceneVariant, StatusChanges } from '~/types/game';
@@ -48,6 +49,9 @@ defineProps<{
   niceTantrumResponseText?: string;
   niceTantrumBonusOutingPoint?: number;
   niceTantrumBonusParentCalm?: number;
+
+  /* はじめて解放したミニゲームの名前（「🎮 ミニゲーム解放！」を出す。出さないときは書かないか null） */
+  unlockedMinigameTitle?: string | null;
 }>();
 
 /* アイテムごとの、こうちゃんのひとこと（「★ アイテム発見！」の名前の下に出す）
@@ -136,6 +140,17 @@ function itemReaction(itemName: string) {
 
       <!-- いやいやが始まったときの文（起きた順で読めるよう、いちばん最後） -->
       <p v-if="tantrumText" class="tantrum-line">{{ tantrumText }}</p>
+
+      <!-- ミニゲームを、はじめて解放したときだけ（いまはテントウムシのできごとだけ。秘密の小道の結果と同じ枠） -->
+      <div v-if="unlockedMinigameTitle" class="event-flash event-flash--minigame" role="status">
+        <p class="event-flash__label">🎮 ミニゲーム解放！</p>
+
+        <p class="event-flash__text">
+          <span v-for="phrase in buildMinigameUnlockPhrases(unlockedMinigameTitle)" :key="phrase" class="event-flash__phrase">{{ phrase }}</span>
+        </p>
+
+        <p class="event-flash__note"><span class="event-flash__phrase">はじめの画面の「🎮 ミニゲーム」から</span><span class="event-flash__phrase">あそべます</span></p>
+      </div>
 
       <!-- 今回の行動で、どのステータスがどれだけ変わったか（スマホ幅では、上部ステータスで見られるので CSS で消す） -->
       <div v-if="statusChanges" class="change-box">

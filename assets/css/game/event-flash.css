@@ -1,12 +1,12 @@
 /* ============================================================
-   ナイス対応／こもれびボーナスの枠（.event-flash 〜）
+   ナイス対応／こもれびボーナス／ミニゲーム解放の枠（.event-flash 〜）
 
    ■ なぜグローバルなのか
      ResultCard.vue（ナイス対応）と pages/index.vue（こもれびボーナス）の
      別々の scoped から使うため
      両方に書くと二重に出力されるので、app.vue から1回だけ読みこむ
 
-   ※ .event-flash が枠の形、.event-flash--nice が色（いま使うのは緑の --nice だけ）
+   ※ .event-flash が枠の形、.event-flash--nice（緑）・.event-flash--minigame（紫）が色
    ============================================================ */
 
 /* 枠の形（左に太い線・ラベルの帯・ステータスの増減のしるし） */
@@ -91,6 +91,31 @@
 
 .event-flash--nice .event-flash__item {
   border-color: #d3eadb;
+}
+
+/* ミニゲーム解放の色（紫。ミニゲームの一覧のカード・こもれびの広場と同じ系統）
+   テントウムシの結果カード（ResultCard.vue）と、秘密の小道の結果（pages/index.vue）の2か所で使う */
+.event-flash--minigame {
+  border-color: #e6dbfa;
+  border-left-color: #8f6ad4;
+  background: #f9f4ff;
+}
+
+.event-flash--minigame .event-flash__label {
+  background: #7f5cc8;
+}
+
+/* ことばの切れめでだけ折り返す（スマホ幅で「あそべるよ／うになりました」のように、ことばの途中で切れないように） */
+.event-flash__phrase {
+  display: inline-block;
+}
+
+/* 本文の下の小さな案内（「はじめの画面の『🎮 ミニゲーム』から あそべます」） */
+.event-flash__note {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 @media (max-height: 800px) {

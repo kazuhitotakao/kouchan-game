@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* ============================================================
-   ミニゲーム「てんとう虫バランス」のフィールド（見た目だけ）
+   ミニゲーム「とばないで！」のフィールド（見た目だけ）
 
    ・切り株の上に、横向きの枝がのっている（まん中を支点に、左右へ傾く）
    ・てんとう虫は枝の上にいるので、枝といっしょに傾く（枝の箱の中に置いている）
@@ -111,7 +111,7 @@ const windStreaks = [
 
     <!-- HUD（エンドレス：レベルと、たえた時間。バーは次のレベルまで） -->
     <div v-else class="lb-hud">
-      <span class="lb-hud__stage lb-hud__stage--endless">♾ エンドレス Lv.{{ endlessLevel }}</span>
+      <span class="lb-hud__stage lb-hud__stage--endless">⏱ なんびょう チャレンジ Lv.{{ endlessLevel }}</span>
       <span class="lb-hud__time">
         <b class="lb-hud__timeValue">{{ elapsedText }}</b>
         <span class="lb-hud__timeUnit">びょう</span>

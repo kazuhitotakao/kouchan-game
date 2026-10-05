@@ -548,10 +548,11 @@ onUnmounted(() => {
     <section v-else-if="unlockState === 'unlocked'" class="mg-stage">
       <!-- はじまる前 -->
       <article v-if="secretPathPhase === 'ready'" v-reveal-with-images class="place-card place-card--secret">
-        <!-- アイコンは一覧のカードと同じ絵（となりに名前があるので、読み上げでは読ませない） -->
+        <!-- アイコンは一覧のカードと同じ絵（となりに名前があるので、読み上げでは読ませない）
+             アイコンと名前を ひとまとまりにして、カードのまん中に置く（.mg-title） -->
         <h1 class="place-card__title mg-title">
           <img v-if="minigameInfo.iconImage" class="mg-title__icon" :src="minigameInfo.iconImage" alt="" decoding="async" />
-          どこまで行ける？
+          <span class="mg-title__text">どこまで行ける？</span>
         </h1>
 
         <!-- 言葉のかわりに置いた枝・こもれびの絵は、読み上げでその名前を読ませる（alt） -->
@@ -784,9 +785,11 @@ onUnmounted(() => {
 /* はじまる前の見出し（［アイコンの絵］どこまで行ける？）
    絵は文字の高さの2倍ほどにして、ゲームの顔として目立たせる
    絵のまわりの透明な余白は、1.12倍に広げて切り落とす（一覧のカードと同じしかけ） */
+/* 見出し（アイコンと名前を ひとまとまりにして、カードのまん中に置く） */
 .mg-title {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 12px;
 }
 

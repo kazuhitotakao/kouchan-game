@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
-import { unlockMinigame } from '~/utils/minigameStorage';
+import { loadNewMinigames, unlockMinigame } from '~/utils/minigameStorage';
 
 import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
@@ -73,6 +73,8 @@ import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/pla
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
+import { buildMinigameUnlockPhrases, minigames } from '~/data/minigames';
+import type { MinigameId } from '~/data/minigames';
 import { maxSnackCount, snackBagImage, snacks } from '~/data/snacks';
 import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
 
@@ -1224,6 +1226,18 @@ function goToSoundtrack() {
   navigateTo('/soundtrack');
 }
 
+/* 本編の「🎮 ミニゲーム解放！」のお知らせに出す、ミニゲームの名前（出さないときは null）
+   はじめて解放したときだけ出す（2回目からは unlockMinigame() が false を返すので出ない） */
+const unlockedMinigameNotice = ref<string | null>(null);
+
+/* A画面の「🎮 ミニゲーム」に NEW を付けるか（新しく解放して、まだ一覧で見ていないものがあるとき。onMounted で読む） */
+const hasNewMinigame = ref(false);
+
+function showMinigameUnlockNotice(id: MinigameId) {
+  unlockedMinigameNotice.value = minigames.find((minigame) => minigame.id === id)?.title ?? null;
+  hasNewMinigame.value = true;
+}
+
 /* ミニゲーム「どこまで行ける？」の解放（秘密の小道をぬけたら、このブラウザに保存する）
 
    ※ A画面の「🎮 ミニゲーム」は、解放していなくてもいつも出す（一覧では「？？？」とヒントだけを出す）
@@ -1233,13 +1247,19 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
     return;
   }
 
-  unlockMinigame('secret-path');
+  if (unlockMinigame('secret-path')) {
+    showMinigameUnlockNotice('secret-path');
+  }
 });
 
-/* ミニゲーム「てんとう虫バランス」の解放（とつぜんのできごとで、テントウムシを見つけたら、このブラウザに保存する） */
+/* ミニゲーム「とばないで！」の解放（とつぜんのできごとで、テントウムシを見つけたら、このブラウザに保存する）
+   お知らせは、場面を移ったら消す（ほかの場面に持ちこさない。消えていく画面は描きなおされないので、途中で消えて見えることはない）
+   テントウムシのお知らせは、できごとの絵と文をじゃましないよう、選んだあとの結果カードに出す */
 watch(currentEvent, (event) => {
-  if (event === 'ladybug') {
-    unlockMinigame('ladybug-balance');
+  unlockedMinigameNotice.value = null;
+
+  if (event === 'ladybug' && unlockMinigame('ladybug-balance')) {
+    showMinigameUnlockNotice('ladybug-balance');
   }
 });
 
@@ -2326,6 +2346,9 @@ onMounted(() => {
   // A画面の「はじめる」へフォーカスを当てる（ほかのページから戻ってきたときも、ページが作り直されるのでここを通る）
   focusTitleMainButton();
 
+  // A画面の「🎮 ミニゲーム」の NEW（一覧を見て戻ってきたときも、ページが作り直されるのでここで読みなおす）
+  hasNewMinigame.value = loadNewMinigames().length > 0;
+
   /* 前回のサウンドの設定（ON/OFFと音量）を思い出す
      ※ ここではBGMを鳴らさない（開いた直後は音を鳴らせないので、「▶ はじめる」を押したときに鳴らしはじめる） */
   restoreSoundSettings();
@@ -2547,8 +2570,12 @@ onUnmounted(() => {
                 <span class="title-card__tooltip" aria-hidden="true">サウンドトラック</span>
               </button>
 
-              <!-- ミニゲームの一覧への入口（まだ1つも解放していなくても、いつも出す） -->
-              <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">🎮 ミニゲーム</button>
+              <!-- ミニゲームの一覧への入口（まだ1つも解放していなくても、いつも出す）
+                   新しく解放して、まだ一覧で見ていないものがあれば、左上の角に NEW を付ける（一覧を開くと消える） -->
+              <button ref="minigameButtonRef" type="button" class="title-card__minigame" @click="goToMinigame">
+                <span v-if="hasNewMinigame" class="title-card__new">NEW</span>
+                🎮 ミニゲーム
+              </button>
             </div>
 
             <!-- サウンドのコントロール（この画面ではミュートボタンだけ）
@@ -3239,6 +3266,17 @@ onUnmounted(() => {
                     </li>
                   </ul>
                 </div>
+
+                <!-- ミニゲーム「どこまで行ける？」を、はじめて解放したときだけ（テントウムシの結果カードと同じ枠） -->
+                <div v-if="unlockedMinigameNotice" class="event-flash event-flash--minigame" role="status">
+                  <p class="event-flash__label">🎮 ミニゲーム解放！</p>
+
+                  <p class="event-flash__text">
+                    <span v-for="phrase in buildMinigameUnlockPhrases(unlockedMinigameNotice)" :key="phrase" class="event-flash__phrase">{{ phrase }}</span>
+                  </p>
+
+                  <p class="event-flash__note"><span class="event-flash__phrase">はじめの画面の「🎮 ミニゲーム」から</span><span class="event-flash__phrase">あそべます</span></p>
+                </div>
               </article>
 
               <!-- コマンドボックス（遊んでいる最中は、コマンドのかわりに操作の案内だけを出す） -->
@@ -3464,7 +3502,8 @@ onUnmounted(() => {
                 :found-items-this-action="foundItemsThisAction"
                 :tantrum-text="tantrumText"
                 :status-changes="statusChanges"
-                :change-groups="changeGroups" />
+                :change-groups="changeGroups"
+                :unlocked-minigame-title="unlockedMinigameNotice" />
 
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
