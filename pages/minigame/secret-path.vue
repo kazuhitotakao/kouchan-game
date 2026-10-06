@@ -162,7 +162,7 @@ const {
 });
 
 /* ============================================================
-   一時停止（まだだよ！てんとう虫 と共通 → composables/useMinigamePause.ts）
+   一時停止（枝の上のてんとう虫 と共通 → composables/useMinigamePause.ts）
    「やめる」は、はじまる前の画面へ戻す（記録は残さない）
    ============================================================ */
 const { pauseState, pauseByButton, resume, quit, handlePauseKeydown } = useMinigamePause({

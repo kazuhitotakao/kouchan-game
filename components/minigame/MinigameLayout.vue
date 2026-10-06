@@ -15,21 +15,27 @@
    ■ fitScreen … 全体の枠を、画面の高さより高くしない（ページ全体はスクロールさせない）
      中身が画面に収まるときは、ふだんどおりの高さ。収まらないときだけ、画面の高さで止まる
      上のツールバーは いつも見えたまま。中身（<slot>）は残りの高さに収まるので、
-     はみ出すぶんのスクロールは、ページ側が中身の中で用意する（まだだよ！てんとう虫 が使う）
+     はみ出すぶんのスクロールは、ページ側が中身の中で用意する（枝の上のてんとう虫 が使う）
 
    ■ 一時停止（遊んでいる最中のミニゲームだけ。状態を持つのは composables/useMinigamePause.ts）
      ・canPause が true のあいだ、ツールバーのサウンドの左に「一時停止」ボタンを出す
      ・止まっているあいだは、一時停止の画面（MinigamePauseOverlay.vue）を重ね、
        全体の枠の中のCSSの動き（てんとう虫の足・こうちゃんの歩き など）も止める。枠の中は押せない（inert）
+
+   ■ あそびかた（説明をいつも並べず、ボタンで開くミニゲームだけ）
+     ・canShowHowTo が true のあいだ、ツールバーのサウンドの左に「? あそびかた」ボタンを出す（スマホ幅では「?」だけ）
+     ・howToOpen のあいだは、あそびかた（MinigameHowToDialog.vue）を重ね、枠の中は押せない（inert）
+       中身は、ページの <template #howto> に書く。開く・とじるは、押されたことを親へ知らせるだけ（openHowTo ／ closeHowTo）
    ============================================================ */
 
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 
 import SoundControl from '~/components/game/SoundControl.vue';
+import MinigameHowToDialog from '~/components/minigame/MinigameHowToDialog.vue';
 import MinigamePauseOverlay from '~/components/minigame/MinigamePauseOverlay.vue';
 import type { MinigamePauseState } from '~/composables/useMinigamePause';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     /* 戻るボタンの文字（広い画面）と、スマホ幅での短い文字・読み上げ用の名前 */
     backLabel: string;
@@ -54,8 +60,21 @@ withDefaults(
     /* 一時停止（上の「■ 一時停止」を参照。一時停止の無いページは書かなくてよい） */
     canPause?: boolean;
     pauseState?: MinigamePauseState;
+
+    /* あそびかた（上の「■ あそびかた」を参照。あそびかたの無いページは書かなくてよい） */
+    canShowHowTo?: boolean;
+    howToOpen?: boolean;
   }>(),
-  { backLabelShort: '← 戻る', variant: 'game', centered: false, fitScreen: false, canPause: false, pauseState: 'running' },
+  {
+    backLabelShort: '← 戻る',
+    variant: 'game',
+    centered: false,
+    fitScreen: false,
+    canPause: false,
+    pauseState: 'running',
+    canShowHowTo: false,
+    howToOpen: false,
+  },
 );
 
 defineEmits<{
@@ -65,14 +84,28 @@ defineEmits<{
   pause: [];
   resume: [];
   quit: [];
+  openHowTo: [];
+  closeHowTo: [];
 }>();
 
 /* 上の行のボタン（矢印キーで移動するときの行き先として、ページ側から見えるようにしておく） */
 const backButton = ref<HTMLButtonElement | null>(null);
+const howToButton = ref<HTMLButtonElement | null>(null);
 const soundControl = ref<InstanceType<typeof SoundControl> | null>(null);
 const soundToggleButton = computed<HTMLButtonElement | null>(() => soundControl.value?.toggleButton ?? null);
 
-defineExpose({ backButton, soundToggleButton });
+defineExpose({ backButton, howToButton, soundToggleButton });
+
+/* あそびかたを とじたら、開いたボタンへフォーカスを戻す（キーボードで続けて操作できるように） */
+watch(
+  () => props.howToOpen,
+  async (open, wasOpen) => {
+    if (!open && wasOpen) {
+      await nextTick();
+      howToButton.value?.focus();
+    }
+  },
+);
 </script>
 
 <template>
@@ -80,12 +113,18 @@ defineExpose({ backButton, soundToggleButton });
     class="minigame"
     :class="[`minigame--${variant}`, { 'minigame--centered': centered || variant === 'menu', 'minigame--fit': fitScreen, 'minigame--pausable': canPause, 'minigame--paused': pauseState !== 'running' }]">
     <!-- 全体の枠（上部ツールバー ＋ 中身） -->
-    <div class="mg-frame" :inert="pauseState !== 'running' || undefined">
+    <div class="mg-frame" :inert="pauseState !== 'running' || howToOpen || undefined">
       <div class="mg-toolbar">
         <!-- スマホ幅では短い文字に入れかえる（読み上げは、どちらも aria-label だけ） -->
         <button ref="backButton" type="button" class="mg-back" :aria-label="backAriaLabel" @click="$emit('back')">
           <span class="mg-back__textFull" aria-hidden="true">{{ backLabel }}</span>
           <span class="mg-back__textShort" aria-hidden="true">{{ backLabelShort }}</span>
+        </button>
+
+        <!-- あそびかた（本編の「? あそびかた」と同じ。スマホ幅では「?」だけにするので、読み上げ用の名前は aria-label に持たせる） -->
+        <button v-if="canShowHowTo" ref="howToButton" type="button" class="mg-back mg-howto-button" aria-label="あそびかた" @click="$emit('openHowTo')">
+          <span class="mg-howto-button__icon" aria-hidden="true">?</span>
+          <span class="mg-howto-button__text" aria-hidden="true">あそびかた</span>
         </button>
 
         <!-- 一時停止（遊んでいる最中だけ。キーボードでは Esc でも止められる） -->
@@ -101,6 +140,11 @@ defineExpose({ backButton, soundToggleButton });
 
     <!-- 一時停止の画面（枠の外に置く。枠の中の動きを止めても、こちらは止めないため） -->
     <MinigamePauseOverlay :state="pauseState" @resume="$emit('resume')" @quit="$emit('quit')" />
+
+    <!-- あそびかた（一時停止の画面と同じく、枠の外に重ねる。中身はページの #howto） -->
+    <MinigameHowToDialog v-if="howToOpen" @close="$emit('closeHowTo')">
+      <slot name="howto" />
+    </MinigameHowToDialog>
   </main>
 </template>
 
@@ -285,6 +329,27 @@ defineExpose({ backButton, soundToggleButton });
   margin-left: auto;
 }
 
+/* あそびかたボタン（戻るボタンと同じ形。サウンドのとなり＝右へ寄せる）
+   「?」は本編の .title-card__howtoIcon と同じく、色の丸に入れる（色はミニゲームの紫） */
+.mg-howto-button {
+  gap: 7px;
+  margin-left: auto;
+}
+
+.mg-howto-button__icon {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
 /* 止まっているあいだは、枠の中のCSSの動きも止める（ゲームの時計で動かしているものは、ゲーム側で止まる） */
 .minigame--paused .mg-frame :deep(*),
 .minigame--paused .mg-frame :deep(*::before),
@@ -352,6 +417,11 @@ defineExpose({ backButton, soundToggleButton });
 
   .mg-back__textShort {
     display: inline;
+  }
+
+  /* あそびかたは、本編のスマホ幅と同じく「?」だけにする（読み上げ用の名前は aria-label） */
+  .mg-howto-button__text {
+    display: none;
   }
 
   .mg-toolbar :deep(.sound-control) {

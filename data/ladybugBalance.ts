@@ -1,5 +1,5 @@
 /* ============================================================
-   ミニゲーム「まだだよ！てんとう虫」（/minigame/ladybug-balance）の設定（ゲーム中に変わらないデータ）
+   ミニゲーム「枝の上のてんとう虫」（/minigame/ladybug-balance）の設定（ゲーム中に変わらないデータ）
 
    ■ 遊びかた
      てんとう虫は枝の上を、勝手に左右へ歩く
@@ -22,7 +22,7 @@
    てんとう虫の種類（見た目と性格）
 
    name           … 画面に出す名前（はじまる前の説明・結果の画面）
-   trait          … 性格のひとこと（はじまる前の説明）
+   trait          … 動きの特徴のひとこと（あそびかたに出す）
    walk           … 歩く速さの倍率（ステージの walkSpeed にかける）
    climb          … 高いほうへ のぼる速さの倍率（ladybugBalanceMotion.climbSpeed にかける）
    quirkInterval  … 気まぐれな動きのあいだの時間の倍率（小さいほど、よく気まぐれを起こす）
@@ -43,10 +43,10 @@ export type LadybugBalanceKindInfo = {
 
 export const ladybugBalanceKinds: Record<LadybugBalanceKind, LadybugBalanceKindInfo> = {
   // ナナホシテントウ（赤に黒い点。いちばん ふつう）
-  nanahoshi: { name: 'ナナホシ', trait: '普通', walk: 1, climb: 1, quirkInterval: 1, dashChance: 0.5, canFly: true },
+  nanahoshi: { name: 'ナナホシ', trait: '普通に歩く', walk: 1, climb: 1, quirkInterval: 1, dashChance: 0.5, canFly: true },
 
   // ナミテントウ（黒に赤い紋。気まぐれで、小走りが多い）
-  namitentou: { name: 'ナミテントウ', trait: '気まぐれで よく走る', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
+  namitentou: { name: 'ナミテントウ', trait: '気まぐれで、よく急に走る', walk: 1, climb: 1, quirkInterval: 0.6, dashChance: 0.75, canFly: true },
 
   // 幼虫（枝が平らなときは ゆっくり歩くが、傾くと 高いほうへ速く登る。飛べない）
   //   歩く速さと登る速さは足し算なので、walk を下げたぶん climb を大きく上げないと、傾けても ナナホシと ほとんど同じ速さになる
