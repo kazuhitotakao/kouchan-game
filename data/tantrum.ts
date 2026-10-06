@@ -16,6 +16,19 @@ export const tantrumLevelInfo: Record<TantrumLevel, TantrumLevelInfo> = {
   3: { icon: '😭💥', title: '大いやいやタイム！', scene: '地面にごろん！ 全身でいやいやしています。' },
 };
 
+/* いやいやのこうちゃんの絵（カードのいちばん上のバナー。レベル → 画像のパス）
+   1 … 座りこんで、ほっぺをぷくっ
+   2 … 大泣き
+   3 … あおむけで「うわあ」とジタバタ
+   ※ 3枚とも同じ縦横比（tantrumBannerRatio）。絵を差しかえるときは、比率をそろえること */
+export const tantrumBannerImages: Record<TantrumLevel, string> = {
+  1: '/images/events/no-no-1.webp',
+  2: '/images/events/no-no-2.webp',
+  3: '/images/events/no-no-3.webp',
+};
+
+export const tantrumBannerRatio = '2660 / 591';
+
 /* 理由ごとに、画面や結果の文章に出すことば */
 export const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
   tired: {
