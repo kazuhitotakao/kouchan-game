@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /* ============================================================
-   ミニゲーム「まだだよ！てんとう虫」（/minigame/ladybug-balance）
+   ミニゲーム「枝の上のてんとう虫」（/minigame/ladybug-balance）
 
    枝の上を勝手に歩くてんとう虫が、はしまで行って飛んでいかないように、左右のボタンで枝を傾けてバランスをとる
    ステージ制（ステージの中身は data/ladybugBalance.ts）。前のステージをクリアすると、次のステージが遊べる
@@ -225,7 +225,7 @@ const isStartCueVisible = computed(() => phase.value === 'playing' && elapsed.va
 /* 次のステージがあるか（いまのステージをクリアしたときだけ「次のステージへ」を出す） */
 const hasNextStage = computed(() => stageIndex.value + 1 < stageCount);
 
-/* 出てくる てんとう虫の説明（「🐞 ナナホシ ×2（ふつう）」のように、種類ごとに1行） */
+/* 出てくる てんとう虫（「🐞 ナナホシ ×2」のように、種類ごとに1行。動きの特徴は、あそびかたに まとめて出す） */
 function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
   const counts = new Map<LadybugBalanceKind, number>();
 
@@ -236,17 +236,20 @@ function describeLadybugs(kinds: readonly LadybugBalanceKind[]) {
   return [...counts].map(([kind, count]) => {
     const info = ladybugBalanceKinds[kind];
 
-    return `🐞 ${info.name}${count > 1 ? ` ×${count}` : ''}（${info.trait}）`;
+    return `🐞 ${info.name}${count > 1 ? ` ×${count}` : ''}`;
   });
 }
 
 /* はじまる前に出す、ステージ（エンドレス）の説明
    えらんでいるものだけでなく、ぜんぶのステージとエンドレスのぶんを作る
    （同じ場所に重ねて、えらんでいるものだけを見せる。いちばん長い説明の高さになるので、
-   えらびなおしても画面の高さが変わらない → template の .lb-summaries） */
+   えらびなおしても画面の高さが変わらない → template の .lb-summaries）
+   ステージの説明は、そのステージならではの特徴（出てくる てんとう虫の名前・風）だけにする
+   （操作や てんとう虫の動きかたは、どのステージも同じなので「あそびかた」にまとめる）
+   （何秒たえればクリアかは書かない。遊んでいる最中の「残り ○秒」で分かる） */
 const stageSummaries = computed(() => {
   const summaries = ladybugBalanceStages.map((stageInfo, index) => {
-    const parts = [...describeLadybugs(stageInfo.ladybugs), `⏱ ${stageInfo.seconds}秒 飛ばさなければクリア`];
+    const parts = describeLadybugs(stageInfo.ladybugs);
 
     if (stageInfo.wind) {
       parts.push('💨 時々 風が吹く');
@@ -426,6 +429,26 @@ async function goToList() {
 }
 
 /* ============================================================
+   あそびかた（はじまる前だけ。ツールバーの「? あそびかた」で開く → MinigameLayout.vue）
+   操作と、てんとう虫の種類ごとの動きを、1画面にまとめて見せる
+   ============================================================ */
+const isHowToOpen = ref(false);
+const canShowHowTo = computed(() => unlockState.value === 'unlocked' && phase.value === 'ready');
+
+/* あそびかたに出す、てんとう虫の種類（data/ladybugBalance.ts の順） */
+const howToKinds = Object.values(ladybugBalanceKinds);
+
+function openHowTo() {
+  if (canShowHowTo.value) {
+    isHowToOpen.value = true;
+  }
+}
+
+function closeHowTo() {
+  isHowToOpen.value = false;
+}
+
+/* ============================================================
    キーボード
    ・遊んでいる最中 … ← → で傾ける（→ useLadybugBalanceGame.ts）
    ・はじまる前・結果の画面 … 矢印キーでボタンを選ぶ（ボタンが横にもならぶので、画面の位置で動かす → useMinigameKeyboardNav.ts の moveMinigameFocusSpatially()）
@@ -447,7 +470,8 @@ async function focusFirstMainButton() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (unlockState.value !== 'unlocked') {
+  // あそびかたを開いているあいだのキー（Esc でとじる）は、あそびかたの画面が受けもつ
+  if (unlockState.value !== 'unlocked' || isHowToOpen.value) {
     return;
   }
 
@@ -468,7 +492,7 @@ function handleKeydown(event: KeyboardEvent) {
       return;
     }
 
-    const topRow = [layoutRef.value?.backButton, layoutRef.value?.soundToggleButton];
+    const topRow = [layoutRef.value?.backButton, layoutRef.value?.howToButton, layoutRef.value?.soundToggleButton];
 
     if (moveMinigameFocusSpatially(event, topRow, getMainButtons())) {
       event.preventDefault();
@@ -582,12 +606,16 @@ onUnmounted(() => {
     :sound-volume-percent="soundVolumePercent"
     :can-pause="canPause"
     :pause-state="pauseState"
+    :can-show-how-to="canShowHowTo"
+    :how-to-open="isHowToOpen"
     @back="goBack"
     @toggle-sound="toggleSound"
     @volume-change="changeSoundVolume"
     @pause="pauseByButton"
     @resume="resume"
-    @quit="quit">
+    @quit="quit"
+    @open-how-to="openHowTo"
+    @close-how-to="closeHowTo">
     <!-- 外枠（背景 ＋ 上部ツールバー）は、ミニゲームの一覧と同じ部品
          ※ このコメントを <MinigameLayout> の外に書かないこと
            開発中はコメントも残って、いちばん外の要素が2つになり、ページを移るときのフェードがこわれて画面がまっ暗になる
@@ -607,7 +635,7 @@ onUnmounted(() => {
     <section v-else-if="unlockState === 'unlocked'" ref="stageRef" class="mg-stage lb-screen" :class="{ 'lb-screen--inGame': phase !== 'ready' }">
       <!-- スクロールする部分（はじまる前の説明・遊んでいる最中・結果） -->
       <div ref="scrollRef" class="lb-scroll">
-        <!-- はじまる前（遊びかたと、ステージ選び） -->
+        <!-- はじまる前（名前・ねらいと、ステージ選び。操作などの説明は「あそびかた」 → 下の #howto） -->
         <article v-if="phase === 'ready'" class="place-card">
           <!-- アイコン（🐞）と名前を ひとまとまりにして、カードのまん中に置く（.mg-title。どこまで行ける？ の見出しと同じ置きかた）
                名前は、ことばの区切りごとに まとめて出す（細い画面で、ことばの途中で切れないように） -->
@@ -625,13 +653,6 @@ onUnmounted(() => {
           <p class="mg-lead">
             <span class="mg-lead__line">枝を傾けて、<br class="mg-lead__break mg-lead__break--pc" />てんとう虫を</span><br class="mg-lead__break mg-lead__break--sp" /><span class="mg-lead__line">飛ばさないようにしよう！</span>
           </p>
-
-          <ul class="mg-rules">
-            <li class="mg-for-pc">← → キーかボタンで、枝を傾ける</li>
-            <li class="mg-for-touch">◀ ▶ か画面の左右を押して、枝を傾ける</li>
-            <li>てんとう虫は、高いほうへ歩く</li>
-            <li>端に近づいたら、そっちを下げよう！</li>
-          </ul>
 
           <!-- ステージ選び（まだ遊べないステージは 🔒） -->
           <div class="lb-stages" role="group" aria-label="ステージを選ぶ">
@@ -669,8 +690,8 @@ onUnmounted(() => {
 
           <!-- えらんでいるステージ（エンドレス）の説明
                ぜんぶの説明を同じ場所に重ねて置き、えらんでいるものだけを見せる（ほかは visibility: hidden で、読み上げもしない）
-               枠はいちばん長い説明の高さになるので、えらびなおしても画面の高さが変わらない（細い画面で折り返したときも）
-               ※ 背の低いスマホでは そろえない（えらんでいる説明の高さだけにする。CSS の .lb-summary--hidden） -->
+               枠はいちばん長い説明の高さになるので、えらびなおしても画面の高さが変わらない（細い画面で折り返したときも。背の低いスマホも同じ）
+               ※ 背の低いスマホでも、いちばん長い説明のときに入りきるよう、まわりの あきを つめてある（CSS の max-height: 700px と 660px） -->
           <div class="lb-summaries">
             <ul v-for="summary in stageSummaries" :key="summary.key" class="lb-summary" :class="{ 'lb-summary--hidden': !summary.isSelected }">
               <li class="lb-summary__title">{{ summary.title }}</li>
@@ -798,6 +819,38 @@ onUnmounted(() => {
         <button type="button" class="mg-play lb-nav lb-nav--primary" :disabled="!canPlaySelected" @click="play">はじめる</button>
       </div>
     </section>
+
+    <!-- あそびかた（ツールバーの「? あそびかた」で開く。見出しと「とじる」は MinigameHowToDialog.vue） -->
+    <template #howto>
+      <!-- ねらい（ステージ選びの .mg-lead と同じ文。背の低いスマホでは、ステージ選びに出さず ここだけで見せる）
+           ことばの区切りごとに まとめて出す（細い画面で、ことばの途中で折り返さないように） -->
+      <p class="lb-howto__goal">
+        <span class="lb-howto__goalPart">枝を傾けて、</span><span class="lb-howto__goalPart">てんとう虫を</span><span class="lb-howto__goalPart">飛ばさないようにしよう！</span>
+      </p>
+
+      <section class="lb-howto__section">
+        <h3 class="lb-howto__heading">枝の傾けかた</h3>
+        <ul class="mg-rules">
+          <li class="mg-for-pc">← → キーかボタンで、枝を傾ける</li>
+          <li class="mg-for-touch">◀ ▶ か画面の左右を押して、枝を傾ける</li>
+          <li>てんとう虫は、高いほうへ歩く</li>
+          <li>端に近づいたら、そっちを下げよう！</li>
+        </ul>
+      </section>
+
+      <section class="lb-howto__section">
+        <h3 class="lb-howto__heading">てんとう虫の種類</h3>
+        <dl class="lb-kinds">
+          <div v-for="kind in howToKinds" :key="kind.name" class="lb-kinds__row">
+            <dt class="lb-kinds__name">🐞 {{ kind.name }}</dt>
+            <!-- 「、」の区切りごとに まとめて出す（細い画面で、ことばの途中で折り返さないように） -->
+            <dd class="lb-kinds__trait">
+              <span v-for="part in kind.trait.split(/(?<=、)/)" :key="part" class="lb-kinds__traitPart">{{ part }}</span>
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </template>
   </MinigameLayout>
 </template>
 
@@ -976,6 +1029,87 @@ onUnmounted(() => {
   .mg-for-touch {
     display: block;
   }
+}
+
+/* ===== あそびかた（中身。カード・見出し・「とじる」は MinigameHowToDialog.vue） ===== */
+/* ねらい（ステージ選びの .mg-lead と同じ見た目を、ひとまわり小さく） */
+.lb-howto__goal {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #e6dbfa;
+  color: #6b4fb0;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.lb-howto__goalPart {
+  display: inline-block;
+}
+
+.lb-howto__section + .lb-howto__section {
+  margin-top: 14px;
+}
+
+/* 小見出し（ステージの説明の見出しと同じ紫） */
+.lb-howto__heading {
+  margin: 0;
+  color: #7f5cc8;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.lb-howto__section .mg-rules {
+  margin-top: 6px;
+}
+
+/* てんとう虫の種類（名前 ／ 動きの特徴 を1行ずつ。名前の幅をそろえる） */
+.lb-kinds {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  margin: 8px 0 0;
+}
+
+.lb-kinds__row {
+  display: contents;
+}
+
+.lb-kinds__name {
+  color: #4e3a86;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.lb-kinds__trait {
+  margin: 0;
+}
+
+.lb-kinds__traitPart {
+  display: inline-block;
+}
+
+/* とても細い画面（iPhone SE 第1世代など）では、名前の右に「平らだとゆっくり、」が入りきらないので、
+   名前の下に説明を出す（説明は少し右へずらして、どの名前のものか分かるように） */
+@media (max-width: 360px) {
+  .lb-kinds {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .lb-kinds__trait {
+    margin-bottom: 6px;
+    padding-left: 1.6em;
+  }
+}
+
+.lb-kinds__name,
+.lb-kinds__trait {
+  font-size: 15px;
+  line-height: 1.6;
 }
 
 /* ===== ステージ選び ===== */
@@ -1563,10 +1697,53 @@ onUnmounted(() => {
     padding: 11px 20px;
   }
 
-  /* ステージの説明は、えらんでいるものの高さにする（いちばん長い説明の高さに そろえない）
-     どうせスクロールする画面なので、えらびなおしたときに高さが変わるより、よけいな すき間が無いほうを とる */
-  .lb-summary--hidden {
+  /* ステージ選びのまわりの あきと、ステージの説明の行間・余白を つめる
+     iPhone SE（375×667）で、説明が3行のステージ6・10・エンドレスを えらぶと、わずかに入りきらず、まん中がスクロールしていたため
+     （iPhone の文字で少し高くなっても入るよう、15px ほど ゆとりを残してある） */
+  .lb-stages {
+    margin-top: 12px;
+  }
+
+  .lb-endless {
+    margin-top: 8px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .lb-summaries {
+    margin-top: 8px;
+  }
+
+  .lb-summary {
+    gap: 0;
+    padding: 6px 12px;
+    line-height: 1.55;
+  }
+}
+
+/* ===== とても背の低いスマホ（iPhone SE を Safari で開いて、アドレスバーとツールバーが出ているとき 375×548 など） =====
+   ステージ選びを、スクロールせずに1画面に収める（上の背の低いスマホの指定に、さらに足す）
+   ・ねらい（.mg-lead）は出さない（あそびかたの いちばん上で見られる）
+   ・ステージの説明の見出し（「ステージ 10」など）は出さない（えらんでいるボタンの色で分かる）
+   ・ステージのボタンを ひとまわり小さく（48px → 42px）、見出しとのあいだも少し つめる
+   ふつうの並びは、高さ 650px ほど無いと入りきらない（説明が3行のステージ6・10・エンドレス）ので、ゆとりを見て 660px までにする */
+@media (max-width: 700px) and (max-height: 660px) {
+  .mg-lead {
     display: none;
+  }
+
+  .lb-summary__title {
+    display: none;
+  }
+
+  /* 見出しの下と、ステージのボタンの上の あき（2つは重なるので、どちらも小さくする） */
+  .place-card__title {
+    margin-bottom: 4px;
+  }
+
+  .lb-stages {
+    grid-template-columns: repeat(5, minmax(0, 42px));
+    margin-top: 6px;
   }
 }
 
