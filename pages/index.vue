@@ -3522,7 +3522,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'dog'" class="scene" :class="sceneClass" key="dog">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="犬" />
+                <NoImage class="place-card__banner" ratio="2660 / 591" src="/images/events/event-dog-appears.webp" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
