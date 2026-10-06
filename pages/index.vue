@@ -76,7 +76,7 @@ import { secretPathSunlightTotal } from '~/data/secretPath';
 import { buildMinigameUnlockPhrases, minigames } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import { maxSnackCount, snackBagImage, snacks } from '~/data/snacks';
-import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration } from '~/data/tantrum';
+import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDuration, tantrumBannerImages, tantrumBannerRatio } from '~/data/tantrum';
 
 /* 画面は4段階あり、この3つの組み合わせで決まる
 
@@ -3063,7 +3063,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'acornArea'" class="scene" :class="sceneClass" key="acornArea">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="どんぐりの木" />
+                <NoImage class="place-card__banner" :ratio="placeBannerImages.acornArea.ratio" :src="placeBannerImages.acornArea.src" />
 
                 <h2 class="place-card__title">どんぐりの木</h2>
 
@@ -3137,7 +3137,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'grassArea'" class="scene" :class="sceneClass" key="grassArea">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="芝生広場" />
+                <NoImage class="place-card__banner" :ratio="placeBannerImages.grassArea.ratio" :src="placeBannerImages.grassArea.src" />
 
                 <h2 class="place-card__title">芝生広場</h2>
 
@@ -3383,9 +3383,9 @@ onUnmounted(() => {
                    見た目と動きでクラスを分けているので、いやいやが終わると、色はそのままで動きだけが止まる
                    （付け外しは isTantrum で見る。終わっても画面は 'tantrum' のままなので） -->
               <article class="place-card place-card--tantrum" :class="{ 'place-card--tantrum-active': isTantrum, 'place-card--tantrum-big': tantrumLevel === 3 }">
-                <!-- いやいやのこうちゃんの絵（激しさで絵を変えられるよう、名前にもレベルを出す）
+                <!-- いやいやのこうちゃんの絵（激しさ＝レベルごとに絵が変わる。data/tantrum.ts の tantrumBannerImages）
                      レベルが上がるのは結果が出ているときなので、ほかのカードとちがい、結果が出ても隠さない -->
-                <NoImage class="place-card__banner" ratio="3 / 1" :label="`いやいやタイム（レベル${tantrumLevel}）`" />
+                <NoImage class="place-card__banner" :ratio="tantrumBannerRatio" :src="tantrumBannerImages[tantrumLevel]" />
 
                 <!-- 見出しは、いやいやの激しさで変わる（数字の「Lv」は出さない） -->
                 <h2 class="place-card__title">

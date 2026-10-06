@@ -31,6 +31,8 @@ export const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
 export const placeBannerImages = {
   slide: { src: '/images/commands/play-slide.webp', ratio: '2660 / 591' },
   sandbox: { src: '/images/commands/play-sandbox.webp', ratio: '2660 / 591' },
+  acornArea: { src: '/images/commands/play-acorn-tree.webp', ratio: '2164 / 727' },
+  grassArea: { src: '/images/commands/play-lawn.webp', ratio: '2172 / 724' },
   restArea: { src: '/images/commands/break.webp', ratio: '2660 / 591' },
 } satisfies Partial<Record<GameEvent, { src: string; ratio: string }>>;
 
