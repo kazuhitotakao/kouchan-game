@@ -10,7 +10,7 @@ import type { Directive } from 'vue';
 
 import { minigames } from '~/data/minigames';
 import { parkMapImages } from '~/data/parkMap';
-import { itemImages } from '~/data/places';
+import { itemImages, placeBannerImages } from '~/data/places';
 import { secretPathItemImages, secretPathPlayerImages } from '~/data/secretPath';
 import { snackBagImage, snacks } from '~/data/snacks';
 
@@ -49,7 +49,7 @@ export async function preloadGameImages(): Promise<void> {
   const parkMapImage = isSp ? parkMapImages.sp : parkMapImages.pc;
 
   await preloadImages([...snacks.map((snack) => snack.image), snackBagImage, parkMapImage]);
-  await preloadImages(Object.values(itemImages));
+  await preloadImages([...Object.values(placeBannerImages).map((banner) => banner.src), ...Object.values(itemImages)]);
   await preloadSecretPathImages();
 }
 
