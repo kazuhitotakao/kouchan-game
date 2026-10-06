@@ -14,7 +14,9 @@
 
      ・← → … 同じ高さ（または いちばん近い高さ）のとなりへ
      ・↑ ↓ … できるだけ同じ列の中で
-     ・おうちへ帰る へは、きゅうけい・すべり台 の ↓ からだけ行ける（まちがえてすぐ選ばないように）
+     ・おうちへ帰る へは、芝生広場 の ↓・きゅうけい の →・すべり台 の ← から行く（きゅうけい・すべり台 の ↓ では行かない）
+     ・おうちへ帰る の ↑ は 芝生広場 へ（きゅうけい・すべり台 へは ← → で戻る）
+     ・秘密の小道 と どんぐりの木・芝生広場・池 は ↑ ↓ で行き来する（秘密の小道の ↓ は、来たほうへ戻る）
 
    ■ 書きかた
      場所ごとに、向き → 移動先の候補 を書く
@@ -38,16 +40,18 @@ export const parkMapStartPlace: GameEvent = 'grassArea';
 export const parkMapMoves: Record<ParkMapSpot, Partial<Record<ParkMapDirection, ParkMapSpot[]>>> = {
   /* 左上 */
   acornArea: {
-    // 右どなりの芝生広場へ（秘密の小道から来たときだけ、秘密の小道へ戻る → parkMapReturnMoves）
-    right: ['grassArea', 'secretSpot'],
+    // 右どなりの芝生広場へ（秘密の小道へは ↑ で行く）
+    right: ['grassArea'],
+    // 秘密の小道へ（まだ出ていないときは動かない）
+    up: ['secretSpot'],
     down: ['sandbox'],
   },
 
   /* 右上 */
   secretSpot: {
     left: ['acornArea'],
-    // 芝生広場の ↑ で来るので、↓ で芝生広場へ戻る
-    down: ['grassArea'],
+    // どんぐりの木・芝生広場・池 の ↑ で来るので、↓ で来たほうへ戻る（わからないときは 芝生広場 → parkMapReturnMoves）
+    down: ['grassArea', 'acornArea', 'pond'],
   },
 
   /* まん中 */
@@ -57,7 +61,8 @@ export const parkMapMoves: Record<ParkMapSpot, Partial<Record<ParkMapDirection, 
     // ふだんは砂場へ（どんぐりの木から来たときだけ、来たほうへ戻る）
     left: ['sandbox', 'acornArea'],
     right: ['pond'],
-    // ↓ には何も書かない（おうちへ帰る を、まちがえてすぐ選ばないように）
+    // すぐ下の おうちへ帰る へ
+    down: ['goal'],
   },
 
   /* 左の中ほど */
@@ -78,25 +83,23 @@ export const parkMapMoves: Record<ParkMapSpot, Partial<Record<ParkMapDirection, 
   /* 左下 */
   restArea: {
     up: ['sandbox'],
-    // 同じ段の右はしの すべり台へ
-    right: ['slide'],
-    // すぐ下の段の おうちへ帰る へ
-    down: ['goal'],
+    // 右どなりの おうちへ帰る へ（すべり台へは、おうちへ帰る をはさんで行く）
+    right: ['goal'],
+    // ↓ には何も書かない（おうちへ帰る へは、となりどうしなので ← → で行く）
   },
 
   /* 右下 */
   slide: {
     up: ['pond'],
-    // 同じ段の左はしの きゅうけいへ
-    left: ['restArea'],
-    // すぐ下の段の おうちへ帰る へ
-    down: ['goal'],
+    // 左どなりの おうちへ帰る へ（きゅうけいへは、おうちへ帰る をはさんで行く）
+    left: ['goal'],
+    // ↓ には何も書かない（おうちへ帰る へは、となりどうしなので ← → で行く）
   },
 
   /* いちばん下のまん中（おうちへ帰る ＝ ゴール。門のすぐ上） */
   goal: {
-    // 来たほうへ戻る（わからないときは きゅうけい へ）
-    up: ['restArea', 'slide'],
+    // すぐ上の芝生広場へ
+    up: ['grassArea'],
     left: ['restArea'],
     right: ['slide'],
   },
@@ -104,15 +107,13 @@ export const parkMapMoves: Record<ParkMapSpot, Partial<Record<ParkMapDirection, 
 
 /* 「来たほうへ戻る」向き
    ここに書いた場所・向きは、候補の中に「直前にいた場所」があれば、1つ目より先にそこへ戻る
-   例）すべり台 →↓→ おうちへ帰る →↑→ すべり台
+   例）池 →↑→ 秘密の小道 →↓→ 池
    （直前にいた場所は useKeyboardControls.ts の moveEntranceOnMap() が覚える） */
 export const parkMapReturnMoves: Partial<Record<ParkMapSpot, ParkMapDirection[]>> = {
-  // どんぐりの木の → … ふだんは芝生広場。秘密の小道から ← で来たときだけ、秘密の小道へ戻る
-  acornArea: ['right'],
   // 芝生広場の ← … どんぐりの木／砂場 のうち、来たほうへ戻る（どちらでもなければ 砂場）
   grassArea: ['left'],
-  // おうちへ帰る の ↑ … きゅうけい／すべり台 のうち、来たほうへ戻る（どちらでもなければ きゅうけい）
-  goal: ['up'],
+  // 秘密の小道の ↓ … どんぐりの木／芝生広場／池 のうち、来たほうへ戻る（どれでもなければ 芝生広場）
+  secretSpot: ['down'],
 };
 
 /* 公園入口の地図の絵（PC用は横長、スマホ用は 3:4。画面の幅が spMaxWidth 以下のときにスマホ用）
