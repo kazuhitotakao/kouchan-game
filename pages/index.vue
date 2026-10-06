@@ -69,7 +69,7 @@ import type {
 /* ゲーム中に変わらない設定データ（読むだけ。プレイ中に変わる値は、それぞれの composable が持つ） */
 import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
 import { parkMapImages, parkMapStartPlace } from '~/data/parkMap';
-import { normalPlaceEvents, placeItems, placeSelectionIndexes } from '~/data/places';
+import { normalPlaceEvents, placeBannerImages, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
 import type { PlaceActionDefinition } from '~/data/placeActions';
 import { secretPathSunlightTotal } from '~/data/secretPath';
@@ -2943,7 +2943,7 @@ onUnmounted(() => {
             <section class="stage">
               <article class="place-card place-card--rest">
                 <!-- 場所の絵（カードのいちばん上のバナー。どの場面も同じ大きさの枠。結果が出ているあいだは隠す → base.css / responsive.css） -->
-                <NoImage class="place-card__banner" ratio="3 / 1" label="ひとやすみ" />
+                <NoImage class="place-card__banner" :ratio="placeBannerImages.restArea.ratio" :src="placeBannerImages.restArea.src" />
 
                 <h2 class="place-card__title">ひとやすみ</h2>
 
@@ -2988,7 +2988,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'slide'" class="scene" :class="sceneClass" key="slide">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="すべり台" />
+                <NoImage class="place-card__banner" :ratio="placeBannerImages.slide.ratio" :src="placeBannerImages.slide.src" />
 
                 <h2 class="place-card__title">すべり台</h2>
 
@@ -3026,7 +3026,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'sandbox'" class="scene" :class="sceneClass" key="sandbox">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="砂場" />
+                <NoImage class="place-card__banner" :ratio="placeBannerImages.sandbox.ratio" :src="placeBannerImages.sandbox.src" />
 
                 <h2 class="place-card__title">砂場</h2>
 
@@ -3522,7 +3522,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'dog'" class="scene" :class="sceneClass" key="dog">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="犬" />
+                <NoImage class="place-card__banner" ratio="2660 / 591" src="/images/events/event-dog-appears.webp" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 

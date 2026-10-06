@@ -25,6 +25,15 @@ export const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
   secretSpot: 5,
 };
 
+/* 場所の絵（カードのいちばん上のバナー。場面の名前 → 画像のパスと縦横比）
+   ratio は画像の縦横比に合わせる（ちがうと、左右か上下が切れる）
+   ※ ここに無い場面は、仮の枠（NO IMAGE）のまま */
+export const placeBannerImages = {
+  slide: { src: '/images/commands/play-slide.webp', ratio: '2660 / 591' },
+  sandbox: { src: '/images/commands/play-sandbox.webp', ratio: '2660 / 591' },
+  restArea: { src: '/images/commands/break.webp', ratio: '2660 / 591' },
+} satisfies Partial<Record<GameEvent, { src: string; ratio: string }>>;
+
 /* 場所ごとに見つかるもの（1か所に1種類） */
 export const placeItems: Record<ItemPlace, string> = {
   slide: 'ちいさな松ぼっくり',
