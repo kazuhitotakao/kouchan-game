@@ -1,9 +1,8 @@
 /* ============================================================
-   ミニゲーム「枝の上のてんとう虫」の ご褒美「うた入り てんとうむしのよりみち」の解放のしくみ
+   ミニゲーム「枝の上のてんとう虫」の ご褒美「うた入り てんとうむしのよりみち」の曲の情報と、解放のしくみ
 
-   エンドレス「ずっと ここにいて！」で 60秒たえると解放する（utils/secretVocalSong.ts と同じ考えかた）
-   ※ うた入りの曲は、まだ無い。いまは「解放したかどうか」を保存するだけ
-     曲ができたら、曲名・音源をここに足して、サウンドトラックの 11 と、結果の画面の知らせを出す
+   エンドレス「ずっと ここにいて！」で 60秒たえると、サウンドトラックの 11 で聴けるようになる
+   ミニゲームとサウンドトラックの2つのページで使うので、ここにまとめてある（utils/secretVocalSong.ts と同じ考えかた）
 
    ■ 保存するのは「解放したかどうか」だけ（一度解放したら戻さないので、false に戻す関数は わざと作っていない）
      記録（何秒たえたか）は、ミニゲームの自己ベスト endlessBestMs をそのまま使う（→ utils/minigameStorage.ts）
@@ -14,6 +13,12 @@ import { loadMinigameBest } from '~/utils/minigameStorage';
 
 /* エンドレスで、何ミリ秒たえたら解放するか（自己ベスト endlessBestMs と同じ、ミリ秒でくらべる） */
 export const ladybugVocalSongUnlockMs = 60000;
+
+/* 曲名（サウンドトラックと、ミニゲームの解放の知らせの両方で使う） */
+export const ladybugVocalSongTitle = 'てんとうむしのよりみち ～うた入り～';
+
+/* 音源（public/audio/ladybug-detour-vocal-bgm.mp3） */
+export const ladybugVocalSongSrc = '/audio/ladybug-detour-vocal-bgm.mp3';
 
 /* 解放したかどうかを保存しておく名前（localStorage のキー。ほかの保存の名前とぶつからないように） */
 const ladybugVocalSongUnlockedStorageKey = 'kouchan-game-ladybug-vocal-song-unlocked';
@@ -43,7 +48,7 @@ export function saveLadybugVocalSongUnlocked() {
   try {
     localStorage.setItem(ladybugVocalSongUnlockedStorageKey, 'true');
   } catch {
-    // ブラウザの設定で保存できないことがある（次に開いたとき、自己ベストから もう一度 解放される）
+    // ブラウザの設定で保存できないことがある（そのプレイでは知らせが出る。次に開いたときは、自己ベストから もう一度 解放される）
   }
 }
 

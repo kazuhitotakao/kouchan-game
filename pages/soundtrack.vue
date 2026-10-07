@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch, type Ref } from
 import { onBeforeRouteLeave } from 'vue-router';
 import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/sPlusSong';
 import { secretVocalSongSrc, secretVocalSongTitle, unlockSecretVocalSongFromSavedBest } from '~/utils/secretVocalSong';
-import { unlockLadybugVocalSongFromSavedBest } from '~/utils/ladybugVocalSong';
+import { ladybugVocalSongSrc, ladybugVocalSongTitle, unlockLadybugVocalSongFromSavedBest } from '~/utils/ladybugVocalSong';
 import { loadUnlockedMinigames } from '~/utils/minigameStorage';
 
 import { sPlusSongLyrics, type LyricLine } from '~/data/sPlusSongLyrics';
@@ -118,6 +118,7 @@ const baseTracks: SoundtrackTrack[] = [
    ・09 … ミニゲーム「どこまで行ける？」で300mまで行くと解放（→ utils/secretVocalSong.ts）
    ・10 … 本編の とつぜんのできごとで、テントウムシを見つけると解放
           （ミニゲーム「枝の上のてんとう虫」と同じ条件なので、ミニゲームの解放の記録をそのまま見る → utils/minigameStorage.ts）
+   ・11 … ミニゲーム「枝の上のてんとう虫」の「ずっと ここにいて！」で60秒たえると解放（→ utils/ladybugVocalSong.ts）
    保存場所は、それぞれのページと同じものを使う（ずれると「取ったのに聴けない」になるため）
 
    ■ 「再生できる曲」と「ロック表示」を分けてある
@@ -160,10 +161,25 @@ const ladybugDetourTrack: SoundtrackTrack = {
   credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
 };
 
+/* ミニゲーム「枝の上のてんとう虫」でずっと流れている曲（10 てんとうむしのよりみち）に、うたを足したもの */
+const ladybugVocalBonusTrack: SoundtrackTrack = {
+  id: 11,
+  title: ladybugVocalSongTitle,
+  description: 'ずっと ここにいて！|60秒達成の特別BGM',
+  src: ladybugVocalSongSrc,
+  // 音量と制作情報は、通常版（10）と同じ
+  volume: 0.4,
+  credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
+};
+
 /* ボーナストラックを解放済みか（onMounted で localStorage から読む。サーバー側では読めないため） */
 const hasUnlockedSPlusSong = ref(false);
 const hasUnlockedSecretVocalSong = ref(false);
 const hasUnlockedLadybugDetour = ref(false);
+const hasUnlockedLadybugVocalSong = ref(false);
+
+/* ミニゲーム「どこまで行ける？」を解放済みか（09 のロック表示の出しわけに使う。てんとう虫のほうは 10 の解放と同じ） */
+const hasUnlockedSecretPathMinigame = ref(false);
 
 /* 再生できる曲の一覧（解放したボーナストラックを、番号の順に うしろへ足す）
 
@@ -174,9 +190,14 @@ const tracks = computed(() => [
   ...(hasUnlockedSPlusSong.value ? [sPlusBonusTrack] : []),
   ...(hasUnlockedSecretVocalSong.value ? [secretVocalBonusTrack] : []),
   ...(hasUnlockedLadybugDetour.value ? [ladybugDetourTrack] : []),
+  ...(hasUnlockedLadybugVocalSong.value ? [ladybugVocalBonusTrack] : []),
 ]);
 
-/* まだ解放していない曲のぶんだけ出す、ロック表示の説明（曲名は出さず、解放のしかただけ） */
+/* まだ解放していない曲のぶんだけ出す、ロック表示の説明（曲名は出さず、解放のしかただけ）
+
+   ミニゲームのご褒美（09・11）は、そのミニゲームを まだ解放していないうちは、ミニゲームの名前を出さない（先のネタばれになるため）
+   ・09 … ミニゲームの一覧の「？？？」カードと同じヒント（data/minigames.ts の lockedHint）
+   ・11 … 10（てんとう虫を見つける）の先にあることだけを伝える */
 const lockedTrackHints = computed(() => {
   const hints: string[] = [];
 
@@ -185,11 +206,15 @@ const lockedTrackHints = computed(() => {
   }
 
   if (!hasUnlockedSecretVocalSong.value) {
-    hints.push('ミニゲーム|「どこまで行ける？」で|300m達成すると解放');
+    hints.push(hasUnlockedSecretPathMinigame.value ? 'ミニゲーム|「どこまで行ける？」で|300m達成すると解放' : '公園のどこかに、|秘密の小道があるみたい…');
   }
 
   if (!hasUnlockedLadybugDetour.value) {
     hints.push('公園で|てんとう虫を見つけると解放');
+  }
+
+  if (!hasUnlockedLadybugVocalSong.value) {
+    hints.push(hasUnlockedLadybugDetour.value ? 'ミニゲーム|「枝の上のてんとう虫」の|ずっと ここにいて！で|60秒たえると解放' : 'てんとう虫と|もっと仲良くなると解放');
   }
 
   return hints;
@@ -2366,11 +2391,12 @@ onMounted(() => {
      ・08 … S+ランクを取ったという記録は、解放の保存そのものしか無いので、それを読むだけ
      ・09 … 「どこまで行ける？」の自己ベストが 300m 以上なら解放
      ・10 … ミニゲーム「枝の上のてんとう虫」の解放の記録を読む
-     ・うた入り「てんとうむしのよりみち」（まだ曲は無い）… エンドレスの自己ベストが 60秒以上なら、解放の保存だけしておく */
+     ・11 … 「枝の上のてんとう虫」のエンドレスの自己ベストが 60秒以上なら解放 */
   hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
   hasUnlockedSecretVocalSong.value = unlockSecretVocalSongFromSavedBest();
   hasUnlockedLadybugDetour.value = loadUnlockedMinigames().includes('ladybug-balance');
-  unlockLadybugVocalSongFromSavedBest();
+  hasUnlockedSecretPathMinigame.value = loadUnlockedMinigames().includes('secret-path');
+  hasUnlockedLadybugVocalSong.value = unlockLadybugVocalSongFromSavedBest();
 
   /* 前回の曲・再生位置と、曲の一覧のスクロール位置を戻す（順番が大事）
      ① ボーナストラックの解放（すぐ上）… ここで一覧に何曲あるかが決まる

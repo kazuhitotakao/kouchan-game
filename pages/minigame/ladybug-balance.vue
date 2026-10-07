@@ -40,7 +40,13 @@ import { minigames, splitMinigameTitle } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
-import { judgeLadybugVocalSongUnlock, saveLadybugVocalSongUnlocked, unlockLadybugVocalSongFromSavedBest } from '~/utils/ladybugVocalSong';
+import {
+  judgeLadybugVocalSongUnlock,
+  ladybugVocalSongTitle,
+  ladybugVocalSongUnlockMs,
+  saveLadybugVocalSongUnlocked,
+  unlockLadybugVocalSongFromSavedBest,
+} from '~/utils/ladybugVocalSong';
 
 /* このミニゲームの id（URL の /minigame/ladybug-balance と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
 const minigameId: MinigameId = 'ladybug-balance';
@@ -60,7 +66,6 @@ const {
   toggleSound,
   changeSoundVolume,
   playDecisionSound,
-  playItemSound,
   playGoalSound,
   playTantrumSound,
   playCountdownSound,
@@ -104,6 +109,16 @@ const isNewEndlessUnlocked = ref(false);
 const isNewEndlessBest = ref(false);
 const endlessRecordMs = ref(0);
 
+/* ご褒美（うた入りの「てんとうむしのよりみち」）を、このブラウザで解放してあるか（onMounted で読む → utils/ladybugVocalSong.ts） */
+const hasUnlockedLadybugVocalSong = ref(false);
+
+/* このプレイで、はじめて解放したか（結果の画面で「見つけた！」と伝えるためだけに使う） */
+const isNewlyUnlockedLadybugVocalSong = ref(false);
+
+/* 「見つけた！」の文を、折り返してよい区切りごとに分ける（曲名の「～うた入り～」の前と、「を」のあと）
+   「🎁 「てんとうむしのよりみち」「～うた入り～」を」「見つけた！」。せまい画面で、ことばの途中で割れないように */
+const ladybugVocalSongFoundPhrases = [...`🎁 「${ladybugVocalSongTitle}」を`.split(/ (?=～)/), '見つけた！'];
+
 /* 秒の文字（「23.4」。0.1秒きざみで切り捨て） */
 function formatSeconds(ms: number) {
   return (Math.floor(ms / 100) / 10).toFixed(1);
@@ -123,6 +138,7 @@ function clearResultNotices() {
   isNewStageUnlocked.value = false;
   isNewEndlessUnlocked.value = false;
   isNewEndlessBest.value = false;
+  isNewlyUnlockedLadybugVocalSong.value = false;
 }
 
 const {
@@ -181,9 +197,8 @@ const {
     }
   },
   onFailed: () => {
-    playTantrumSound();
-
     if (mode.value !== 'endless') {
+      playTantrumSound();
       return;
     }
 
@@ -195,14 +210,21 @@ const {
       endlessBestMs.value = endlessRecordMs.value;
       saveProgress();
 
-      // 自己ベストを更新したときだけ、キラリン♪
-      playItemSound();
+      // 自己ベストを更新したときは、しょんぼり音ではなく、ステージクリアと同じ成功音「タタターン♪」
+      playGoalSound();
+    } else {
+      playTantrumSound();
     }
 
     /* うた入り「てんとうむしのよりみち」の解放（→ utils/ladybugVocalSong.ts）
-       このプレイで はじめて 60秒たえたときだけ保存する（解放の知らせは、曲を足すときに ここで出す） */
-    if (judgeLadybugVocalSongUnlock(endlessRecordMs.value, false) === 'newlyUnlocked') {
+       このプレイで はじめて 60秒たえたときだけ、保存して結果の画面で知らせる（2回目からは 'alreadyUnlocked' になるので、知らせは1回だけ）
+       音は、自己ベストの成功音「タタターン♪」（60秒たえたら、かならず自己ベストになる）に「ピーン♪」を重ねる */
+    if (judgeLadybugVocalSongUnlock(endlessRecordMs.value, hasUnlockedLadybugVocalSong.value) === 'newlyUnlocked') {
+      hasUnlockedLadybugVocalSong.value = true;
+      isNewlyUnlockedLadybugVocalSong.value = true;
       saveLadybugVocalSongUnlocked();
+
+      playCountdownStartSound();
     }
   },
   onLevelUp: () => {
@@ -574,8 +596,8 @@ onMounted(() => {
   clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(savedBest?.clearedStage) || 0)));
   endlessBestMs.value = Math.max(0, Number(savedBest?.endlessBestMs) || 0);
 
-  // 自己ベストが 60秒以上なら、うた入りの曲を黙って解放済みにする（解放を足す前に たえていた人のため。知らせは出さない）
-  unlockLadybugVocalSongFromSavedBest();
+  // ご褒美を、もう解放してあるか。自己ベストが 60秒以上なら、ここで黙って解放済みにする（ご褒美を足す前に たえていた人のため。知らせは出さない）
+  hasUnlockedLadybugVocalSong.value = unlockLadybugVocalSongFromSavedBest();
 
   // さいごに えらんでいたものを、えらんでおく
   // まだ無い・いまは遊べないものなら、まだクリアしていない いちばん前のステージ（ぜんぶクリアしていたら最後のステージ）
@@ -759,10 +781,27 @@ onUnmounted(() => {
               ステージ <span class="lb-result__stageNumber">{{ stageIndex + 1 }}</span> クリア！
             </p>
             <p v-else class="place-card__flash lb-result__flash lb-result__flash--failed">残念…</p>
-            <p class="mg-text">{{ resultComment }}</p>
+            <!-- うた入りの曲を見つけたときは、ひとことを出さない（「自己ベスト更新！」は札と同じことで、
+                 見つけた知らせのぶんの高さを空けるため。iPhone SE では、結果のカードがフィールドからはみ出していた） -->
+            <p v-if="!isNewlyUnlockedLadybugVocalSong" class="mg-text">{{ resultComment }}</p>
             <p v-if="isNewStageUnlocked" class="lb-unlocked">🔓 ステージ {{ stageIndex + 2 }} が遊べるようになった！</p>
             <p v-if="isNewEndlessUnlocked" class="lb-unlocked">⏱ ずっと ここにいて！が遊べるようになった！</p>
             <p v-if="mode === 'endless' && !isNewEndlessBest && endlessBestMs > 0" class="mg-text lb-record__best">🏆 自己ベスト {{ formatSeconds(endlessBestMs) }}秒</p>
+
+            <!-- ご褒美（エンドレスのときだけ。どこまで行ける？ の結果の画面と同じ）
+                 ・このプレイで解放した … 曲の名前と、どこで聴けるかを伝える
+                 ・まだ解放していない … めざす秒数だけを伝える（何がもらえるかは言わない。もう解放してあるときは何も出さない） -->
+            <template v-if="mode === 'endless'">
+              <p v-if="isNewlyUnlockedLadybugVocalSong" class="lb-reward lb-reward--new">
+                <!-- かたまりのあいだは空白（もとの文の空白。ここでだけ折り返す） -->
+                <template v-for="(phrase, index) in ladybugVocalSongFoundPhrases" :key="phrase">{{ index > 0 ? ' ' : '' }}<span class="lb-reward__phrase">{{ phrase }}</span></template>
+                <span class="lb-reward__note"><span class="lb-reward__phrase">サウンドトラックで</span> <span class="lb-reward__phrase">聴けるようになりました</span></span>
+              </p>
+              <!-- せまい画面では「、」のあとで折り返す（「なにかあるみた｜い…」と、ことばの途中で割れないように） -->
+              <p v-else-if="!hasUnlockedLadybugVocalSong" class="lb-reward lb-reward--locked">
+                <span class="lb-reward__phrase">🔒 {{ ladybugVocalSongUnlockMs / 1000 }}秒 がんばると、</span><wbr /><span class="lb-reward__phrase">なにかあるみたい…</span>
+              </p>
+            </template>
           </article>
         </div>
 
@@ -1462,6 +1501,47 @@ onUnmounted(() => {
   animation: found-in 0.4s ease-out 0.2s backwards;
 }
 
+/* ご褒美の行（どこまで行ける？ の .mg-reward と同じ見た目）
+   ・--locked … まだ解放していない。ひかえめに置く
+   ・--new    … このプレイで解放した。めったに出ない知らせなので、いちばん目立たせる（.lb-unlocked と同じ紫） */
+.lb-reward {
+  box-sizing: border-box;
+  margin: 12px 0 0;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.lb-reward--locked {
+  background: #fff;
+  box-shadow: inset 0 0 0 2px #e6dbfa;
+  color: #7f6aa8;
+}
+
+.lb-reward--new {
+  background: linear-gradient(180deg, #8f6ad4 0%, #7a54c4 100%);
+  box-shadow: 0 4px 12px rgb(122 84 196 / 30%);
+  color: #fff;
+  font-size: 16px;
+  animation: found-in 0.4s ease-out 0.2s backwards;
+}
+
+/* 折り返さないかたまり（あいだの <wbr>・空白でだけ折り返す） */
+.lb-reward__phrase {
+  display: inline-block;
+}
+
+/* 「サウンドトラックで 聴けるようになりました」（曲名の下に、少し小さく） */
+.lb-reward__note {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  opacity: 0.92;
+}
+
 /* 結果の画面のボタン（2列。横にならべた2つは、同じ幅・同じ高さになる） */
 .lb-result-actions {
   container-type: inline-size; /* スマホ幅で、文字の大きさを この並びの幅から決める（下の cqi） */
@@ -1646,10 +1726,15 @@ onUnmounted(() => {
     line-height: 1.6;
   }
 
-  .lb-result .lb-unlocked {
+  .lb-result .lb-unlocked,
+  .lb-result .lb-reward {
     margin-top: 8px;
     padding: 6px 12px;
     font-size: 14px;
+  }
+
+  .lb-result .lb-reward__note {
+    font-size: 13px;
   }
 
   .lb-result-actions {
