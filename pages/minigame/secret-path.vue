@@ -44,10 +44,10 @@ import type { GameEvent, StatusChanges } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
 import {
   judgeSecretVocalSongUnlock,
-  loadHasUnlockedSecretVocalSong,
   saveSecretVocalSongUnlocked,
   secretVocalSongTitle,
   secretVocalSongUnlockDistance,
+  unlockSecretVocalSongFromSavedBest,
 } from '~/utils/secretVocalSong';
 
 // 絵の先読みと、中の絵が表示できるようになってから箱ごと出す目印（→ utils/imagePreload.ts）
@@ -547,8 +547,9 @@ onMounted(() => {
 
   unlockState.value = loadUnlockedMinigames().includes(minigameId) ? 'unlocked' : 'locked';
 
-  // ご褒美（うた入りの「こもれびの奥で」）を、もう解放してあるか（→ utils/secretVocalSong.ts）
-  hasUnlockedSecretVocalSong.value = loadHasUnlockedSecretVocalSong();
+  /* ご褒美（うた入りの「こもれびの奥で」）を、もう解放してあるか（→ utils/secretVocalSong.ts）
+     自己ベストが 300m 以上なら、ここで黙って解放済みにする（ご褒美を足す前に行っていた人のため。知らせは出さない） */
+  hasUnlockedSecretVocalSong.value = unlockSecretVocalSongFromSavedBest();
 
   // 保存してある自己ベストを、数に直して読む（まだ遊んでいない・こわれた記録は 0）
   const savedBest = loadMinigameBest(minigameId);

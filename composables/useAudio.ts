@@ -3,7 +3,7 @@
 
    ■ ここがやること
      ・効果音（Web Audio API でその場で作る音・録音した音声ファイル：救急車・犬・噴水）
-     ・BGM 7本（公園1・公園2・タイトル・いやいや・リザルト・GAME OVER・こもれびの広場）
+     ・BGM 8本（公園1・公園2・タイトル・いやいや・リザルト・GAME OVER・こもれびの広場・てんとう虫のミニゲーム）
      ・BGMのフェードイン、「少し待ってから鳴らす」予約
      ・音量スライダーとミュート、その localStorage への保存と読みこみ
      ・ページを離れるときの後片づけ
@@ -54,10 +54,13 @@ export type UseAudioOptions = {
 
   /* 決まったランク（S+ランクのときだけ、うた入りのリザルトBGMにする） */
   endingRank: Ref<string>;
+
+  /* ミニゲーム「枝の上のてんとう虫」のページか（サウンドをONに戻したとき、てんとう虫のBGMを鳴らす） */
+  isLadybugMinigame?: boolean;
 };
 
 export function useAudio(options: UseAudioOptions) {
-  const { titleEntered, gameStarted, currentEvent, isTantrum, isResultScene, currentMinutes, endingRank } = options;
+  const { titleEntered, gameStarted, currentEvent, isTantrum, isResultScene, currentMinutes, endingRank, isLadybugMinigame = false } = options;
 
   /* ============================================================
      効果音（Web Audio API）
@@ -127,10 +130,13 @@ export function useAudio(options: UseAudioOptions) {
          （いやいやの途中でゴール・GAME OVER になると、isTantrum が true のまま残っていることがあるため）
        ・いやいや関連は、公園BGMより先に置く（いやいや画面なのに公園BGMが鳴ってしまうため）
        ・「いやいや発生の結果を読んでいる最中」（場所はそのまま、isTantrum だけ true）は、わざと無音なので何も鳴らさない
-       ・秘密の場所・秘密の小道は、公園BGMより先に置く（公園BGMが鳴って、2曲が重なってしまうため） */
+       ・秘密の場所・秘密の小道は、公園BGMより先に置く（公園BGMが鳴って、2曲が重なってしまうため）
+       ・てんとう虫のミニゲームは、いちばん先に置く（ほかの条件は、本編の画面を見わけるためのもののため） */
   function applySoundEnabledChange() {
     if (soundEnabled.value) {
-      if (titleEntered.value && !gameStarted.value) {
+      if (isLadybugMinigame) {
+        resumeLadybugBgm();
+      } else if (titleEntered.value && !gameStarted.value) {
         resumeTitleBgm();
       } else if (gameStarted.value && currentEvent.value === 'goal') {
         resumeResultBgm();
@@ -154,6 +160,7 @@ export function useAudio(options: UseAudioOptions) {
       pauseTantrumBgm();
       pauseResultBgm();
       pauseGameOverBgm();
+      pauseLadybugBgm();
     }
 
     if (!import.meta.client) {
@@ -738,6 +745,8 @@ export function useAudio(options: UseAudioOptions) {
   const gameOverBgmVolume = 0.17;
 
   const secretBgmVolume = 0.16;
+
+  const ladybugBgmVolume = 0.16;
 
   /* 公園BGM（null は「まだ作っていない」）
      ※ ここで new Audio() をしない（サーバー側には Audio が無いため） */
@@ -1937,6 +1946,147 @@ export function useAudio(options: UseAudioOptions) {
   }
 
   /* ============================================================
+     ミニゲーム「枝の上のてんとう虫」のBGM（作りは公園BGMと同じ）
+
+     てんとう虫のミニゲームのページにいるあいだ、ステージ・エンドレスのどちらでも同じ曲を鳴らす
+     ============================================================ */
+
+  let ladybugBgm: GameAudio | null = null;
+
+  /* てんとう虫のBGMを用意して返す（ここでは soundEnabled を見ない。OFFにした瞬間に止めるためにも使うため） */
+  function getLadybugBgm() {
+    if (!import.meta.client) {
+      return null;
+    }
+
+    try {
+      if (!ladybugBgm) {
+        ladybugBgm = createGameAudio('/audio/ladybug-detour-bgm.mp3', getAudioContext);
+
+        ladybugBgm.loop = true;
+
+        setElementVolume(ladybugBgm, getSoundVolume(ladybugBgmVolume), getAudioContext);
+      }
+
+      return ladybugBgm;
+    } catch {
+      // BGMが使えない環境でも、ゲームは続けられるようにする
+      return null;
+    }
+  }
+
+  /* てんとう虫のBGMを「最初から」再生する */
+  function playLadybugBgm() {
+    // getLadybugBgm() より先に見て、OFFのあいだは mp3 の読み込みを起こさない
+    if (!soundEnabled.value) {
+      return;
+    }
+
+    const bgm = getLadybugBgm();
+
+    if (!bgm) {
+      return;
+    }
+
+    try {
+      bgm.currentTime = 0;
+
+      startBgmFadeIn(bgm, ladybugBgmVolume);
+
+      cancelElementPause(bgm);
+      bgm.play().catch(() => {});
+    } catch {
+      // BGMが鳴らなくても、ゲームは止めない
+    }
+  }
+
+  /* てんとう虫のBGMを鳴らしはじめるまでの待ち時間（ミリ秒。公園BGMと同じ） */
+  const ladybugBgmStartDelay = 700;
+
+  let ladybugBgmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /* てんとう虫のBGMを「少し待ってから」最初から鳴らす（待たせるのは音だけで、画面はすぐ出る）
+     ページを離れるときは stopLadybugBgm() か cleanupAudio() が予約を取り消すので、ここでは画面を見なくてよい */
+  function playLadybugBgmSoon() {
+    cancelLadybugBgmStart();
+
+    if (!import.meta.client) {
+      return;
+    }
+
+    preloadBgmWhileWaiting(getLadybugBgm);
+
+    ladybugBgmTimer = setTimeout(() => {
+      ladybugBgmTimer = null;
+
+      playLadybugBgm();
+    }, ladybugBgmStartDelay);
+  }
+
+  function cancelLadybugBgmStart() {
+    if (ladybugBgmTimer === null) {
+      return;
+    }
+
+    clearTimeout(ladybugBgmTimer);
+    ladybugBgmTimer = null;
+  }
+
+  /* てんとう虫のBGMを「続きから」再生する（サウンドをONに戻したとき・直接開いて「はじめる」を押したとき用）
+     OFFのまま開いていたときは、ここで初めて作るので、先頭から鳴る */
+  function resumeLadybugBgm() {
+    if (!soundEnabled.value) {
+      return;
+    }
+
+    const bgm = getLadybugBgm();
+
+    if (!bgm) {
+      return;
+    }
+
+    try {
+      cancelElementPause(bgm);
+      bgm.play().catch(() => {});
+    } catch {
+      // 何もしない
+    }
+  }
+
+  /* てんとう虫のBGMを一時停止する（どこまで再生したかは覚えたまま） */
+  function pauseLadybugBgm() {
+    cancelBgmFade();
+
+    if (!ladybugBgm) {
+      return;
+    }
+
+    try {
+      pauseElement(ladybugBgm);
+    } catch {
+      // 何もしない
+    }
+  }
+
+  /* てんとう虫のBGMを完全に止める（次に開いたときは、また先頭から） */
+  function stopLadybugBgm() {
+    // 「あとで鳴らす」の予約も取り消す（開いた直後に離れたときは、予約だけある状態のため）
+    cancelLadybugBgmStart();
+
+    cancelBgmFade();
+
+    if (!ladybugBgm) {
+      return;
+    }
+
+    try {
+      pauseElement(ladybugBgm, { rewind: true });
+    } catch {
+      // 何もしない
+    }
+  }
+
+  /* ============================================================
      音量（スライダー）を、実際の音へ反映する
      ============================================================ */
 
@@ -1955,6 +2105,7 @@ export function useAudio(options: UseAudioOptions) {
       [resultBgm, resultBgmVolume],
       [gameOverBgm, gameOverBgmVolume],
       [secretBgm, secretBgmVolume],
+      [ladybugBgm, ladybugBgmVolume],
     ];
 
     for (const [bgm, baseVolume] of bgmList) {
@@ -2054,7 +2205,7 @@ export function useAudio(options: UseAudioOptions) {
     // フェードインの途中なら、やめて音量を戻す（戻ってきたとき、小さい音のままにならないように）
     cancelBgmFade();
 
-    const bgmList = [titleBgm, parkBgm, parkBgm2, secretBgm, tantrumBgm, resultBgm, gameOverBgm];
+    const bgmList = [titleBgm, parkBgm, parkBgm2, secretBgm, tantrumBgm, resultBgm, gameOverBgm, ladybugBgm];
 
     for (const bgm of bgmList) {
       // まだ作っていない曲・止まっている曲・止めている途中の曲は、さわらない
@@ -2215,6 +2366,7 @@ export function useAudio(options: UseAudioOptions) {
     pauseTantrumBgm();
     pauseResultBgm();
     pauseGameOverBgm();
+    pauseLadybugBgm();
 
     // 「あとで鳴らす」の予約とフェードインも止める（残っていると、別のページで鳴りだしてしまう）
     cancelTitleBgmStart();
@@ -2223,6 +2375,7 @@ export function useAudio(options: UseAudioOptions) {
     cancelResultBgmStart();
     cancelGameOverBgmStart();
     cancelTantrumBgmStart();
+    cancelLadybugBgmStart();
     cancelFileSound();
     cancelBgmFade();
 
@@ -2244,7 +2397,7 @@ export function useAudio(options: UseAudioOptions) {
       }
     }
 
-    const pageAudios = [titleBgm, parkBgm, parkBgm2, secretBgm, tantrumBgm, resultBgm, gameOverBgm, ...fileSounds];
+    const pageAudios = [titleBgm, parkBgm, parkBgm2, secretBgm, tantrumBgm, resultBgm, gameOverBgm, ladybugBgm, ...fileSounds];
 
     for (const audio of pageAudios) {
       if (audio) {
@@ -2277,7 +2430,6 @@ export function useAudio(options: UseAudioOptions) {
     /* ===== 公園のBGM ===== */
     playParkBgmSoon,
     stopParkBgm,
-    resumeParkBgm, // ミニゲーム「枝の上のてんとう虫」で、開いたときに鳴らせなかった曲を「はじめる」で鳴らす
     switchParkBgmForCurrentTime,
 
     /* 10:30を過ぎたか（公園入口の文章の出しわけにも使う → parkEntranceText） */
@@ -2287,7 +2439,6 @@ export function useAudio(options: UseAudioOptions) {
     playTitleBgmSoon,
     cancelTitleBgmStart,
     stopTitleBgm,
-    resumeTitleBgm, // ミニゲームの一覧で、開いたときに鳴らせなかった曲を、はじめて さわったときに鳴らす
 
     /* ===== いやいやタイムのBGM ===== */
     playTantrumBgmSoon,
@@ -2306,6 +2457,11 @@ export function useAudio(options: UseAudioOptions) {
     stopSecretBgm,
     resumeSecretBgm, // ミニゲーム「どこまで行ける？」で、開いたときに鳴らせなかった曲を「はじめる」で鳴らす
     setSecretBgmPlaybackRate, // ミニゲーム「どこまで行ける？」だけが使う（レベルが上がると曲を速くする）
+
+    /* ===== ミニゲーム「枝の上のてんとう虫」のBGM ===== */
+    playLadybugBgmSoon,
+    stopLadybugBgm,
+    resumeLadybugBgm, // 開いたときに鳴らせなかった曲を「はじめる」で鳴らす
 
     /* ===== ページを開いたとき・離れるとき ===== */
     restoreSoundSettings,

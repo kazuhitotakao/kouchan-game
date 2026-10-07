@@ -5,7 +5,7 @@
    data/minigames.ts の一覧をカードで並べる（ミニゲームを増やすときは、あちらに1件たすだけでよい）
    ・解放したもの     … 押すと /minigame/<id> へ
    ・まだ解放していないもの … 「？？？」とヒントだけ（何かがあると分かるようにして、本編をまた遊ぶきっかけにする）
-   BGMはタイトルBGM（B画面と同じメニューの曲）
+   BGMは鳴らさない（効果音だけ）
    ============================================================ */
 
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
@@ -23,8 +23,8 @@ import { preloadSecretPathImages, vRevealWithImages } from '~/utils/imagePreload
 
 /* ============================================================
    音
-   useAudio() には「タイトル画面（B画面）にいる」ときと同じ値を渡す
-   （サウンドをOFFからONに戻したときも、タイトルBGMの続きが鳴るように）
+   BGMは鳴らさないので、useAudio() には「どの画面にもいない」値を渡す
+   （titleEntered も gameStarted も false。サウンドをOFFからONに戻しても、どの曲も鳴りださないように）
    ============================================================ */
 const {
   soundEnabled,
@@ -32,12 +32,10 @@ const {
   toggleSound,
   changeSoundVolume,
   playDecisionSound,
-  playTitleBgmSoon,
-  resumeTitleBgm,
   restoreSoundSettings,
   cleanupAudio,
 } = useAudio({
-  titleEntered: ref(true),
+  titleEntered: ref(false),
   gameStarted: ref(false),
   currentEvent: ref<GameEvent>('parkEntrance'),
   isTantrum: ref(false),
@@ -132,11 +130,6 @@ onMounted(async () => {
   // 絵を先読みしておく（ミニゲームへ進んだときに、絵だけあとから出ないように）
   preloadSecretPathImages();
 
-  /* タイトルBGM（直接開いたときは鳴らせないので、はじめて押したときに鳴らす → resumeBgmOnFirstInput） */
-  playTitleBgmSoon();
-  window.addEventListener('pointerdown', resumeBgmOnFirstInput, { once: true });
-  window.addEventListener('keydown', resumeBgmOnFirstInput, { once: true });
-
   unlockedIds.value = loadUnlockedMinigames();
   newIds.value = loadNewMinigames();
   clearNewMinigames();
@@ -156,17 +149,8 @@ onMounted(async () => {
   (getCardButtons()[0] ?? layoutRef.value?.backButton)?.focus();
 });
 
-/* はじめて押した・キーを押したときに、タイトルBGMを鳴らす（1回だけ。もう鳴っていれば、そのまま） */
-function resumeBgmOnFirstInput() {
-  window.removeEventListener('pointerdown', resumeBgmOnFirstInput);
-  window.removeEventListener('keydown', resumeBgmOnFirstInput);
-  resumeTitleBgm();
-}
-
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown);
-  window.removeEventListener('pointerdown', resumeBgmOnFirstInput);
-  window.removeEventListener('keydown', resumeBgmOnFirstInput);
   cleanupAudio();
 });
 </script>
