@@ -40,6 +40,7 @@ import { minigames, splitMinigameTitle } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
+import { judgeLadybugVocalSongUnlock, saveLadybugVocalSongUnlocked, unlockLadybugVocalSongFromSavedBest } from '~/utils/ladybugVocalSong';
 
 /* このミニゲームの id（URL の /minigame/ladybug-balance と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
 const minigameId: MinigameId = 'ladybug-balance';
@@ -49,8 +50,9 @@ const stageCount = ladybugBalanceStages.length;
 
 /* ============================================================
    音
-   BGM は公園の曲（てんとう虫は公園で見つけるので）。useAudio() には「公園で遊んでいる」ときと同じ値を渡す
-   （サウンドをOFFからONに戻したときも、公園BGMの続きが鳴るように）
+   BGM は、このミニゲーム専用の曲「てんとうむしのよりみち」（ステージ・エンドレスのどちらでも同じ曲）
+   useAudio() には isLadybugMinigame を渡す（サウンドをOFFからONに戻したときも、この曲の続きが鳴るように）
+   ほかの値は「公園で遊んでいる」ときと同じ（このページでは使われない）
    ============================================================ */
 const {
   soundEnabled,
@@ -64,9 +66,9 @@ const {
   playCountdownSound,
   playCountdownStartSound,
   playSuddenEventSound,
-  playParkBgmSoon,
-  stopParkBgm,
-  resumeParkBgm,
+  playLadybugBgmSoon,
+  stopLadybugBgm,
+  resumeLadybugBgm,
   restoreSoundSettings,
   cleanupAudio,
 } = useAudio({
@@ -77,6 +79,7 @@ const {
   isResultScene: computed(() => false),
   currentMinutes: computed(() => 0),
   endingRank: ref(''),
+  isLadybugMinigame: true,
 });
 
 /* ============================================================
@@ -195,6 +198,12 @@ const {
       // 自己ベストを更新したときだけ、キラリン♪
       playItemSound();
     }
+
+    /* うた入り「てんとうむしのよりみち」の解放（→ utils/ladybugVocalSong.ts）
+       このプレイで はじめて 60秒たえたときだけ保存する（解放の知らせは、曲を足すときに ここで出す） */
+    if (judgeLadybugVocalSongUnlock(endlessRecordMs.value, false) === 'newlyUnlocked') {
+      saveLadybugVocalSongUnlocked();
+    }
   },
   onLevelUp: () => {
     // エンドレスのレベルアップ「ピピッ」（どこまで行ける？ のスピードアップと同じ）
@@ -304,7 +313,7 @@ function play() {
   start();
 
   /* BGM は開いたときから鳴らしているが、直接開いたときはまだ鳴らせていないので、ここで鳴らす（鳴っていれば、そのまま） */
-  resumeParkBgm();
+  resumeLadybugBgm();
 }
 
 /* 結果の画面のボタン（終わってすぐは受けつけない → canAcceptResultInput()） */
@@ -423,7 +432,7 @@ async function goToList() {
 
   isLeavingPage = true;
 
-  stopParkBgm();
+  stopLadybugBgm();
 
   await navigateTo('/minigame');
 }
@@ -565,6 +574,9 @@ onMounted(() => {
   clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(savedBest?.clearedStage) || 0)));
   endlessBestMs.value = Math.max(0, Number(savedBest?.endlessBestMs) || 0);
 
+  // 自己ベストが 60秒以上なら、うた入りの曲を黙って解放済みにする（解放を足す前に たえていた人のため。知らせは出さない）
+  unlockLadybugVocalSongFromSavedBest();
+
   // さいごに えらんでいたものを、えらんでおく
   // まだ無い・いまは遊べないものなら、まだクリアしていない いちばん前のステージ（ぜんぶクリアしていたら最後のステージ）
   const savedSelected = savedBest?.selected;
@@ -584,7 +596,7 @@ onMounted(() => {
 
   if (unlockState.value === 'unlocked') {
     focusFirstMainButton();
-    playParkBgmSoon();
+    playLadybugBgmSoon();
   }
 });
 
