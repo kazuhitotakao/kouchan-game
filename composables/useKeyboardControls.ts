@@ -27,6 +27,7 @@ export type UseKeyboardControlsOptions = {
   gameStarted: Ref<boolean>;
   isSnackSelectionOpen: Ref<boolean>;
   isHowToPlayOpen: Ref<boolean>;
+  isRecordsOpen: Ref<boolean>;
   isScreenChanging: Ref<boolean>;
   currentEvent: Ref<GameEvent>;
   resultMessage: Ref<string>;
@@ -56,7 +57,10 @@ export type UseKeyboardControlsOptions = {
   selectSnacksButtonRef: Ref<HTMLButtonElement | null>;
   howToPlayButtonRef: Ref<HTMLButtonElement | null>;
   backToBootButtonRef: Ref<HTMLButtonElement | null>;
+  /* B画面の「🏆 ハイスコア」の札（記録があるときだけ。無いときは null） */
+  recordsButtonRef: Ref<HTMLButtonElement | null>;
   howToBackButtonRef: Ref<HTMLButtonElement | null>;
+  recordsBackButtonRef: Ref<HTMLButtonElement | null>;
   snackSelectionRef: Ref<HTMLElement | null>;
 
   /* サウンドのボタンとスライダーは SoundControl の中にあるので、親が computed で借りている */
@@ -73,6 +77,7 @@ export type UseKeyboardControlsOptions = {
   openSnackSelection: () => void;
   closeSnackSelection: () => void;
   closeHowToPlay: () => void;
+  closeRecords: () => void;
   closeSnackMenu: () => void;
 
   /* 「公園の出口へ向かう？」をやめる（決定音も鳴らす） */
@@ -91,6 +96,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     gameStarted,
     isSnackSelectionOpen,
     isHowToPlayOpen,
+    isRecordsOpen,
     isScreenChanging,
     currentEvent,
     resultMessage,
@@ -111,7 +117,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     selectSnacksButtonRef,
     howToPlayButtonRef,
     backToBootButtonRef,
+    recordsButtonRef,
     howToBackButtonRef,
+    recordsBackButtonRef,
     snackSelectionRef,
     soundToggleButtonRef,
     soundVolumeSliderRef,
@@ -120,6 +128,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     openSnackSelection,
     closeSnackSelection,
     closeHowToPlay,
+    closeRecords,
     closeSnackMenu,
     cancelGoalConfirm,
     confirmGoToGoal,
@@ -244,6 +253,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
        A … ① はじめる             ② ♪（サウンドトラック）   ③ 🎮 ミニゲーム ④ サウンドON/OFF
        B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
      ①がその画面のメインのボタンで、画面が出たときは①にフォーカスを当てる
+     B画面には、記録があるときだけ「🏆 ハイスコア」の札も出る（メインのボタンのすぐ上。→ getTitleRecordsButton()）
 
      ・Tab / Shift+Tab … ブラウザのふつうの移動（はしでは反対のはしへ回りこませる）
      ・↑ ← ↓ →        … 画面の並びのとおりに動かす（→ moveTitleFocusByArrow()）
@@ -251,14 +261,19 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
      ============================================================ */
 
   /* いまの画面で選べるボタンを、選ぶ順番（＝Tab の順番）どおりに取り出す
-     ゲームが始まったあと・あそびかた画面・おやつ選択画面では、空っぽを返す
-     （A画面・B画面のボタンが出ていないので、矢印キー・Tab の回りこみ・フォーカスが、どれも動かないようにする） */
+     ゲームが始まったあと・あそびかた画面・記録の画面・おやつ選択画面では、空っぽを返す
+     （A画面・B画面のボタンが出ていないので、矢印キー・Tab の回りこみ・フォーカスが、どれも動かないようにする）
+     ※ B画面の「🏆 ハイスコア」の札は、出たり出なかったりするので、ここには入れない（→ getTitleRecordsButton()） */
   function getTitleFocusItems(): HTMLButtonElement[] {
     if (gameStarted.value) {
       return [];
     }
 
     if (isHowToPlayOpen.value) {
+      return [];
+    }
+
+    if (isRecordsOpen.value) {
       return [];
     }
 
@@ -274,20 +289,28 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     return items.filter((item): item is HTMLButtonElement => item !== null);
   }
 
+  /* B画面の「🏆 ハイスコア」の札（A画面と、まだ記録が無いときは null）
+     getTitleFocusItems() が空っぽでないとき（A画面・B画面が出ているとき）だけ呼ぶ */
+  function getTitleRecordsButton(): HTMLButtonElement | null {
+    return titleEntered.value ? recordsButtonRef.value : null;
+  }
+
   /* ↑↓←→ でフォーカスを動かす
 
      ■ A画面
        [ ♪ ][ 🎮 ミニゲーム ]        [ サウンドON/OFF ]
                     [ はじめる ]
 
-     ■ B画面
+     ■ B画面（「🏆 ハイスコア」の札は、記録があるときだけ）
        [ はじめの画面へ戻る ]     [ ？ あそびかた ][ サウンドON/OFF ]
+                 [ 🏆 ハイスコア 88点（Sランク） › ]
                    [ きょうのおやつを選ぶ ]
 
      どちらも「下にメインのボタンが1つ、上の行にいくつか」の形なので、同じ動きにしている
-       ・↑ ↓ … メインのボタンと、上の行を行き来する（メインからは、さっき上の行でいたボタンへ戻る）
-       ・← → … 上の行を、となりへ1つずつ動く（はしでは回りこむ。メインからは、←で左上・→で右上のサウンドへ） */
-  /* 上の行から ↓ でメインへ下りたとき、上の行のどのボタンにいたか（↑ で同じボタンへ戻すため）
+       ・↑ ↓ … たての並び（上の行 → 札 → メインのボタン）を1段ずつ動く（はしでは反対のはしへ回りこむ）
+                札が無いときは、メインのボタンと上の行の行き来になる。上の行へ戻るときは、さっき上の行でいたボタンへ戻る
+       ・← → … 上の行を、となりへ1つずつ動く（はしでは回りこむ。上の行にいないときは、←で左上・→で右上のサウンドへ） */
+  /* 上の行から ↑↓ で出たとき、上の行のどのボタンにいたか（上の行へ戻ってきたとき、同じボタンへ戻すため）
      A画面⇄B画面で入れかわると、もう画面に無いボタンになるので、そのときは左上のボタンへ戻す */
   let lastTitleTopItem: HTMLButtonElement | null = null;
 
@@ -305,23 +328,37 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     // 上の行の何番目にいるか（上の行にいないときは -1）
     const topIndex = topRow.findIndex((button) => button === active);
 
-    // ↑ ↓：メインのボタン ⇔ 上の行
+    // ↑ ↓：たての並びを1段ずつ（上の行はまとめて1段。null の段が上の行）
     if (key === 'ArrowUp' || key === 'ArrowDown') {
-      if (active === mainButton) {
-        /* 上の行へ戻るときは、さっき上の行でいた場所へ戻る
-           覚えている場所が無い・この画面には無いときは、左上のボタンへ */
-        const lastTopItem = lastTitleTopItem && topRow.includes(lastTitleTopItem) ? lastTitleTopItem : topRow[0];
+      const recordsButton = getTitleRecordsButton();
+      const column: (HTMLButtonElement | null)[] = recordsButton ? [null, recordsButton, mainButton] : [null, mainButton];
 
-        lastTopItem.focus();
-      } else {
-        // 上の行からメインのボタンへ下りるときに、いまいた場所を覚えておく
-        if (topIndex !== -1) {
-          lastTitleTopItem = topRow[topIndex];
-        }
+      // いまいる段（上の行・札・メインのボタンのどれでもないとき（何も選んでいないときなど）は -1）
+      const currentRow = topIndex !== -1 ? 0 : active instanceof HTMLButtonElement ? column.indexOf(active) : -1;
 
+      if (currentRow === -1) {
         mainButton.focus();
+        return;
       }
 
+      // 上の行を出るときに、いまいた場所を覚えておく（戻ってきたとき、同じボタンへ戻すため）
+      if (topIndex !== -1) {
+        lastTitleTopItem = topRow[topIndex];
+      }
+
+      const step = key === 'ArrowDown' ? 1 : -1;
+      const nextButton = column[(currentRow + step + column.length) % column.length];
+
+      if (nextButton) {
+        nextButton.focus();
+        return;
+      }
+
+      /* 上の行へ戻るときは、さっき上の行でいた場所へ戻る
+         覚えている場所が無い・この画面には無いときは、左上のボタンへ */
+      const lastTopItem = lastTitleTopItem && topRow.includes(lastTitleTopItem) ? lastTitleTopItem : topRow[0];
+
+      lastTopItem.focus();
       return;
     }
 
@@ -535,25 +572,44 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
   }
 
   /* ============================================================
-     あそびかた画面のキーボード操作
+     あそびかた画面・記録の画面のキーボード操作（どちらも B画面から開く、読むための縦に長い画面なので、同じ操作にする）
 
      ・Escape        … B画面へ戻る
+     ・↑ ↓           … 画面をスクロールする（1回ぶんの量は、ゲーム画面の読む場面と同じ）
+                       いちばん下まで来たら下の「← 戻る」へ、いちばん上まで来たら上の「← 戻る」へフォーカスを移す（そのまま Enter で戻れる）
+                       とちゅうでは、どのボタンにもフォーカスを置かない（見えていない「戻る」を Enter で押してしまわないように）
+                       → scrollReadingScreenByArrow()
      ・← →           … 上の「← 戻る」と「サウンド」を行き来する（どちらかにフォーカスがあるときだけ）
-     ・↑ ↓ など      … 何もしない（ふつうのスクロールにまかせる）
      ・Enter / Space … 押すのはブラウザにまかせる。押しっぱなしを止めるだけ
      読むための縦に長いページなので、preventDefault() するのは、実際に何かをしたキーだけ
+
+     backButton … その画面の上の「← ひとつ前の画面へ戻る」 ／ close … B画面へ戻る関数
      ============================================================ */
-  function handleHowToPlayKeydown(event: KeyboardEvent) {
+  function handleReadingScreenKeydown(event: KeyboardEvent, backButton: HTMLButtonElement | null, close: () => void) {
     if (event.key === 'Escape') {
       event.preventDefault();
-      closeHowToPlay();
+      close();
+      return;
+    }
+
+    /* ① ↑ ↓ … スクロールして、いちばん上・いちばん下では「← 戻る」へフォーカスを移す
+       押しっぱなしでも止めない（続けてスクロールできるように） */
+    if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      const screen = backButton?.closest<HTMLElement>('.title-screen');
+
+      // 画面の切りかわり中などで、まだ画面が出ていないときは何もしない
+      if (!backButton || !screen) {
+        return;
+      }
+
+      event.preventDefault();
+      scrollReadingScreenByArrow(screen, backButton, event.key === 'ArrowUp' ? -1 : 1);
       return;
     }
 
     /* ② ← → … 上のツールバーの2つを行き来する
        どちらかにフォーカスがあるときだけ（本文を読んでいる途中に上のボタンへ飛ぶと、いちばん上までスクロールしてしまうため） */
     if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-      const backButton = howToBackButtonRef.value;
       const soundButton = soundToggleButtonRef.value;
       const active = document.activeElement;
 
@@ -581,6 +637,50 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     }
   }
 
+  /* 読む画面（あそびかた・記録）を ↑↓ で1回ぶんスクロールして、フォーカスを位置に合わせる
+
+     スクロールするのは、パソコンでは画面の入れもの（.title-screen）、スマホ幅ではページ全体
+     ・いちばん下 … 下の「← 戻る」（.howto-footer の中のもの）
+     ・いちばん上 … 上の「← 戻る」（topBackButton）
+     ・とちゅう   … どこにも置かない（いまフォーカスがある、この画面の中のボタンから外す）
+     スクロールしない短い画面では、上と下の両方にあたるので、押した向きで決める（↓ で下の「戻る」、↑ で上の「戻る」）
+     ※ preventScroll … 見えている「戻る」へ当てるだけなので、フォーカスでスクロール位置を動かさない */
+  function scrollReadingScreenByArrow(screen: HTMLElement, topBackButton: HTMLButtonElement, direction: 1 | -1) {
+    const scrollers: HTMLElement[] = [];
+
+    if (canScrollInside(screen)) {
+      scrollers.push(screen);
+    }
+
+    const page = document.scrollingElement;
+
+    if (page instanceof HTMLElement && page.scrollHeight - window.innerHeight > 1) {
+      scrollers.push(page);
+    }
+
+    scrollSceneByArrow(scrollers, direction);
+
+    const isAtTop = scrollers.every((element) => element.scrollTop <= 1);
+    const isAtBottom = scrollers.every((element) => element.scrollTop + getScrollViewHeight(element) >= element.scrollHeight - 1);
+    const bottomBackButton = screen.querySelector<HTMLButtonElement>('.howto-footer .title-card__back');
+
+    if (direction > 0 && isAtBottom && bottomBackButton) {
+      bottomBackButton.focus({ preventScroll: true });
+      return;
+    }
+
+    if (direction < 0 && isAtTop) {
+      topBackButton.focus({ preventScroll: true });
+      return;
+    }
+
+    const active = document.activeElement;
+
+    if (active instanceof HTMLElement && screen.contains(active)) {
+      active.blur();
+    }
+  }
+
   /* A画面・B画面でキーを押したときの処理 */
   function handleTitleKeydown(event: KeyboardEvent) {
     const items = getTitleFocusItems();
@@ -601,10 +701,12 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     if (event.key === 'Tab') {
       const first = items[0];
 
-      /* いちばん後ろは音量スライダー（ボタンではないので items に入っていないが、HTML ではいちばん最後にある）
-         入れておかないと、サウンドボタンで Tab を押したときにスライダーを飛びこしてしまう
+      /* いちばん後ろ（HTML でいちばん最後にあるもの）
+         ・B画面に「🏆 ハイスコア」の札があるときは、その札（カードのいちばん後ろに書いてある）
+         ・それ以外は音量スライダー（ボタンではないので items に入っていないが、ツールバーのいちばん最後にある）
+           入れておかないと、サウンドボタンで Tab を押したときにスライダーを飛びこしてしまう
          ※ A画面にはスライダーが無いので、そのときはミュートボタンがいちばん後ろ */
-      const last = soundVolumeSliderRef.value ?? items[items.length - 1];
+      const last = getTitleRecordsButton() ?? soundVolumeSliderRef.value ?? items[items.length - 1];
 
       if (!event.shiftKey && document.activeElement === last) {
         event.preventDefault();
@@ -736,7 +838,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     return scrollers;
   }
 
-  /* ↑↓ を1回押したぶん、スクロールする
+  /* ↑↓ を1回押したぶん、スクロールする（ゲーム画面の読む場面と、あそびかた・記録の画面で使う）
 
      前の候補がその向きにもう動けないときは、次の候補を動かす（マウスホイールと同じ動き）
      ・1回に動かす量 … 見えている高さの2割（60〜120px）
@@ -794,10 +896,15 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     }
 
     /* 画面ごとに、専用の関数へまかせる（画面の出し分けと同じ順番で見る）
-       あそびかた画面・おやつ選択画面を、A画面・B画面より先に見るのが大事
+       あそびかた画面・記録の画面・おやつ選択画面を、A画面・B画面より先に見るのが大事
        （あとに置くと、画面に無いB画面のボタンを操作しようとしてしまうため） */
     if (!gameStarted.value && isHowToPlayOpen.value) {
-      handleHowToPlayKeydown(event);
+      handleReadingScreenKeydown(event, howToBackButtonRef.value, closeHowToPlay);
+      return;
+    }
+
+    if (!gameStarted.value && isRecordsOpen.value) {
+      handleReadingScreenKeydown(event, recordsBackButtonRef.value, closeRecords);
       return;
     }
 

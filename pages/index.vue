@@ -9,6 +9,8 @@ import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameTex
 
 import { addMinutesToTime } from '~/utils/gameTime';
 
+import { formatPlayedAt, formatRecordScore, recentGameRecordLimit } from '~/utils/gameRecords';
+
 // 画像の先読みと、画像がそろってから まとめて出す目印（v-reveal-with-images）
 import { preloadGameImages, vRevealWithImages } from '~/utils/imagePreload';
 
@@ -16,6 +18,7 @@ import { preloadGameImages, vRevealWithImages } from '~/utils/imagePreload';
    行動の中身・ステータスの計算は、このファイルに残してある */
 import CommandBox from '~/components/game/CommandBox.vue';
 import FoundItemCollection from '~/components/game/FoundItemCollection.vue';
+import GameRecordHistory from '~/components/game/GameRecordHistory.vue';
 import ResultCard from '~/components/game/ResultCard.vue';
 import SecretPathField from '~/components/game/SecretPathField.vue';
 import SecretPathIcon from '~/components/game/SecretPathIcon.vue';
@@ -28,7 +31,7 @@ import { useKeyboardControls } from '~/composables/useKeyboardControls';
 
 import { useTantrum } from '~/composables/useTantrum';
 
-/* ゲームが終わったあとの結果（スコア・ランク・GAME OVERの文章・S+の曲の解放） */
+/* ゲームが終わったあとの結果（スコア・ランク・GAME OVERの文章・S+の曲の解放・ハイスコアと直近の記録） */
 import { useGameResult } from '~/composables/useGameResult';
 
 /* 通常の行動1回ぶんの結果（文章・今回の変化・見つけたもの）
@@ -90,7 +93,8 @@ import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDu
    ※ 起動画面をはさんでいるのは、ユーザーがまだ触っていないページでは音を鳴らせないため
      「▶ はじめる」を押した操作をきっかけに、タイトルBGMを鳴らしはじめる
    ※ 出発したあとも isSnackSelectionOpen は true のまま（gameStarted を先に見て見分ける）
-   ※ このほかに「あそびかた」画面（isHowToPlayOpen）があり、開いているあいだは A画面・B画面・おやつ選択画面より優先する */
+   ※ このほかに「あそびかた」画面（isHowToPlayOpen）と「これまでの記録」の画面（isRecordsOpen）があり、
+     開いているあいだは A画面・B画面・おやつ選択画面より優先する（どちらもB画面から開く） */
 const titleEntered = ref(false);
 
 const gameStarted = ref(false);
@@ -104,6 +108,12 @@ const isSnackSelectionOpen = ref(false);
    ※ 画面の出し分け・キー操作・フォーカスのどれも、「!gameStarted && isHowToPlayOpen」を、おやつ選択画面より先に見る
    ※ 読んだかどうかは保存しない（必要な人が、必要なときに開くページ） */
 const isHowToPlayOpen = ref(false);
+
+/* 「これまでの記録」の画面を開いているか（B画面の「🏆 ハイスコア」の札から開く）
+
+   あそびかた画面と同じく、B画面の上に一時的に広げるだけなので、ほかの画面の状態やタイトルBGMはさわらない
+   ※ 画面の出し分け・キー操作・フォーカスのどれも、あそびかた画面のすぐあと（おやつ選択画面より先）に見る */
+const isRecordsOpen = ref(false);
 
 /* ホーム画面のアイコンから（アプリのように）起動しているか（null … まだ調べていない）
 
@@ -123,6 +133,8 @@ const minigameButtonRef = ref<HTMLButtonElement | null>(null);
 const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
 const howToPlayButtonRef = ref<HTMLButtonElement | null>(null);
 const backToBootButtonRef = ref<HTMLButtonElement | null>(null);
+/* B画面の「🏆 ハイスコア」の札（記録があるときだけ出る。無いときは null） */
+const recordsButtonRef = ref<HTMLButtonElement | null>(null);
 /* サウンドのコントロール（4画面に置いてあるが、いちどに出るのは1画面だけなので、いま出ているもの1つを指す） */
 const soundControlRef = ref<InstanceType<typeof SoundControl> | null>(null);
 
@@ -133,6 +145,13 @@ const soundVolumeSliderRef = computed<HTMLInputElement | null>(() => soundContro
 
 /* あそびかた画面の「← ひとつ前の画面へ戻る」（画面が出おわったときに、ここへフォーカスを当てる） */
 const howToBackButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* 記録の画面の「← ひとつ前の画面へ戻る」（あそびかた画面と同じく、画面が出おわったときに、ここへフォーカスを当てる） */
+const recordsBackButtonRef = ref<HTMLButtonElement | null>(null);
+
+/* 記録の画面から戻ったときに、B画面の札へフォーカスを戻すか（続けて Enter で、もう一度開けるように）
+   当てるのは、フェードが終わったときの handleScreenEnterEnd() */
+let shouldFocusRecordsButton = false;
 
 /* おやつ選択画面のカードまるごと
    おやつは v-for で作るので、ボタンごとではなく入れものを覚える（おやつが増えても、ref を増やさなくてすむ） */
@@ -233,9 +252,9 @@ const pendingSuddenEvent = ref<GameEvent | null>(null);
 /* ============================================================
    ゲームが終わったあとの結果（入れものは composables/useGameResult.ts）
 
-   計算は composables/useScore.ts、S+の曲の解放と localStorage は utils/sPlusSong.ts
+   計算は composables/useScore.ts、S+の曲の解放と localStorage は utils/sPlusSong.ts、記録の保存は utils/gameRecords.ts
    このファイルに残してあるもの
-   ・ゴールへ向かう流れ（goToGoal()）と、judgeResult() → unlockSPlusSongIfEarned() を呼ぶ順番
+   ・ゴールへ向かう流れ（goToGoal()）と、judgeResult() → unlockSPlusSongIfEarned() → recordGameResult() を呼ぶ順番
    ・GAME OVERの条件判定・BGM・画面の切りかえ（checkGameOver()）
    ============================================================ */
 const {
@@ -255,9 +274,20 @@ const {
   isSPlusSongNewlyUnlocked,
   isSPlusSongHintVisible,
 
+  /* これまでの記録（ハイスコアと直近の記録） */
+  highScoreRecord,
+  recentRecords,
+  currentRecord,
+  isHighScoreUpdated,
+  previousHighScoreRecord,
+  previousRecord,
+
   /* ゴールしたときに呼ぶ（順番は goToGoal() が決める） */
   judgeResult,
   unlockSPlusSongIfEarned,
+
+  /* ゴール・GAME OVERのときに呼ぶ（goToGoal() と checkGameOver()） */
+  recordGameResult,
 
   resetGameResult,
 } = useGameResult({
@@ -887,7 +917,8 @@ const {
    ・いやいや発生の演出も必ず消す（消さないと、GAME OVER画面の上に「いやいや発生！」が残るため）
    ・行動の途中でGAME OVERになるので、選んでいたコマンドの番号を 0 に戻す
    ・少し無音の間をおいてから、GAME OVER BGMを鳴らす（画面はすぐ切りかわる）
-   ・同じ行動のあとにもう一度呼ばれても、いちばん上の return で止まるので、BGMの予約は1回だけ */
+   ・同じ行動のあとにもう一度呼ばれても、いちばん上の return で止まるので、BGMの予約は1回だけ
+   ・理由の文を入れたあとで、直近の記録に残す（点数は出さないので、ハイスコアにはならない） */
 function checkGameOver() {
   // すでにGAME OVERになっているときは、理由を上書きしない
   if (currentEvent.value === 'gameOver') {
@@ -899,6 +930,7 @@ function checkGameOver() {
     gameOverTitle.value = '親の体力が限界！';
     gameOverMessage.value = 'もう動けません……。今日はここで帰ります。';
     currentEvent.value = 'gameOver';
+    recordGameResult('gameOver');
     stopParkBgm();
     stopSecretBgm();
     stopTantrumBgm();
@@ -916,6 +948,7 @@ function checkGameOver() {
     gameOverTitle.value = '親の余裕がなくなった！';
     gameOverMessage.value = '心の余裕がなくなってしまいました。今日はここでおしまい。';
     currentEvent.value = 'gameOver';
+    recordGameResult('gameOver');
     stopParkBgm();
     stopSecretBgm();
     stopTantrumBgm();
@@ -933,6 +966,7 @@ function checkGameOver() {
     gameOverTitle.value = 'こうちゃん電池切れ！';
     gameOverMessage.value = 'もうクタクタ。だっこで公園をあとにしました。';
     currentEvent.value = 'gameOver';
+    recordGameResult('gameOver');
     stopParkBgm();
     stopSecretBgm();
     stopTantrumBgm();
@@ -1029,9 +1063,15 @@ function handleScreenEnterEnd() {
   isScreenChanging.value = false;
 
   /* あそびかた画面は、おやつ選択画面より先に見る（画面の出し分けと同じ順番）
-     いちばん上の「← ひとつ前の画面へ戻る」へ当てる（そのまま Enter で戻れ、↑↓ はふつうのスクロールのまま） */
+     いちばん上の「← ひとつ前の画面へ戻る」へ当てる（そのまま Enter で戻れる。↑↓ でスクロールすると、フォーカスは位置に合わせて動く → useKeyboardControls.ts） */
   if (isHowToPlayOpen.value && !gameStarted.value) {
     howToBackButtonRef.value?.focus();
+    return;
+  }
+
+  // 記録の画面も、あそびかた画面と同じく、いちばん上の「← ひとつ前の画面へ戻る」へ当てる
+  if (isRecordsOpen.value && !gameStarted.value) {
+    recordsBackButtonRef.value?.focus();
     return;
   }
 
@@ -1040,6 +1080,16 @@ function handleScreenEnterEnd() {
   if (isSnackSelectionOpen.value && !gameStarted.value) {
     focusFirstSnackOption();
     return;
+  }
+
+  // 記録の画面から戻ってきたときは、開いたときの札へ戻す（札が無いときは、いつもどおりメインのボタンへ）
+  if (shouldFocusRecordsButton) {
+    shouldFocusRecordsButton = false;
+
+    if (recordsButtonRef.value) {
+      recordsButtonRef.value.focus();
+      return;
+    }
   }
 
   focusTitleMainButton();
@@ -1072,8 +1122,9 @@ function goBackToBoot() {
   resetSnackBag();
   isSnackSelectionOpen.value = false;
 
-  // A画面へ戻ったのに、中ではあそびかたが開いたまま、という状態を残さないため
+  // A画面へ戻ったのに、中ではあそびかた・記録の画面が開いたまま、という状態を残さないため
   isHowToPlayOpen.value = false;
+  isRecordsOpen.value = false;
 
   /* 画面はこの1行だけで切りかわる（表示用の state はこれ以外いじらないので、B画面は中身がそろったままフェードアウトする） */
   titleEntered.value = false;
@@ -1140,6 +1191,27 @@ function openHowToPlay() {
 /* あそびかた画面の「← ひとつ前の画面へ戻る」（Escape もここを呼ぶ） */
 function closeHowToPlay() {
   isHowToPlayOpen.value = false;
+}
+
+/* ============================================================
+   これまでの記録の画面（B画面 → 記録 → B画面）
+
+   ハイスコアのくわしい記録と、直近の記録を出すだけ（記録を残すのは useGameResult.ts）
+   ・別のページ（route）にしない・BGMをさわらない … あそびかた画面と同じ理由
+   ============================================================ */
+
+/* B画面の「🏆 ハイスコア」の札
+   ※ 決定音は鳴らさない（あそびかたと同じく、記録をちょっと開くだけのボタンなので。閉じるときもそろえる） */
+function openRecords() {
+  shouldFocusRecordsButton = false;
+  isRecordsOpen.value = true;
+}
+
+/* 記録の画面の「← ひとつ前の画面へ戻る」（Escape もここを呼ぶ）
+   戻ったB画面では、開いたときの札へフォーカスを戻す（→ handleScreenEnterEnd()） */
+function closeRecords() {
+  shouldFocusRecordsButton = true;
+  isRecordsOpen.value = false;
 }
 
 /* おやつのカードを押したとき（入っていなければ入れる、入っていれば出す）
@@ -1929,6 +2001,10 @@ function goToGoal() {
      ランクが決まった直後に呼ぶ（このあと鳴らすリザルトBGMも、同じランクで曲を選ぶ） */
   unlockSPlusSongIfEarned();
 
+  /* 今回の記録を残す（ハイスコアを更新したかも、ここで決まる）
+     点数とランクが決まったあとに呼ぶ。リザルト画面のままアプリを閉じても残るよう、「もう一度あそぶ」まで待たない */
+  recordGameResult('goal');
+
   currentEvent.value = 'goal';
 
   /* リザルトBGMは、ゴール音と重ならないよう少し間を空けてから鳴らす（待つのは音だけ）
@@ -2013,6 +2089,7 @@ function resetGame() {
   isSnackSelectionOpen.value = false;
 
   isHowToPlayOpen.value = false;
+  isRecordsOpen.value = false;
 
   // 残っていると、タイトル画面の上に前回の「いやいや発生！」が出たままになる
   hideTantrumAlert();
@@ -2285,6 +2362,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, focusTitleMainButton } = use
   gameStarted,
   isSnackSelectionOpen,
   isHowToPlayOpen,
+  isRecordsOpen,
   isScreenChanging,
   currentEvent,
   resultMessage,
@@ -2305,7 +2383,9 @@ const { gameScreenRef, moveSnackSelectionToHovered, focusTitleMainButton } = use
   selectSnacksButtonRef,
   howToPlayButtonRef,
   backToBootButtonRef,
+  recordsButtonRef,
   howToBackButtonRef,
+  recordsBackButtonRef,
   snackSelectionRef,
   soundToggleButtonRef,
   soundVolumeSliderRef,
@@ -2314,6 +2394,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, focusTitleMainButton } = use
   openSnackSelection,
   closeSnackSelection,
   closeHowToPlay,
+  closeRecords,
   closeSnackMenu,
   cancelGoalConfirm,
   confirmGoToGoal,
@@ -2383,7 +2464,7 @@ onUnmounted(() => {
              書かないもの：秘密の場所の名前と条件・おやつといやいやの相性・「少し待ってみる」の成功率・
              レベルごとの数字・くり返したときの効きにくさの数字・ナイス対応の組み合わせ・各行動のステータス増減
            ■ 文字は少なめにする（1項目1行。「〜する」「〜できるか」の短い言いかた）
-           ■ 縦に長いので、ふつうのスクロールで読む（↑↓キーも横取りしない）
+           ■ 縦に長いので、スクロールして読む（↑↓キーでもスクロールでき、いちばん下では下の「← 戻る」へフォーカスが移る → useKeyboardControls.ts）
            ============================================================ -->
       <div v-if="!gameStarted && isHowToPlayOpen" key="how-to-play" class="title-screen">
         <div class="title-card title-card--howto">
@@ -2548,6 +2629,114 @@ onUnmounted(() => {
       </div>
 
       <!-- ============================================================
+           これまでの記録の画面（B画面の「🏆 ハイスコア」の札から開く。あそびかた画面と同じく、A画面・B画面・おやつ選択画面より優先して出す）
+
+           入れもの・ツールバー・見出し・セクションは、あそびかた画面と同じものを使う
+           ・ハイスコア … 点数・ランク・見出し・日時と、そのときの記録（まだゴールしていないときは、そう書く）
+           ・直近の記録 … 保存している件数ぜんぶ（リザルト画面のカードと同じ部品。いちばん上のハイスコアの帯は出さない）
+           ============================================================ -->
+      <div v-else-if="!gameStarted && isRecordsOpen" key="records" class="title-screen">
+        <div class="title-card title-card--howto">
+          <!-- 上のツールバー（あそびかた画面と同じ。左：B画面へ戻る ／ 右：サウンド） -->
+          <div class="title-card__tools">
+            <button ref="recordsBackButtonRef" type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeRecords">
+              <span aria-hidden="true">← 戻る</span>
+            </button>
+
+            <SoundControl
+              ref="soundControlRef"
+              :sound-enabled="soundEnabled"
+              :sound-volume-percent="soundVolumePercent"
+              @toggle="toggleSound"
+              @volume-change="changeSoundVolume" />
+          </div>
+
+          <h1 class="howto-heading">
+            <span class="howto-heading__icon" aria-hidden="true">🏆</span>
+            これまでの記録
+          </h1>
+
+          <!-- ハイスコア（リザルト画面のエンディングカードと同じ金色。点数 → ランク → 見出し → 日時 → そのときの記録） -->
+          <section class="howto-section records-best">
+            <h2 class="howto-section__title">ハイスコア</h2>
+
+            <template v-if="highScoreRecord">
+              <p class="records-best__score">
+                <span class="sr-only">総合スコア</span>
+                <span class="records-best__scoreValue">{{ highScoreRecord.score }}</span>
+                <span class="records-best__scoreMax">/ 100</span>
+              </p>
+
+              <p class="records-best__rank">{{ highScoreRecord.rank }}</p>
+
+              <p class="records-best__title">{{ highScoreRecord.title }}</p>
+
+              <p class="records-best__date">{{ formatPlayedAt(highScoreRecord.playedAt) }}</p>
+
+              <!-- そのときの記録（名前は、リザルト画面の「今日の記録」とそろえる） -->
+              <ul class="record-list records-panel">
+                <li class="record-item">
+                  <span>帰った時間</span>
+                  <b>{{ highScoreRecord.returnTime }}</b>
+                </li>
+
+                <li class="record-item">
+                  <span>おでかけポイント</span>
+                  <b>{{ highScoreRecord.outingPoint }}</b>
+                </li>
+
+                <li class="record-item">
+                  <span>見つけたもの</span>
+                  <b>{{ highScoreRecord.collectedItemCount }} / {{ foundItemTotal }}</b>
+                </li>
+
+                <li class="record-item">
+                  <span>探検した場所の数</span>
+                  <b>{{ highScoreRecord.visitedPlaceCount }}か所</b>
+                </li>
+
+                <li class="record-item">
+                  <span>遊んだ回数</span>
+                  <b>{{ highScoreRecord.playCount }}回</b>
+                </li>
+
+                <li class="record-item">
+                  <span>いやいや発生</span>
+                  <b>{{ highScoreRecord.tantrumCount }}回</b>
+                </li>
+              </ul>
+            </template>
+
+            <p v-else class="records-empty">まだゴールした記録はありません。</p>
+          </section>
+
+          <!-- 直近の記録（新しい順。保存している件数ぜんぶ） -->
+          <section class="howto-section">
+            <h2 class="howto-section__title">直近の記録</h2>
+
+            <div class="records-panel">
+              <GameRecordHistory
+                v-if="recentRecords.length > 0"
+                :high-score-record="highScoreRecord"
+                :recent-records="recentRecords"
+                :current-record="null"
+                :limit="recentGameRecordLimit"
+                :show-best="false" />
+
+              <p v-else class="records-empty">まだ記録はありません。</p>
+            </div>
+          </section>
+
+          <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるように（あそびかた画面と同じ） -->
+          <div class="howto-footer">
+            <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeRecords">
+              <span aria-hidden="true">← 戻る</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
            起動画面（いちばん最初の1枚。ここで押した操作をきっかけに、タイトルBGMを鳴らしはじめる）
            ============================================================ -->
       <div v-else-if="!titleEntered" key="boot" class="title-screen">
@@ -2642,6 +2831,20 @@ onUnmounted(() => {
               <span class="title-card__phrase">9時〜12時の公園を、</span><span class="title-card__phrase">たくさん探検しよう！</span>
             </p>
           </div>
+
+          <!-- これまでの記録の画面への入口（記録があるときだけ。記録は useGameResult.ts が onMounted で読む）
+               ・ゴールしたことがあるとき … 「🏆 ハイスコア 88点（Sランク） ›」
+               ・GAME OVER の記録しか無いとき … 「📝 これまでの記録 ›」
+               HTML ではカードのいちばん後ろなので、Tab ではサウンドのあと（見た目は CSS の order で、説明文の下）
+               「›」は押せることを見せる飾りなので読み上げない。折り返しても「›」だけが次の行へ行かないよう、最後のかたまりに入れる -->
+          <button v-if="highScoreRecord || recentRecords.length > 0" ref="recordsButtonRef" type="button" class="title-card__highscore" @click="openRecords">
+            <template v-if="highScoreRecord">
+              <span class="title-card__phrase">🏆 ハイスコア {{ formatRecordScore(highScoreRecord) }}</span>
+              <span class="title-card__phrase">（{{ highScoreRecord.rank }}）<span class="title-card__highscoreArrow" aria-hidden="true">›</span></span>
+            </template>
+
+            <span v-else class="title-card__phrase">📝 これまでの記録<span class="title-card__highscoreArrow" aria-hidden="true">›</span></span>
+          </button>
         </div>
       </div>
 
@@ -3638,6 +3841,20 @@ onUnmounted(() => {
                   <span class="ending-card__score-max">/ 100</span>
                 </p>
 
+                <!-- ハイスコア（どちらか1つ。点数とくらべやすいよう、点数のすぐ下に出す）
+                     ・前のハイスコアをこえたとき … 金色の札「🏆 ハイスコア更新！」（role="status" で読み上げにも伝える）
+                     ・こえなかったとき … 「🏆 ハイスコア 88点　前回 72点」を小さく
+                     はじめての記録のときは、どちらも出さない（→ utils/gameRecords.ts の addGameRecord()）
+                     ※ 下のランクのバッジは inline-block なので、横にならばないよう、行そのものはブロックにして札を中に入れる -->
+                <p v-if="isHighScoreUpdated" class="ending-card__highscore" role="status">
+                  <span class="ending-card__highscoreBadge">🏆 ハイスコア更新！</span>
+                </p>
+
+                <p v-else-if="previousHighScoreRecord && highScoreRecord" class="ending-card__highscore">
+                  <span>🏆 ハイスコア {{ formatRecordScore(highScoreRecord) }}</span>
+                  <span v-if="previousRecord">前回 {{ formatRecordScore(previousRecord) }}</span>
+                </p>
+
                 <!-- 今回のランク（いちばん大事なところなので、大きなバッジにする） -->
                 <p class="ending-card__rank">{{ endingRank }}</p>
 
@@ -3738,6 +3955,13 @@ onUnmounted(() => {
                   <FoundItemCollection :collected-items="collectedItems" />
                 </article>
               </div>
+
+              <!-- これまでの記録（ハイスコアと直近の記録。今回のプレイがいちばん上。中身は GameRecordHistory.vue） -->
+              <article class="record-card">
+                <h3 class="record-card__title">これまでの記録</h3>
+
+                <GameRecordHistory :high-score-record="highScoreRecord" :recent-records="recentRecords" :current-record="currentRecord" />
+              </article>
             </section>
 
             <!-- ボタンは2つ（← → で行き来して Enter / Space で押す。リザルトがスクロールするときは、↑↓ はスクロールに使う）
@@ -3839,6 +4063,13 @@ onUnmounted(() => {
                   <FoundItemCollection :collected-items="collectedItems" />
                 </article>
               </div>
+
+              <!-- これまでの記録（ゴールの画面と同じ） -->
+              <article class="record-card">
+                <h3 class="record-card__title">これまでの記録</h3>
+
+                <GameRecordHistory :high-score-record="highScoreRecord" :recent-records="recentRecords" :current-record="currentRecord" />
+              </article>
             </section>
 
             <!-- ボタンは2つ（ゴールの画面と同じ） -->
