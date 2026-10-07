@@ -144,15 +144,32 @@ const secretVocalBonusTrack: SoundtrackTrack = {
   lyrics: secretVocalSongLyrics,
 };
 
+/* ミニゲーム「枝の上のてんとう虫」のBGM（はじめから聴ける曲）
+   ボーナストラック（08・09）のあとから足した曲なので、番号は 10。一覧でも、ボーナストラックのうしろに出す
+   （08・09 の番号を変えると、覚えている続きの曲がずれるため） */
+const ladybugDetourTrack: SoundtrackTrack = {
+  id: 10,
+  title: 'てんとうむしのよりみち',
+  description: 'ミニゲーム|枝の上のてんとう虫 BGM',
+  src: '/audio/ladybug-detour-bgm.mp3',
+  volume: 0.4,
+  credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
+};
+
 /* ボーナストラックを解放済みか（onMounted で localStorage から読む。サーバー側では読めないため） */
 const hasUnlockedSPlusSong = ref(false);
 const hasUnlockedSecretVocalSong = ref(false);
 
-/* 再生できる曲の一覧（解放したボーナストラックを、うしろに足す）
+/* 再生できる曲の一覧（解放したボーナストラックを、うしろに足す。そのあとに 10 てんとうむしのよりみち）
 
    ※ 既存の曲の id と順番は変えないので、覚えている開始曲などはくずれない
    ※ 片方だけ解放しているときは、番号がとぶ（07 → 09）。曲ごとの番号が変わらないほうを取っている */
-const tracks = computed(() => [...baseTracks, ...(hasUnlockedSPlusSong.value ? [sPlusBonusTrack] : []), ...(hasUnlockedSecretVocalSong.value ? [secretVocalBonusTrack] : [])]);
+const tracks = computed(() => [
+  ...baseTracks,
+  ...(hasUnlockedSPlusSong.value ? [sPlusBonusTrack] : []),
+  ...(hasUnlockedSecretVocalSong.value ? [secretVocalBonusTrack] : []),
+  ladybugDetourTrack,
+]);
 
 /* まだ解放していない曲のぶんだけ出す、ロック表示の説明（曲名は出さず、解放のしかただけ） */
 const lockedTrackHints = computed(() => {

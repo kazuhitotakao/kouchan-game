@@ -49,8 +49,9 @@ const stageCount = ladybugBalanceStages.length;
 
 /* ============================================================
    音
-   BGM は公園の曲（てんとう虫は公園で見つけるので）。useAudio() には「公園で遊んでいる」ときと同じ値を渡す
-   （サウンドをOFFからONに戻したときも、公園BGMの続きが鳴るように）
+   BGM は、このミニゲーム専用の曲「てんとうむしのよりみち」（ステージ・エンドレスのどちらでも同じ曲）
+   useAudio() には isLadybugMinigame を渡す（サウンドをOFFからONに戻したときも、この曲の続きが鳴るように）
+   ほかの値は「公園で遊んでいる」ときと同じ（このページでは使われない）
    ============================================================ */
 const {
   soundEnabled,
@@ -64,9 +65,9 @@ const {
   playCountdownSound,
   playCountdownStartSound,
   playSuddenEventSound,
-  playParkBgmSoon,
-  stopParkBgm,
-  resumeParkBgm,
+  playLadybugBgmSoon,
+  stopLadybugBgm,
+  resumeLadybugBgm,
   restoreSoundSettings,
   cleanupAudio,
 } = useAudio({
@@ -77,6 +78,7 @@ const {
   isResultScene: computed(() => false),
   currentMinutes: computed(() => 0),
   endingRank: ref(''),
+  isLadybugMinigame: true,
 });
 
 /* ============================================================
@@ -304,7 +306,7 @@ function play() {
   start();
 
   /* BGM は開いたときから鳴らしているが、直接開いたときはまだ鳴らせていないので、ここで鳴らす（鳴っていれば、そのまま） */
-  resumeParkBgm();
+  resumeLadybugBgm();
 }
 
 /* 結果の画面のボタン（終わってすぐは受けつけない → canAcceptResultInput()） */
@@ -423,7 +425,7 @@ async function goToList() {
 
   isLeavingPage = true;
 
-  stopParkBgm();
+  stopLadybugBgm();
 
   await navigateTo('/minigame');
 }
@@ -584,7 +586,7 @@ onMounted(() => {
 
   if (unlockState.value === 'unlocked') {
     focusFirstMainButton();
-    playParkBgmSoon();
+    playLadybugBgmSoon();
   }
 });
 
