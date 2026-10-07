@@ -83,6 +83,33 @@
   font-weight: 700;
 }
 
+/* ハイスコア（点数のすぐ下。前のハイスコアがあるときだけ出す）
+   ・こえなかったとき … 「🏆 ハイスコア 88点　前回 72点」を小さく（主役のランクより目立たないように）
+   ・こえたとき       … 中に金色のふちの札（.ending-card__highscoreBadge）
+   せまい画面で入りきらないときは、「前回」を次の行へ回す */
+.ending-card__highscore {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 14px;
+  margin: -2px 0 12px;
+  color: #8a5a00;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+/* 「🏆 ハイスコア更新！」の札（ランクのバッジより少し遅れて出す。S+の曲のお知らせは、さらにそのあと） */
+.ending-card__highscoreBadge {
+  animation: rank-in 0.5s ease-out 0.4s backwards;
+  padding: 2px 14px;
+  border: 2px solid var(--gold);
+  border-radius: 999px;
+  background: #fffaf0;
+  color: #8a5a00;
+  font-size: 15px;
+}
+
 /* S+ランクのときだけ出す、うた入りエンディングBGMの小さな表示
    主役より目立たないよう、結果の文の下に小さな帯で出す
    せまい画面で2行に分かれても形がくずれないよう、角の丸みは 12px にしている */
