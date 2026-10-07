@@ -284,6 +284,56 @@
   max-width: 100%;
 }
 
+/* B画面の「🏆 ハイスコア」の札（記録があるときだけ。押すと「これまでの記録」の画面が開く）
+   ・order は説明文と同じ 3（HTMLで説明文のあとに書いてあるので、そのすぐ下に出る。書かないと 0 になり、カードのいちばん上へ行ってしまう）
+   ・上の余白をマイナスにして、説明文の下の余白（26px）に食いこませる（説明文とボタンのあいだが、空きすぎないように）
+   ・細い画面で2行に分かれても形がくずれないよう、角の丸みは 12px にしている
+   ・押せることは、右はしの「›」と、カーソルを当てたときの動きで伝える（動きは上のツールバーのボタンとそろえる） */
+.title-card__highscore {
+  order: 3;
+  align-self: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: 38px;
+  margin: -12px 0 22px;
+  padding: 6px 16px;
+  border: 2px solid #f0d58a;
+  border-radius: 12px;
+  background: #fff7e2;
+  color: #8a5a00;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+.title-card__highscore:hover {
+  border-color: #e8b23c;
+  background: #ffefc7;
+  transform: translateY(-1px);
+}
+
+.title-card__highscore:active {
+  transform: translateY(1px);
+}
+
+.title-card__highscore:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+/* 「›」（押すと次の画面へ進む印） */
+.title-card__highscoreArrow {
+  margin-left: 8px;
+  font-size: 17px;
+  line-height: 1;
+}
+
 /* ============================================================
    タイトルカード上部の補助操作（A画面・B画面で共通）
 
@@ -670,6 +720,88 @@
   display: flex;
   justify-content: center;
   margin-top: 8px;
+}
+
+/* ============================================================
+   これまでの記録の画面（B画面の「🏆 ハイスコア」の札から開く）
+
+   入れもの・ツールバー・見出し・セクションは、あそびかた画面のもの（.title-card--howto・.howto-〜）をそのまま使う
+   ハイスコアのセクションだけ、リザルト画面のエンディングカードと同じ金色にする
+   ============================================================ */
+.records-best {
+  border: 2px solid var(--gold);
+  background: linear-gradient(160deg, #fff7e2 0%, #ffeec4 100%);
+  text-align: center;
+}
+
+/* 点数（「88 / 100」。リザルト画面の .ending-card__score を、ひとまわり小さくしたもの） */
+.records-best__score {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+
+.records-best__scoreValue {
+  color: #8a5a00;
+  font-size: 44px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.records-best__scoreMax {
+  color: #8a6a20;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+/* ランク（リザルト画面のバッジを小さくしたもの。前後が段落なので、inline-block のままでも1行に1つ） */
+.records-best__rank {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 4px 20px;
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  background: var(--navy);
+  color: var(--gold);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.3;
+}
+
+.records-best__title {
+  margin: 0;
+  color: #8a5a00;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.records-best__date {
+  margin: 2px 0 12px;
+  color: #8a6a20;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 記録の一覧をのせる白い紙（うすい青・金色の地の上でも、点線の区切りが読めるように） */
+.records-panel {
+  margin: 0;
+  padding: 6px 14px;
+  border-radius: 10px;
+  background: var(--paper);
+  text-align: left;
+}
+
+.records-empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.8;
 }
 
 /* ============================================================

@@ -204,3 +204,34 @@ export type SecretPathSpawn = {
    endless … ミニゲーム（/minigame/secret-path）の「どこまで行ける？」
              （枝に3回当たるまで続き、進むほど速くなる） */
 export type SecretPathMode = 'story' | 'endless';
+
+/* 本編1回ぶんの終わりかた
+   goal     … ゴールした（総合スコアとランクが出る）
+   gameOver … 途中で GAME OVER になった（総合スコアは出さない） */
+export type GameRecordResult = 'goal' | 'gameOver';
+
+/* 本編1回ぶんの記録（ハイスコアと直近の記録に使う。保存のしくみは utils/gameRecords.ts）
+
+   playedAt   … 遊びおわった日時（Date.now() のミリ秒）
+   score      … 総合スコア（GAME OVER は null）
+   rank       … 'Sランク'・'特殊エンド' など（GAME OVER は null）
+   title      … ランクの見出し ／ GAME OVER の理由の見出し
+   returnTime … 帰った時間（'11:40'。GAME OVER は、終わった時間）
+   ほかは、終わったときのステータスと進みぐあい（リザルト画面の「今日の記録」と同じもの） */
+export type GameRecord = {
+  playedAt: number;
+  result: GameRecordResult;
+  score: number | null;
+  rank: string | null;
+  title: string;
+  returnTime: string;
+  childEnergy: number;
+  childMood: number;
+  parentEnergy: number;
+  parentCalm: number;
+  outingPoint: number;
+  tantrumCount: number;
+  visitedPlaceCount: number;
+  playCount: number;
+  collectedItemCount: number;
+};
