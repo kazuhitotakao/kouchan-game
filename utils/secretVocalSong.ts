@@ -8,6 +8,8 @@
    ■ サーバーには localStorage が無いので、読み書きはブラウザで動いているときだけ
    ============================================================ */
 
+import { loadMinigameBest } from '~/utils/minigameStorage';
+
 /* 1回のプレイで、何メートルまで行けたら解放するか
    結果のひとことが「小道の名人です！」になるのと同じ 300m（名人と言われたときに、ごほうびも出るように）
    手で調整したレベル表（Lv.7・350m まで）の中で とどく */
@@ -67,4 +69,21 @@ export function judgeSecretVocalSongUnlock(distanceMeters: number, hasUnlockedSe
   }
 
   return 'newlyUnlocked';
+}
+
+/* 保存してある自己ベストから、解放済みにそろえる（ページを開いたときに呼ぶ。知らせは出さない）
+
+   うた入りの曲を足す前に、もう 300m 行っていた人もいるので、その人には もう一度 行ってもらわずに解放する
+   自己ベストの距離は「1回のプレイで行けた distanceMeters」のいちばん大きい値なので、遊んでいる最中の判定と同じ条件になる
+   答えは「いま解放済みか」（もとから解放済み・いま解放した、のどちらも true） */
+export function unlockSecretVocalSongFromSavedBest() {
+  const savedBest = loadMinigameBest('secret-path');
+  const result = judgeSecretVocalSongUnlock(Number(savedBest?.distance) || 0, false);
+
+  if (result === 'newlyUnlocked') {
+    saveSecretVocalSongUnlocked();
+  }
+
+  // とどいていなくても、遊んでいる最中に解放して、自己ベストを保存する前に閉じたこともあるので、保存も見る
+  return result !== 'none' || loadHasUnlockedSecretVocalSong();
 }

@@ -40,6 +40,7 @@ import { minigames, splitMinigameTitle } from '~/data/minigames';
 import type { MinigameId } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { loadMinigameBest, loadUnlockedMinigames, saveMinigameBest } from '~/utils/minigameStorage';
+import { judgeLadybugVocalSongUnlock, saveLadybugVocalSongUnlocked, unlockLadybugVocalSongFromSavedBest } from '~/utils/ladybugVocalSong';
 
 /* このミニゲームの id（URL の /minigame/ladybug-balance と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
 const minigameId: MinigameId = 'ladybug-balance';
@@ -196,6 +197,12 @@ const {
 
       // 自己ベストを更新したときだけ、キラリン♪
       playItemSound();
+    }
+
+    /* うた入り「てんとうむしのよりみち」の解放（→ utils/ladybugVocalSong.ts）
+       このプレイで はじめて 60秒たえたときだけ保存する（解放の知らせは、曲を足すときに ここで出す） */
+    if (judgeLadybugVocalSongUnlock(endlessRecordMs.value, false) === 'newlyUnlocked') {
+      saveLadybugVocalSongUnlocked();
     }
   },
   onLevelUp: () => {
@@ -566,6 +573,9 @@ onMounted(() => {
 
   clearedStage.value = Math.min(stageCount, Math.max(0, Math.floor(Number(savedBest?.clearedStage) || 0)));
   endlessBestMs.value = Math.max(0, Number(savedBest?.endlessBestMs) || 0);
+
+  // 自己ベストが 60秒以上なら、うた入りの曲を黙って解放済みにする（解放を足す前に たえていた人のため。知らせは出さない）
+  unlockLadybugVocalSongFromSavedBest();
 
   // さいごに えらんでいたものを、えらんでおく
   // まだ無い・いまは遊べないものなら、まだクリアしていない いちばん前のステージ（ぜんぶクリアしていたら最後のステージ）
