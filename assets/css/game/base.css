@@ -866,6 +866,12 @@
   line-height: 1.7;
 }
 
+/* 「もう一度押すと、バッグから出せるよ」を、まだ1つも選んでいないあいだは見せない
+   display: none ではなく visibility: hidden … 場所は残して、選んだ瞬間に下のカードが動かないようにする */
+.snack-lead__sub--hidden {
+  visibility: hidden;
+}
+
 /* おやつの並べ方（パソコンでもスマホでも2列）
    minmax(0, 1fr) の 0 が大事（ふつうの 1fr は中身より小さくならないので、中身が長い列だけ広がってしまう） */
 .snack-list {
