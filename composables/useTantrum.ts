@@ -77,6 +77,7 @@ export type UseTantrumOptions = {
   playTantrumSound: () => void;
   stopParkBgm: () => void;
   stopSecretBgm: () => void;
+  playTantrumBgmSoon: () => void;
 };
 
 export function useTantrum(options: UseTantrumOptions) {
@@ -106,6 +107,7 @@ export function useTantrum(options: UseTantrumOptions) {
     playTantrumSound,
     stopParkBgm,
     stopSecretBgm,
+    playTantrumBgmSoon,
   } = options;
 
   /* ============================================================
@@ -326,11 +328,13 @@ export function useTantrum(options: UseTantrumOptions) {
 
     showTantrumAlert();
 
-    /* BGMを止めて、いやいや発生の結果カードを「無音」にする（しんと静かにして「たいへんなことが起きた」を伝える）
-       ・stop（先頭へ戻す）にするのは、公園へ戻るときに曲を「仕切りなおし」にしたいため
-       ・どの場所でも起こるので、公園BGMとこもれびの広場BGMの両方を止める（秘密の場所でも特別あつかいしない） */
+    /* BGMを、いやいやBGMへ切りかえる（いやいや発生の結果カードを読んでいるあいだから、もう鳴らす）
+       ・公園BGM・こもれびの広場BGMを stop（先頭へ戻す）にするのは、公園へ戻るときに曲を「仕切りなおし」にしたいため
+       ・どの場所でも起こるので、公園BGMとこもれびの広場BGMの両方を止める（秘密の場所でも特別あつかいしない）
+       ・いやいやBGMは、発生音が鳴り終わってから入る（このあと GAME OVER になったときは、checkGameOver() が予約を取り消す） */
     stopParkBgm();
     stopSecretBgm();
+    playTantrumBgmSoon();
 
     childMood.value -= 15;
     parentCalm.value -= 12;
