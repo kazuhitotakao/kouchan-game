@@ -13,6 +13,11 @@ const gameDescription = 'こうちゃんと公園を探検するゲーム';
  */
 const themeColor = '#d6f0fb';
 
+/*
+ * pages/ の中のページの URL（下の hooks で集めて、ビルドのときに HTML を作っておくページとして渡す）
+ */
+const pagePaths = new Set<string>();
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
 
@@ -82,6 +87,37 @@ export default defineNuxtConfig({
          */
         { name: 'apple-mobile-web-app-title', content: gameName },
       ],
+    },
+  },
+
+  /*
+   * どのページも、ビルドするときに HTML を作っておく（prerender）
+   *
+   * ・このゲームのページには、開くたびにサーバーで作る中身が無い（記録や設定は、ぜんぶブラウザの中で読む）
+   * ・作っておかないと、開くたびに Vercel の米国東部のサーバーで HTML を作るので、日本から開くと待たされる
+   *   作っておけば、画像と同じように、近くの（日本の）サーバーからそのまま返せる
+   * ・作るページは pages/ の中から集める（ページを増やしても、ここは直さなくてよい）
+   *   ※ routeRules の '/**': { prerender: true } でも書けるはずだが、いまの Nuxt（3.21）では
+   *     どのページも対象にならなかった（Nuxt の不具合）ので、この形にしている
+   */
+  hooks: {
+    /* pages/ のページの一覧ができたとき、URL を控えておく */
+    'pages:resolved'(pages) {
+      pagePaths.clear();
+
+      for (const page of pages) {
+        // [id] のような、URL の一部が変わるページは、前もって作れないのではぶく
+        if (!page.path.includes(':')) {
+          pagePaths.add(page.path);
+        }
+      }
+    },
+
+    /* ビルドのときに HTML を作っておくページへ、控えておいたページをぜんぶ足す */
+    'prerender:routes'({ routes }) {
+      for (const path of pagePaths) {
+        routes.add(path);
+      }
     },
   },
 
