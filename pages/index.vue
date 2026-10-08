@@ -3296,14 +3296,13 @@ onUnmounted(() => {
 
                     <!-- 中断（いまのプレイを保存したまま、はじめの画面へ戻る → suspendPlay()）
 
-                         ・行き先ではないので、地図の左上のすみに小さく置く（「← 戻る」と同じ、画面を出るボタンの場所。
-                           下の「おうちへ帰る」から はなして、押しまちがえないようにする）
-                         ・入りきる幅に合わせて文字を出しわける（地図が小さいときは「中断」の文字だけ）。読み上げは aria-label
+                         ・行き先ではないので、地図のすみに小さく置く（PC用の地図は右上、スマホ用の地図は左上 → park-map.css）
+                           どちらも行き先のボタンが来ない場所で、下の「おうちへ帰る」からも はなれているので、押しまちがえにくい
+                         ・文字は「中断する」（スマホ用の地図はせまいので「中断」）。読み上げは aria-label
                          ・矢印キーの行き先には入れない（Tab で選んで Enter。上部バーのサウンドボタンと同じあつかい → useKeyboardControls.ts）
                          ・マウスを乗せても、地図で選んでいる行き先は変えない -->
                     <button type="button" class="park-map__suspend" aria-label="中断して、はじめの画面へ戻る" @click="suspendPlay">
-                      <span class="park-map__suspendIcon" aria-hidden="true">⏸</span>
-                      <span class="park-map__suspendText--full" aria-hidden="true">中断して はじめの画面へ</span>
+                      <span class="park-map__suspendText--full" aria-hidden="true">中断する</span>
                       <span class="park-map__suspendText--short" aria-hidden="true">中断</span>
                     </button>
                   </div>
