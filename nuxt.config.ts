@@ -121,6 +121,18 @@ export default defineNuxtConfig({
     },
   },
 
+  experimental: {
+    /*
+     * 作っておいたページのデータを、別のファイル（_payload.json）に分けない（HTML の中に入れたままにする）
+     *
+     * ・このゲームのページには、分けるほどのデータが無い
+     * ・分けると、HTML に _payload.json の先読みが付くのに、ブラウザ側は使わない設定になるので、
+     *   「先読みしたのに使われていない」という警告が出ていた
+     *   （ブラウザ側の設定はページを集める前に決まり、そのときは作るページが0件に見えるため → 上の hooks）
+     */
+    payloadExtraction: false,
+  },
+
   modules: ['@vite-pwa/nuxt'],
 
   /*
