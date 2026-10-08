@@ -26,6 +26,21 @@
   outline-offset: 3px;
 }
 
+/* A画面の「つづきから」（保存があるときだけ。「はじめる」のすぐ上）
+   下の余白（auto）は「はじめる」にまかせる（2つとも auto だと、2つのボタンのあいだにも余白が分けられて、はなれてしまうため） */
+.title-card .title-card__continue {
+  margin-bottom: 12px;
+}
+
+/* 「つづきから」の時刻（保存したときのゲームの中の時刻。名前より小さく、白っぽい札にする） */
+.title-card__continueTime {
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 55%);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ダイアログのボタンは、2つとも左右の余白をそろえる
    .cmd のままだと左右の余白がちがう（左34px／右18px）ので、中央ぞろえの文字が右へずれてしまうため（→ .cmd--goal）
    ※ クラスを2つ重ねているのが大事（あとに書いてある背の低い画面の .cmd { padding } に負けないように） */

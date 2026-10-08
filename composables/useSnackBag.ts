@@ -22,7 +22,8 @@ import type { Snack, SnackId } from '~/types/game';
 export function useSnackBag() {
   /* 今日バッグに入れたおやつ（選んだ順。名札だけで、中身は snacks のほうが持っている）
      ※ 同じおやつは1個まで
-     ※ localStorage には保存しない（その1プレイだけのもの）
+     ※ ここでは localStorage に保存しない（その1プレイだけのもの）
+       「つづきから」のために、公園の地図の画面で残りのおやつを保存するのは pages/index.vue（→ utils/playSave.ts）
      ※ 空に戻すのは、もう一度あそぶときと、A画面へ戻るときだけ（出発しても書きかえないので、そのまま公園へ持ちこまれる） */
   const selectedSnackIds = ref<SnackId[]>([]);
 

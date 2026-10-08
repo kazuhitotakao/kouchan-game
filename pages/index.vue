@@ -7,9 +7,12 @@ import { loadNewMinigames, unlockMinigame } from '~/utils/minigameStorage';
 
 import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
-import { addMinutesToTime } from '~/utils/gameTime';
+import { addMinutesToTime, removeLeadingZero } from '~/utils/gameTime';
 
 import { formatPlayedAt, formatRecordRank, formatRecordScore, getRecordRankTier, isLetterRank, recentGameRecordLimit } from '~/utils/gameRecords';
+
+/* 「つづきから」の保存（公園の地図の画面に来るたびに保存し、ゴール・GAME OVER で消す） */
+import { clearPlaySave, loadPlaySave, savePlay } from '~/utils/playSave';
 
 // 画像の先読みと、画像がそろってから まとめて出す目印（v-reveal-with-images）
 import { preloadGameImages, vRevealWithImages } from '~/utils/imagePreload';
@@ -65,6 +68,7 @@ import StatusBar from '~/components/game/StatusBar.vue';
 import type {
   GameEvent,
   ItemPlace,
+  PlaySave,
   SnackId,
   SnackUseContext,
 } from '~/types/game';
@@ -92,6 +96,7 @@ import { niceTantrumBonusOutingPoint, niceTantrumBonusParentCalm, tantrumAlertDu
 
    ※ 起動画面をはさんでいるのは、ユーザーがまだ触っていないページでは音を鳴らせないため
      「▶ はじめる」を押した操作をきっかけに、タイトルBGMを鳴らしはじめる
+   ※ 起動画面には、保存があるときだけ「つづきから」も出る（押すと、タイトル画面をとばしてゲーム画面へ → resumePlay()）
    ※ 出発したあとも isSnackSelectionOpen は true のまま（gameStarted を先に見て見分ける）
    ※ このほかに「あそびかた」画面（isHowToPlayOpen）と「これまでの記録」の画面（isRecordsOpen）があり、
      開いているあいだは A画面・B画面・おやつ選択画面より優先する（どちらもB画面から開く） */
@@ -121,6 +126,13 @@ const isRecordsOpen = ref(false);
    null のあいだは「ホーム画面に追加」の案内を出さない（ホーム画面から起動したときに、一瞬見えてしまわないように） */
 const isStandalone = ref<boolean | null>(null);
 
+/* 「つづきから」で再開できるプレイ（null … 保存が無い）
+
+   読むのは onMounted の中（localStorage はブラウザにしか無いため）
+   公園の地図の画面に来るたびに保存しなおし、ゴール・GAME OVER で消す（→ watch([gameStarted, currentEvent])）
+   A画面は、これがあるときだけ「つづきから」を出す */
+const playSave = ref<PlaySave | null>(null);
+
 /* ============================================================
    A画面・B画面のボタン（キーボード操作用。画面に出ていないときは null）
 
@@ -128,6 +140,8 @@ const isStandalone = ref<boolean | null>(null);
    ※ サウンドON/OFFは、いちどに1画面にしか出ないので、箱は1つだけで足りる
    ============================================================ */
 const startButtonRef = ref<HTMLButtonElement | null>(null);
+/* A画面の「つづきから」（保存があるときだけ出る。無いときは null） */
+const continueButtonRef = ref<HTMLButtonElement | null>(null);
 const soundtrackButtonRef = ref<HTMLButtonElement | null>(null);
 const minigameButtonRef = ref<HTMLButtonElement | null>(null);
 const selectSnacksButtonRef = ref<HTMLButtonElement | null>(null);
@@ -1154,6 +1168,50 @@ function startGame() {
   pauseCommandPointer();
 }
 
+/* A画面の「つづきから」（保存してあった公園の地図の画面から、プレイを再開する）
+
+   タイトル画面・おやつ選択画面はとばして、出発したあとと同じ状態にする（startGame() のかわり）
+   ・ステータス・時刻・進みぐあい・残りのおやつを、保存から戻す
+     いやいや・とつぜんのできごと・秘密の小道の中の状態は、公園の地図の画面ではいつも片づいているので、はじめのままでよい
+   ・押したこの操作をきっかけに、公園BGMを鳴らしはじめる（タイトルBGMは鳴らさない。どちらの公園BGMかは時刻で決まる）
+   ※ A画面が出るのは、ページを開いたばかりか、プレイが終わって resetGame() したあとだけなので、ほかの状態ははじめのまま */
+function resumePlay() {
+  const save = playSave.value;
+
+  // 保存が無い・もう始まっている（すばやく2回押したときなど）ときは、何もしない
+  if (!save || gameStarted.value) {
+    return;
+  }
+
+  playDecisionSound();
+
+  childEnergy.value = save.childEnergy;
+  childMood.value = save.childMood;
+  outingPoint.value = save.outingPoint;
+  parentEnergy.value = save.parentEnergy;
+  parentCalm.value = save.parentCalm;
+  currentTime.value = save.currentTime;
+  visitedPlaces.value = [...save.visitedPlaces];
+  playCount.value = save.playCount;
+  collectedItems.value = [...save.collectedItems];
+  hasDiscoveredSecretSpot.value = save.hasDiscoveredSecretSpot;
+  tantrumCount.value = save.tantrumCount;
+  selectedSnackIds.value = [...save.snackIds];
+  currentEvent.value = 'parkEntrance';
+
+  playParkBgmSoon();
+
+  // 画面は、出発したあとと同じ組み合わせにする（→ いちばん上の titleEntered の表）
+  titleEntered.value = true;
+  isSnackSelectionOpen.value = true;
+  gameStarted.value = true;
+
+  // 地図のまん中から（startGame() と同じ）
+  lastSelectedPlace.value = null;
+  selectedCommandIndex.value = getEntranceStartIndex();
+  pauseCommandPointer();
+}
+
 /* ============================================================
    おやつ選択画面（B画面 → おやつ選択 → ゲーム）
 
@@ -1333,6 +1391,54 @@ watch(currentEvent, (event) => {
 
   if (event === 'ladybug' && unlockMinigame('ladybug-balance')) {
     showMinigameUnlockNotice('ladybug-balance');
+  }
+});
+
+/* ============================================================
+   「つづきから」の保存（中身と読み書きは utils/playSave.ts）
+
+   ・公園の地図の画面に来るたびに、いまのプレイを保存しなおす（出発した直後・つづきからの直後もふくむ）
+   ・ゴール・GAME OVER になったら消す（終わったプレイは再開しない）
+   ・watch で見るのは、地図の画面へ入る道がいくつもあるため（次の場所へ・小道から引き返す・出発・つづきから）
+     watch は、移動の処理がぜんぶ終わってから呼ばれるので、書きかえがそろったあとの状態が保存される
+   ============================================================ */
+
+/* いまのプレイを、保存の形にまとめる（配列は写しを作る。このあとのプレイで中身が変わっても、保存はそのままにするため） */
+function buildPlaySave(): PlaySave {
+  return {
+    savedAt: Date.now(),
+    childEnergy: childEnergy.value,
+    childMood: childMood.value,
+    outingPoint: outingPoint.value,
+    parentEnergy: parentEnergy.value,
+    parentCalm: parentCalm.value,
+    currentTime: currentTime.value,
+    visitedPlaces: [...visitedPlaces.value],
+    playCount: playCount.value,
+    collectedItems: [...collectedItems.value],
+    hasDiscoveredSecretSpot: hasDiscoveredSecretSpot.value,
+    tantrumCount: tantrumCount.value,
+    snackIds: [...selectedSnackIds.value],
+  };
+}
+
+watch([gameStarted, currentEvent], ([started, event]) => {
+  // A画面・B画面・おやつ選択画面にいるあいだは、保存をさわらない（新しいプレイは、出発した時点で上書きする）
+  if (!started) {
+    return;
+  }
+
+  if (event === 'parkEntrance') {
+    const save = buildPlaySave();
+
+    savePlay(save);
+    playSave.value = save;
+    return;
+  }
+
+  if (event === 'goal' || event === 'gameOver') {
+    clearPlaySave();
+    playSave.value = null;
   }
 });
 
@@ -2382,6 +2488,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, focusTitleMainButton } = use
   getPlaceSelectionIndex,
   isSecretPathPlaying,
   startButtonRef,
+  continueButtonRef,
   soundtrackButtonRef,
   minigameButtonRef,
   selectSnacksButtonRef,
@@ -2395,6 +2502,7 @@ const { gameScreenRef, moveSnackSelectionToHovered, focusTitleMainButton } = use
   soundVolumeSliderRef,
   runSelectedCommand,
   enterTitle,
+  resumePlay,
   openSnackSelection,
   closeSnackSelection,
   closeHowToPlay,
@@ -2428,7 +2536,12 @@ onMounted(() => {
      （画面へ進んだときに、ボタンや文字だけが先に出て、画像があとから出ないように → utils/imagePreload.ts） */
   preloadGameImages();
 
-  // A画面の「はじめる」へフォーカスを当てる（ほかのページから戻ってきたときも、ページが作り直されるのでここを通る）
+  /* 「つづきから」で再開できるプレイを読む（あれば A画面に「つづきから」が出る）
+     フォーカスを当てるより先に読む（「つづきから」があるときは、そちらがメインのボタンになるため） */
+  playSave.value = loadPlaySave();
+
+  /* A画面のメインのボタン（「つづきから」か「はじめる」）へフォーカスを当てる
+     （ほかのページから戻ってきたときも、ページが作り直されるのでここを通る） */
   focusTitleMainButton();
 
   // A画面の「🎮 ミニゲーム」の NEW（一覧を見て戻ってきたときも、ページが作り直されるのでここで読みなおす）
@@ -2742,10 +2855,22 @@ onUnmounted(() => {
            起動画面（いちばん最初の1枚。ここで押した操作をきっかけに、タイトルBGMを鳴らしはじめる）
            ============================================================ -->
       <div v-else-if="!titleEntered" key="boot" class="title-screen">
-        <div class="title-card title-card--boot">
+        <!-- title-card--resumable … 「つづきから」があるときの目印（ボタンが1つ増えても、カードの高さが変わらないようにする → base.css） -->
+        <div class="title-card title-card--boot" :class="{ 'title-card--resumable': playSave }">
+          <!-- 「つづきから」（保存があるときだけ → resumePlay()）
+               あるときは、中断したプレイを続けるのがいちばんありそうなので、こちらをメインのボタンにする
+               （HTML でいちばん先に書いて Tab の最初にし、光る印 cmd--single もこちらに付ける）
+               見た目は「はじめる」のすぐ上（CSS の order が「はじめる」と同じで、HTML でこちらが先にあるため）
+               時刻は、保存したときのゲームの中の時刻（どこから続くのかが分かるように） -->
+          <button v-if="playSave" ref="continueButtonRef" class="cmd cmd--start cmd--single title-card__continue" @click="resumePlay">
+            つづきから
+            <span class="title-card__continueTime">{{ removeLeadingZero(playSave.currentTime) }}</span>
+          </button>
+
           <!-- メインのボタンなので、HTMLではいちばん先に書く（Tab の順番を「はじめる → サウンドトラック → …」にするため）
-               見た目の位置は、CSS の order でいちばん下のまま -->
-          <button ref="startButtonRef" class="cmd cmd--start cmd--single" @click="enterTitle">はじめる</button>
+               見た目の位置は、CSS の order でいちばん下のまま
+               「つづきから」があるときは、光る印（cmd--single）をあちらにゆずる（2つとも光ると、どちらが選ばれているか分からないため） -->
+          <button ref="startButtonRef" class="cmd cmd--start" :class="{ 'cmd--single': !playSave }" @click="enterTitle">はじめる</button>
 
           <!-- 上のツールバー（左：サウンドトラック・ミニゲームへの入口 ／ 右：サウンド） -->
           <div class="title-card__tools">
@@ -2787,8 +2912,10 @@ onUnmounted(() => {
           <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <!-- 「ホーム画面に追加」の案内（ふつうの Safari / Chrome で開いているときだけ。パソコンでは CSS でかくす）
-               iPhone も Android も「ホーム画面に追加」という名前のメニューを選ぶので、その名前だけ伝える -->
-          <p v-if="isStandalone === false" class="install-hint">📱 「ホーム画面に追加」で、アプリみたいに遊べるよ</p>
+               iPhone も Android も「ホーム画面に追加」という名前のメニューを選ぶので、その名前だけ伝える
+               「つづきから」があるときは出さない（前にも遊んだ人なので、もう見ている。出すと、ボタンが1つ増えたぶん
+               カードが高くなり、A画面 → B画面でカードの上のふちがずれてしまうため） -->
+          <p v-if="isStandalone === false && !playSave" class="install-hint">📱 「ホーム画面に追加」で、アプリみたいに遊べるよ</p>
         </div>
       </div>
 

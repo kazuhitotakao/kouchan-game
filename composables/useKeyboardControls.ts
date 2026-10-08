@@ -52,6 +52,8 @@ export type UseKeyboardControlsOptions = {
 
   /* ===== フォーカスを当てるためのボタン・入力欄 ===== */
   startButtonRef: Ref<HTMLButtonElement | null>;
+  /* A画面の「つづきから」（保存があるときだけ。無いときは null） */
+  continueButtonRef: Ref<HTMLButtonElement | null>;
   soundtrackButtonRef: Ref<HTMLButtonElement | null>;
   minigameButtonRef: Ref<HTMLButtonElement | null>;
   selectSnacksButtonRef: Ref<HTMLButtonElement | null>;
@@ -74,6 +76,8 @@ export type UseKeyboardControlsOptions = {
 
   /* 画面の開け閉め */
   enterTitle: () => void;
+  /* A画面の「つづきから」（保存してあった公園の地図から再開する） */
+  resumePlay: () => void;
   openSnackSelection: () => void;
   closeSnackSelection: () => void;
   closeHowToPlay: () => void;
@@ -112,6 +116,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     getPlaceSelectionIndex,
     isSecretPathPlaying,
     startButtonRef,
+    continueButtonRef,
     soundtrackButtonRef,
     minigameButtonRef,
     selectSnacksButtonRef,
@@ -125,6 +130,7 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     soundVolumeSliderRef,
     runSelectedCommand,
     enterTitle,
+    resumePlay,
     openSnackSelection,
     closeSnackSelection,
     closeHowToPlay,
@@ -254,6 +260,8 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
        B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
      ①がその画面のメインのボタンで、画面が出たときは①にフォーカスを当てる
      B画面には、記録があるときだけ「🏆 ハイスコア」の札も出る（メインのボタンのすぐ上。→ getTitleRecordsButton()）
+     A画面には、保存があるときだけ「つづきから」も出る（「はじめる」のすぐ上）
+       あるときは「つづきから」が①（メインのボタン）になり、「はじめる」は、そのすぐ下のボタンになる（→ getTitleColumn()）
 
      ・Tab / Shift+Tab … ブラウザのふつうの移動（はしでは反対のはしへ回りこませる）
      ・↑ ← ↓ →        … 画面の並びのとおりに動かす（→ moveTitleFocusByArrow()）
@@ -281,10 +289,10 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return [];
     }
 
-    // 並びは「メイン → 上の行のボタンを左から順に」
+    // 並びは「メイン → 上の行のボタンを左から順に」（A画面のメインは、「つづきから」があればそちら）
     const items = titleEntered.value
       ? [selectSnacksButtonRef.value, backToBootButtonRef.value, howToPlayButtonRef.value, soundToggleButtonRef.value] // B画面
-      : [startButtonRef.value, soundtrackButtonRef.value, minigameButtonRef.value, soundToggleButtonRef.value]; // A画面
+      : [continueButtonRef.value ?? startButtonRef.value, soundtrackButtonRef.value, minigameButtonRef.value, soundToggleButtonRef.value]; // A画面
 
     return items.filter((item): item is HTMLButtonElement => item !== null);
   }
@@ -295,10 +303,28 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     return titleEntered.value ? recordsButtonRef.value : null;
   }
 
+  /* 上の行より下の、たての並び（見た目の上から順。先頭の null が上の行）
+     ・B画面 … 上の行 → 🏆 ハイスコアの札（あるときだけ）→ メイン（きょうのおやつを選ぶ）
+     ・A画面 … 上の行 → メイン（つづきから）→ はじめる（「つづきから」が無いときは、上の行 → メイン（はじめる）） */
+  function getTitleColumn(mainButton: HTMLButtonElement): (HTMLButtonElement | null)[] {
+    const recordsButton = getTitleRecordsButton();
+
+    if (recordsButton) {
+      return [null, recordsButton, mainButton];
+    }
+
+    if (!titleEntered.value && startButtonRef.value && startButtonRef.value !== mainButton) {
+      return [null, mainButton, startButtonRef.value];
+    }
+
+    return [null, mainButton];
+  }
+
   /* ↑↓←→ でフォーカスを動かす
 
-     ■ A画面
+     ■ A画面（「つづきから」は、保存があるときだけ）
        [ ♪ ][ 🎮 ミニゲーム ]        [ サウンドON/OFF ]
+                   [ つづきから ]
                     [ はじめる ]
 
      ■ B画面（「🏆 ハイスコア」の札は、記録があるときだけ）
@@ -306,9 +332,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
                  [ 🏆 ハイスコア 88点（Sランク） › ]
                    [ きょうのおやつを選ぶ ]
 
-     どちらも「下にメインのボタンが1つ、上の行にいくつか」の形なので、同じ動きにしている
-       ・↑ ↓ … たての並び（上の行 → 札 → メインのボタン）を1段ずつ動く（はしでは反対のはしへ回りこむ）
-                札が無いときは、メインのボタンと上の行の行き来になる。上の行へ戻るときは、さっき上の行でいたボタンへ戻る
+     どちらも「下にボタンが1〜2つ、上の行にいくつか」の形なので、同じ動きにしている
+       ・↑ ↓ … たての並び（上の行 → 下のボタン）を1段ずつ動く（はしでは反対のはしへ回りこむ。→ getTitleColumn()）
+                下のボタンが1つのときは、メインのボタンと上の行の行き来になる。上の行へ戻るときは、さっき上の行でいたボタンへ戻る
        ・← → … 上の行を、となりへ1つずつ動く（はしでは回りこむ。上の行にいないときは、←で左上・→で右上のサウンドへ） */
   /* 上の行から ↑↓ で出たとき、上の行のどのボタンにいたか（上の行へ戻ってきたとき、同じボタンへ戻すため）
      A画面⇄B画面で入れかわると、もう画面に無いボタンになるので、そのときは左上のボタンへ戻す */
@@ -330,10 +356,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
     // ↑ ↓：たての並びを1段ずつ（上の行はまとめて1段。null の段が上の行）
     if (key === 'ArrowUp' || key === 'ArrowDown') {
-      const recordsButton = getTitleRecordsButton();
-      const column: (HTMLButtonElement | null)[] = recordsButton ? [null, recordsButton, mainButton] : [null, mainButton];
+      const column = getTitleColumn(mainButton);
 
-      // いまいる段（上の行・札・メインのボタンのどれでもないとき（何も選んでいないときなど）は -1）
+      // いまいる段（上の行・下のボタンのどれでもないとき（何も選んでいないときなど）は -1）
       const currentRow = topIndex !== -1 ? 0 : active instanceof HTMLButtonElement ? column.indexOf(active) : -1;
 
       if (currentRow === -1) {
@@ -742,7 +767,10 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     // どこも選んでいない（body など）ときは、その画面のメインのボタンを押したことにする（Space のスクロールは止める）
     event.preventDefault();
 
-    if (!titleEntered.value) {
+    // A画面で「つづきから」があるときは、そちらがメインのボタン
+    if (!titleEntered.value && continueButtonRef.value) {
+      resumePlay();
+    } else if (!titleEntered.value) {
       enterTitle();
     } else {
       openSnackSelection();
