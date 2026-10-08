@@ -54,6 +54,19 @@ export default defineNuxtConfig({
        */
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
 
+      script: [
+        /*
+         * 「つづきから」の保存があるかだけを、画面が出る前に調べて、<html data-play-save> の目印を付ける
+         *   作っておいた HTML には、保存があるかどうかが入っていない（はじめは「はじめる」1つ）ので、
+         *   目印が無いと、ページを開いたとき「はじめる」が一瞬出てから「はじめから／つづきから」に切りかわってしまう
+         *   目印があるあいだは、ボタンの段を「横ならびと同じ高さ」でかくしておく（→ command.css の .title-card--checking）
+         * ※ キーの名前は utils/playSave.ts の playSaveStorageKey と同じにすること
+         */
+        {
+          innerHTML: "try{if(localStorage.getItem('kouchan-game-play-save'))document.documentElement.setAttribute('data-play-save','')}catch(e){}",
+        },
+      ],
+
       meta: [
         /*
          * ページの説明（検索結果や、共有したときのカードに出る）
