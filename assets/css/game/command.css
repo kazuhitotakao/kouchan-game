@@ -26,19 +26,142 @@
   outline-offset: 3px;
 }
 
-/* A画面の「つづきから」（保存があるときだけ。「はじめる」のすぐ上）
-   下の余白（auto）は「はじめる」にまかせる（2つとも auto だと、2つのボタンのあいだにも余白が分けられて、はなれてしまうため） */
-.title-card .title-card__continue {
-  margin-bottom: 12px;
+/* タイトル系の画面（A画面・B画面・おやつ選択）の金色のボタンの見た目
+   ・角を少し丸くして、やわらかい感じにする
+   ・上のほうを明るくして、光が当たっているような ふっくらした感じを出す
+   ・文字の下に白い線を1px入れて、浮き出ているように見せる
+   ※ 大きさ（余白・ふちの太さ・文字の大きさ）は .cmd--start のまま変えない（カードの高さをそろえてあるため） */
+.title-card .cmd--start {
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffe39a 0%, #ffd370 45%, #ffc94a 100%);
+  letter-spacing: 0.06em;
+  text-shadow: 0 1px 0 rgb(255 255 255 / 55%);
 }
 
-/* 「つづきから」の時刻（保存したときのゲームの中の時刻。名前より小さく、白っぽい札にする） */
+/* ============================================================
+   A画面のメインのボタンの段（→ pages/index.vue の .title-card__starts）
+
+   保存が無いときは「はじめる」1つ、保存があるときは「はじめから」「つづきから」を同じ大きさで横にならべる
+   ・order と margin-bottom: auto は段がうけもつ（カードの中で下のほうに置き、上下の余白を、上の margin-top: auto と均す）
+   ・2つのボタンは stretch なので、2行の「つづきから」と、1行の「はじめから」の高さもそろう
+   ============================================================ */
+.title-card__starts {
+  display: flex;
+  order: 4;
+  gap: 12px;
+  margin-bottom: auto;
+}
+
+/* 段の中のボタンは、段の役目（margin-bottom: auto）を持たない
+   ・order は段の中のならび（HTML では「つづきから」が先だが、見た目は「はじめから」を左にする）
+   ・左右の余白は同じにする（.cmd のままだと、背の低い画面で左32px・右16pxになり、真ん中の文字が右へずれる。
+     半分の幅のボタンでは、そのずれが目立つため） */
+.title-card .title-card__starts .cmd {
+  flex: 1 1 0;
+  order: 2;
+  min-width: 0;
+  margin-bottom: 0;
+  padding-inline: 24px;
+}
+
+.title-card .title-card__starts .title-card__restart {
+  order: 1;
+}
+
+/* 「つづきから」：名前の下に、保存したときの時刻を小さく出す（2行。どちらも真ん中ぞろえ） */
+.title-card .title-card__continue {
+  flex-direction: column;
+  gap: 0;
+}
+
+/* 時刻の札（保存したときのゲームの中の時刻）
+   金色のボタンになじむよう、淡いベージュの地に、ボタンの文字と同じ茶色の仲間の数字にする
+   ・左に小さなアナログ時計（針は保存した時刻を指す）
+   ・そろそろお昼（11:30以降）は、ゲーム画面の上部の時計と同じく、オレンジにする（--almostNoon）
+   ・色は、すぐ下の変数だけで決める（札の地 --continue-time-ground ／ 数字と文字盤 --continue-time-ink）
+   ・金色のボタンの文字の白い浮き出し（text-shadow）は、札の中ではいらないので消す */
 .title-card__continueTime {
-  padding: 0 10px;
+  --continue-time-ground: #fff3cf;
+  --continue-time-ink: #8a5f1c;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  padding: 1px 9px 1px 6px;
   border-radius: 999px;
-  background: rgb(255 255 255 / 55%);
-  font-size: 15px;
+  background: var(--continue-time-ground);
+  box-shadow: inset 0 0 0 1px rgb(138 95 28 / 22%);
+  color: var(--continue-time-ink);
+  font-size: 12.5px;
+  line-height: 1.25;
+  letter-spacing: 0.05em;
+  text-shadow: none;
   font-variant-numeric: tabular-nums;
+}
+
+/* 淡い地でも読めるよう、上部の時計のオレンジ（#ff9f40）より少し濃くしてある */
+.title-card__continueTime--almostNoon {
+  --continue-time-ink: #d9731a;
+}
+
+/* 札の中の小さな時計（文字盤は数字と同じ色でぬり、針と真ん中の点は札の地の色にする）
+   文字盤を線だけで描くと、2本の針が一直線になる時刻（9:20 など）で、円に斜線の「禁止」の印に見えてしまうため */
+.title-card__continueClock {
+  flex: none;
+  width: 13px;
+  height: 13px;
+}
+
+.title-card__continueClockFace {
+  fill: var(--continue-time-ink);
+}
+
+.title-card__continueClockHand {
+  stroke: var(--continue-time-ground);
+  stroke-width: 1.4;
+  stroke-linecap: round;
+}
+
+/* 短い針は太くして、長い針と見分けやすくする */
+.title-card__continueClockHand--hour {
+  stroke-width: 1.9;
+}
+
+.title-card__continueClockCenter {
+  fill: var(--continue-time-ground);
+}
+
+/* 「はじめから」：白いボタン（「つづきから」より目立たせない）
+   cmd--start のまま色だけ変えるので、大きさ・文字・余白は金色のボタンとぴったり同じ */
+.title-card .cmd--start.title-card__restart {
+  border-color: #c8d4e6;
+  background: var(--paper);
+  color: var(--navy);
+  text-shadow: none;
+}
+
+.title-card .cmd--start.title-card__restart::before {
+  color: var(--navy);
+}
+
+/* とても細いスマホ（360px以下）では、半分の幅のボタンに「はじめから」が1行で入りきらないので、
+   すき間・左右の余白・文字の間を少しつめて、文字も1px小さくする（選択カーソル「▶」も、はしへ寄せる） */
+@media (max-width: 360px) {
+
+  .title-card__starts {
+    gap: 8px;
+  }
+
+  .title-card .title-card__starts .cmd {
+    padding-inline: 18px;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+
+  .title-card .title-card__starts .cmd::before {
+    left: 6px;
+  }
 }
 
 /* ダイアログのボタンは、2つとも左右の余白をそろえる

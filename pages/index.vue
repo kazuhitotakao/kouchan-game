@@ -7,7 +7,7 @@ import { loadNewMinigames, unlockMinigame } from '~/utils/minigameStorage';
 
 import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
-import { addMinutesToTime, removeLeadingZero } from '~/utils/gameTime';
+import { addMinutesToTime, parseTimeToMinutes, removeLeadingZero } from '~/utils/gameTime';
 
 import { formatPlayedAt, formatRecordRank, formatRecordScore, getRecordRankTier, isLetterRank, recentGameRecordLimit } from '~/utils/gameRecords';
 
@@ -132,6 +132,24 @@ const isStandalone = ref<boolean | null>(null);
    公園の地図の画面に来るたびに保存しなおし、ゴール・GAME OVER で消す（→ watch([gameStarted, currentEvent])）
    A画面は、これがあるときだけ「つづきから」を出す */
 const playSave = ref<PlaySave | null>(null);
+
+/* A画面の「つづきから」の時刻に付ける、小さなアナログ時計（保存が無いときは null）
+
+   hourAngle / minuteAngle … 短い針・長い針の角度（0° が12時の向きで、時計まわり）
+   isAlmostNoon            … そろそろお昼（11:30以降）か（ゲーム画面の上部の時計と同じく、オレンジにする → isAlmostNoon） */
+const playSaveClock = computed(() => {
+  if (!playSave.value) {
+    return null;
+  }
+
+  const minutes = parseTimeToMinutes(playSave.value.currentTime);
+
+  return {
+    hourAngle: (Math.floor(minutes / 60) % 12) * 30 + (minutes % 60) * 0.5,
+    minuteAngle: (minutes % 60) * 6,
+    isAlmostNoon: minutes >= 11 * 60 + 30,
+  };
+});
 
 /* ============================================================
    A画面・B画面のボタン（キーボード操作用。画面に出ていないときは null）
@@ -2878,22 +2896,44 @@ onUnmounted(() => {
            起動画面（いちばん最初の1枚。ここで押した操作をきっかけに、タイトルBGMを鳴らしはじめる）
            ============================================================ -->
       <div v-else-if="!titleEntered" key="boot" class="title-screen">
-        <!-- title-card--resumable … 「つづきから」があるときの目印（ボタンが1つ増えても、カードの高さが変わらないようにする → base.css） -->
+        <!-- title-card--resumable … 「つづきから」があるときの目印（ボタンの段が少し高くなっても、カードの高さが変わらないようにする → base.css） -->
         <div class="title-card title-card--boot" :class="{ 'title-card--resumable': playSave }">
-          <!-- 「つづきから」（保存があるときだけ → resumePlay()）
-               あるときは、中断したプレイを続けるのがいちばんありそうなので、こちらをメインのボタンにする
-               （HTML でいちばん先に書いて Tab の最初にし、光る印 cmd--single もこちらに付ける）
-               見た目は「はじめる」のすぐ上（CSS の order が「はじめる」と同じで、HTML でこちらが先にあるため）
-               時刻は、保存したときのゲームの中の時刻（どこから続くのかが分かるように） -->
-          <button v-if="playSave" ref="continueButtonRef" class="cmd cmd--start cmd--single title-card__continue" @click="resumePlay">
-            つづきから
-            <span class="title-card__continueTime">{{ removeLeadingZero(playSave.currentTime) }}</span>
-          </button>
+          <!-- メインのボタンの段（HTMLではいちばん先に書く。Tab の順番を「メイン → サウンドトラック → …」にするため。
+               見た目の位置は、CSS の order でいちばん下のまま）
 
-          <!-- メインのボタンなので、HTMLではいちばん先に書く（Tab の順番を「はじめる → サウンドトラック → …」にするため）
-               見た目の位置は、CSS の order でいちばん下のまま
-               「つづきから」があるときは、光る印（cmd--single）をあちらにゆずる（2つとも光ると、どちらが選ばれているか分からないため） -->
-          <button ref="startButtonRef" class="cmd cmd--start" :class="{ 'cmd--single': !playSave }" @click="enterTitle">はじめる</button>
+               ・保存が無いとき … 金色の「はじめる」1つ（これまでどおり）
+               ・保存があるとき … 「はじめから」「つづきから」を、同じ大きさで横にならべる（昔のゲームの形）
+                 つづきから … 金色。中断したプレイを続けるのがいちばんありそうなので、メインのボタンにする（→ resumePlay()）
+                               HTML でこちらを先に書いて Tab の最初にし、光る印 cmd--single もこちらに付ける（見た目は右がわ）
+                               2行目は、保存したときのゲームの中の時刻（どこから続くのかが分かるように）
+                 はじめから … 白。押したときの動きは「はじめる」と同じ（B画面へ。新しく出発した時点で、保存を上書きする）
+                               大きさが金色のボタンとぴったり同じになるよう、cmd--start のまま色だけ変える（→ command.css） -->
+          <div class="title-card__starts">
+            <button
+              v-if="playSave"
+              ref="continueButtonRef"
+              class="cmd cmd--start cmd--single title-card__continue"
+              :aria-label="`つづきから（${removeLeadingZero(playSave.currentTime)}から）`"
+              @click="resumePlay">
+              <span>つづきから</span>
+
+              <!-- 保存したときの時刻（淡いベージュの地に茶色の数字の札。11:30 からはオレンジ。色は command.css）
+                   左の小さな時計は、針が保存した時刻を指す（→ playSaveClock） -->
+              <span v-if="playSaveClock" class="title-card__continueTime" :class="{ 'title-card__continueTime--almostNoon': playSaveClock.isAlmostNoon }">
+                <svg class="title-card__continueClock" viewBox="0 0 16 16" aria-hidden="true">
+                  <circle class="title-card__continueClockFace" cx="8" cy="8" r="7" />
+                  <line class="title-card__continueClockHand title-card__continueClockHand--hour" x1="8" y1="8" x2="8" y2="5" :transform="`rotate(${playSaveClock.hourAngle} 8 8)`" />
+                  <line class="title-card__continueClockHand" x1="8" y1="8" x2="8" y2="3.2" :transform="`rotate(${playSaveClock.minuteAngle} 8 8)`" />
+                  <circle class="title-card__continueClockCenter" cx="8" cy="8" r="1" />
+                </svg>
+                {{ removeLeadingZero(playSave.currentTime) }}
+              </span>
+            </button>
+
+            <button ref="startButtonRef" class="cmd cmd--start" :class="playSave ? 'title-card__restart' : 'cmd--single'" @click="enterTitle">
+              {{ playSave ? 'はじめから' : 'はじめる' }}
+            </button>
+          </div>
 
           <!-- 上のツールバー（左：サウンドトラック・ミニゲームへの入口 ／ 右：サウンド） -->
           <div class="title-card__tools">
@@ -2936,7 +2976,7 @@ onUnmounted(() => {
 
           <!-- 「ホーム画面に追加」の案内（ふつうの Safari / Chrome で開いているときだけ。パソコンでは CSS でかくす）
                iPhone も Android も「ホーム画面に追加」という名前のメニューを選ぶので、その名前だけ伝える
-               「つづきから」があるときは出さない（前にも遊んだ人なので、もう見ている。出すと、ボタンが1つ増えたぶん
+               「つづきから」があるときは出さない（前にも遊んだ人なので、もう見ている。出すと、「つづきから」の時刻の2行目のぶん
                カードが高くなり、A画面 → B画面でカードの上のふちがずれてしまうため） -->
           <p v-if="isStandalone === false && !playSave" class="install-hint">📱 「ホーム画面に追加」で、アプリみたいに遊べるよ</p>
         </div>

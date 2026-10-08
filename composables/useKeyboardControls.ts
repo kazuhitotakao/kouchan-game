@@ -260,8 +260,8 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
        B … ① きょうのおやつを選ぶ ② はじめの画面へ戻る ③ ？ あそびかた      ④ サウンドON/OFF
      ①がその画面のメインのボタンで、画面が出たときは①にフォーカスを当てる
      B画面には、記録があるときだけ「🏆 ハイスコア」の札も出る（メインのボタンのすぐ上。→ getTitleRecordsButton()）
-     A画面には、保存があるときだけ「つづきから」も出る（「はじめる」のすぐ上）
-       あるときは「つづきから」が①（メインのボタン）になり、「はじめる」は、そのすぐ下のボタンになる（→ getTitleColumn()）
+     A画面は、保存があるときだけ「はじめから」「つづきから」の2つが横にならぶ
+       あるときは「つづきから」が①（メインのボタン）になり、「はじめから」は、その左どなりになる（→ getTitleStartPair()）
 
      ・Tab / Shift+Tab … ブラウザのふつうの移動（はしでは反対のはしへ回りこませる）
      ・↑ ← ↓ →        … 画面の並びのとおりに動かす（→ moveTitleFocusByArrow()）
@@ -305,40 +305,47 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
   /* 上の行より下の、たての並び（見た目の上から順。先頭の null が上の行）
      ・B画面 … 上の行 → 🏆 ハイスコアの札（あるときだけ）→ メイン（きょうのおやつを選ぶ）
-     ・A画面 … 上の行 → メイン（つづきから）→ はじめる（「つづきから」が無いときは、上の行 → メイン（はじめる）） */
+     ・A画面 … 上の行 → メイン（「はじめから」「つづきから」が横にならぶときは、その段をまとめて1段とする） */
   function getTitleColumn(mainButton: HTMLButtonElement): (HTMLButtonElement | null)[] {
     const recordsButton = getTitleRecordsButton();
 
-    if (recordsButton) {
-      return [null, recordsButton, mainButton];
+    return recordsButton ? [null, recordsButton, mainButton] : [null, mainButton];
+  }
+
+  /* A画面で「はじめから」「つづきから」が横にならんでいるときの、その段のボタン（見た目の左から順）
+     ならんでいないとき（B画面・保存が無いとき）は null */
+  function getTitleStartPair(): HTMLButtonElement[] | null {
+    if (titleEntered.value || !continueButtonRef.value || !startButtonRef.value) {
+      return null;
     }
 
-    if (!titleEntered.value && startButtonRef.value && startButtonRef.value !== mainButton) {
-      return [null, mainButton, startButtonRef.value];
-    }
-
-    return [null, mainButton];
+    return [startButtonRef.value, continueButtonRef.value];
   }
 
   /* ↑↓←→ でフォーカスを動かす
 
-     ■ A画面（「つづきから」は、保存があるときだけ）
+     ■ A画面（保存があるときは「はじめから」「つづきから」、無いときは「はじめる」1つ）
        [ ♪ ][ 🎮 ミニゲーム ]        [ サウンドON/OFF ]
-                   [ つづきから ]
-                    [ はじめる ]
+             [ はじめから ][ つづきから ]
 
      ■ B画面（「🏆 ハイスコア」の札は、記録があるときだけ）
        [ はじめの画面へ戻る ]     [ ？ あそびかた ][ サウンドON/OFF ]
                  [ 🏆 ハイスコア 88点（Sランク） › ]
                    [ きょうのおやつを選ぶ ]
 
-     どちらも「下にボタンが1〜2つ、上の行にいくつか」の形なので、同じ動きにしている
-       ・↑ ↓ … たての並び（上の行 → 下のボタン）を1段ずつ動く（はしでは反対のはしへ回りこむ。→ getTitleColumn()）
-                下のボタンが1つのときは、メインのボタンと上の行の行き来になる。上の行へ戻るときは、さっき上の行でいたボタンへ戻る
-       ・← → … 上の行を、となりへ1つずつ動く（はしでは回りこむ。上の行にいないときは、←で左上・→で右上のサウンドへ） */
+     どちらも「下にメインのボタンの段、上の行にいくつか」の形なので、同じ動きにしている
+       ・↑ ↓ … たての並び（上の行 → 札 → メインのボタンの段）を1段ずつ動く（はしでは反対のはしへ回りこむ。→ getTitleColumn()）
+                札が無いときは、メインのボタンの段と上の行の行き来になる。上の行へ戻るときは、さっき上の行でいたボタンへ戻る
+                A画面の「はじめから」「つづきから」の段へ戻るときも、さっきその段でいたほうへ戻る（はじめは「つづきから」）
+       ・← → … 上の行を、となりへ1つずつ動く（はしでは回りこむ。上の行にいないときは、←で左上・→で右上のサウンドへ）
+                A画面の「はじめから」「つづきから」にいるときは、その2つを行き来する（はしでは回りこむ） */
   /* 上の行から ↑↓ で出たとき、上の行のどのボタンにいたか（上の行へ戻ってきたとき、同じボタンへ戻すため）
      A画面⇄B画面で入れかわると、もう画面に無いボタンになるので、そのときは左上のボタンへ戻す */
   let lastTitleTopItem: HTMLButtonElement | null = null;
+
+  /* A画面の「はじめから」「つづきから」の段から ↑↓ で出たとき、どちらにいたか（その段へ戻ってきたとき、同じほうへ戻すため）
+     まだ覚えていない・もう画面に無いボタン（A画面を出て戻ってきたときなど）なら、メインのボタン（つづきから）へ戻す */
+  let lastTitleStartPairItem: HTMLButtonElement | null = null;
 
   function moveTitleFocusByArrow(key: string) {
     const items = getTitleFocusItems();
@@ -354,25 +361,41 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
     // 上の行の何番目にいるか（上の行にいないときは -1）
     const topIndex = topRow.findIndex((button) => button === active);
 
+    // A画面の「はじめから」「つづきから」の段の、何番目にいるか（ならんでいない・その段にいないときは -1）
+    const startPair = getTitleStartPair();
+    const pairIndex = startPair && active instanceof HTMLButtonElement ? startPair.indexOf(active) : -1;
+
     // ↑ ↓：たての並びを1段ずつ（上の行はまとめて1段。null の段が上の行）
     if (key === 'ArrowUp' || key === 'ArrowDown') {
       const column = getTitleColumn(mainButton);
 
-      // いまいる段（上の行・下のボタンのどれでもないとき（何も選んでいないときなど）は -1）
-      const currentRow = topIndex !== -1 ? 0 : active instanceof HTMLButtonElement ? column.indexOf(active) : -1;
+      /* いまいる段（上の行・札・メインのボタンの段のどれでもないとき（何も選んでいないときなど）は -1）
+         「はじめから」にいるときも、メインのボタン（つづきから）と同じ段にいることにする */
+      const currentRow =
+        topIndex !== -1 ? 0 : pairIndex !== -1 ? column.indexOf(mainButton) : active instanceof HTMLButtonElement ? column.indexOf(active) : -1;
 
       if (currentRow === -1) {
         mainButton.focus();
         return;
       }
 
-      // 上の行を出るときに、いまいた場所を覚えておく（戻ってきたとき、同じボタンへ戻すため）
+      // 上の行・「はじめから」「つづきから」の段を出るときに、いまいた場所を覚えておく（戻ってきたとき、同じボタンへ戻すため）
       if (topIndex !== -1) {
         lastTitleTopItem = topRow[topIndex];
       }
 
+      if (startPair && pairIndex !== -1) {
+        lastTitleStartPairItem = startPair[pairIndex];
+      }
+
       const step = key === 'ArrowDown' ? 1 : -1;
       const nextButton = column[(currentRow + step + column.length) % column.length];
+
+      // 「はじめから」「つづきから」の段へ入るときは、さっきその段でいたほうへ戻る
+      if (nextButton === mainButton && startPair && lastTitleStartPairItem && startPair.includes(lastTitleStartPairItem)) {
+        lastTitleStartPairItem.focus();
+        return;
+      }
 
       if (nextButton) {
         nextButton.focus();
@@ -384,6 +407,13 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       const lastTopItem = lastTitleTopItem && topRow.includes(lastTitleTopItem) ? lastTitleTopItem : topRow[0];
 
       lastTopItem.focus();
+      return;
+    }
+
+    // ← →：A画面の「はじめから」「つづきから」にいるときは、その2つを行き来する（はしでは回りこむ）
+    if (startPair && pairIndex !== -1) {
+      const step = key === 'ArrowLeft' ? -1 : 1;
+      startPair[(pairIndex + step + startPair.length) % startPair.length].focus();
       return;
     }
 
