@@ -540,8 +540,9 @@ const snackCommandIndex = 2;
 const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 3 : 2));
 
 /* いやいやタイムの「待つ」コマンドの文字
-   なにか試したのに、まだ続いている（いやいや中で結果メッセージが出ている）ときは「もう少し待ってみる」 */
-const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し待ってみる' : '少し待ってみる'));
+   なにか試したのに、まだ続いている（いやいや中で結果メッセージが出ている）ときは「もう少し待ってみる」
+   ※「|」は、折り返してよい区切り（画面には出ない。→ CommandBox.vue の splitCommandLabel） */
+const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し|待って|みる' : '少し|待って|みる'));
 
 /* 結果カードの下の「次へ進む」コマンドの文字（押したときの goToNextPlace() は同じ） */
 const nextPlaceCommandLabel = computed(() => {
@@ -1716,7 +1717,7 @@ function lookForAmbulance() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② いっしょにサイレンを聞く */
+/* ② いっしょに音を聞く */
 function listenToSiren() {
   startStatusChanges();
 
@@ -1732,11 +1733,14 @@ function listenToSiren() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 遊びに戻る（ステータスも時間も変わらない） */
-function walkOnFromSiren() {
+/* ③ 手をふって応援する */
+function cheerOnAmbulance() {
   startStatusChanges();
 
-  resultMessage.value = '「またこんど見ようね」遊びに戻っても、何度もふりかえっています。';
+  childMood.value += 3;
+  addMinutes(5);
+
+  resultMessage.value = '「がんばれー！」音のするほうに手をふって、何度もふりかえっています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1879,7 +1883,7 @@ function hugAfterFall() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 「いたいのいたいのとんでいけ〜」（ころんだ分を、だいぶ取り返せる） */
+/* ② 「いたいのいたいのとんでけ」（ころんだ分を、だいぶ取り返せる） */
 function blowPainAway() {
   startStatusChanges();
 
@@ -1955,11 +1959,11 @@ function watchFountainFar() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 遊びに戻る（ステータスも時間も変わらない） */
+/* ③ ぬれる前に離れる（ステータスも時間も変わらない） */
 function walkOnFromFountain() {
   startStatusChanges();
 
-  resultMessage.value = '「またあとで見ようね」遊びに戻っても、何度も噴水をふりかえっています。';
+  resultMessage.value = '「ぬれちゃうから、またあとでね」歩きだしても、何度も噴水をふりかえっています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2298,14 +2302,14 @@ function runSelectedCommand() {
 
     /* ここから下はとつぜんのできごと */
 
-    /* 救急車のサイレン（0 救急車を探してみる／1 いっしょにサイレンを聞く／2 遊びに戻る） */
+    /* 救急車のサイレン（0 救急車を探してみる／1 いっしょに音を聞く／2 手をふって応援する） */
     case 'emergencySiren':
       if (index === 0) {
         lookForAmbulance();
       } else if (index === 1) {
         listenToSiren();
       } else if (index === 2) {
-        walkOnFromSiren();
+        cheerOnAmbulance();
       }
       break;
 
@@ -2342,7 +2346,7 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 噴水が出た（0 水しぶきの近くまで行く／1 少し離れてながめる／2 遊びに戻る） */
+    /* 噴水が出た（0 水しぶきの近くまで行く／1 少し離れてながめる／2 ぬれる前に離れる） */
     case 'fountain':
       if (index === 0) {
         goCloseToFountain();
@@ -3674,12 +3678,12 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '救急車を探してみる' }, { label: 'いっしょにサイレンを聞く' }, { label: '遊びに戻る' }]"
+                :commands="[{ label: '救急車を|探して|みる' }, { label: 'いっしょに|音を聞く' }, { label: '手をふって|応援する' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
                 :pointer-paused="isCommandPointerPaused"
-                @select="index => [lookForAmbulance, listenToSiren, walkOnFromSiren][index]()"
+                @select="index => [lookForAmbulance, listenToSiren, cheerOnAmbulance][index]()"
                 @next="goToNextPlace" />
             </section>
           </div>
@@ -3711,7 +3715,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'いっしょにじっくり見る' }, { label: 'そっと手を近づけてみる' }, { label: 'ばいばいして見送る' }]"
+                :commands="[{ label: 'いっしょに|じっくり|見る' }, { label: 'そっと|手を|近づけて|みる' }, { label: 'ばいばい|して|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -3747,7 +3751,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '近くで見せてもらう' }, { label: 'だっこで少し離れて見る' }, { label: '道をあけて見送る' }]"
+                :commands="[{ label: '近くで|見せて|もらう' }, { label: 'だっこで|少し|離れて|見る' }, { label: '道をあけて|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -3783,7 +3787,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'すぐにだっこする' }, { label: '「いたいのいたいのとんでいけ〜」' }, { label: '「大丈夫？」と声をかけて待つ' }]"
+                :commands="[{ label: 'すぐに|だっこする' }, { label: '「いたいの|いたいの|とんでけ」' }, { label: '「大丈夫？」|と|声を|かけて|待つ' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -3819,7 +3823,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '水しぶきの近くまで行く' }, { label: '少し離れてながめる' }, { label: '遊びに戻る' }]"
+                :commands="[{ label: '水しぶきの|近くまで|行く' }, { label: '少し|離れて|ながめる' }, { label: 'ぬれる前に|離れる' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
