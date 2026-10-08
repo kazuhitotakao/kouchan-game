@@ -8,11 +8,14 @@
 
 import type { Directive } from 'vue';
 
+import { suddenEventBannerImages } from '~/data/game';
 import { minigames } from '~/data/minigames';
 import { parkMapImages } from '~/data/parkMap';
 import { itemImages, placeBannerImages } from '~/data/places';
 import { secretPathItemImages, secretPathPlayerImages } from '~/data/secretPath';
 import { snackBagImage, snacks } from '~/data/snacks';
+import { tantrumBannerImages } from '~/data/tantrum';
+import type { BannerImage } from '~/types/game';
 
 /* 一度 読みはじめた画像は、ここにおぼえておく
    ・同じ画像を2回読まない（何回呼ばれても、同じ Promise を返す）
@@ -40,8 +43,16 @@ export async function preloadImages(srcs: readonly string[]): Promise<void> {
   await Promise.all(srcs.map(preloadImage));
 }
 
+/* 場面の絵（バナー）のうち、絵があるものの画像のパス（まだ仮の枠の場面は入れない） */
+function getBannerImageSrcs(banners: Record<string, BannerImage>): string[] {
+  return Object.values(banners).flatMap((banner) => ('src' in banner ? [banner.src] : []));
+}
+
 /* 本編で使う画像を、出てくる順に3回に分けて先読みする（すぐ次に出る画像から先に届くように）
-   地図は、いまの画面の幅で出るほう1枚だけ */
+   ① おやつ選択画面と地図（地図は、いまの画面の幅で出るほう1枚だけ）
+   ② 場面の絵（場所・とつぜんのできごと・いやいや）と、見つけたもの
+   ③ 秘密の小道
+   ※ 場面の絵は、data/ の絵の一覧から集める（一覧に足した絵は、ここを直さなくても先読みされる） */
 export async function preloadGameImages(): Promise<void> {
   if (!import.meta.client) return;
 
@@ -49,7 +60,12 @@ export async function preloadGameImages(): Promise<void> {
   const parkMapImage = isSp ? parkMapImages.sp : parkMapImages.pc;
 
   await preloadImages([...snacks.map((snack) => snack.image), snackBagImage, parkMapImage]);
-  await preloadImages([...Object.values(placeBannerImages).map((banner) => banner.src), ...Object.values(itemImages)]);
+  await preloadImages([
+    ...getBannerImageSrcs(placeBannerImages),
+    ...getBannerImageSrcs(suddenEventBannerImages),
+    ...Object.values(tantrumBannerImages),
+    ...Object.values(itemImages),
+  ]);
   await preloadSecretPathImages();
 }
 
