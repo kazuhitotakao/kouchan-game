@@ -54,6 +54,15 @@ export type GameEvent =
 */
 export type SceneVariant = 'place' | 'rest' | 'tantrum' | 'suddenEvent';
 
+/* 場面の絵（カードのいちばん上のバナー）1枚ぶん（NoImage.vue へ v-bind でそのまま渡す）
+
+   絵があるとき     … { src, ratio }   画像のパスと縦横比（ちがうと、左右か上下が切れる）
+   まだ絵が無いとき … { label, ratio } 仮の枠（NO IMAGE）に出す、何の絵が入るかの名前
+
+   ※ 絵ができたら、label を src に書きかえて、ratio を画像に合わせるだけでよい
+     画面に出すのも、先読み（utils/imagePreload.ts）も、この形のデータを見る */
+export type BannerImage = { src: string; ratio: string } | { label: string; ratio: string };
+
 /* おやつの名札（決めた文字しか入れられないので、'gumi' のような書きまちがいをエディタが教えてくれる） */
 export type SnackId = 'gummy' | 'chocolate' | 'senbei' | 'biscuit' | 'banana' | 'jelly';
 
