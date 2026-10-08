@@ -992,12 +992,12 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
       return;
     }
 
-    /* 上部バーのサウンドボタンにフォーカスしているときは、ゲームのキー操作をしない
-       （Enter で「音のON/OFF」と「ゲームの決定」が同時に起きてしまうため）
+    /* 上部バーのサウンドボタン・公園の地図の「中断」にフォーカスしているときは、ゲームのキー操作をしない
+       （Enter で「音のON/OFF」や「中断」と、「ゲームの決定」が同時に起きてしまうため）
        ※ preventDefault() は呼ばない（ボタン本来のクリックは、ブラウザにまかせる） */
     const target = event.target as HTMLElement | null;
 
-    if (target?.closest?.('.sound-toggle')) {
+    if (target?.closest?.('.sound-toggle, .park-map__suspend')) {
       return;
     }
 

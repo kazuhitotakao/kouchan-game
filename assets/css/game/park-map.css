@@ -269,6 +269,81 @@
   white-space: nowrap;
 }
 
+/* ===== 中断（いまのプレイを保存したまま、はじめの画面へ戻る → pages/index.vue の suspendPlay()） =====
+   行き先ではないので、地図の左上のすみに小さく置く
+   ・見た目は行き先のボタン（.cmd）とは変えて、「← 戻る」と同じ白い札にする（場所の名前とまちがえないように）
+   ・絵の上でも読めるよう、白い下地を濃いめにして、行き先のボタンと同じ影を付ける
+   ・左上のすみには行き先のボタンが無い（いちばん近いのは、その右下の秘密の小道。NEW の印もふくめて、はなれるようにしてある）
+     ※ 320×454 のような、とても小さい画面では、地図がちぢんで行き先のボタンどうしも重なる（そこまでは合わせていない） */
+.park-map__suspend {
+  position: absolute;
+  z-index: 1;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--navy-line);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 88%);
+  box-shadow: 0 2px 6px rgb(35 57 94 / 28%);
+  color: var(--navy);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.1s ease;
+}
+
+/* PCでカーソルを当てたときは、「← 戻る」と同じく、うすい水色になって少し上へ動く */
+.park-map__suspend:hover {
+  border-color: var(--navy);
+  background: #e3f2fb;
+  transform: translateY(-1px);
+}
+
+.park-map__suspend:active {
+  transform: translateY(1px);
+}
+
+.park-map__suspend:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* 短い文字（「中断」）は、地図が小さいときだけ出す（→ すぐ下の @container） */
+.park-map__suspendText--short {
+  display: none;
+}
+
+/* 地図が小さいとき（板の横はば 600px 未満。スマホ・背の低いPC）は、「中断」の文字だけの小さな札にする
+   （行き先のボタンが名前ぶんの幅に切りかわるのと同じ境目）
+   ⏸ もはずすのは、すぐ右下の秘密の小道（と左上の角の NEW の印）から はなすため */
+@container park-map (max-width: 599px) {
+
+  .park-map__suspend {
+    top: 5px;
+    left: 5px;
+    padding: 3px 9px;
+    font-size: 12px;
+  }
+
+  .park-map__suspendIcon,
+  .park-map__suspendText--full {
+    display: none;
+  }
+
+  .park-map__suspendText--short {
+    display: inline;
+  }
+}
+
 /* 地図が小さいとき（板の横はば 600px 未満）
    PCでも背の低い画面では地図が小さくなり、11em のボタンだと となりと重なるので、名前ぶんの幅にする */
 @container park-map (max-width: 599px) {

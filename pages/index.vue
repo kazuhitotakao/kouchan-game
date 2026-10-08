@@ -2227,11 +2227,12 @@ function resetGame() {
   selectedCommandIndex.value = 0;
 }
 
-/* ゴール／GAME OVER画面から、A画面（起動画面）へ戻る（「もう一度あそぶ」はB画面まで）
+/* ゲーム画面から、A画面（起動画面）へ戻る（「もう一度あそぶ」はB画面まで）
+   ゴール／GAME OVER画面の「はじめに戻る」と、公園の地図の「中断」（→ suspendPlay()）から呼ぶ
 
    resetGame() の中でタイトルBGMを「少しあとで鳴らす」予約をしているので、かならず取り消す
    （A画面は「まだ音を鳴らしていない画面」なので、戻ったとたんに曲が鳴りだすと不自然なため） */
-function goBackToBootFromResult() {
+function goBackToBootFromGame() {
   /* ここでの変更は、ぜんぶ同じ処理の中で行うので、Vue はまとめて1回だけ描きなおす
      （「スコアが0のリザルト画面」や「B画面」が途中でチラッと見えることはない）
      消えかけのリザルト画面は <Transition> でもう描きなおされないので、結果が見えたままフェードアウトする */
@@ -2243,6 +2244,26 @@ function goBackToBootFromResult() {
   titleEntered.value = false;
 }
 
+/* 公園の地図の「中断」（いまのプレイを保存したまま、A画面へ戻る）
+
+   保存は地図の画面に来たときにもう済んでいるが、念のため、いまの状態でもう一度保存してから戻る
+   ・resetGame() で gameStarted が false になっても、保存は消えない（消すのはゴール・GAME OVER のときだけ）
+   ・戻ったA画面には「つづきから」が出るので、そこから同じ地図の画面へ戻れる（→ resumePlay()）
+   ・確認は出さない（保存したままなので、押しまちがえても「つづきから」ですぐ戻れるため） */
+function suspendPlay() {
+  // 地図の画面にいないとき・出口の確認を開いているときは、何もしない（画面に出ていないボタンが、キーなどで押されたとき）
+  if (!gameStarted.value || currentEvent.value !== 'parkEntrance' || isGoalConfirmVisible.value) {
+    return;
+  }
+
+  const save = buildPlaySave();
+
+  savePlay(save);
+  playSave.value = save;
+
+  goBackToBootFromGame();
+}
+
 /* Enter / Space を押したときに、いま選んでいるコマンドを実行する
    マウスでクリックしたときと同じ関数を、いる場所（currentEvent）と番号（selectedCommandIndex）で呼び分けるだけ */
 function runSelectedCommand() {
@@ -2250,7 +2271,7 @@ function runSelectedCommand() {
      ※ 下の「結果表示中」にも当てはまることがあるので、いちばん先に見る */
   if (currentEvent.value === 'goal' || currentEvent.value === 'gameOver') {
     if (selectedCommandIndex.value === 1) {
-      goBackToBootFromResult();
+      goBackToBootFromGame();
       return;
     }
 
@@ -2619,6 +2640,8 @@ onUnmounted(() => {
               <ul class="howto-list">
                 <li>朝9時〜12時、公園の場所を選んで探検。行動すると時間が進みます。</li>
                 <li>12時になるか、出口へ向かうと結果発表。</li>
+                <!-- 自動で保存していることと、途中でやめられることを知らせる（保存のしくみは utils/playSave.ts） -->
+                <li>公園の地図にもどるたびに、自動で保存。途中でやめても「つづきから」で遊べます。</li>
                 <li>公園には、特別な場所もあるみたい。</li>
               </ul>
 
@@ -3270,6 +3293,19 @@ onUnmounted(() => {
                         <span class="cmd__text">おうちへ帰る</span>
                       </button>
                     </div>
+
+                    <!-- 中断（いまのプレイを保存したまま、はじめの画面へ戻る → suspendPlay()）
+
+                         ・行き先ではないので、地図の左上のすみに小さく置く（「← 戻る」と同じ、画面を出るボタンの場所。
+                           下の「おうちへ帰る」から はなして、押しまちがえないようにする）
+                         ・入りきる幅に合わせて文字を出しわける（地図が小さいときは「中断」の文字だけ）。読み上げは aria-label
+                         ・矢印キーの行き先には入れない（Tab で選んで Enter。上部バーのサウンドボタンと同じあつかい → useKeyboardControls.ts）
+                         ・マウスを乗せても、地図で選んでいる行き先は変えない -->
+                    <button type="button" class="park-map__suspend" aria-label="中断して、はじめの画面へ戻る" @click="suspendPlay">
+                      <span class="park-map__suspendIcon" aria-hidden="true">⏸</span>
+                      <span class="park-map__suspendText--full" aria-hidden="true">中断して はじめの画面へ</span>
+                      <span class="park-map__suspendText--short" aria-hidden="true">中断</span>
+                    </button>
                   </div>
                 </nav>
               </article>
@@ -4121,7 +4157,7 @@ onUnmounted(() => {
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
                 aria-label="はじめの画面へ戻る"
-                @click="goBackToBootFromResult"
+                @click="goBackToBootFromGame"
                 @mouseenter="selectedCommandIndex = 1"
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
@@ -4225,7 +4261,7 @@ onUnmounted(() => {
                 class="cmd cmd--sub cmd--back"
                 :class="{ 'cmd--selected': selectedCommandIndex === 1 }"
                 aria-label="はじめの画面へ戻る"
-                @click="goBackToBootFromResult"
+                @click="goBackToBootFromGame"
                 @mouseenter="selectedCommandIndex = 1"
                 @focus="selectedCommandIndex = 1"
                 @keydown.enter.stop
