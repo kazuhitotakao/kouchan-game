@@ -21,7 +21,8 @@ withDefaults(
     variant: SceneVariant;
 
     /* その場面ならではの選択肢（place は2つ、suddenEvent は3つ、rest・tantrum は使わない）
-       押されたときは、何番目かを @select で親へ伝える */
+       押されたときは、何番目かを @select で親へ伝える
+       label の「|」は、折り返してよい区切り（画面には出ない。「水しぶきの|近くまで|行く」） */
     commands?: { label: string }[];
 
     /* 結果の文章（出ているあいだは、コマンドのかわりに「次へ進む」だけを出す） */
@@ -97,6 +98,12 @@ defineEmits<{
   hug: [];
   wait: [];
 }>();
+
+/* 選択肢の文字を、折り返してよい区切り（|）ごとに分ける（「水しぶきの|近くまで|行く」→「水しぶきの」「近くまで」「行く」）
+   区切りが無い文字は、そのまま1つ */
+function splitCommandLabel(label: string): string[] {
+  return label.split('|');
+}
 </script>
 
 <template>
@@ -117,7 +124,7 @@ defineEmits<{
           @click="$emit('select', index)"
           @mouseenter="selectedIndex = index"
           @focus="selectedIndex = index">
-          <span class="command-box__text">{{ command.label }}</span>
+          <span class="command-box__text"><span v-for="(phrase, phraseIndex) in splitCommandLabel(command.label)" :key="phraseIndex" class="command-box__phrase">{{ phrase }}</span></span>
         </button>
 
         <!-- ここから下は「どこでも同じコマンド」という区切り（種類がちがうことを、ひとめで分かるように）
@@ -296,7 +303,7 @@ defineEmits<{
           @click="$emit('talk')"
           @mouseenter="selectedIndex = talkCommandIndex"
           @focus="selectedIndex = talkCommandIndex">
-          <span class="command-box__text">お話してみる</span>
+          <span class="command-box__text"><span class="command-box__phrase">お話して</span><span class="command-box__phrase">みる</span></span>
         </button>
 
         <button
@@ -316,7 +323,7 @@ defineEmits<{
           @click="$emit('openSnackMenu')"
           @mouseenter="selectedIndex = snackCommandIndex"
           @focus="selectedIndex = snackCommandIndex">
-          <span class="command-box__text">おやつをあげる</span>
+          <span class="command-box__text"><span class="command-box__phrase">おやつを</span><span class="command-box__phrase">あげる</span></span>
           <span class="command-box__badge">残り{{ snackLeft }}個</span>
         </button>
 
@@ -329,7 +336,7 @@ defineEmits<{
           @click="$emit('wait')"
           @mouseenter="selectedIndex = waitCommandIndex"
           @focus="selectedIndex = waitCommandIndex">
-          <span class="command-box__text">{{ waitCommandLabel }}</span>
+          <span class="command-box__text"><span v-for="(phrase, phraseIndex) in splitCommandLabel(waitCommandLabel)" :key="phraseIndex" class="command-box__phrase">{{ phrase }}</span></span>
         </button>
       </template>
 
@@ -359,7 +366,7 @@ defineEmits<{
           @click="$emit('select', index)"
           @mouseenter="selectedIndex = index"
           @focus="selectedIndex = index">
-          <span class="command-box__text">{{ command.label }}</span>
+          <span class="command-box__text"><span v-for="(phrase, phraseIndex) in splitCommandLabel(command.label)" :key="phraseIndex" class="command-box__phrase">{{ phrase }}</span></span>
         </button>
       </template>
 
