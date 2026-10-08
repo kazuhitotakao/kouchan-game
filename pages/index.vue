@@ -944,6 +944,7 @@ const {
   playTantrumSound,
   stopParkBgm,
   stopSecretBgm,
+  playTantrumBgmSoon,
 });
 
 /* GAME OVER判定（ステータスが変わる行動のあとに、必ず fixAllStatus() のあとで呼ぶ）
@@ -1565,18 +1566,15 @@ function goToNextPlace() {
     stopSecretBgm();
   }
 
-  /* ② いやいや中なら、いやいやタイムの画面へ（いやいやBGMを鳴らす予約をする）
+  /* ② いやいや中なら、いやいやタイムの画面へ
 
-     公園BGMとこもれびの広場BGMは、いやいやが発生した瞬間にもう止めてあるが、2曲が重ならないよう念のため止める
-     どの場所で起きても、同じ曲・同じ聞こえかたにそろえる */
+     いやいやBGMは、いやいやが発生した瞬間から鳴っているので、ここではそのまま続ける（頭からやり直さない → checkTantrum()）
+     公園BGMとこもれびの広場BGMも、発生した瞬間にもう止めてあるが、2曲が重ならないよう念のため止める */
   if (isTantrum.value) {
     stopParkBgm();
     stopSecretBgm();
 
     currentEvent.value = 'tantrum';
-
-    // currentEvent を 'tantrum' にしたあとで呼ぶ（鳴らす直前に、まだいやいやタイムにいるかを確かめるため）
-    playTantrumBgmSoon();
     return;
   }
 
@@ -3425,7 +3423,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">「すべるー！」小さな手で、とてとて階段をのぼりはじめました。</p>
+                <p class="place-card__text">「見ててー！」よいしょ、よいしょと階段をのぼりはじめました。</p>
               </article>
 
               <ResultCard
@@ -3997,7 +3995,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
-                <p class="place-card__text">「いたい……」つまずいて、ひざを見ています。</p>
+                <p class="place-card__text">「いたーいっ！」つまずいて、ひざをさすっています。</p>
               </article>
 
               <ResultCard

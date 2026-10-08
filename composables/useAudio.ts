@@ -129,7 +129,7 @@ export function useAudio(options: UseAudioOptions) {
        ・ゴールと GAME OVER は、いやいや関連より先に置く
          （いやいやの途中でゴール・GAME OVER になると、isTantrum が true のまま残っていることがあるため）
        ・いやいや関連は、公園BGMより先に置く（いやいや画面なのに公園BGMが鳴ってしまうため）
-       ・「いやいや発生の結果を読んでいる最中」（場所はそのまま、isTantrum だけ true）は、わざと無音なので何も鳴らさない
+       ・「いやいや発生の結果を読んでいる最中」（場所はそのまま、isTantrum だけ true）も、いやいやBGMを鳴らす
        ・秘密の場所・秘密の小道は、公園BGMより先に置く（公園BGMが鳴って、2曲が重なってしまうため）
        ・てんとう虫のミニゲームは、いちばん先に置く（ほかの条件は、本編の画面を見わけるためのもののため） */
   function applySoundEnabledChange() {
@@ -142,10 +142,9 @@ export function useAudio(options: UseAudioOptions) {
         resumeResultBgm();
       } else if (gameStarted.value && currentEvent.value === 'gameOver') {
         resumeGameOverBgm();
-      } else if (gameStarted.value && currentEvent.value === 'tantrum') {
+      } else if (gameStarted.value && (currentEvent.value === 'tantrum' || isTantrum.value)) {
+        // isTantrum だけ true … いやいや発生の結果カードを読んでいる最中（ここからもう、いやいやBGMの出番）
         resumeTantrumBgm();
-      } else if (gameStarted.value && isTantrum.value) {
-        // いやいや発生の結果カードを読んでいる最中（わざと無音）なので、何も鳴らさない
       } else if (gameStarted.value && (currentEvent.value === 'secretSpot' || currentEvent.value === 'secretPath')) {
         // 秘密の小道も、こもれびの広場と同じ「こもれびの奥で」
         resumeSecretBgm();
@@ -1241,8 +1240,9 @@ export function useAudio(options: UseAudioOptions) {
      いやいやタイムのBGM（作りは公園BGMと同じ）
 
      いちばん大事なのは「いつ切り替えるか」
-     ① いやいやが発生した瞬間は、公園BGMを止めて「無音」にするだけ（通常行動の結果を、しんと静かな画面で読ませる）
-     ② 「こうちゃんのところへ行く」で、いやいやタイムの画面へ移った瞬間に鳴らす（goToNextPlace()）
+     ① いやいやが発生した瞬間に、公園BGMを止めて、いやいやBGMを鳴らす予約をする（checkTantrum()）
+        （発生音「ポヨヨン……」が鳴り終わってから曲が入る）
+     ② 「こうちゃんのところへ行く」で、いやいやタイムの画面へ移っても、曲はそのまま続ける（頭からやり直さない → goToNextPlace()）
      ③ いやいやが終わっても、その瞬間には止めない（結果を読んでいるあいだ、画面はまだいやいやタイムのため）
      ④ 「次の場所を選ぶ」で、いやいやタイムの画面から出るときに止める（goToNextPlace()）
      ============================================================ */
@@ -1300,9 +1300,8 @@ export function useAudio(options: UseAudioOptions) {
   }
 
   /* いやいやBGMを鳴らしはじめるまでの待ち時間（ミリ秒）
-     いやいやタイムの場面が出きったころに鳴りはじめる長さ
-     ほかのBGM（0.7秒）より短いのは、「すぐ なだめに行く」場面なので、間を置かずに曲が入るほうが合うため */
-  const tantrumBgmStartDelay = 400;
+     ほかのBGM（0.7秒）より少し長い 1秒（発生音「ポヨヨン……」は 0.4秒で鳴り終わるので、しっかり間をはさんでから曲が入る） */
+  const tantrumBgmStartDelay = 1000;
 
   let tantrumBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1319,8 +1318,12 @@ export function useAudio(options: UseAudioOptions) {
     tantrumBgmTimer = setTimeout(() => {
       tantrumBgmTimer = null;
 
-      // 待っているあいだに、いやいやタイムの画面から出ていたら、もう鳴らさない
-      if (currentEvent.value !== 'tantrum') {
+      /* 待っているあいだに、いやいやの場面から出ていたら、もう鳴らさない
+         ・いやいやの場面 … いやいや発生の結果カード（isTantrum だけ true）と、いやいやタイムの画面（currentEvent が 'tantrum'）
+         ・ゴール・GAME OVER は、isTantrum が true のまま残っていることがあるので、はっきり除く */
+      const isTantrumScene = currentEvent.value === 'tantrum' || isTantrum.value;
+
+      if (!isTantrumScene || currentEvent.value === 'goal' || currentEvent.value === 'gameOver') {
         return;
       }
 

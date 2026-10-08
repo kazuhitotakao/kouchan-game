@@ -35,11 +35,14 @@ import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession }
    ============================================================ */
 
 /* 1曲ぶんの情報
+   id          … 保存（前回の曲・曲順 → lastPlayStorageKey）に使う名前。あとから変えると、覚えている曲がずれるので変えない
+   number      … 画面に出す番号（01 など）。一覧もこの順にならぶ。曲を足したときは、こちらだけ振りなおせばよい
    description … 「|」は、せまい画面で折り返してよい場所のしるし（画面には出ない → splitPhrases）
                  「BGM」のような短い言葉だけが次の行に残らないよう、短い言葉は前の言葉とくっつけておく
    lyrics      … 歌詞（うた入りの曲だけ） */
 type SoundtrackTrack = {
   id: number;
+  number: number;
   title: string;
   description: string;
   src: string;
@@ -48,14 +51,14 @@ type SoundtrackTrack = {
   lyrics?: LyricLine[];
 };
 
-/* 曲の一覧（この順番で画面に出る）
+/* 曲の一覧（はじめから聴ける曲だけ。ボーナストラックは下に分けてある → あわせて番号の順にならべたものが tracks）
 
    volume が曲ごとにちがうのは、音源の録音の大きさがちがうため
-   本編のBGMより全体に大きめなのは、曲そのものを聴くページだから
-   ※ はじめから聴ける曲だけ。ボーナストラックは下に分けてある（あわせたものが tracks） */
+   本編のBGMより全体に大きめなのは、曲そのものを聴くページだから */
 const baseTracks: SoundtrackTrack[] = [
   {
     id: 1,
+    number: 1,
     title: 'こうちゃんの大冒険',
     description: 'はじまりの|BGM',
     src: '/audio/title-bgm.mp3',
@@ -64,6 +67,7 @@ const baseTracks: SoundtrackTrack[] = [
   },
   {
     id: 2,
+    number: 2,
     title: 'こうえんたんけん',
     description: '公園での|探検BGM 前半',
     src: '/audio/park-bgm.mp3',
@@ -72,6 +76,7 @@ const baseTracks: SoundtrackTrack[] = [
   },
   {
     id: 3,
+    number: 3,
     title: 'ひるまえのぼうけん',
     description: '公園での|探検BGM 後半',
     src: '/audio/park-bgm2.mp3',
@@ -79,15 +84,8 @@ const baseTracks: SoundtrackTrack[] = [
     credit: '音楽生成：Suno',
   },
   {
-    id: 4,
-    title: 'こもれびの奥で',
-    description: 'こもれびの広場 BGM',
-    src: '/audio/secret-bgm.mp3',
-    volume: 0.4,
-    credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
-  },
-  {
     id: 5,
+    number: 6,
     title: 'いやいやタイム！',
     description: 'いやいやタイム|BGM',
     src: '/audio/tantrum-bgm.mp3',
@@ -96,6 +94,7 @@ const baseTracks: SoundtrackTrack[] = [
   },
   {
     id: 6,
+    number: 7,
     title: 'きょうの大冒険、おしまい！',
     description: 'リザルト画面|BGM',
     src: '/audio/result-bgm.mp3',
@@ -104,6 +103,7 @@ const baseTracks: SoundtrackTrack[] = [
   },
   {
     id: 7,
+    number: 8,
     title: 'きょうはここまで',
     description: 'GAME OVER|画面|BGM',
     src: '/audio/game-over-bgm.mp3',
@@ -113,34 +113,54 @@ const baseTracks: SoundtrackTrack[] = [
 ];
 
 /* ============================================================
-   ボーナストラック（あそんで解放する曲）
+   ボーナストラック（あそんで解放する曲。番号は画面の番号 → number）
 
-   ・08 … 本編で一度でもS+ランクを取ると解放（→ utils/sPlusSong.ts）
-   ・09 … ミニゲーム「どこまで行ける？」で300mまで行くと解放（→ utils/secretVocalSong.ts）
-   ・10 … 本編の とつぜんのできごとで、テントウムシを見つけると解放
+   ・04 … 本編で 秘密の小道をぬけると解放
+          （ミニゲーム「どこまで行ける？」と同じ条件なので、ミニゲームの解放の記録をそのまま見る → utils/minigameStorage.ts）
+   ・05 … 本編の とつぜんのできごとで、テントウムシを見つけると解放
           （ミニゲーム「枝の上のてんとう虫」と同じ条件なので、ミニゲームの解放の記録をそのまま見る → utils/minigameStorage.ts）
-   ・11 … ミニゲーム「枝の上のてんとう虫」の「ずっと ここにいて！」で60秒たえると解放（→ utils/ladybugVocalSong.ts）
+   ・09 … ミニゲーム「どこまで行ける？」で300mまで行くと解放（→ utils/secretVocalSong.ts）
+   ・10 … ミニゲーム「枝の上のてんとう虫」の「ずっと ここにいて！」で60秒たえると解放（→ utils/ladybugVocalSong.ts）
+   ・11 … 本編で一度でもS+ランクを取ると解放（→ utils/sPlusSong.ts）
    保存場所は、それぞれのページと同じものを使う（ずれると「取ったのに聴けない」になるため）
+
+   ■ 番号のならび
+     ・場面のBGM（01〜08）のあとに、うた入りの曲（09〜11）をまとめる
+     ・ミニゲームのBGM（04・05）は、公園の探検BGM（02・03）のすぐあと
+     ・うた入りは、もとの曲と同じ順（04 → 09、05 → 10）。S+（07 のうた入り）は、いちばん最後のご褒美なので 11
 
    ■ 「再生できる曲」と「ロック表示」を分けてある
      ・tracks         … 再生できる曲だけ。再生のしくみは、ぜんぶ tracks だけを見る
      ・lockedTrackHints … まだ解放していない曲の「🔒 ？？？」表示（ボタンを持たない、ただの表示）
      こうすれば、再生のしくみのあちこちで「ロック中の曲はとばす」と書かなくてよい
    ============================================================ */
-const sPlusBonusTrack: SoundtrackTrack = {
-  id: 8,
-  title: sPlusSongTitle,
-  description: 'S+ランク|特別エンディングBGM',
-  src: sPlusSongSrc,
-  // 音量と制作情報は、通常版（06）と同じ（通常版にSunoでうたを足したもののため）
-  volume: 0.43,
+
+/* こもれびの広場のBGM（ミニゲーム「どこまで行ける？」でも流れている） */
+const secretSpotTrack: SoundtrackTrack = {
+  id: 4,
+  number: 4,
+  title: 'こもれびの奥で',
+  description: 'こもれびの広場 BGM',
+  src: '/audio/secret-bgm.mp3',
+  volume: 0.4,
   credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
-  lyrics: sPlusSongLyrics,
+};
+
+/* ミニゲーム「枝の上のてんとう虫」のBGM */
+const ladybugDetourTrack: SoundtrackTrack = {
+  id: 10,
+  number: 5,
+  title: 'てんとうむしのよりみち',
+  description: 'ミニゲーム|枝の上のてんとう虫 BGM',
+  src: '/audio/ladybug-detour-bgm.mp3',
+  volume: 0.4,
+  credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
 };
 
 /* ミニゲームでずっと流れている曲（04 こもれびの奥で）に、うたを足したもの */
 const secretVocalBonusTrack: SoundtrackTrack = {
   id: 9,
+  number: 9,
   title: secretVocalSongTitle,
   description: 'どこまで行ける？|300m達成の特別BGM',
   src: secretVocalSongSrc,
@@ -150,28 +170,29 @@ const secretVocalBonusTrack: SoundtrackTrack = {
   lyrics: secretVocalSongLyrics,
 };
 
-/* ミニゲーム「枝の上のてんとう虫」のBGM
-   08・09 のあとから足した曲なので、番号は 10。一覧でも、08・09 のうしろに出す
-   （08・09 の番号を変えると、覚えている続きの曲がずれるため） */
-const ladybugDetourTrack: SoundtrackTrack = {
-  id: 10,
-  title: 'てんとうむしのよりみち',
-  description: 'ミニゲーム|枝の上のてんとう虫 BGM',
-  src: '/audio/ladybug-detour-bgm.mp3',
-  volume: 0.4,
-  credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
-};
-
-/* ミニゲーム「枝の上のてんとう虫」でずっと流れている曲（10 てんとうむしのよりみち）に、うたを足したもの */
+/* ミニゲーム「枝の上のてんとう虫」でずっと流れている曲（05 てんとうむしのよりみち）に、うたを足したもの */
 const ladybugVocalBonusTrack: SoundtrackTrack = {
   id: 11,
+  number: 10,
   title: ladybugVocalSongTitle,
   description: 'ずっと ここにいて！|60秒達成の特別BGM',
   src: ladybugVocalSongSrc,
-  // 音量と制作情報は、通常版（10）と同じ
+  // 音量と制作情報は、通常版（05）と同じ
   volume: 0.4,
   credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
   lyrics: ladybugVocalSongLyrics,
+};
+
+const sPlusBonusTrack: SoundtrackTrack = {
+  id: 8,
+  number: 11,
+  title: sPlusSongTitle,
+  description: 'S+ランク|特別エンディングBGM',
+  src: sPlusSongSrc,
+  // 音量と制作情報は、通常版（07）と同じ（通常版にSunoでうたを足したもののため）
+  volume: 0.43,
+  credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
+  lyrics: sPlusSongLyrics,
 };
 
 /* ボーナストラックを解放済みか（onMounted で localStorage から読む。サーバー側では読めないため） */
@@ -180,43 +201,50 @@ const hasUnlockedSecretVocalSong = ref(false);
 const hasUnlockedLadybugDetour = ref(false);
 const hasUnlockedLadybugVocalSong = ref(false);
 
-/* ミニゲーム「どこまで行ける？」を解放済みか（09 のロック表示の出しわけに使う。てんとう虫のほうは 10 の解放と同じ） */
+/* ミニゲーム「どこまで行ける？」を解放済みか（04 の解放と、09 のロック表示の出しわけに使う。てんとう虫のほうの 05 と同じ形） */
 const hasUnlockedSecretPathMinigame = ref(false);
 
-/* 再生できる曲の一覧（解放したボーナストラックを、番号の順に うしろへ足す）
+/* 再生できる曲の一覧（解放したボーナストラックを足して、画面の番号の順にならべる）
 
-   ※ 既存の曲の id と順番は変えないので、覚えている開始曲などはくずれない
-   ※ 一部だけ解放しているときは、番号がとぶ（07 → 09）。曲ごとの番号が変わらないほうを取っている */
-const tracks = computed(() => [
-  ...baseTracks,
-  ...(hasUnlockedSPlusSong.value ? [sPlusBonusTrack] : []),
-  ...(hasUnlockedSecretVocalSong.value ? [secretVocalBonusTrack] : []),
-  ...(hasUnlockedLadybugDetour.value ? [ladybugDetourTrack] : []),
-  ...(hasUnlockedLadybugVocalSong.value ? [ladybugVocalBonusTrack] : []),
-]);
+   ※ id は変えないので、覚えている前回の曲などはくずれない
+   ※ 一部だけ解放しているときは、番号がとぶ（03 → 06、08 → 10）。曲ごとの番号が変わらないほうを取っている */
+const tracks = computed(() =>
+  [
+    ...baseTracks,
+    ...(hasUnlockedSecretPathMinigame.value ? [secretSpotTrack] : []),
+    ...(hasUnlockedLadybugDetour.value ? [ladybugDetourTrack] : []),
+    ...(hasUnlockedSecretVocalSong.value ? [secretVocalBonusTrack] : []),
+    ...(hasUnlockedLadybugVocalSong.value ? [ladybugVocalBonusTrack] : []),
+    ...(hasUnlockedSPlusSong.value ? [sPlusBonusTrack] : []),
+  ].sort((a, b) => a.number - b.number),
+);
 
-/* まだ解放していない曲のぶんだけ出す、ロック表示の説明（曲名は出さず、解放のしかただけ）
+/* まだ解放していない曲のぶんだけ出す、ロック表示の説明（曲名は出さず、解放のしかただけ。画面の番号の順）
 
-   ミニゲームのご褒美（09・11）は、そのミニゲームを まだ解放していないうちは、ミニゲームの名前を出さない（先のネタばれになるため）
-   ・09 … ミニゲームの一覧の「？？？」カードと同じヒント（data/minigames.ts の lockedHint）
-   ・11 … 10（てんとう虫を見つける）の先にあることだけを伝える */
+   ミニゲームのご褒美（09・10）は、そのミニゲームを まだ解放していないうちは、ミニゲームの名前を出さない（先のネタばれになるため）
+   ・09 … 04（秘密の小道を見つける）の先にあることだけを伝える
+   ・10 … 05（てんとう虫を見つける）の先にあることだけを伝える */
 const lockedTrackHints = computed(() => {
   const hints: string[] = [];
 
-  if (!hasUnlockedSPlusSong.value) {
-    hints.push('S+ランクで解放');
-  }
-
-  if (!hasUnlockedSecretVocalSong.value) {
-    hints.push(hasUnlockedSecretPathMinigame.value ? 'ミニゲーム|「どこまで行ける？」で|300m達成すると解放' : '公園のどこかに、|秘密の小道があるみたい…');
+  if (!hasUnlockedSecretPathMinigame.value) {
+    hints.push('公園で|秘密の小道を見つけると解放');
   }
 
   if (!hasUnlockedLadybugDetour.value) {
     hints.push('公園で|てんとう虫を見つけると解放');
   }
 
+  if (!hasUnlockedSecretVocalSong.value) {
+    hints.push(hasUnlockedSecretPathMinigame.value ? 'ミニゲーム|「どこまで行ける？」で|300m達成すると解放' : '秘密の小道を|もっと奥まで進むと解放');
+  }
+
   if (!hasUnlockedLadybugVocalSong.value) {
     hints.push(hasUnlockedLadybugDetour.value ? 'ミニゲーム|「枝の上のてんとう虫」の|ずっと ここにいて！で|60秒たえると解放' : 'てんとう虫と|もっと仲良くなると解放');
+  }
+
+  if (!hasUnlockedSPlusSong.value) {
+    hints.push('S+ランクで解放');
   }
 
   return hints;
@@ -1915,8 +1943,9 @@ function trackButtonLabel(track: SoundtrackTrack) {
   return isTrackPlaying(track) ? `${track.title}を一時停止` : `${track.title}を再生`;
 }
 
-function formatTrackNumber(id: number) {
-  return String(id).padStart(2, '0');
+/* 画面に出す番号（5 → 「05」） */
+function formatTrackNumber(number: number) {
+  return String(number).padStart(2, '0');
 }
 
 /* いま鳴っている曲のカードまで、曲の一覧をスクロールする
@@ -2390,10 +2419,11 @@ onMounted(() => {
 
   /* ボーナストラックを解放済みか（サーバー側では読めないので、ブラウザで動くここで読む）
      解放の条件を、曲を足す前に もう達成していた人もいるので、保存してある記録から判定できるものは、ここで黙って解放済みにする（知らせは出さない）
-     ・08 … S+ランクを取ったという記録は、解放の保存そのものしか無いので、それを読むだけ
+     ・04 … ミニゲーム「どこまで行ける？」の解放の記録を読む（秘密の小道をぬけた人には、もう記録がある）
+     ・05 … ミニゲーム「枝の上のてんとう虫」の解放の記録を読む
      ・09 … 「どこまで行ける？」の自己ベストが 300m 以上なら解放
-     ・10 … ミニゲーム「枝の上のてんとう虫」の解放の記録を読む
-     ・11 … 「枝の上のてんとう虫」のエンドレスの自己ベストが 60秒以上なら解放 */
+     ・10 … 「枝の上のてんとう虫」のエンドレスの自己ベストが 60秒以上なら解放
+     ・11 … S+ランクを取ったという記録は、解放の保存そのものしか無いので、それを読むだけ */
   hasUnlockedSPlusSong.value = loadHasUnlockedSPlusSong();
   hasUnlockedSecretVocalSong.value = unlockSecretVocalSongFromSavedBest();
   hasUnlockedLadybugDetour.value = loadUnlockedMinigames().includes('ladybug-balance');
@@ -2516,7 +2546,7 @@ onUnmounted(() => {
 
           <span v-if="isPlaylistPlaying" class="st-playall__count">{{ playlistIndex + 1 }} / {{ playlistTracks.length }}</span>
 
-          <span class="st-playall__track">{{ formatTrackNumber(playingTrack.id) }} {{ playingTrack.title }}</span>
+          <span class="st-playall__track">{{ formatTrackNumber(playingTrack.number) }} {{ playingTrack.title }}</span>
 
           <!-- 歌詞の画面 ⇄ 曲の一覧 の切りかえ（うた入りの曲だけ）
                行き先のアイコンに2文字の名前を添える（マイクのアイコンだけだと「録音」に見えて分かりにくかったため） -->
@@ -2640,7 +2670,7 @@ onUnmounted(() => {
             :aria-label="track.title + 'を全曲再生の開始曲にする'"
             :aria-pressed="selectedStartTrackId === track.id"
             @click="selectStartTrack(track)">
-            <span class="track__noNum">{{ formatTrackNumber(track.id) }}</span>
+            <span class="track__noNum">{{ formatTrackNumber(track.number) }}</span>
           </button>
 
           <div class="track__body">
