@@ -9,7 +9,7 @@ import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameTex
 
 import { addMinutesToTime } from '~/utils/gameTime';
 
-import { formatPlayedAt, formatRecordScore, recentGameRecordLimit } from '~/utils/gameRecords';
+import { formatPlayedAt, formatRecordRank, formatRecordScore, getRecordRankTier, isLetterRank, recentGameRecordLimit } from '~/utils/gameRecords';
 
 // 画像の先読みと、画像がそろってから まとめて出す目印（v-reveal-with-images）
 import { preloadGameImages, vRevealWithImages } from '~/utils/imagePreload';
@@ -540,8 +540,9 @@ const snackCommandIndex = 2;
 const waitCommandIndex = computed(() => (snackLeft.value > 0 ? 3 : 2));
 
 /* いやいやタイムの「待つ」コマンドの文字
-   なにか試したのに、まだ続いている（いやいや中で結果メッセージが出ている）ときは「もう少し待ってみる」 */
-const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し待ってみる' : '少し待ってみる'));
+   なにか試したのに、まだ続いている（いやいや中で結果メッセージが出ている）ときは「もう少し待ってみる」
+   ※「|」は、折り返してよい区切り（画面には出ない。→ CommandBox.vue の splitCommandLabel） */
+const waitCommandLabel = computed(() => (isTantrumUnsolved.value && resultMessage.value ? 'もう少し|待って|みる' : '少し|待って|みる'));
 
 /* 結果カードの下の「次へ進む」コマンドの文字（押したときの goToNextPlace() は同じ） */
 const nextPlaceCommandLabel = computed(() => {
@@ -1716,7 +1717,7 @@ function lookForAmbulance() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② いっしょにサイレンを聞く */
+/* ② いっしょに音を聞く */
 function listenToSiren() {
   startStatusChanges();
 
@@ -1732,11 +1733,14 @@ function listenToSiren() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 遊びに戻る（ステータスも時間も変わらない） */
-function walkOnFromSiren() {
+/* ③ 手をふって応援する */
+function cheerOnAmbulance() {
   startStatusChanges();
 
-  resultMessage.value = '「またこんど見ようね」遊びに戻っても、何度もふりかえっています。';
+  childMood.value += 3;
+  addMinutes(5);
+
+  resultMessage.value = '「がんばれー！」音のするほうに手をふって、何度もふりかえっています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1879,7 +1883,7 @@ function hugAfterFall() {
   selectedCommandIndex.value = 0;
 }
 
-/* ② 「いたいのいたいのとんでいけ〜」（ころんだ分を、だいぶ取り返せる） */
+/* ② 「いたいのいたいのとんでけ」（ころんだ分を、だいぶ取り返せる） */
 function blowPainAway() {
   startStatusChanges();
 
@@ -1955,11 +1959,11 @@ function watchFountainFar() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 遊びに戻る（ステータスも時間も変わらない） */
+/* ③ ぬれる前に離れる（ステータスも時間も変わらない） */
 function walkOnFromFountain() {
   startStatusChanges();
 
-  resultMessage.value = '「またあとで見ようね」遊びに戻っても、何度も噴水をふりかえっています。';
+  resultMessage.value = '「ぬれちゃうから、またあとでね」歩きだしても、何度も噴水をふりかえっています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2298,14 +2302,14 @@ function runSelectedCommand() {
 
     /* ここから下はとつぜんのできごと */
 
-    /* 救急車のサイレン（0 救急車を探してみる／1 いっしょにサイレンを聞く／2 遊びに戻る） */
+    /* 救急車のサイレン（0 救急車を探してみる／1 いっしょに音を聞く／2 手をふって応援する） */
     case 'emergencySiren':
       if (index === 0) {
         lookForAmbulance();
       } else if (index === 1) {
         listenToSiren();
       } else if (index === 2) {
-        walkOnFromSiren();
+        cheerOnAmbulance();
       }
       break;
 
@@ -2342,7 +2346,7 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 噴水が出た（0 水しぶきの近くまで行く／1 少し離れてながめる／2 遊びに戻る） */
+    /* 噴水が出た（0 水しぶきの近くまで行く／1 少し離れてながめる／2 ぬれる前に離れる） */
     case 'fountain':
       if (index === 0) {
         goCloseToFountain();
@@ -2464,9 +2468,10 @@ onUnmounted(() => {
              書かないもの：秘密の場所の名前と条件・おやつといやいやの相性・「少し待ってみる」の成功率・
              レベルごとの数字・くり返したときの効きにくさの数字・ナイス対応の組み合わせ・各行動のステータス増減
            ■ 文字は少なめにする（1項目1行。「〜する」「〜できるか」の短い言いかた）
-           ■ 縦に長いので、スクロールして読む（↑↓キーでもスクロールでき、いちばん下では下の「← 戻る」へフォーカスが移る → useKeyboardControls.ts）
+           ■ 縦に長いので、見出しより下だけをスクロールして読む（上の「← 戻る」とサウンド・見出しは、いつも見えている）
+             ↑↓キーでもスクロールでき、いちばん下・いちばん上では「← 戻る」へフォーカスが移る → useKeyboardControls.ts
            ============================================================ -->
-      <div v-if="!gameStarted && isHowToPlayOpen" key="how-to-play" class="title-screen">
+      <div v-if="!gameStarted && isHowToPlayOpen" key="how-to-play" class="title-screen title-screen--reading">
         <div class="title-card title-card--howto">
           <!-- 上のツールバー（左：B画面へ戻る ／ 右：サウンド） -->
           <div class="title-card__tools">
@@ -2489,141 +2494,137 @@ onUnmounted(() => {
             あそびかた
           </h1>
 
-          <!-- 1. このゲームについて（秘密の場所は「特別な場所もあるみたい」までにとどめる） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">
-              <span class="howto-section__num">1</span>
-              こうちゃんと公園を探検しよう
-            </h2>
+          <!-- 見出しより下（ここだけがスクロールする。上のツールバーと見出しは動かない → base.css の .howto-body） -->
+          <div class="howto-body">
+            <!-- 1. このゲームについて（秘密の場所は「特別な場所もあるみたい」までにとどめる） -->
+            <section class="howto-section">
+              <h2 class="howto-section__title">
+                <span class="howto-section__num">1</span>
+                こうちゃんと公園を探検しよう
+              </h2>
 
-            <ul class="howto-list">
-              <li>朝9時〜12時、公園の場所を選んで探検。行動すると時間が進みます。</li>
-              <li>12時になるか、出口へ向かうと結果発表。</li>
-              <li>公園には、特別な場所もあるみたい。</li>
-            </ul>
+              <ul class="howto-list">
+                <li>朝9時〜12時、公園の場所を選んで探検。行動すると時間が進みます。</li>
+                <li>12時になるか、出口へ向かうと結果発表。</li>
+                <li>公園には、特別な場所もあるみたい。</li>
+              </ul>
 
-            <!-- 操作は「パソコンでもスマホでも遊べる」と分かる最低限だけ（ミニゲームの操作は、その画面に案内が出る） -->
-            <p class="howto-note">
-              <b class="howto-note__title">操作</b>
-              クリック・矢印キー＋Enter・タップで遊べます。
-            </p>
-          </section>
+              <!-- 操作は「パソコンでもスマホでも遊べる」と分かる最低限だけ（ミニゲームの操作は、その画面に案内が出る） -->
+              <p class="howto-note">
+                <b class="howto-note__title">操作</b>
+                クリック・矢印キー＋Enter・タップで遊べます。
+              </p>
+            </section>
 
-          <!-- 2. ステータス（名前はゲーム画面の上部ステータスにそろえ、丸い印の色もゲージと同じにする） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">
-              <span class="howto-section__num">2</span>
-              ステータス
-            </h2>
+            <!-- 2. ステータス（名前はゲーム画面の上部ステータスにそろえ、丸い印の色もゲージと同じにする） -->
+            <section class="howto-section">
+              <h2 class="howto-section__title">
+                <span class="howto-section__num">2</span>
+                ステータス
+              </h2>
 
-            <dl class="howto-terms">
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--child-energy"></span>
-                  こうちゃんの体力
-                </dt>
-                <dd>元気に動ける力</dd>
-              </div>
+              <dl class="howto-terms">
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-dot howto-dot--child-energy"></span>
+                    こうちゃんの体力
+                  </dt>
+                  <dd>元気に動ける力</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--child-mood"></span>
-                  こうちゃんの機嫌
-                </dt>
-                <dd>楽しい気分</dd>
-              </div>
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-dot howto-dot--child-mood"></span>
+                    こうちゃんの機嫌
+                  </dt>
+                  <dd>楽しい気分</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--parent-energy"></span>
-                  親の体力
-                </dt>
-                <dd>遊びやだっこで減る</dd>
-              </div>
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-dot howto-dot--parent-energy"></span>
+                    親の体力
+                  </dt>
+                  <dd>遊びやだっこで減る</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--parent-calm"></span>
-                  親の余裕
-                </dt>
-                <dd>落ち着いて対応できるか</dd>
-              </div>
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-dot howto-dot--parent-calm"></span>
+                    親の余裕
+                  </dt>
+                  <dd>落ち着いて対応できるか</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>
-                  <span class="howto-dot howto-dot--point"></span>
-                  おでかけポイント
-                </dt>
-                <dd>体験すると増える</dd>
-              </div>
-            </dl>
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-dot howto-dot--point"></span>
+                    おでかけポイント
+                  </dt>
+                  <dd>体験すると増える</dd>
+                </div>
+              </dl>
 
-            <!-- GAME OVER は雰囲気だけ伝える（判定の一覧にはしない） -->
-            <p class="howto-note howto-note--caution">
-              <b class="howto-note__title">GAME OVER</b>
-              疲れすぎたり、余裕がなくなったりすると、途中で終わることも。
-            </p>
-          </section>
+              <!-- GAME OVER は雰囲気だけ伝える（判定の一覧にはしない） -->
+              <p class="howto-note howto-note--caution">
+                <b class="howto-note__title">GAME OVER</b>
+                疲れすぎたり、余裕がなくなったりすると、途中で終わることも。
+              </p>
+            </section>
 
-          <!-- 3. おやつ（どれが効くかは書かない。種類と数は snacks / maxSnackCount を見るので、変わっても直さなくてよい） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">
-              <span class="howto-section__num">3</span>
-              おやつ
-            </h2>
+            <!-- 3. おやつ（どれが効くかは書かない。種類と数は snacks / maxSnackCount を見るので、変わっても直さなくてよい） -->
+            <section class="howto-section">
+              <h2 class="howto-section__title">
+                <span class="howto-section__num">3</span>
+                おやつ
+              </h2>
 
-            <ul class="howto-list">
-              <li>出発前に{{ snacks.length }}種類から{{ maxSnackCount }}つ選びます。おやつごとに得意なことがちがいます。</li>
-              <li>ひとやすみと、いやいやタイムで使えます。使うと減ります。</li>
-            </ul>
-          </section>
+              <ul class="howto-list">
+                <li>出発前に{{ snacks.length }}種類から{{ maxSnackCount }}つ選びます。おやつごとに得意なことがちがいます。</li>
+                <li>ひとやすみと、いやいやタイムで使えます。使うと減ります。</li>
+              </ul>
+            </section>
 
-          <!-- 4. いやいやタイム（4つの対応の「しくみ」だけを書く）
-               対応の名前と並び順は、ゲーム画面のコマンドとそろえる（コマンドの順番を変えたら、ここも直すこと） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">
-              <span class="howto-section__num">4</span>
-              いやいやタイム
-            </h2>
+            <!-- 4. いやいやタイム（4つの対応の「しくみ」だけを書く）
+                 対応の名前と並び順は、ゲーム画面のコマンドとそろえる（コマンドの順番を変えたら、ここも直すこと） -->
+            <section class="howto-section">
+              <h2 class="howto-section__title">
+                <span class="howto-section__num">4</span>
+                いやいやタイム
+              </h2>
 
-            <p class="howto-note howto-note--hint">💡 セリフや様子から、いやいやの理由を考えよう。</p>
+              <p class="howto-note howto-note--hint">💡 セリフや様子から、いやいやの理由を考えよう。</p>
 
-            <h3 class="howto-subheading">4つの対応</h3>
+              <h3 class="howto-subheading">4つの対応</h3>
 
-            <dl class="howto-terms">
-              <div class="howto-terms__row">
-                <dt>お話してみる</dt>
-                <dd>理由によって効きめが変わる</dd>
-              </div>
+              <dl class="howto-terms">
+                <div class="howto-terms__row">
+                  <dt>お話してみる</dt>
+                  <dd>理由によって効きめが変わる</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>だっこする</dt>
-                <dd>親の体力を使う</dd>
-              </div>
+                <div class="howto-terms__row">
+                  <dt>だっこする</dt>
+                  <dd>親の体力を使う</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>おやつをあげる</dt>
-                <dd>おやつを1つ使う</dd>
-              </div>
+                <div class="howto-terms__row">
+                  <dt>おやつをあげる</dt>
+                  <dd>おやつを1つ使う</dd>
+                </div>
 
-              <div class="howto-terms__row">
-                <dt>少し待ってみる</dt>
-                <dd>落ち着くことも、そうでないことも</dd>
-              </div>
-            </dl>
+                <div class="howto-terms__row">
+                  <dt>少し待ってみる</dt>
+                  <dd>落ち着くことも、そうでないことも</dd>
+                </div>
+              </dl>
 
-            <ul class="howto-list">
-              <li>合わない対応だと、もっと強くなることも。</li>
-              <li>同じ方法ばかりだと、効きにくくなることも。</li>
-              <li>ぴったり合うと「ナイス対応」！</li>
-            </ul>
-          </section>
-
-          <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるように -->
-          <div class="howto-footer">
-            <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeHowToPlay">
-              <span aria-hidden="true">← 戻る</span>
-            </button>
+              <ul class="howto-list">
+                <li>合わない対応だと、もっと強くなることも。</li>
+                <li>同じ方法ばかりだと、効きにくくなることも。</li>
+                <li>ぴったり合うと「ナイス対応」！</li>
+              </ul>
+            </section>
           </div>
         </div>
       </div>
@@ -2635,7 +2636,7 @@ onUnmounted(() => {
            ・ハイスコア … 点数・ランク・見出し・日時と、そのときの記録（まだゴールしていないときは、そう書く）
            ・直近の記録 … 保存している件数ぜんぶ（リザルト画面のカードと同じ部品。いちばん上のハイスコアの帯は出さない）
            ============================================================ -->
-      <div v-else-if="!gameStarted && isRecordsOpen" key="records" class="title-screen">
+      <div v-else-if="!gameStarted && isRecordsOpen" key="records" class="title-screen title-screen--reading">
         <div class="title-card title-card--howto">
           <!-- 上のツールバー（あそびかた画面と同じ。左：B画面へ戻る ／ 右：サウンド） -->
           <div class="title-card__tools">
@@ -2656,82 +2657,83 @@ onUnmounted(() => {
             これまでの記録
           </h1>
 
-          <!-- ハイスコア（リザルト画面のエンディングカードと同じ金色。点数 → ランク → 見出し → 日時 → そのときの記録） -->
-          <section class="howto-section records-best">
-            <h2 class="howto-section__title">ハイスコア</h2>
+          <!-- 見出しより下（ここだけがスクロールする。上のツールバーと見出しは動かない。あそびかた画面と同じ） -->
+          <div class="howto-body">
+            <!-- ハイスコア（リザルト画面のエンディングカードと同じ金色。点数 → ランク → 見出し → 日時 → そのときの記録） -->
+            <section class="howto-section records-best">
+              <h2 class="howto-section__title">ハイスコア</h2>
 
-            <template v-if="highScoreRecord">
-              <p class="records-best__score">
-                <span class="sr-only">総合スコア</span>
-                <span class="records-best__scoreValue">{{ highScoreRecord.score }}</span>
-                <span class="records-best__scoreMax">/ 100</span>
-              </p>
+              <template v-if="highScoreRecord">
+                <p class="records-best__score">
+                  <span class="sr-only">総合スコア</span>
+                  <span class="records-best__scoreValue">{{ highScoreRecord.score }}</span>
+                  <span class="records-best__scoreMax">/ 100</span>
+                </p>
 
-              <p class="records-best__rank">{{ highScoreRecord.rank }}</p>
+                <!-- ランクは英字だけ（「S+ランク」→「S+」。読み上げ用に「ランク」を足す） -->
+                <p
+                  class="records-best__rank"
+                  :class="[`records-best__rank--${getRecordRankTier(highScoreRecord.rank ?? '')}`, { 'records-best__rank--text': !isLetterRank(highScoreRecord.rank ?? '') }]">
+                  <span class="sr-only">ランク</span>{{ formatRecordRank(highScoreRecord.rank ?? '') }}
+                </p>
 
-              <p class="records-best__title">{{ highScoreRecord.title }}</p>
+                <p class="records-best__title">{{ highScoreRecord.title }}</p>
 
-              <p class="records-best__date">{{ formatPlayedAt(highScoreRecord.playedAt) }}</p>
+                <p class="records-best__date">{{ formatPlayedAt(highScoreRecord.playedAt) }}</p>
 
-              <!-- そのときの記録（名前は、リザルト画面の「今日の記録」とそろえる） -->
-              <ul class="record-list records-panel">
-                <li class="record-item">
-                  <span>帰った時間</span>
-                  <b>{{ highScoreRecord.returnTime }}</b>
-                </li>
+                <!-- そのときの記録（名前は、リザルト画面の「今日の記録」とそろえる） -->
+                <ul class="record-list records-panel">
+                  <li class="record-item">
+                    <span>帰った時間</span>
+                    <b>{{ highScoreRecord.returnTime }}</b>
+                  </li>
 
-                <li class="record-item">
-                  <span>おでかけポイント</span>
-                  <b>{{ highScoreRecord.outingPoint }}</b>
-                </li>
+                  <li class="record-item">
+                    <span>おでかけポイント</span>
+                    <b>{{ highScoreRecord.outingPoint }}</b>
+                  </li>
 
-                <li class="record-item">
-                  <span>見つけたもの</span>
-                  <b>{{ highScoreRecord.collectedItemCount }} / {{ foundItemTotal }}</b>
-                </li>
+                  <li class="record-item">
+                    <span>見つけたもの</span>
+                    <b>{{ highScoreRecord.collectedItemCount }} / {{ foundItemTotal }}</b>
+                  </li>
 
-                <li class="record-item">
-                  <span>探検した場所の数</span>
-                  <b>{{ highScoreRecord.visitedPlaceCount }}か所</b>
-                </li>
+                  <li class="record-item">
+                    <span>探検した場所の数</span>
+                    <b>{{ highScoreRecord.visitedPlaceCount }}か所</b>
+                  </li>
 
-                <li class="record-item">
-                  <span>遊んだ回数</span>
-                  <b>{{ highScoreRecord.playCount }}回</b>
-                </li>
+                  <li class="record-item">
+                    <span>遊んだ回数</span>
+                    <b>{{ highScoreRecord.playCount }}回</b>
+                  </li>
 
-                <li class="record-item">
-                  <span>いやいや発生</span>
-                  <b>{{ highScoreRecord.tantrumCount }}回</b>
-                </li>
-              </ul>
-            </template>
+                  <li class="record-item">
+                    <span>いやいや発生</span>
+                    <b>{{ highScoreRecord.tantrumCount }}回</b>
+                  </li>
+                </ul>
+              </template>
 
-            <p v-else class="records-empty">まだゴールした記録はありません。</p>
-          </section>
+              <p v-else class="records-empty">まだゴールした記録はありません。</p>
+            </section>
 
-          <!-- 直近の記録（新しい順。保存している件数ぜんぶ） -->
-          <section class="howto-section">
-            <h2 class="howto-section__title">直近の記録</h2>
+            <!-- 直近の記録（新しい順。保存している件数ぜんぶ） -->
+            <section class="howto-section">
+              <h2 class="howto-section__title">直近の記録</h2>
 
-            <div class="records-panel">
-              <GameRecordHistory
-                v-if="recentRecords.length > 0"
-                :high-score-record="highScoreRecord"
-                :recent-records="recentRecords"
-                :current-record="null"
-                :limit="recentGameRecordLimit"
-                :show-best="false" />
+              <div class="records-panel">
+                <GameRecordHistory
+                  v-if="recentRecords.length > 0"
+                  :high-score-record="highScoreRecord"
+                  :recent-records="recentRecords"
+                  :current-record="null"
+                  :limit="recentGameRecordLimit"
+                  :show-best="false" />
 
-              <p v-else class="records-empty">まだ記録はありません。</p>
-            </div>
-          </section>
-
-          <!-- いちばん下まで読んだ人が、上までスクロールしなくても戻れるように（あそびかた画面と同じ） -->
-          <div class="howto-footer">
-            <button type="button" class="title-card__back" aria-label="ひとつ前の画面へ戻る" @click="closeRecords">
-              <span aria-hidden="true">← 戻る</span>
-            </button>
+                <p v-else class="records-empty">まだ記録はありません。</p>
+              </div>
+            </section>
           </div>
         </div>
       </div>
@@ -2833,14 +2835,23 @@ onUnmounted(() => {
           </div>
 
           <!-- これまでの記録の画面への入口（記録があるときだけ。記録は useGameResult.ts が onMounted で読む）
-               ・ゴールしたことがあるとき … 「🏆 ハイスコア 88点（Sランク） ›」
+               ・ゴールしたことがあるとき … 「🏆 ハイスコア 88点 [S] ›」（ランクは英字だけのバッジ。読み上げは「Sランク」）
                ・GAME OVER の記録しか無いとき … 「📝 これまでの記録 ›」
                HTML ではカードのいちばん後ろなので、Tab ではサウンドのあと（見た目は CSS の order で、説明文の下）
                「›」は押せることを見せる飾りなので読み上げない。折り返しても「›」だけが次の行へ行かないよう、最後のかたまりに入れる -->
           <button v-if="highScoreRecord || recentRecords.length > 0" ref="recordsButtonRef" type="button" class="title-card__highscore" @click="openRecords">
             <template v-if="highScoreRecord">
               <span class="title-card__phrase">🏆 ハイスコア {{ formatRecordScore(highScoreRecord) }}</span>
-              <span class="title-card__phrase">（{{ highScoreRecord.rank }}）<span class="title-card__highscoreArrow" aria-hidden="true">›</span></span>
+              <span class="title-card__phrase">
+                <span
+                  class="title-card__highscoreRank"
+                  :class="[`title-card__highscoreRank--${getRecordRankTier(highScoreRecord.rank ?? '')}`, { 'title-card__highscoreRank--text': !isLetterRank(highScoreRecord.rank ?? '') }]"
+                  role="img"
+                  :aria-label="highScoreRecord.rank ?? ''">
+                  {{ formatRecordRank(highScoreRecord.rank ?? '') }}
+                </span>
+                <span class="title-card__highscoreArrow" aria-hidden="true">›</span>
+              </span>
             </template>
 
             <span v-else class="title-card__phrase">📝 これまでの記録<span class="title-card__highscoreArrow" aria-hidden="true">›</span></span>
@@ -2945,12 +2956,14 @@ onUnmounted(() => {
 
           <h1 class="snack-heading">きょうのおやつ</h1>
 
-          <!-- 2文目は、スマホでは出さない（1画面に収めるため。押してみればすぐ分かる） -->
+          <!-- 2文目は、スマホでは出さない（1画面に収めるため。押してみればすぐ分かる）
+               まだ1つも選んでいないときは見せない（バッグから出すものが無いので）
+               場所は残しておく（出たり消えたりで、下のカードが上下に動かないように） -->
           <p class="snack-lead">
             おやつを{{ maxSnackCount }}つ選ぼう！
-            <span class="snack-lead__sub">
+            <span class="snack-lead__sub" :class="{ 'snack-lead__sub--hidden': selectedSnacks.length === 0 }">
               <br />
-              もう一度押すと外せます。
+              もう一度押すと、バッグから出せるよ
             </span>
           </p>
         </div>
@@ -3674,12 +3687,12 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '救急車を探してみる' }, { label: 'いっしょにサイレンを聞く' }, { label: '遊びに戻る' }]"
+                :commands="[{ label: '救急車を|探して|みる' }, { label: 'いっしょに|音を聞く' }, { label: '手をふって|応援する' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
                 :pointer-paused="isCommandPointerPaused"
-                @select="index => [lookForAmbulance, listenToSiren, walkOnFromSiren][index]()"
+                @select="index => [lookForAmbulance, listenToSiren, cheerOnAmbulance][index]()"
                 @next="goToNextPlace" />
             </section>
           </div>
@@ -3711,7 +3724,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'いっしょにじっくり見る' }, { label: 'そっと手を近づけてみる' }, { label: 'ばいばいして見送る' }]"
+                :commands="[{ label: 'いっしょに|じっくり|見る' }, { label: 'そっと|手を|近づけて|みる' }, { label: 'ばいばい|して|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -3747,7 +3760,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '近くで見せてもらう' }, { label: 'だっこで少し離れて見る' }, { label: '道をあけて見送る' }]"
+                :commands="[{ label: '近くで|見せて|もらう' }, { label: 'だっこで|少し|離れて|見る' }, { label: '道をあけて|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -3783,7 +3796,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'すぐにだっこする' }, { label: '「いたいのいたいのとんでいけ〜」' }, { label: '「大丈夫？」と声をかけて待つ' }]"
+                :commands="[{ label: 'すぐに|だっこする' }, { label: '「いたいの|いたいの|とんでけ」' }, { label: '「大丈夫？」|と|声を|かけて|待つ' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -3819,7 +3832,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '水しぶきの近くまで行く' }, { label: '少し離れてながめる' }, { label: '遊びに戻る' }]"
+                :commands="[{ label: '水しぶきの|近くまで|行く' }, { label: '少し|離れて|ながめる' }, { label: 'ぬれる前に|離れる' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"

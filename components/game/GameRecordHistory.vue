@@ -12,7 +12,7 @@
 import { computed } from 'vue';
 
 import type { GameRecord } from '~/types/game';
-import { formatPlayedAt, formatRecordScore } from '~/utils/gameRecords';
+import { formatPlayedAt, formatRecordRank, formatRecordScore, getRecordRankTier, isLetterRank } from '~/utils/gameRecords';
 
 const props = withDefaults(
   defineProps<{
@@ -36,6 +36,9 @@ const props = withDefaults(
 
 const shownRecords = computed(() => props.recentRecords.slice(0, props.limit));
 
+/* 出している記録の中に、今回のプレイがあるか（あるときは、今回の行を枠で囲むので、ほかの行も枠の中と位置をそろえる） */
+const hasCurrentRecord = computed(() => shownRecords.value.some((record) => isSameRecord(record, props.currentRecord)));
+
 /* 同じプレイの記録か（保存して読みなおすと別の入れものになるので、遊びおわった日時でくらべる） */
 function isSameRecord(record: GameRecord, other: GameRecord | null) {
   return other !== null && record.playedAt === other.playedAt;
@@ -44,7 +47,8 @@ function isSameRecord(record: GameRecord, other: GameRecord | null) {
 
 <template>
   <div class="record-history">
-    <!-- ハイスコア（🏆 ハイスコア 10/5 ……… 88点 Sランク） -->
+    <!-- ハイスコア（🏆 ハイスコア 10/5 ……… 88点 [S]）
+         ランクは英字だけのバッジ（読み上げは「Sランク」） -->
     <p v-if="showBest && highScoreRecord" class="record-history__best">
       <span class="record-history__bestLabel">
         🏆 ハイスコア
@@ -53,27 +57,45 @@ function isSameRecord(record: GameRecord, other: GameRecord | null) {
 
       <span class="record-history__result">
         <b class="record-history__score">{{ formatRecordScore(highScoreRecord) }}</b>
-        <span class="record-history__rank">{{ highScoreRecord.rank }}</span>
+        <span
+          class="record-history__rank"
+          :class="[`record-history__rank--${getRecordRankTier(highScoreRecord.rank ?? '')}`, { 'record-history__rank--text': !isLetterRank(highScoreRecord.rank ?? '') }]"
+          role="img"
+          :aria-label="highScoreRecord.rank ?? ''">
+          {{ formatRecordRank(highScoreRecord.rank ?? '') }}
+        </span>
       </span>
     </p>
 
     <!-- ハイスコアの帯と分けるための見出し（帯を出さないときは、外に見出しがあるので出さない） -->
     <p v-if="showBest" class="record-history__subtitle">直近の記録</p>
 
-    <!-- 1行ずつ（［今回］10/7 14:32 ……… 🏆 72点 Aランク ／ GAME OVER） -->
-    <ol class="record-history__list">
-      <li v-for="(record, index) in shownRecords" :key="`${record.playedAt}-${index}`" class="record-history__item">
-        <span class="record-history__when">
-          <span v-if="isSameRecord(record, currentRecord)" class="record-history__now">今回</span>
-          {{ formatPlayedAt(record.playedAt) }}
+    <!-- 1行ずつ（2026/10/7 14:32 ……… 🏆 72点 [A] ／ GAME OVER）
+         今回のプレイの行は、枠で囲んで、上の段に「今回」の札を出す（どの行が今回か ひと目で分かり、日時の横もあけておける） -->
+    <ol class="record-history__list" :class="{ 'record-history__list--hasNow': hasCurrentRecord }">
+      <li
+        v-for="(record, index) in shownRecords"
+        :key="`${record.playedAt}-${index}`"
+        class="record-history__item"
+        :class="{ 'record-history__item--now': isSameRecord(record, currentRecord) }">
+        <span v-if="isSameRecord(record, currentRecord)" class="record-history__nowLine">
+          <span class="record-history__now">今回</span>
         </span>
+
+        <span class="record-history__when">{{ formatPlayedAt(record.playedAt) }}</span>
 
         <span class="record-history__result">
           <span v-if="isSameRecord(record, highScoreRecord)" class="record-history__bestMark" role="img" aria-label="ハイスコア">🏆</span>
 
           <template v-if="record.result === 'goal'">
             <b class="record-history__score">{{ formatRecordScore(record) }}</b>
-            <span class="record-history__rank">{{ record.rank }}</span>
+            <span
+              class="record-history__rank"
+              :class="[`record-history__rank--${getRecordRankTier(record.rank ?? '')}`, { 'record-history__rank--text': !isLetterRank(record.rank ?? '') }]"
+              role="img"
+              :aria-label="record.rank ?? ''">
+              {{ formatRecordRank(record.rank ?? '') }}
+            </span>
           </template>
 
           <span v-else class="record-history__gameOver">{{ formatRecordScore(record) }}</span>
@@ -140,10 +162,33 @@ function isSameRecord(record: GameRecord, other: GameRecord | null) {
   font-variant-numeric: tabular-nums;
 }
 
+/* 今回の枠があるときは、どの行も枠の中と同じだけ内がわに寄せる
+   （日時の左はし・点数の右はしの縦の位置を、枠の中とそろえる。ハイスコアの帯の中身とも同じ12px）
+   12px ＝ 枠の線 2px ＋ 枠の内がわの余白 10px（枠を外へ広げると、せまい画面で横にはみ出すので、内がわでそろえる） */
+.record-history__list--hasNow .record-history__item {
+  padding-right: 12px;
+  padding-left: 12px;
+}
+
+/* 今回のプレイの行（うすい水色の枠で囲む。上下の行の点線とかさならないよう、点線は付けない）
+   .record-history__item を2つ重ねるのは、上の「どの行も12px」より強くするため（枠の線のぶん、余白は10px） */
+.record-history__item.record-history__item--now {
+  margin: 2px 0 4px;
+  padding: 4px 10px 6px;
+  border: 2px solid var(--navy-line);
+  border-radius: 10px;
+  background: #f0f8fb;
+}
+
+/* 「今回」の札の段（flex-basis: 100% … 日時・点数とは別の段にする） */
+.record-history__nowLine {
+  flex-basis: 100%;
+  line-height: 1;
+}
+
 /* 今回のプレイの札 */
 .record-history__now {
   display: inline-block;
-  margin-right: 6px;
   padding: 0 8px;
   border-radius: 999px;
   background: var(--navy);
@@ -169,8 +214,39 @@ function isSameRecord(record: GameRecord, other: GameRecord | null) {
   color: var(--navy);
 }
 
+/* ランクのバッジ（英字だけ。記録の画面のハイスコアのバッジと同じ、紺に金の文字）
+   min-width … 「S」と「S+」でバッジの幅がそろい、点数の位置がそろう
+   line-height … 行の高さが、バッジの無い GAME OVER の行と変わらないくらいにする */
 .record-history__rank {
-  font-size: 14px;
+  display: inline-block;
+  min-width: 2.2em;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--navy);
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* 英字ではないランク（特殊エンド）は、文字が多いので小さくする */
+.record-history__rank--text {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* S+ / S … 金の地に茶色の文字（金色は「特別」の色）。うすい縁で、金色の下地の上でもバッジの形が分かるようにする */
+.record-history__rank--top {
+  background: var(--gold);
+  box-shadow: inset 0 0 0 1px #e8b23c;
+  color: #7a4b00;
+}
+
+/* C / D … ひかえめな灰青（良い回を目立たせるため。赤は GAME OVER の色なので使わない） */
+.record-history__rank--low {
+  background: #e4ebf1;
+  color: var(--navy-deep);
 }
 
 .record-history__gameOver {
