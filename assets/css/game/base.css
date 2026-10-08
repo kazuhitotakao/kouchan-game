@@ -327,6 +327,41 @@
   outline-offset: 2px;
 }
 
+/* ハイスコアのランク（英字だけのバッジ。記録の画面のハイスコアと同じ、紺に金の文字）
+   margin-left … 点数とのあいだ（前のかたまりとのあいだに空白が無いため） */
+.title-card__highscoreRank {
+  display: inline-block;
+  min-width: 2.2em;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--navy);
+  color: var(--gold);
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.4; /* ボタンの行（14px × 1.6）より高くならないように */
+  text-align: center;
+}
+
+/* 英字ではないランク（特殊エンド）は、文字が多いので小さくする */
+.title-card__highscoreRank--text {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* S+ / S … 金の地に茶色の文字（金色は「特別」の色）。うすい縁で、金色の下地の上でもバッジの形が分かるようにする */
+.title-card__highscoreRank--top {
+  background: var(--gold);
+  box-shadow: inset 0 0 0 1px #e8b23c;
+  color: #7a4b00;
+}
+
+/* C / D … ひかえめな灰青（良い回を目立たせるため。赤は GAME OVER の色なので使わない） */
+.title-card__highscoreRank--low {
+  background: #e4ebf1;
+  color: var(--navy-deep);
+}
+
 /* 「›」（押すと次の画面へ進む印） */
 .title-card__highscoreArrow {
   margin-left: 8px;
@@ -757,19 +792,45 @@
   font-weight: 700;
 }
 
-/* ランク（リザルト画面のバッジを小さくしたもの。前後が段落なので、inline-block のままでも1行に1つ） */
+/* ランク（リザルト画面のバッジを小さくしたもの。前後が段落なので、inline-block のままでも1行に1つ）
+   英字だけなので、文字を大きくしてひと目で分かるようにする
+   min-width … 「S」と「S+」で、バッジの大きさがあまり変わらないように */
 .records-best__rank {
   display: inline-block;
+  min-width: 96px;
+  box-sizing: border-box;
   margin: 0 0 8px;
-  padding: 4px 20px;
+  padding: 2px 20px;
   border: 2px solid var(--gold);
   border-radius: 12px;
   background: var(--navy);
   color: var(--gold);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+}
+
+/* 英字ではないランク（特殊エンド）は、文字が多いので前の大きさのまま */
+.records-best__rank--text {
+  padding: 4px 20px;
   font-size: 20px;
   font-weight: 700;
-  letter-spacing: 0.04em;
   line-height: 1.3;
+}
+
+/* S+ / S … 金の地に茶色の文字（金色は「特別」の色）。縁を濃い金にして、金色のカードの上でもバッジの形が分かるようにする */
+.records-best__rank--top {
+  border-color: #d9a21b;
+  background: var(--gold);
+  color: #7a4b00;
+}
+
+/* C / D … ひかえめな灰青（良い回を目立たせるため。赤は GAME OVER の色なので使わない） */
+.records-best__rank--low {
+  border-color: #c9d6e0;
+  background: #e4ebf1;
+  color: var(--navy-deep);
 }
 
 .records-best__title {

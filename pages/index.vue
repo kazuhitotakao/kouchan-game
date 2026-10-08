@@ -9,7 +9,7 @@ import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameTex
 
 import { addMinutesToTime } from '~/utils/gameTime';
 
-import { formatPlayedAt, formatRecordScore, recentGameRecordLimit } from '~/utils/gameRecords';
+import { formatPlayedAt, formatRecordRank, formatRecordScore, getRecordRankTier, isLetterRank, recentGameRecordLimit } from '~/utils/gameRecords';
 
 // 画像の先読みと、画像がそろってから まとめて出す目印（v-reveal-with-images）
 import { preloadGameImages, vRevealWithImages } from '~/utils/imagePreload';
@@ -2671,7 +2671,12 @@ onUnmounted(() => {
                 <span class="records-best__scoreMax">/ 100</span>
               </p>
 
-              <p class="records-best__rank">{{ highScoreRecord.rank }}</p>
+              <!-- ランクは英字だけ（「S+ランク」→「S+」。読み上げ用に「ランク」を足す） -->
+              <p
+                class="records-best__rank"
+                :class="[`records-best__rank--${getRecordRankTier(highScoreRecord.rank ?? '')}`, { 'records-best__rank--text': !isLetterRank(highScoreRecord.rank ?? '') }]">
+                <span class="sr-only">ランク</span>{{ formatRecordRank(highScoreRecord.rank ?? '') }}
+              </p>
 
               <p class="records-best__title">{{ highScoreRecord.title }}</p>
 
@@ -2837,14 +2842,23 @@ onUnmounted(() => {
           </div>
 
           <!-- これまでの記録の画面への入口（記録があるときだけ。記録は useGameResult.ts が onMounted で読む）
-               ・ゴールしたことがあるとき … 「🏆 ハイスコア 88点（Sランク） ›」
+               ・ゴールしたことがあるとき … 「🏆 ハイスコア 88点 [S] ›」（ランクは英字だけのバッジ。読み上げは「Sランク」）
                ・GAME OVER の記録しか無いとき … 「📝 これまでの記録 ›」
                HTML ではカードのいちばん後ろなので、Tab ではサウンドのあと（見た目は CSS の order で、説明文の下）
                「›」は押せることを見せる飾りなので読み上げない。折り返しても「›」だけが次の行へ行かないよう、最後のかたまりに入れる -->
           <button v-if="highScoreRecord || recentRecords.length > 0" ref="recordsButtonRef" type="button" class="title-card__highscore" @click="openRecords">
             <template v-if="highScoreRecord">
               <span class="title-card__phrase">🏆 ハイスコア {{ formatRecordScore(highScoreRecord) }}</span>
-              <span class="title-card__phrase">（{{ highScoreRecord.rank }}）<span class="title-card__highscoreArrow" aria-hidden="true">›</span></span>
+              <span class="title-card__phrase">
+                <span
+                  class="title-card__highscoreRank"
+                  :class="[`title-card__highscoreRank--${getRecordRankTier(highScoreRecord.rank ?? '')}`, { 'title-card__highscoreRank--text': !isLetterRank(highScoreRecord.rank ?? '') }]"
+                  role="img"
+                  :aria-label="highScoreRecord.rank ?? ''">
+                  {{ formatRecordRank(highScoreRecord.rank ?? '') }}
+                </span>
+                <span class="title-card__highscoreArrow" aria-hidden="true">›</span>
+              </span>
             </template>
 
             <span v-else class="title-card__phrase">📝 これまでの記録<span class="title-card__highscoreArrow" aria-hidden="true">›</span></span>

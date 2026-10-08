@@ -166,6 +166,33 @@ export function formatRecordScore(record: GameRecord) {
   return record.result === 'goal' ? `${record.score}点` : 'GAME OVER';
 }
 
+/* 記録のランクの書きかた（「Sランク」→「S」。英字だけをバッジにするほうが、ひと目で分かる）
+   英字のランクではない「特殊エンド」は、そのまま */
+export function formatRecordRank(rank: string) {
+  return rank.replace(/ランク$/, '');
+}
+
+/* 英字のランク（S+ / S / A / B / C / D）か（「特殊エンド」は false。バッジの文字を小さくするのに使う） */
+export function isLetterRank(rank: string) {
+  return rank.endsWith('ランク');
+}
+
+/* ランクのバッジの色分け（3段階。クラス名の「〜--top」「〜--low」に使う）
+   top    … S+ / S（金色。このゲームでは金色＝「特別」）
+   normal … A / B / 特殊エンド（いつもの紺。特殊エンドは点数の良し悪しとは別の結末なので、ふつうの扱い）
+   low    … C / D（ひかえめな灰青。良い回を目立たせるため。赤は「あぶない」・GAME OVER の色なので使わない） */
+export function getRecordRankTier(rank: string): 'top' | 'normal' | 'low' {
+  if (rank === 'S+ランク' || rank === 'Sランク') {
+    return 'top';
+  }
+
+  if (rank === 'Cランク' || rank === 'Dランク') {
+    return 'low';
+  }
+
+  return 'normal';
+}
+
 /* 遊んだ日時を「10/7 14:32」の形にする（直近の記録なので、年は出さない） */
 export function formatPlayedAt(playedAt: number) {
   const date = new Date(playedAt);
