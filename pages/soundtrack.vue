@@ -8,6 +8,7 @@ import { loadUnlockedMinigames } from '~/utils/minigameStorage';
 
 import { sPlusSongLyrics, type LyricLine } from '~/data/sPlusSongLyrics';
 import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
+import { ladybugVocalSongLyrics } from '~/data/ladybugVocalSongLyrics';
 
 /* 曲の音量は、かならずこれを通して入れる（audio.volume に直接入れても、iPhone では変わらないため） */
 import { cancelElementPause, isElementPlaying, keepAudioContextAwake, pauseElement, pauseElementThen, releaseElement, setElementVolume, wakeElementAudioContext } from '~/utils/elementVolume';
@@ -170,6 +171,7 @@ const ladybugVocalBonusTrack: SoundtrackTrack = {
   // 音量と制作情報は、通常版（10）と同じ
   volume: 0.4,
   credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
+  lyrics: ladybugVocalSongLyrics,
 };
 
 /* ボーナストラックを解放済みか（onMounted で localStorage から読む。サーバー側では読めないため） */
