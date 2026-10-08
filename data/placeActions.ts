@@ -37,7 +37,7 @@ export const placeActions = {
     parentEnergy: -14,
     parentCalm: -9,
     minutes: 25,
-    message: 'こうちゃんと一緒にすべりました。大喜びです！',
+    message: 'こうちゃんを膝に乗せ、一緒にすべりました。大はしゃぎです！',
   },
 
   /* ② 下で見守る
@@ -51,7 +51,7 @@ export const placeActions = {
     parentEnergy: -8,
     parentCalm: -9,
     minutes: 15,
-    message: '「みててー！」てっぺんで手をふる姿に、下でハラハラ。',
+    message: 'てっぺんに立って手をふる姿に、親はハラハラ。',
   },
 
   /* ===== 砂場 ===== */
@@ -156,7 +156,7 @@ export const placeActions = {
     parentEnergy: -6,
     parentCalm: -3,
     minutes: 20,
-    message: '「ふわふわー！」飛んでいくシャボン玉を追いかけています。',
+    message: '「まてまてー！」飛んでいくシャボン玉を追いかけています。',
   },
 
   /* ===== こもれびの広場 ===== */
