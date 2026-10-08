@@ -132,6 +132,27 @@
   fill: var(--continue-time-ground);
 }
 
+/* ページを開いた直後（保存を読む前）で、保存があるとき（<html data-play-save>。nuxt.config.ts の head の script が付ける）
+   作っておいた HTML の「はじめる」1つが一瞬見えてから、「はじめから／つづきから」に切りかわらないよう、ボタンの段をかくしておく
+   ・visibility: hidden なので、場所はとったまま（カードの中のほかのものが動かない）
+   ・見えない場所とり（.title-card__startPlaceholder ＝ 時刻の札と同じ形）を2行目に入れて、横ならびの段と同じ高さにする */
+html[data-play-save] .title-card--checking .title-card__starts {
+  visibility: hidden;
+}
+
+html[data-play-save] .title-card--checking .title-card__starts .cmd {
+  flex-direction: column;
+  gap: 0;
+}
+
+.title-card__continueTime.title-card__startPlaceholder {
+  display: none;
+}
+
+html[data-play-save] .title-card--checking .title-card__continueTime.title-card__startPlaceholder {
+  display: inline-flex;
+}
+
 /* 「はじめから」：白いボタン（「つづきから」より目立たせない）
    cmd--start のまま色だけ変えるので、大きさ・文字・余白は金色のボタンとぴったり同じ */
 .title-card .cmd--start.title-card__restart {

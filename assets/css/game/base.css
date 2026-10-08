@@ -219,8 +219,10 @@
 /* 「つづきから」があるときは、キービジュアルを そのぶん低くする
    「つづきから」は時刻の札の2行目があるぶん（札の高さ 約18px ＋ 上のすき間 2px ＝ 約20px）、ボタンの段が高くなるので、
    カードの高さを「つづきから」が無いときと同じにして、A画面 → B画面でカードの上のふちがずれないようにする
+   ・保存を読む前（ページを開いた直後）も、保存があれば同じだけ低くしておく（→ command.css の .title-card--checking）
    ※ スマホ幅では低くしない。もともとカードに余りがあるので、高さは変わらない（→ @media (max-width: 700px)） */
-.title-card--resumable .title-card__visual {
+.title-card--resumable .title-card__visual,
+html[data-play-save] .title-card--checking .title-card__visual {
   max-width: calc((240px - 20px) * 16 / 9);
 }
 
@@ -1972,7 +1974,8 @@
 
   /* 起動画面のキービジュアルは、高さ 140px まで（「つづきから」があっても同じ。カードに余りがあるので、高さは変わらない） */
   .title-card__visual,
-  .title-card--resumable .title-card__visual {
+  .title-card--resumable .title-card__visual,
+  html[data-play-save] .title-card--checking .title-card__visual {
     max-width: calc(140px * 16 / 9);
   }
 

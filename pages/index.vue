@@ -133,6 +133,11 @@ const isStandalone = ref<boolean | null>(null);
    A画面は、これがあるときだけ「つづきから」を出す */
 const playSave = ref<PlaySave | null>(null);
 
+/* 保存を読みおえたか（onMounted で true）
+   読む前は、作っておいた HTML のまま（「はじめる」1つ）なので、保存があるときはボタンの段をかくしておく
+   （→ A画面の title-card--checking と、nuxt.config.ts の head の script） */
+const isPlaySaveChecked = ref(false);
+
 /* A画面の「つづきから」の時刻に付ける、小さなアナログ時計（保存が無いときは null）
 
    hourAngle / minuteAngle … 短い針・長い針の角度（0° が12時の向きで、時計まわり）
@@ -2578,6 +2583,10 @@ onMounted(() => {
   /* 「つづきから」で再開できるプレイを読む（あれば A画面に「つづきから」が出る）
      フォーカスを当てるより先に読む（「つづきから」があるときは、そちらがメインのボタンになるため） */
   playSave.value = loadPlaySave();
+  isPlaySaveChecked.value = true;
+
+  // ページの先頭で付けた目印（→ nuxt.config.ts の head の script）を、読んだ結果に合わせる（こわれた保存は、無いあつかい）
+  document.documentElement.toggleAttribute('data-play-save', playSave.value !== null);
 
   /* A画面のメインのボタン（「つづきから」か「はじめる」）へフォーカスを当てる
      （ほかのページから戻ってきたときも、ページが作り直されるのでここを通る） */
@@ -2897,7 +2906,8 @@ onUnmounted(() => {
            ============================================================ -->
       <div v-else-if="!titleEntered" key="boot" class="title-screen">
         <!-- title-card--resumable … 「つづきから」があるときの目印（ボタンの段が少し高くなっても、カードの高さが変わらないようにする → base.css） -->
-        <div class="title-card title-card--boot" :class="{ 'title-card--resumable': playSave }">
+        <!-- title-card--checking … 保存をまだ読んでいない（ページを開いた直後）。保存があるなら、ボタンの段をかくしておく → command.css -->
+        <div class="title-card title-card--boot" :class="{ 'title-card--resumable': playSave, 'title-card--checking': !isPlaySaveChecked }">
           <!-- メインのボタンの段（HTMLではいちばん先に書く。Tab の順番を「メイン → サウンドトラック → …」にするため。
                見た目の位置は、CSS の order でいちばん下のまま）
 
@@ -2932,6 +2942,9 @@ onUnmounted(() => {
 
             <button ref="startButtonRef" class="cmd cmd--start" :class="playSave ? 'title-card__restart' : 'cmd--single'" @click="enterTitle">
               {{ playSave ? 'はじめから' : 'はじめる' }}
+
+              <!-- 保存を読む前だけ：時刻の札と同じ高さの、見えない場所とり（かくしたボタンの段を、横ならびと同じ高さにするため） -->
+              <span v-if="!isPlaySaveChecked" class="title-card__continueTime title-card__startPlaceholder" aria-hidden="true">0:00</span>
             </button>
           </div>
 
