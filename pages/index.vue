@@ -2963,12 +2963,14 @@ onUnmounted(() => {
 
           <h1 class="snack-heading">きょうのおやつ</h1>
 
-          <!-- 2文目は、スマホでは出さない（1画面に収めるため。押してみればすぐ分かる） -->
+          <!-- 2文目は、スマホでは出さない（1画面に収めるため。押してみればすぐ分かる）
+               まだ1つも選んでいないときは見せない（バッグから出すものが無いので）
+               場所は残しておく（出たり消えたりで、下のカードが上下に動かないように） -->
           <p class="snack-lead">
             おやつを{{ maxSnackCount }}つ選ぼう！
-            <span class="snack-lead__sub">
+            <span class="snack-lead__sub" :class="{ 'snack-lead__sub--hidden': selectedSnacks.length === 0 }">
               <br />
-              もう一度押すと外せます。
+              もう一度押すと、バッグから出せるよ
             </span>
           </p>
         </div>
