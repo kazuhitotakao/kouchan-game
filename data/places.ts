@@ -4,7 +4,7 @@
    プレイ中に変わる値は useGameState.ts、遊んだときの数値・文章は data/placeActions.ts
    ============================================================ */
 
-import type { GameEvent, ItemPlace } from '~/types/game';
+import type { BannerImage, GameEvent, ItemPlace } from '~/types/game';
 
 /* 公園にある「通常の場所」6か所（その場所ならではの遊びを持っている場所） */
 export const normalPlaceEvents: GameEvent[] = ['slide', 'sandbox', 'acornArea', 'pond', 'grassArea', 'secretSpot'];
@@ -25,16 +25,18 @@ export const placeSelectionIndexes: Partial<Record<GameEvent, number>> = {
   secretSpot: 5,
 };
 
-/* 場所の絵（カードのいちばん上のバナー。場面の名前 → 画像のパスと縦横比）
-   ratio は画像の縦横比に合わせる（ちがうと、左右か上下が切れる）
-   ※ ここに無い場面は、仮の枠（NO IMAGE）のまま */
+/* 場所の絵（カードのいちばん上のバナー。場面の名前 → 絵。書きかたは types/game.ts の BannerImage）
+   画面に出すのも先読みも、ここを見る（絵ができたら、ここだけ書きかえればよい。pages/index.vue は直さなくてよい）
+   ※ とつぜんのできごとの絵は data/game.ts の suddenEventBannerImages、いやいやの絵は data/tantrum.ts */
 export const placeBannerImages = {
   slide: { src: '/images/commands/play-slide.webp', ratio: '2660 / 591' },
   sandbox: { src: '/images/commands/play-sandbox.webp', ratio: '2660 / 591' },
   acornArea: { src: '/images/commands/play-acorn-tree.webp', ratio: '2164 / 727' },
+  pond: { label: '池', ratio: '3 / 1' },
   grassArea: { src: '/images/commands/play-lawn.webp', ratio: '2172 / 724' },
+  secretSpot: { label: 'こもれびの広場', ratio: '3 / 1' },
   restArea: { src: '/images/commands/break.webp', ratio: '2660 / 591' },
-} satisfies Partial<Record<GameEvent, { src: string; ratio: string }>>;
+} satisfies Partial<Record<GameEvent, BannerImage>>;
 
 /* 場所ごとに見つかるもの（1か所に1種類） */
 export const placeItems: Record<ItemPlace, string> = {

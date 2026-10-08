@@ -70,7 +70,7 @@ import type {
 } from '~/types/game';
 
 /* ゲーム中に変わらない設定データ（読むだけ。プレイ中に変わる値は、それぞれの composable が持つ） */
-import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEvents } from '~/data/game';
+import { dangerCalmLine, dangerEnergyLine, fussEnergyLine, fussMoodLine, gameTitle, suddenEventBannerImages, suddenEvents } from '~/data/game';
 import { parkMapImages, parkMapStartPlace } from '~/data/parkMap';
 import { normalPlaceEvents, placeBannerImages, placeItems, placeSelectionIndexes } from '~/data/places';
 import { placeActions } from '~/data/placeActions';
@@ -3158,8 +3158,10 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'restArea'" class="scene" :class="sceneClass" key="restArea">
             <section class="stage">
               <article class="place-card place-card--rest">
-                <!-- 場所の絵（カードのいちばん上のバナー。どの場面も同じ大きさの枠。結果が出ているあいだは隠す → base.css / responsive.css） -->
-                <NoImage class="place-card__banner" :ratio="placeBannerImages.restArea.ratio" :src="placeBannerImages.restArea.src" />
+                <!-- 場所の絵（カードのいちばん上のバナー。どの場面も同じ大きさの枠。結果が出ているあいだは隠す → base.css / responsive.css）
+                     絵のパスと縦横比は data/places.ts の placeBannerImages（とつぜんのできごとは data/game.ts の suddenEventBannerImages）
+                     v-bind でまとめて渡すので、絵ができたときは data/ だけを書きかえればよい（まだ絵が無い場面は、仮の枠を出す） -->
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.restArea" />
 
                 <h2 class="place-card__title">ひとやすみ</h2>
 
@@ -3204,7 +3206,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'slide'" class="scene" :class="sceneClass" key="slide">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" :ratio="placeBannerImages.slide.ratio" :src="placeBannerImages.slide.src" />
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.slide" />
 
                 <h2 class="place-card__title">すべり台</h2>
 
@@ -3242,7 +3244,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'sandbox'" class="scene" :class="sceneClass" key="sandbox">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" :ratio="placeBannerImages.sandbox.ratio" :src="placeBannerImages.sandbox.src" />
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.sandbox" />
 
                 <h2 class="place-card__title">砂場</h2>
 
@@ -3279,7 +3281,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'acornArea'" class="scene" :class="sceneClass" key="acornArea">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" :ratio="placeBannerImages.acornArea.ratio" :src="placeBannerImages.acornArea.src" />
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.acornArea" />
 
                 <h2 class="place-card__title">どんぐりの木</h2>
 
@@ -3316,7 +3318,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'pond'" class="scene" :class="sceneClass" key="pond">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="池" />
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.pond" />
 
                 <h2 class="place-card__title">池</h2>
 
@@ -3353,7 +3355,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'grassArea'" class="scene" :class="sceneClass" key="grassArea">
             <section class="stage">
               <article class="place-card">
-                <NoImage class="place-card__banner" :ratio="placeBannerImages.grassArea.ratio" :src="placeBannerImages.grassArea.src" />
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.grassArea" />
 
                 <h2 class="place-card__title">芝生広場</h2>
 
@@ -3556,7 +3558,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'secretSpot'" class="scene" :class="sceneClass" key="secretSpot">
             <section class="stage">
               <article class="place-card place-card--secret">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="こもれびの広場" />
+                <NoImage class="place-card__banner" v-bind="placeBannerImages.secretSpot" />
 
                 <h2 class="place-card__title">こもれびの広場</h2>
 
@@ -3665,7 +3667,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'emergencySiren'" class="scene" :class="sceneClass" key="emergencySiren">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="救急車" />
+                <NoImage class="place-card__banner" v-bind="suddenEventBannerImages.emergencySiren" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
@@ -3701,7 +3703,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'ladybug'" class="scene" :class="sceneClass" key="ladybug">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="テントウムシ" />
+                <NoImage class="place-card__banner" v-bind="suddenEventBannerImages.ladybug" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
@@ -3738,7 +3740,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'dog'" class="scene" :class="sceneClass" key="dog">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="2660 / 591" src="/images/events/event-dog-appears.webp" />
+                <NoImage class="place-card__banner" v-bind="suddenEventBannerImages.dog" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
@@ -3774,7 +3776,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'fallDown'" class="scene" :class="sceneClass" key="fallDown">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="ころんだ" />
+                <NoImage class="place-card__banner" v-bind="suddenEventBannerImages.fallDown" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 
@@ -3810,7 +3812,7 @@ onUnmounted(() => {
           <div v-else-if="currentEvent === 'fountain'" class="scene" :class="sceneClass" key="fountain">
             <section class="stage">
               <article class="place-card place-card--sudden">
-                <NoImage class="place-card__banner" ratio="3 / 1" label="噴水" />
+                <NoImage class="place-card__banner" v-bind="suddenEventBannerImages.fountain" />
 
                 <p class="place-card__flash">とつぜんのできごと！</p>
 

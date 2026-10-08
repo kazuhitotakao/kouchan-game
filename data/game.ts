@@ -4,7 +4,7 @@
    場所・おやつ・いやいや・秘密の小道の設定は、それぞれ data/ の中の別のファイル
    ============================================================ */
 
-import type { GameEvent } from '~/types/game';
+import type { BannerImage, GameEvent } from '~/types/game';
 
 /* 画面に出すゲームの題名 */
 export const gameTitle: string = 'こうちゃんの大冒険';
@@ -14,6 +14,16 @@ export const suddenEvents: GameEvent[] = ['emergencySiren', 'ladybug', 'dog', 'f
 
 /* とつぜんのできごとが起きる確率（0.2 ＝ 20%。5回に1回くらい） */
 export const suddenEventChance = 0.2;
+
+/* とつぜんのできごとの絵（カードのいちばん上のバナー。書きかたは data/places.ts の placeBannerImages と同じ）
+   画面に出すのも先読みも、ここを見る（絵ができたら、ここだけ書きかえればよい） */
+export const suddenEventBannerImages = {
+  emergencySiren: { label: '救急車', ratio: '3 / 1' },
+  ladybug: { label: 'テントウムシ', ratio: '3 / 1' },
+  dog: { src: '/images/events/event-dog-appears.webp', ratio: '2660 / 591' },
+  fallDown: { label: 'ころんだ', ratio: '3 / 1' },
+  fountain: { label: '噴水', ratio: '3 / 1' },
+} satisfies Partial<Record<GameEvent, BannerImage>>;
 
 /* ===== ゲージのしきい値（目もり） =====
    ゲージの線の位置とルールの判定の両方で使うので、数字を変えても線とルールがずれない
