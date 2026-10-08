@@ -568,6 +568,40 @@
   text-align: left;
 }
 
+/* ===== 読む画面（あそびかた・記録）は、見出しより下だけをスクロールする =====
+   上の「← 戻る」とサウンド・見出しは、いつも見えている（なので、いちばん下に「← 戻る」は置かない）
+
+   ・.title-screen 自体はスクロールさせず、カードを画面の高さまでに収める（flex-shrink で縮む）
+   ・カードの中で、見出しより下の .howto-body だけがスクロールする
+   ・min-height … B画面のカードと同じ高さを下限にする（短い記録でも、カードが小さくなりすぎない）
+                  背の低い画面では、画面の高さ（100%）までゆずる（はみ出して切れないように）
+   ・padding-bottom … スクロールする中身を、カードの下のふちの近くまで見せる（下の余白は .howto-body の中に持つ）
+   ※ スマホ幅で、画面の高さに固定するところは、ファイルの後ろの @media (max-width: 700px) */
+.title-screen--reading {
+  overflow: hidden;
+}
+
+.title-screen--reading .title-card--howto {
+  flex: 0 1 auto;
+  min-height: min(494px, 100%);
+  padding-bottom: 12px;
+  overflow: hidden;
+}
+
+/* 見出しより下（スクロールする中身）
+   ・左右の余白を、カードの余白からこちらへ移す（スクロールバーが、本文の横ではなくカードの右のふちに出るように）
+   ・上のふちの線 … 見出しまでが動かないところ、ここから下が動くところ、の区切り
+   ・overscroll-behavior: contain … いちばん下までスクロールした勢いで、うしろのページまで動かないように */
+.howto-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 -44px;
+  padding: 14px 44px 24px;
+  border-top: 1px solid #e3eaf1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 /* この画面は HTML の順番のまま上から出したいので、order を 0 に戻す（1 のままだと、ツールバーがいちばん下へ行く）
    flex-wrap … とても細い画面でのはみ出しよけ */
 .title-card--howto .title-card__tools {
@@ -749,12 +783,6 @@
 
 .howto-note--hint {
   border-left-color: var(--gold);
-}
-
-.howto-footer {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
 }
 
 /* ============================================================
@@ -1864,6 +1892,27 @@
     padding: 28px 16px;
   }
 
+  /* 読む画面（あそびかた・記録）は、ゲーム画面と同じく画面の高さに固定して、見出しより下だけをスクロールさせる
+     （ほかのタイトル系の画面は、今までどおりページ全体のスクロール）
+     border-box … 上下の余白も、画面の高さの中に入れる（入れないと、余白のぶんだけページがスクロールしてしまう）
+     safe-area を引く理由は、.game-screen と同じ（→ responsive.css） */
+  .title-screen--reading {
+    box-sizing: border-box;
+    flex: none;
+    height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .title-screen--reading .title-card--howto {
+    min-height: min(462px, 100%);
+  }
+
+  /* カードの左右の余白が16pxになるので、こちらも合わせる */
+  .howto-body {
+    margin: 0 -16px;
+    padding: 12px 16px 18px;
+  }
+
   /* 左右の余白は、上のツールバーが1行に収まるように小さくする */
   .title-screen {
     padding-right: 12px;
@@ -2199,5 +2248,45 @@
   .snack-option {
     padding-top: 6px;
     padding-bottom: 6px;
+  }
+}
+
+/* ============================================================
+   背の低い画面（高さ500px以下。横向きのスマホなど）の読む画面（あそびかた・記録）
+
+   上の「← 戻る」・サウンド・見出しは動かないところなので、背が低いと本文の見える高さが減ってしまう
+   （横向きのスマホでは、何もしないと上の部分が画面の約4割をとり、本文は200pxほどしか見えない）
+   ボタンの大きさ（押しやすさ）はそのままにして、まわりの余白と見出しの文字を小さくする
+   ※ ファイルの最後に置くのは、幅で分けた指定（max-width: 700px など）より後から効かせるため
+   ============================================================ */
+@media (max-height: 500px) {
+  .title-screen--reading {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .title-screen--reading .title-card--howto {
+    padding-top: 14px;
+  }
+
+  .title-screen--reading .title-card__tools {
+    margin-top: -6px;
+    margin-bottom: 6px;
+  }
+
+  .title-screen--reading .howto-heading {
+    gap: 8px;
+    margin-bottom: 8px;
+    font-size: 20px;
+  }
+
+  .title-screen--reading .howto-heading__icon {
+    width: 26px;
+    height: 26px;
+    font-size: 15px;
+  }
+
+  .title-screen--reading .howto-body {
+    padding-top: 10px;
   }
 }

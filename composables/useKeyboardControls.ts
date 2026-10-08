@@ -575,9 +575,9 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
      あそびかた画面・記録の画面のキーボード操作（どちらも B画面から開く、読むための縦に長い画面なので、同じ操作にする）
 
      ・Escape        … B画面へ戻る
-     ・↑ ↓           … 画面をスクロールする（1回ぶんの量は、ゲーム画面の読む場面と同じ）
-                       いちばん下まで来たら下の「← 戻る」へ、いちばん上まで来たら上の「← 戻る」へフォーカスを移す（そのまま Enter で戻れる）
-                       とちゅうでは、どのボタンにもフォーカスを置かない（見えていない「戻る」を Enter で押してしまわないように）
+     ・↑ ↓           … 見出しより下をスクロールする（1回ぶんの量は、ゲーム画面の読む場面と同じ）
+                       いちばん下・いちばん上まで来たら、上の「← 戻る」へフォーカスを移す（そのまま Enter で戻れる）
+                       とちゅうでは、どのボタンにもフォーカスを置かない（読んでいる途中で Enter を押して、うっかり戻らないように）
                        → scrollReadingScreenByArrow()
      ・← →           … 上の「← 戻る」と「サウンド」を行き来する（どちらかにフォーカスがあるときだけ）
      ・Enter / Space … 押すのはブラウザにまかせる。押しっぱなしを止めるだけ
@@ -639,37 +639,25 @@ export function useKeyboardControls(options: UseKeyboardControlsOptions) {
 
   /* 読む画面（あそびかた・記録）を ↑↓ で1回ぶんスクロールして、フォーカスを位置に合わせる
 
-     スクロールするのは、パソコンでは画面の入れもの（.title-screen）、スマホ幅ではページ全体
-     ・いちばん下 … 下の「← 戻る」（.howto-footer の中のもの）
-     ・いちばん上 … 上の「← 戻る」（topBackButton）
-     ・とちゅう   … どこにも置かない（いまフォーカスがある、この画面の中のボタンから外す）
-     スクロールしない短い画面では、上と下の両方にあたるので、押した向きで決める（↓ で下の「戻る」、↑ で上の「戻る」）
+     スクロールするのは、見出しより下（.howto-body）だけ（上の「← 戻る」と見出しは動かない → base.css）
+     ・いちばん下・いちばん上 … 上の「← 戻る」（topBackButton。いつも見えているので、どちらのはしでもここへ当てる）
+     ・とちゅう               … どこにも置かない（いまフォーカスがある、この画面の中のボタンから外す）
+     スクロールしない短い画面では、どちらの向きでも上の「戻る」へ当てる
      ※ preventScroll … 見えている「戻る」へ当てるだけなので、フォーカスでスクロール位置を動かさない */
   function scrollReadingScreenByArrow(screen: HTMLElement, topBackButton: HTMLButtonElement, direction: 1 | -1) {
     const scrollers: HTMLElement[] = [];
+    const body = screen.querySelector<HTMLElement>('.howto-body');
 
-    if (canScrollInside(screen)) {
-      scrollers.push(screen);
-    }
-
-    const page = document.scrollingElement;
-
-    if (page instanceof HTMLElement && page.scrollHeight - window.innerHeight > 1) {
-      scrollers.push(page);
+    if (canScrollInside(body)) {
+      scrollers.push(body);
     }
 
     scrollSceneByArrow(scrollers, direction);
 
     const isAtTop = scrollers.every((element) => element.scrollTop <= 1);
     const isAtBottom = scrollers.every((element) => element.scrollTop + getScrollViewHeight(element) >= element.scrollHeight - 1);
-    const bottomBackButton = screen.querySelector<HTMLButtonElement>('.howto-footer .title-card__back');
 
-    if (direction > 0 && isAtBottom && bottomBackButton) {
-      bottomBackButton.focus({ preventScroll: true });
-      return;
-    }
-
-    if (direction < 0 && isAtTop) {
+    if ((direction > 0 && isAtBottom) || (direction < 0 && isAtTop)) {
       topBackButton.focus({ preventScroll: true });
       return;
     }
