@@ -54,6 +54,19 @@ export default defineNuxtConfig({
        */
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
 
+      script: [
+        /*
+         * 「つづきから」の保存があるかだけを、画面が出る前に調べて、<html data-play-save> の目印を付ける
+         *   作っておいた HTML には、保存があるかどうかが入っていない（はじめは「はじめる」1つ）ので、
+         *   目印が無いと、ページを開いたとき「はじめる」が一瞬出てから「はじめから／つづきから」に切りかわってしまう
+         *   目印があるあいだは、ボタンの段を「横ならびと同じ高さ」でかくしておく（→ command.css の .title-card--checking）
+         * ※ キーの名前は utils/playSave.ts の playSaveStorageKey と同じにすること
+         */
+        {
+          innerHTML: "try{if(localStorage.getItem('kouchan-game-play-save'))document.documentElement.setAttribute('data-play-save','')}catch(e){}",
+        },
+      ],
+
       meta: [
         /*
          * ページの説明（検索結果や、共有したときのカードに出る）
@@ -119,6 +132,18 @@ export default defineNuxtConfig({
         routes.add(path);
       }
     },
+  },
+
+  experimental: {
+    /*
+     * 作っておいたページのデータを、別のファイル（_payload.json）に分けない（HTML の中に入れたままにする）
+     *
+     * ・このゲームのページには、分けるほどのデータが無い
+     * ・分けると、HTML に _payload.json の先読みが付くのに、ブラウザ側は使わない設定になるので、
+     *   「先読みしたのに使われていない」という警告が出ていた
+     *   （ブラウザ側の設定はページを集める前に決まり、そのときは作るページが0件に見えるため → 上の hooks）
+     */
+    payloadExtraction: false,
   },
 
   modules: ['@vite-pwa/nuxt'],

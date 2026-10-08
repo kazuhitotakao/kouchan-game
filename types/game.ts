@@ -244,3 +244,28 @@ export type GameRecord = {
   playCount: number;
   collectedItemCount: number;
 };
+
+/* 本編の「つづきから」のための保存（公園の地図の画面に来るたびに上書きする。保存のしくみは utils/playSave.ts）
+
+   公園の地図の画面では、いやいや・とつぜんのできごと・秘密の小道・結果の表示が、どれも片づいているので、
+   再開に要るのは、ステータス・時刻・進みぐあい・残りのおやつ だけ
+
+   savedAt     … 保存した日時（Date.now() のミリ秒）
+   currentTime … ゲームの中の時刻（'10:40'）
+   snackIds    … バッグに残っているおやつ
+   ほかは useGameState.ts の同じ名前の値 */
+export type PlaySave = {
+  savedAt: number;
+  childEnergy: number;
+  childMood: number;
+  outingPoint: number;
+  parentEnergy: number;
+  parentCalm: number;
+  currentTime: string;
+  visitedPlaces: GameEvent[];
+  playCount: number;
+  collectedItems: string[];
+  hasDiscoveredSecretSpot: boolean;
+  tantrumCount: number;
+  snackIds: SnackId[];
+};
