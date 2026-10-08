@@ -193,9 +193,11 @@ export function getRecordRankTier(rank: string): 'top' | 'normal' | 'low' {
   return 'normal';
 }
 
-/* 遊んだ日時を「10/7 14:32」の形にする（直近の記録なので、年は出さない） */
+/* 遊んだ日時を「2026/10/7 14:32」の形にする
+   年も出す（ハイスコアは何年も前の記録が残ることがあり、直近の記録も、たまに遊ぶ人では年をまたぐため）
+   年によって付けたり付けなかったりはしない（一覧で、日時の長さがそろわなくなるため） */
 export function formatPlayedAt(playedAt: number) {
   const date = new Date(playedAt);
 
-  return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
