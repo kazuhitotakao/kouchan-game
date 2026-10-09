@@ -47,6 +47,7 @@ import {
   saveLadybugVocalSongUnlocked,
   unlockLadybugVocalSongFromSavedBest,
 } from '~/utils/ladybugVocalSong';
+import { markNewSoundtrackTrack } from '~/utils/soundtrackNew';
 
 /* このミニゲームの id（URL の /minigame/ladybug-balance と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
 const minigameId: MinigameId = 'ladybug-balance';
@@ -223,6 +224,9 @@ const {
       hasUnlockedLadybugVocalSong.value = true;
       isNewlyUnlockedLadybugVocalSong.value = true;
       saveLadybugVocalSongUnlocked();
+
+      // サウンドトラックの曲のカードと、A画面の「♪ サウンドトラック」に NEW を出す
+      markNewSoundtrackTrack('ladybug-vocal');
 
       playCountdownStartSound();
     }

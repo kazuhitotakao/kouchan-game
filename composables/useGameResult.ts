@@ -23,6 +23,7 @@ import { fussMoodLine, playedALotLine, totalPlaceCount } from '~/data/game';
 import { addGameRecord, loadGameRecords } from '~/utils/gameRecords';
 import { formatMinutesToTime } from '~/utils/gameTime';
 import { judgeSPlusSongUnlock, loadHasUnlockedSPlusSong, saveSPlusSongUnlocked, shouldShowSPlusSongHint } from '~/utils/sPlusSong';
+import { markNewSoundtrackTrack } from '~/utils/soundtrackNew';
 import type { GameEvent, GameRecord, GameRecordResult, ScoreBreakdownItem } from '~/types/game';
 
 /* ============================================================
@@ -172,6 +173,9 @@ export function useGameResult(options: UseGameResultOptions) {
     if (result === 'newlyUnlocked') {
       isSPlusSongNewlyUnlocked.value = true;
       saveSPlusSongUnlocked();
+
+      // サウンドトラックの曲のカードと、A画面の「♪ サウンドトラック」に NEW を出す
+      markNewSoundtrackTrack('s-plus');
     }
   }
 

@@ -43,11 +43,11 @@ export const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
     complaint: 'おなかすいたー！',
     greatSnackText: 'おなかも少し満たされたようです。',
   },
-  frustrated: {
-    voices: { 1: 'なんかちがう〜！', 2: 'なんかちがうー！！', 3: 'ちがうのーーー！！！' },
-    scene: 'こうちゃんは、目に涙をためて納得できない様子です。',
-    complaint: 'なんかちがうー！',
-    greatSnackText: '悔しかった気持ちも、少しやわらいだようです。',
+  doItMyself: {
+    voices: { 1: 'こうちゃんがするー！', 2: 'こうちゃんがしたかったー！！', 3: 'こうちゃんがしたかったにーー！！！' },
+    scene: 'こうちゃんは、手をふりはらって首をふっています。',
+    complaint: 'こうちゃんがするー！',
+    greatSnackText: 'むっとしていた気持ちも、少しやわらいだようです。',
   },
   wantMorePlay: {
     voices: { 1: 'まだあそぶ〜！', 2: 'まだあそぶー！！', 3: 'まだあそぶーーー！！！' },
@@ -62,12 +62,12 @@ export const tantrumReasonInfo: Record<TantrumReason, TantrumReasonInfo> = {
    おやつの回復量とは別のルールなので、Snack の型には入れず、ここに表として分けて持つ
    読みかた：snackTantrumFits.banana.hungry → バナナは「おなかすいた」に great */
 export const snackTantrumFits: Record<SnackId, Record<TantrumReason, TantrumSnackFit>> = {
-  gummy: { tired: 'weak', hungry: 'normal', frustrated: 'great', wantMorePlay: 'normal' },
-  chocolate: { tired: 'normal', hungry: 'normal', frustrated: 'great', wantMorePlay: 'normal' },
-  senbei: { tired: 'normal', hungry: 'great', frustrated: 'weak', wantMorePlay: 'weak' },
-  biscuit: { tired: 'normal', hungry: 'great', frustrated: 'normal', wantMorePlay: 'weak' },
-  banana: { tired: 'great', hungry: 'great', frustrated: 'weak', wantMorePlay: 'weak' },
-  jelly: { tired: 'normal', hungry: 'normal', frustrated: 'normal', wantMorePlay: 'normal' },
+  gummy: { tired: 'weak', hungry: 'normal', doItMyself: 'great', wantMorePlay: 'normal' },
+  chocolate: { tired: 'normal', hungry: 'normal', doItMyself: 'great', wantMorePlay: 'normal' },
+  senbei: { tired: 'normal', hungry: 'great', doItMyself: 'weak', wantMorePlay: 'weak' },
+  biscuit: { tired: 'normal', hungry: 'great', doItMyself: 'normal', wantMorePlay: 'weak' },
+  banana: { tired: 'great', hungry: 'great', doItMyself: 'weak', wantMorePlay: 'weak' },
+  jelly: { tired: 'normal', hungry: 'normal', doItMyself: 'normal', wantMorePlay: 'normal' },
 };
 
 /* ナイス対応でもらえるボーナスの量（画面の「おでかけポイント +3」もここを見る） */

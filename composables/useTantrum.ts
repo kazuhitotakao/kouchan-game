@@ -111,7 +111,7 @@ export function useTantrum(options: UseTantrumOptions) {
   } = options;
 
   /* ============================================================
-     いやいやの理由（tired つかれた ／ hungry おなかすいた ／ frustrated 悔しい ／ wantMorePlay まだ遊びたい）
+     いやいやの理由（tired つかれた ／ hungry おなかすいた ／ doItMyself じぶんでやりたい ／ wantMorePlay まだ遊びたい）
 
      理由によって「効く対応」がちがい、プレイヤーはセリフや様子から理由を考えて対応を選ぶ
      ・「起きるか」（checkTantrum）と「なぜ泣いているか」（chooseTantrumReason）は別の抽選
@@ -159,8 +159,8 @@ export function useTantrum(options: UseTantrumOptions) {
   /* ===== ナイス対応（いやいやの理由に合った対応をしたときのごほうび） =====
 
      ・つかれた           ＋ だっこ（どのレベルでも）
-     ・悔しい／まだ遊びたい ＋ お話する（大いやいやで1段落ち着くだけのときもふくむ）
-     ・悔しい             ＋ 少し待ってみる（成功したとき。1段落ち着くだけのときもふくむ）
+     ・じぶんでやりたい／まだ遊びたい ＋ お話する（大いやいやで1段落ち着くだけのときもふくむ）
+     ・じぶんでやりたい   ＋ 少し待ってみる（成功したとき。1段落ち着くだけのときもふくむ）
      ・相性 great のおやつ ＋ そのいやいやの理由（どのレベルでも）
      ボーナスを足すのは applyNiceTantrumResponse() の1か所だけ */
 
@@ -201,10 +201,10 @@ export function useTantrum(options: UseTantrumOptions) {
      ■ 出やすさ
        tired        … 体力が低いほど出やすい
        hungry       … 11:00をすぎたら出る
-       frustrated   … 機嫌が低いほど出やすい
+       doItMyself   … 機嫌が低いほど出やすい
        wantMorePlay … 11:00をすぎたら出る。元気が残っているほど出やすい
        ※ 11:00より前に「まだ遊びたい」を出さないのは、まだ時間がたっぷりあるのに「まだあそぶー！」とぐずるのは不自然なため
-         （そのため 11:00より前は、つかれた か 悔しい のどちらか） */
+         （そのため 11:00より前は、つかれた か じぶんでやりたい のどちらか） */
   function chooseTantrumReason(): TantrumReason {
     const isAfterEleven = currentMinutes.value >= 11 * 60;
 
@@ -220,13 +220,13 @@ export function useTantrum(options: UseTantrumOptions) {
     // ② おなかすいた
     const hungryWeight = isAfterEleven ? 4 : 0;
 
-    // ③ うまくできなくて悔しい
-    let frustratedWeight = 1;
+    // ③ じぶんでやりたい
+    let doItMyselfWeight = 1;
 
     if (childMood.value <= 30) {
-      frustratedWeight = 5;
+      doItMyselfWeight = 5;
     } else if (childMood.value <= fussMoodLine) {
-      frustratedWeight = 3;
+      doItMyselfWeight = 3;
     }
 
     // ④ まだ遊びたい
@@ -243,11 +243,11 @@ export function useTantrum(options: UseTantrumOptions) {
     const candidates: { reason: TantrumReason; weight: number }[] = [
       { reason: 'tired', weight: tiredWeight },
       { reason: 'hungry', weight: hungryWeight },
-      { reason: 'frustrated', weight: frustratedWeight },
+      { reason: 'doItMyself', weight: doItMyselfWeight },
       { reason: 'wantMorePlay', weight: wantMorePlayWeight },
     ];
 
-    // くじの本数の合計（つかれた・悔しい は最低でも1ずつあるので、0にはならない）
+    // くじの本数の合計（つかれた・じぶんでやりたい は最低でも1ずつあるので、0にはならない）
     let totalWeight = 0;
 
     for (const candidate of candidates) {
@@ -349,10 +349,10 @@ export function useTantrum(options: UseTantrumOptions) {
        ・少し落ち着く … レベルが1段下がる（いやいやは続く）
        ・悪化する     … レベルが1段上がる（大いやいやのままなら、親の余裕が減る）
 
-     ・お話する … 悔しい・まだ遊びたい なら正解（ナイス対応）。つかれた・おなかすいた には効かず、悪化
+     ・お話する … じぶんでやりたい・まだ遊びたい なら正解（ナイス対応）。つかれた・おなかすいた には効かず、悪化
      ・だっこ   … 安全策。どのレベルでも必ず解決（はげしいほど親の体力を多く使う）。つかれた なら ナイス対応
      ・おやつ   … 相性しだい（great 解決＋ナイス対応 ／ normal ぐずぐずなら解決 ／ weak 悪化）
-     ・待つ     … ギャンブル。成功すれば解決か少し落ち着く、失敗すると悪化。悔しい で成功したら ナイス対応
+     ・待つ     … ギャンブル。成功すれば解決か少し落ち着く、失敗すると悪化。じぶんでやりたい で成功したら ナイス対応
 
      対応4つは、どれも親の余裕が減る（何で払うかがちがうだけ）
      ・お話する … 親の体力 -2       ／ 親の余裕 -4
@@ -575,7 +575,7 @@ export function useTantrum(options: UseTantrumOptions) {
 
   /* ③ お話してみる（親の体力 -2 ／ 親の余裕 -4 ／ 5分 … どの理由・レベルでも同じ）
 
-     ■ 悔しい／まだ遊びたい … お話が正解（機嫌 +12 ／ ナイス対応）
+     ■ じぶんでやりたい／まだ遊びたい … お話が正解（機嫌 +12 ／ ナイス対応）
        ・ぐずぐず・大泣き … 解決
        ・大いやいや       … 泣き声が大きすぎて1回では話がぜんぶ入らないので、1段落ち着くだけ
                              （対応そのものは正しいので、ナイス対応は付ける）
@@ -594,14 +594,14 @@ export function useTantrum(options: UseTantrumOptions) {
     parentCalm.value -= 4;
     addMinutes(5);
 
-    if (tantrumReason.value === 'frustrated' || tantrumReason.value === 'wantMorePlay') {
+    if (tantrumReason.value === 'doItMyself' || tantrumReason.value === 'wantMorePlay') {
       childMood.value += 12;
 
       if (isRepeatedTalk) {
         parentCalm.value -= 2;
       }
 
-      const words = tantrumReason.value === 'frustrated' ? '「うまくできなくて悔しかったんだね」' : '「まだ遊びたかったんだね」';
+      const words = tantrumReason.value === 'doItMyself' ? '「自分でやりたかったんだね」' : '「まだ遊びたかったんだね」';
 
       if (tantrumLevel.value === 3) {
         decreaseTantrumLevel();
@@ -611,7 +611,7 @@ export function useTantrum(options: UseTantrumOptions) {
         isTantrum.value = false;
 
         resultMessage.value =
-          tantrumReason.value === 'frustrated' ? `${words}涙をふいて、落ち着いてきました。` : `${words}「うん…」とうなずいて、落ち着きました。`;
+          tantrumReason.value === 'doItMyself' ? `${words}涙をふいて、落ち着いてきました。` : `${words}「うん…」とうなずいて、落ち着きました。`;
       }
 
       if (isRepeatedTalk) {
@@ -650,8 +650,8 @@ export function useTantrum(options: UseTantrumOptions) {
 
   /* 「少し待ってみる」が成功する確率（0.7 なら 70%）
 
-     ① 理由ごとの基本 … 悔しい 70% ／ まだ遊びたい 55% ／ つかれた 35% ／ おなかすいた 20%
-        （悔しい気持ちは時間で立てなおせることが多いが、体の疲れや空腹は、待ってもそのまま）
+     ① 理由ごとの基本 … じぶんでやりたい 70% ／ まだ遊びたい 55% ／ つかれた 35% ／ おなかすいた 20%
+        （手を出さずに見守れば、自分でやってみて気がすむことが多いが、体の疲れや空腹は、待ってもそのまま）
      ② 激しさ        … 大泣き -10 ／ 大いやいや -20
      ③ 待つの連続    … 2回続けた -15 ／ 3回以上 -30
      ④ 0〜100% の中におさめる
@@ -662,7 +662,7 @@ export function useTantrum(options: UseTantrumOptions) {
     let chancePercent = 50;
 
     switch (tantrumReason.value) {
-      case 'frustrated':
+      case 'doItMyself':
         chancePercent = 70;
         break;
       case 'wantMorePlay':
@@ -701,7 +701,7 @@ export function useTantrum(options: UseTantrumOptions) {
   /* ④ 少し待ってみる（ギャンブル）
 
      ・成功 … ぐずぐずなら解決／大泣き以上なら1段落ち着く
-              悔しい で成功したら、ナイス対応（1段落ち着くだけでも、見守ったこと自体は良かったので）
+              じぶんでやりたい で成功したら、ナイス対応（1段落ち着くだけでも、見守ったこと自体は良かったので）
      ・失敗 … 悪化する
      成功しても失敗しても、ステータスの増減と時間（15分）は毎回発生する
      ＝「もう一度待つか、ほかの対応を試すか」を考える場面になる */
@@ -718,7 +718,7 @@ export function useTantrum(options: UseTantrumOptions) {
 
     // 上で registerTantrumAction('wait') を呼んだあとなので、「待つの連続」も確率に入る
     const calmSuccess = Math.random() < getWaitSuccessChance();
-    const isFrustrated = tantrumReason.value === 'frustrated';
+    const isDoItMyself = tantrumReason.value === 'doItMyself';
 
     if (calmSuccess) {
       if (tantrumLevel.value === 1) {
@@ -731,7 +731,7 @@ export function useTantrum(options: UseTantrumOptions) {
         resultMessage.value = '待っていると、泣き声は少し小さく。でも、まだ涙は止まりません。';
       }
 
-      if (isFrustrated) {
+      if (isDoItMyself) {
         applyNiceTantrumResponse('そっと見守ったのが、よかったみたい！');
       }
     } else {
