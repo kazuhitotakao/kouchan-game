@@ -1801,7 +1801,7 @@ function takeCommonBreak() {
   parentCalm.value += 8;
   addMinutes(15);
 
-  resultMessage.value = 'ベンチでひと休み。こうちゃんも少し元気が出てきました。';
+  resultMessage.value = 'ベンチに座ってひと休み。みんな少し元気になりました！';
 
   finishCareAction();
 }
@@ -1857,7 +1857,7 @@ function lookForAmbulance() {
   parentEnergy.value -= 2;
   addMinutes(10);
 
-  resultMessage.value = '「いた！」道路の向こうを救急車が走っていきました。';
+  resultMessage.value = '「いたいた！」道路の向こうを救急車が走っていきました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1873,7 +1873,7 @@ function listenToSiren() {
   childMood.value += 4;
   addMinutes(5);
 
-  resultMessage.value = '「ピーポー！」遠ざかる音を、最後までまねしています。';
+  resultMessage.value = '「ピーポー！ピーポー！」遠ざかるサイレンの音を、楽しそうにまねしています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1889,7 +1889,7 @@ function cheerOnAmbulance() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = '「がんばれー！」音のするほうに手をふって、何度もふりかえっています。';
+  resultMessage.value = '「がんばれー！」救急車の音がするほうへ、小さな手を一生懸命ふっています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1908,7 +1908,7 @@ function holdLadybug() {
   outingPoint.value += 5;
   addMinutes(10);
 
-  resultMessage.value = '「のった！」テントウムシが指にちょこんと乗りました。';
+  resultMessage.value = '「のった！」そっと差し出した指に、テントウムシがちょこんと乗りました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1925,7 +1925,7 @@ function watchLadybug() {
   outingPoint.value += 4;
   addMinutes(10);
 
-  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
+  resultMessage.value = '「てちてち歩いてる！かわいい！」小さなテントウムシの動きを、じっと見つめています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1941,7 +1941,7 @@ function seeOffLadybug() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = '「ばいばーい！」てんとう虫に、手をふってお別れしました。';
+  resultMessage.value = '「ばいばーい！」葉っぱの奥へ歩いていくテントウムシに、小さく手をふりました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2021,7 +2021,7 @@ function hugAfterFall() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = 'ぎゅっとだっこ。肩に顔をつけて、少しずつ落ち着いてきました。';
+  resultMessage.value = 'ぎゅっとだっこすると、こうちゃんは肩に顔をうずめて、少しずつ落ち着いてきました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2042,7 +2042,7 @@ function blowPainAway() {
   parentCalm.value -= 5;
   addMinutes(5);
 
-  resultMessage.value = '「とんでった！」ひざをなでてもらって、にっこり。';
+  resultMessage.value = '「とんでった！」ひざをなでてもらうと、こうちゃんはにっこり。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2061,7 +2061,7 @@ function watchAfterFall() {
   parentCalm.value -= 8;
   addMinutes(5);
 
-  resultMessage.value = '「だいじょうぶ」自分でよいしょと立ち上がりました。';
+  resultMessage.value = '「だいじょうぶ！」こうちゃんは自分でよいしょと立ち上がりました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2082,7 +2082,7 @@ function goCloseToFountain() {
   parentEnergy.value -= 5;
   addMinutes(10);
 
-  resultMessage.value = '「きゃーっ！」水しぶきに向かって走りまわっています！';
+  resultMessage.value = '「わー！つめたーーい！」水しぶきがかかるたびに、こうちゃんは大はしゃぎ！';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2099,7 +2099,7 @@ function watchFountainFar() {
   outingPoint.value += 2;
   addMinutes(5);
 
-  resultMessage.value = '水の音を聞きながら、指をさして笑っています。';
+  resultMessage.value = '「みずでっぽうみたい！」噴水を指さしながら、楽しそうに眺めています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2112,7 +2112,7 @@ function watchFountainFar() {
 function walkOnFromFountain() {
   startStatusChanges();
 
-  resultMessage.value = '「ぬれちゃうから、またあとでね」歩きだしても、何度も噴水をふりかえっています。';
+  resultMessage.value = '『ぬれちゃうから、またあとでね』離れてからも、こうちゃんは何度も噴水をふりかえっています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -3590,7 +3590,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">池</h2>
 
-                <p class="place-card__text">「とりさん！」白鳥とコイを指さして大はしゃぎ。</p>
+                <p class="place-card__text">「とりさん！」白鳥を指さして大はしゃぎ。横にいるコイも、口をパクパクさせています。</p>
               </article>
 
               <ResultCard
@@ -3627,7 +3627,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">「ひろーい！」と声をあげて、芝生の上を元気に走り出しました。</p>
+                <p class="place-card__text">「なにしてあそぼっかなー！」こうちゃんは広い芝生を前に、ワクワクしています。</p>
               </article>
 
               <ResultCard
@@ -3941,7 +3941,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🚑 救急車のサイレン！</h2>
 
-                <p class="place-card__text">「きゅうきゅうしゃ、どこ？」遠くからピーポーピーポー。</p>
+                <p class="place-card__text">「きゅうきゅうしゃ、どこ？」遠くから聞こえるサイレンの音に、こうちゃんはあたりをキョロキョロ。</p>
               </article>
 
               <ResultCard
@@ -3977,7 +3977,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-                <p class="place-card__text">「てんとうむし！」と声をあげて、葉っぱの前にしゃがみこみました。</p>
+                <p class="place-card__text">「てんとうむし！」葉っぱの上にいるテントウムシを見つけて、こうちゃんはしゃがみこみました。</p>
               </article>
 
               <ResultCard
@@ -4050,7 +4050,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">💦 こうちゃんがころんだ！</h2>
 
-                <p class="place-card__text">「いたーいっ！」つまずいて、ひざをさすっています。</p>
+                <p class="place-card__text">「いたーいっ！」つまずいて転んだこうちゃんは、ひざをさすっています。</p>
               </article>
 
               <ResultCard
@@ -4066,7 +4066,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'すぐに|だっこする' }, { label: '「いたいの|いたいの|とんでけ」' }, { label: '「大丈夫？」|と|声を|かけて|待つ' }]"
+                :commands="[{ label: 'すぐに|だっこする' }, { label: '『いたいの|いたいの|とんでけ』' }, { label: '『大丈夫？』|と|声を|かけて|待つ' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
@@ -4086,7 +4086,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">⛲ 噴水が出た！</h2>
 
-                <p class="place-card__text">「わあ！」噴水から勢いよく水が飛び出しました。</p>
+                <p class="place-card__text">「うわあっ！」噴水から勢いよく水が飛び出して、こうちゃんはびっくり！</p>
               </article>
 
               <ResultCard
@@ -4394,7 +4394,7 @@ onUnmounted(() => {
       <div class="goal-confirm__content" role="alertdialog" aria-modal="true" aria-labelledby="goal-confirm-title" aria-describedby="goal-confirm-text">
         <p id="goal-confirm-title" class="goal-confirm__title">出口へ向かう？</p>
 
-        <p id="goal-confirm-text" class="goal-confirm__text">おでかけを終えて、結果発表へ。</p>
+        <p id="goal-confirm-text" class="goal-confirm__text">いっぱい遊んだね！冒険の結果を見てみよう！</p>
 
         <p class="goal-confirm__time">{{ goalConfirmTimeText }}</p>
 
