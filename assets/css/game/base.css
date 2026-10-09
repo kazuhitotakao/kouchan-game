@@ -771,6 +771,26 @@ html[data-play-save] .title-card--checking .title-card__visual {
   background: var(--gold);
 }
 
+/* ゲージの線の名前の前の印（ゲーム画面の目もりと同じ見た目。status.css の .gauge-legend__mark） */
+.howto-line {
+  flex: none;
+  width: 3px;
+  height: 16px;
+  margin: 0 4px;
+  border-radius: 1px;
+}
+
+.howto-line--fuss {
+  background: var(--line-fuss);
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 80%);
+}
+
+.howto-line--danger {
+  width: 4px;
+  background: var(--line-danger);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 90%);
+}
+
 /* 目立たせたい一文（左の太い線の色で、どんな話かを分ける。操作 … 水色 ／ 注意 … さんご色 ／ ヒント … 金色） */
 .howto-note {
   margin: 10px 0 0;

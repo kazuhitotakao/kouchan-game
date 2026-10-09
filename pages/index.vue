@@ -2726,6 +2726,29 @@ onUnmounted(() => {
                 </div>
               </dl>
 
+              <!-- ゲージの線（スマホではゲーム画面の目もりの説明を出していないので、ここで説明する）
+                   印の見た目と並び順は、ゲーム画面の目もりの説明（StatusBar.vue の .gauge-legend）にそろえる
+                   GAME OVER と同じく、数字（20・50・71）は書かない -->
+              <h3 class="howto-subheading">ゲージの線</h3>
+
+              <dl class="howto-terms">
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-line howto-line--danger"></span>
+                    あぶないライン
+                  </dt>
+                  <dd>下回ると、もうすぐGAME OVERになるかも！</dd>
+                </div>
+
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-line howto-line--fuss"></span>
+                    ぐずりだすライン
+                  </dt>
+                  <dd>下回ると、いやいやになりやすくなるよ！</dd>
+                </div>
+              </dl>
+
               <!-- GAME OVER は雰囲気だけ伝える（判定の一覧にはしない） -->
               <p class="howto-note howto-note--caution">
                 <b class="howto-note__title">GAME OVER</b>
