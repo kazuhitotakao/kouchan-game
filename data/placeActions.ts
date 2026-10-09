@@ -68,8 +68,8 @@ export const placeActions = {
     message: '一緒に大きな山を作りました。こうちゃんは夢中です！',
   },
 
-  /* ② 砂のトンネルを作る（軽いが休む行動ではないので、親の体力もきちんと減る） */
-  buildSandTunnel: {
+  /* ② 砂のケーキ屋さんごっこ（軽いが休む行動ではないので、親の体力もきちんと減る） */
+  playSandCakeShop: {
     place: 'sandbox',
     childEnergy: -8,
     childMood: 4,
@@ -77,7 +77,7 @@ export const placeActions = {
     parentEnergy: -7,
     parentCalm: -2,
     minutes: 15,
-    message: '「みえたー！」トンネルの向こうで、手と手がタッチ。',
+    message: '「いらっしゃいませー！」砂で作ったケーキを、たくさん並べています。',
   },
 
   /* ===== どんぐりの木 ===== */

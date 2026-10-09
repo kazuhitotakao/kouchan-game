@@ -2365,12 +2365,12 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 砂場（0 一緒に大きな山を作る／1 砂のトンネルを作る） */
+    /* 砂場（0 一緒に大きな山を作る／1 砂のケーキ屋さんごっこ） */
     case 'sandbox':
       if (index === 0) {
         runPlaceAction(placeActions.playSandbox);
       } else if (index === 1) {
-        runPlaceAction(placeActions.buildSandTunnel);
+        runPlaceAction(placeActions.playSandCakeShop);
       }
       break;
 
@@ -3423,7 +3423,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">「見ててー！」よいしょ、よいしょと階段をのぼりはじめました。</p>
+                <p class="place-card__text">「すべりだい！」と指をさして、うれしそうにかけ寄っていきました。</p>
               </article>
 
               <ResultCard
@@ -3461,7 +3461,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">砂場</h2>
 
-                <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
+                <p class="place-card__text">バケツとスコップを手に取ると、うれしそうに小躍りしています。</p>
               </article>
 
               <ResultCard
@@ -3478,12 +3478,12 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: '一緒に大きな山を作る' }, { label: '砂のトンネルを作る' }]"
+                  :commands="[{ label: '一緒に大きな山を作る' }, { label: '砂のケーキ屋さんごっこ' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => runPlaceAction([placeActions.playSandbox, placeActions.buildSandTunnel][index])"
+                  @select="index => runPlaceAction([placeActions.playSandbox, placeActions.playSandCakeShop][index])"
                   @leave="goToNextPlace"
                   @next="goToNextPlace" />
               </div>
@@ -3572,7 +3572,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">やわらかい芝生。思いきり走り回れそう！</p>
+                <p class="place-card__text">「ひろーい！」と声をあげて、芝生の上を元気に走り出しました。</p>
               </article>
 
               <ResultCard
