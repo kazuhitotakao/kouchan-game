@@ -2396,12 +2396,12 @@ function runSelectedCommand() {
       }
       break;
 
-    /* どんぐりの木（0 一緒にどんぐりを拾う／1 どんぐりをころがして遊ぶ） */
+    /* どんぐりの木（0 どんぐりを拾う／1 木のかげに隠れる） */
     case 'acornArea':
       if (index === 0) {
         runPlaceAction(placeActions.collectAcorns);
       } else if (index === 1) {
-        runPlaceAction(placeActions.rollAcorns);
+        runPlaceAction(placeActions.hideBehindTree);
       }
       break;
 
@@ -3570,12 +3570,12 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: '一緒にどんぐりを拾う' }, { label: 'どんぐりをころがして遊ぶ' }]"
+                  :commands="[{ label: 'どんぐりを拾う' }, { label: '木のかげに隠れる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.rollAcorns][index])"
+                  @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.hideBehindTree][index])"
                   @leave="goToNextPlace"
                   @next="goToNextPlace" />
               </div>

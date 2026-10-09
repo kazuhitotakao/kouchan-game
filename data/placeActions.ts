@@ -82,7 +82,7 @@ export const placeActions = {
 
   /* ===== どんぐりの木 ===== */
 
-  /* ① 一緒にどんぐりを拾う */
+  /* ① どんぐりを拾う */
   collectAcorns: {
     place: 'acornArea',
     childEnergy: -11,
@@ -94,8 +94,8 @@ export const placeActions = {
     message: 'こうちゃんは夢中でどんぐりを拾っています！',
   },
 
-  /* ② どんぐりをころがして遊ぶ */
-  rollAcorns: {
+  /* ② 木のかげに隠れる */
+  hideBehindTree: {
     place: 'acornArea',
     childEnergy: -7,
     childMood: 4,
@@ -103,7 +103,7 @@ export const placeActions = {
     parentEnergy: -5,
     parentCalm: -2,
     minutes: 15,
-    message: '「まてまてー！」ころがるどんぐりを何度も追いかけています。',
+    message: '「……ばあ！」木の後ろから、ひょっこり顔を出しました。',
   },
 
   /* ===== 池 ===== */
