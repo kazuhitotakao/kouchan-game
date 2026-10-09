@@ -4,6 +4,8 @@ import { sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
 import { loadNewMinigames, unlockMinigame } from '~/utils/minigameStorage';
+import { loadNewSoundtrackTracks, markNewSoundtrackTrack } from '~/utils/soundtrackNew';
+import type { SoundtrackNewKey } from '~/utils/soundtrackNew';
 
 import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
@@ -1393,6 +1395,15 @@ function showMinigameUnlockNotice(id: MinigameId) {
   hasNewMinigame.value = true;
 }
 
+/* A画面の「♪ サウンドトラック」に NEW を付けるか（新しく解放して、まだサウンドトラックで見ていない曲があるとき。onMounted で読む） */
+const hasNewSoundtrack = ref(false);
+
+/* 曲を はじめて解放したときに呼ぶ（サウンドトラックの NEW の一覧に入れて、A画面の「♪ サウンドトラック」にも NEW を付ける） */
+function noticeNewSoundtrackTrack(key: SoundtrackNewKey) {
+  markNewSoundtrackTrack(key);
+  hasNewSoundtrack.value = true;
+}
+
 /* ミニゲーム「どこまで行ける？」の解放（秘密の小道をぬけたら、このブラウザに保存する）
 
    ※ A画面の「🎮 ミニゲーム」は、解放していなくてもいつも出す（一覧では「？？？」とヒントだけを出す）
@@ -1402,8 +1413,10 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
     return;
   }
 
+  // ミニゲームといっしょに、そのBGM（サウンドトラックの 04 こもれびの奥で）も聴けるようになる
   if (unlockMinigame('secret-path')) {
     showMinigameUnlockNotice('secret-path');
+    noticeNewSoundtrackTrack('secret-spot');
   }
 });
 
@@ -1413,8 +1426,17 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
 watch(currentEvent, (event) => {
   unlockedMinigameNotice.value = null;
 
+  // ミニゲームといっしょに、そのBGM（サウンドトラックの 05 てんとうむしのよりみち）も聴けるようになる
   if (event === 'ladybug' && unlockMinigame('ladybug-balance')) {
     showMinigameUnlockNotice('ladybug-balance');
+    noticeNewSoundtrackTrack('ladybug-detour');
+  }
+});
+
+/* S+ランクで、うた入りエンディングBGMを はじめて解放したとき（NEW の一覧に入れるのは useGameResult.ts。ここでは A画面の NEW だけ） */
+watch(isSPlusSongNewlyUnlocked, (isNewlyUnlocked) => {
+  if (isNewlyUnlocked) {
+    hasNewSoundtrack.value = true;
   }
 });
 
@@ -1878,24 +1900,7 @@ function cheerOnAmbulance() {
 
 /* ===== とつぜんのできごと：テントウムシ ===== */
 
-/* ① いっしょにじっくり見る */
-function watchLadybug() {
-  startStatusChanges();
-
-  childMood.value += 7;
-  outingPoint.value += 4;
-  addMinutes(10);
-
-  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
-
-  saveStatusChanges();
-  fixAllStatus();
-  checkGameOver();
-
-  selectedCommandIndex.value = 0;
-}
-
-/* ② そっと手を近づけてみる */
+/* ① そっと手を近づけてみる */
 function holdLadybug() {
   startStatusChanges();
 
@@ -1912,6 +1917,23 @@ function holdLadybug() {
   selectedCommandIndex.value = 0;
 }
 
+/* ② いっしょにじっくり見る */
+function watchLadybug() {
+  startStatusChanges();
+
+  childMood.value += 7;
+  outingPoint.value += 4;
+  addMinutes(10);
+
+  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
+
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  selectedCommandIndex.value = 0;
+}
+
 /* ③ ばいばいして見送る */
 function seeOffLadybug() {
   startStatusChanges();
@@ -1919,7 +1941,7 @@ function seeOffLadybug() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = '「ばいばーい！」空に向かって手をふっています。';
+  resultMessage.value = '「ばいばーい！」てんとう虫に、手をふってお別れしました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1930,7 +1952,7 @@ function seeOffLadybug() {
 
 /* ===== とつぜんのできごと：犬が近づいてくる ===== */
 
-/* ① 近くで見せてもらう */
+/* ① さわらせてもらう */
 function watchDogClose() {
   startStatusChanges();
 
@@ -1939,7 +1961,7 @@ function watchDogClose() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = '「わんわん、かわいいね！」近くで見せてもらいました。';
+  resultMessage.value = '「ふわふわする！」飼い主さんにことわって、そっと背中をなでさせてもらいました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1956,7 +1978,7 @@ function watchDogBehindParent() {
   parentEnergy.value -= 2;
   addMinutes(5);
 
-  resultMessage.value = '「わんわん、こっち見た！」だっこで少し離れて見ています。';
+  resultMessage.value = '「しっぽ、ふりふりしてる！」だっこされたまま、じっと見つめています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1965,13 +1987,13 @@ function watchDogBehindParent() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 道をあけて見送る */
+/* ③ ばいばいして見送る */
 function keepDistanceFromDog() {
   startStatusChanges();
 
   addMinutes(5);
 
-  resultMessage.value = '「わんわん、ばいばーい！」犬はそのまま歩いていきました。';
+  resultMessage.value = '「ばいばーい！」犬の後ろ姿を見ながら、小さく手をふりました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2365,21 +2387,21 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 砂場（0 一緒に大きな山を作る／1 砂のトンネルを作る） */
+    /* 砂場（0 一緒に大きな山を作る／1 砂のケーキ屋さんごっこ） */
     case 'sandbox':
       if (index === 0) {
         runPlaceAction(placeActions.playSandbox);
       } else if (index === 1) {
-        runPlaceAction(placeActions.buildSandTunnel);
+        runPlaceAction(placeActions.playSandCakeShop);
       }
       break;
 
-    /* どんぐりの木（0 一緒にどんぐりを拾う／1 どんぐりをころがして遊ぶ） */
+    /* どんぐりの木（0 どんぐりを拾う／1 木のかげに隠れる） */
     case 'acornArea':
       if (index === 0) {
         runPlaceAction(placeActions.collectAcorns);
       } else if (index === 1) {
-        runPlaceAction(placeActions.rollAcorns);
+        runPlaceAction(placeActions.hideBehindTree);
       }
       break;
 
@@ -2461,18 +2483,18 @@ function runSelectedCommand() {
       }
       break;
 
-    /* テントウムシ（0 いっしょにじっくり見る／1 そっと手を近づけてみる／2 ばいばいして見送る） */
+    /* テントウムシ（0 そっと手を近づけてみる／1 いっしょにじっくり見る／2 ばいばいして見送る） */
     case 'ladybug':
       if (index === 0) {
-        watchLadybug();
-      } else if (index === 1) {
         holdLadybug();
+      } else if (index === 1) {
+        watchLadybug();
       } else if (index === 2) {
         seeOffLadybug();
       }
       break;
 
-    /* 犬が近づいてきた（0 近くで見せてもらう／1 だっこで少し離れて見る／2 道をあけて見送る） */
+    /* 犬が近づいてきた（0 さわらせてもらう／1 だっこで少し離れて見る／2 ばいばいして見送る） */
     case 'dog':
       if (index === 0) {
         watchDogClose();
@@ -2592,6 +2614,9 @@ onMounted(() => {
 
   // A画面の「🎮 ミニゲーム」の NEW（一覧を見て戻ってきたときも、ページが作り直されるのでここで読みなおす）
   hasNewMinigame.value = loadNewMinigames().length > 0;
+
+  // A画面の「♪ サウンドトラック」の NEW（サウンドトラックから戻ってきたときも、ここで読みなおす）
+  hasNewSoundtrack.value = loadNewSoundtrackTracks().length > 0;
 
   /* 前回のサウンドの設定（ON/OFFと音量）を思い出す
      ※ ここではBGMを鳴らさない（開いた直後は音を鳴らせないので、「▶ はじめる」を押したときに鳴らしはじめる） */
@@ -2723,6 +2748,29 @@ onUnmounted(() => {
                     おでかけポイント
                   </dt>
                   <dd>体験すると増える</dd>
+                </div>
+              </dl>
+
+              <!-- ゲージの線（スマホではゲーム画面の目もりの説明を出していないので、ここで説明する）
+                   印の見た目と並び順は、ゲーム画面の目もりの説明（StatusBar.vue の .gauge-legend）にそろえる
+                   GAME OVER と同じく、数字（20・50・71）は書かない -->
+              <h3 class="howto-subheading">ゲージの線</h3>
+
+              <dl class="howto-terms">
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-line howto-line--danger"></span>
+                    あぶないライン
+                  </dt>
+                  <dd>下回ると、もうすぐGAME OVERになるかも！</dd>
+                </div>
+
+                <div class="howto-terms__row">
+                  <dt>
+                    <span class="howto-line howto-line--fuss"></span>
+                    ぐずりだすライン
+                  </dt>
+                  <dd>下回ると、いやいやになりやすくなるよ！</dd>
                 </div>
               </dl>
 
@@ -2952,8 +3000,15 @@ onUnmounted(() => {
             <div class="title-card__toolsLeft">
               <!-- サウンドトラックへの入口（入りきる幅に合わせて、文字を出しわける）
                    390px以上 … 「♪ サウンドトラック」／ 341〜389px … 「♪ サントラ」／ 340px以下 … 「♪」だけ（hover / focus で吹き出し）
-                   読み上げは、どの幅でも aria-label の「サウンドトラック」 -->
-              <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" aria-label="サウンドトラック" @click="goToSoundtrack">
+                   読み上げは、どの幅でも aria-label の「サウンドトラック」
+                   新しく解放して、まだサウンドトラックで見ていない曲があれば、左上の角に NEW を付ける（「🎮 ミニゲーム」と同じ。開くと消える） -->
+              <button
+                ref="soundtrackButtonRef"
+                type="button"
+                class="title-card__soundtrack"
+                :aria-label="hasNewSoundtrack ? 'サウンドトラック（新しい曲あり）' : 'サウンドトラック'"
+                @click="goToSoundtrack">
+                <span v-if="hasNewSoundtrack" class="title-card__new" aria-hidden="true">NEW</span>
                 <span aria-hidden="true">♪</span>
                 <span class="title-card__soundtrackText--full" aria-hidden="true">サウンドトラック</span>
                 <span class="title-card__soundtrackText--short" aria-hidden="true">サントラ</span>
@@ -3423,7 +3478,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">すべり台</h2>
 
-                <p class="place-card__text">「見ててー！」よいしょ、よいしょと階段をのぼりはじめました。</p>
+                <p class="place-card__text">「すべりだい！」と指をさして、うれしそうにかけ寄っていきました。</p>
               </article>
 
               <ResultCard
@@ -3461,7 +3516,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">砂場</h2>
 
-                <p class="place-card__text">こうちゃんはさっそくスコップを手に取りました。</p>
+                <p class="place-card__text">バケツとスコップを手に取ると、うれしそうに小躍りしています。</p>
               </article>
 
               <ResultCard
@@ -3478,12 +3533,12 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: '一緒に大きな山を作る' }, { label: '砂のトンネルを作る' }]"
+                  :commands="[{ label: '一緒に大きな山を作る' }, { label: '砂のケーキ屋さんごっこ' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => runPlaceAction([placeActions.playSandbox, placeActions.buildSandTunnel][index])"
+                  @select="index => runPlaceAction([placeActions.playSandbox, placeActions.playSandCakeShop][index])"
                   @leave="goToNextPlace"
                   @next="goToNextPlace" />
               </div>
@@ -3515,12 +3570,12 @@ onUnmounted(() => {
                 <CommandBox
                   v-model:selected-index="selectedCommandIndex"
                   variant="place"
-                  :commands="[{ label: '一緒にどんぐりを拾う' }, { label: 'どんぐりをころがして遊ぶ' }]"
+                  :commands="[{ label: 'どんぐりを拾う' }, { label: '木のかげに隠れる' }]"
                   :result-message="resultMessage"
                   :next-place-command-label="nextPlaceCommandLabel"
                   :pointer-paused="isCommandPointerPaused"
                   :leave-place-command-index="leavePlaceCommandIndex"
-                  @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.rollAcorns][index])"
+                  @select="index => runPlaceAction([placeActions.collectAcorns, placeActions.hideBehindTree][index])"
                   @leave="goToNextPlace"
                   @next="goToNextPlace" />
               </div>
@@ -3572,7 +3627,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">芝生広場</h2>
 
-                <p class="place-card__text">やわらかい芝生。思いきり走り回れそう！</p>
+                <p class="place-card__text">「ひろーい！」と声をあげて、芝生の上を元気に走り出しました。</p>
               </article>
 
               <ResultCard
@@ -3922,7 +3977,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-                <p class="place-card__text">「てんとうむし！」葉っぱの前にしゃがみこみました。</p>
+                <p class="place-card__text">「てんとうむし！」と声をあげて、葉っぱの前にしゃがみこみました。</p>
               </article>
 
               <ResultCard
@@ -3939,12 +3994,12 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'いっしょに|じっくり|見る' }, { label: 'そっと|手を|近づけて|みる' }, { label: 'ばいばい|して|見送る' }]"
+                :commands="[{ label: 'そっと|手を|近づけて|みる' }, { label: 'いっしょに|じっくり|見る' }, { label: 'ばいばい|して|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
                 :pointer-paused="isCommandPointerPaused"
-                @select="index => [watchLadybug, holdLadybug, seeOffLadybug][index]()"
+                @select="index => [holdLadybug, watchLadybug, seeOffLadybug][index]()"
                 @next="goToNextPlace" />
             </section>
           </div>
@@ -3975,7 +4030,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '近くで|見せて|もらう' }, { label: 'だっこで|少し|離れて|見る' }, { label: '道をあけて|見送る' }]"
+                :commands="[{ label: 'さわらせて|もらう' }, { label: 'だっこで|少し|離れて|見る' }, { label: 'ばいばい|して|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"

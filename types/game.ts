@@ -95,9 +95,9 @@ export type SnackUseContext = 'exploring' | 'tantrum';
 /* いやいやの理由
    tired        … つかれた
    hungry       … おなかすいた
-   frustrated   … うまくできなくて悔しい
+   doItMyself   … 自分でやりたかった（手伝われたのがいや）
    wantMorePlay … まだ遊びたい */
-export type TantrumReason = 'tired' | 'hungry' | 'frustrated' | 'wantMorePlay';
+export type TantrumReason = 'tired' | 'hungry' | 'doItMyself' | 'wantMorePlay';
 
 /* いやいやの激しさ（いやいやレベル）
      1 … ぐずぐず   （はじまったばかり）

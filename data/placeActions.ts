@@ -68,8 +68,8 @@ export const placeActions = {
     message: '一緒に大きな山を作りました。こうちゃんは夢中です！',
   },
 
-  /* ② 砂のトンネルを作る（軽いが休む行動ではないので、親の体力もきちんと減る） */
-  buildSandTunnel: {
+  /* ② 砂のケーキ屋さんごっこ（軽いが休む行動ではないので、親の体力もきちんと減る） */
+  playSandCakeShop: {
     place: 'sandbox',
     childEnergy: -8,
     childMood: 4,
@@ -77,12 +77,12 @@ export const placeActions = {
     parentEnergy: -7,
     parentCalm: -2,
     minutes: 15,
-    message: '「みえたー！」トンネルの向こうで、手と手がタッチ。',
+    message: '「いらっしゃいませー！」砂で作ったケーキを、たくさん並べています。',
   },
 
   /* ===== どんぐりの木 ===== */
 
-  /* ① 一緒にどんぐりを拾う */
+  /* ① どんぐりを拾う */
   collectAcorns: {
     place: 'acornArea',
     childEnergy: -11,
@@ -94,8 +94,8 @@ export const placeActions = {
     message: 'こうちゃんは夢中でどんぐりを拾っています！',
   },
 
-  /* ② どんぐりをころがして遊ぶ */
-  rollAcorns: {
+  /* ② 木のかげに隠れる */
+  hideBehindTree: {
     place: 'acornArea',
     childEnergy: -7,
     childMood: 4,
@@ -103,7 +103,7 @@ export const placeActions = {
     parentEnergy: -5,
     parentCalm: -2,
     minutes: 15,
-    message: '「まてまてー！」ころがるどんぐりを何度も追いかけています。',
+    message: '「……ばあ！」木の後ろから、ひょっこり顔を出しました。',
   },
 
   /* ===== 池 ===== */
