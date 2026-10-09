@@ -1878,24 +1878,7 @@ function cheerOnAmbulance() {
 
 /* ===== とつぜんのできごと：テントウムシ ===== */
 
-/* ① いっしょにじっくり見る */
-function watchLadybug() {
-  startStatusChanges();
-
-  childMood.value += 7;
-  outingPoint.value += 4;
-  addMinutes(10);
-
-  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
-
-  saveStatusChanges();
-  fixAllStatus();
-  checkGameOver();
-
-  selectedCommandIndex.value = 0;
-}
-
-/* ② そっと手を近づけてみる */
+/* ① そっと手を近づけてみる */
 function holdLadybug() {
   startStatusChanges();
 
@@ -1912,6 +1895,23 @@ function holdLadybug() {
   selectedCommandIndex.value = 0;
 }
 
+/* ② いっしょにじっくり見る */
+function watchLadybug() {
+  startStatusChanges();
+
+  childMood.value += 7;
+  outingPoint.value += 4;
+  addMinutes(10);
+
+  resultMessage.value = '「てちてち歩いてる、かわいい」二人でじっくり見つめました。';
+
+  saveStatusChanges();
+  fixAllStatus();
+  checkGameOver();
+
+  selectedCommandIndex.value = 0;
+}
+
 /* ③ ばいばいして見送る */
 function seeOffLadybug() {
   startStatusChanges();
@@ -1919,7 +1919,7 @@ function seeOffLadybug() {
   childMood.value += 3;
   addMinutes(5);
 
-  resultMessage.value = '「ばいばーい！」空に向かって手をふっています。';
+  resultMessage.value = '「ばいばーい！」てんとう虫に、手をふってお別れしました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2461,12 +2461,12 @@ function runSelectedCommand() {
       }
       break;
 
-    /* テントウムシ（0 いっしょにじっくり見る／1 そっと手を近づけてみる／2 ばいばいして見送る） */
+    /* テントウムシ（0 そっと手を近づけてみる／1 いっしょにじっくり見る／2 ばいばいして見送る） */
     case 'ladybug':
       if (index === 0) {
-        watchLadybug();
-      } else if (index === 1) {
         holdLadybug();
+      } else if (index === 1) {
+        watchLadybug();
       } else if (index === 2) {
         seeOffLadybug();
       }
@@ -3922,7 +3922,7 @@ onUnmounted(() => {
 
                 <h2 class="place-card__title">🐞 テントウムシ発見！</h2>
 
-                <p class="place-card__text">「てんとうむし！」葉っぱの前にしゃがみこみました。</p>
+                <p class="place-card__text">「てんとうむし！」と声をあげて、葉っぱの前にしゃがみこみました。</p>
               </article>
 
               <ResultCard
@@ -3939,12 +3939,12 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: 'いっしょに|じっくり|見る' }, { label: 'そっと|手を|近づけて|みる' }, { label: 'ばいばい|して|見送る' }]"
+                :commands="[{ label: 'そっと|手を|近づけて|みる' }, { label: 'いっしょに|じっくり|見る' }, { label: 'ばいばい|して|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
                 :pointer-paused="isCommandPointerPaused"
-                @select="index => [watchLadybug, holdLadybug, seeOffLadybug][index]()"
+                @select="index => [holdLadybug, watchLadybug, seeOffLadybug][index]()"
                 @next="goToNextPlace" />
             </section>
           </div>
