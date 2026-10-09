@@ -1952,7 +1952,7 @@ function seeOffLadybug() {
 
 /* ===== とつぜんのできごと：犬が近づいてくる ===== */
 
-/* ① 近くで見せてもらう */
+/* ① さわらせてもらう */
 function watchDogClose() {
   startStatusChanges();
 
@@ -1961,7 +1961,7 @@ function watchDogClose() {
   parentCalm.value -= 3;
   addMinutes(10);
 
-  resultMessage.value = '「わんわん、かわいいね！」近くで見せてもらいました。';
+  resultMessage.value = '「ふわふわする！」飼い主さんにことわって、そっと背中をなでさせてもらいました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1978,7 +1978,7 @@ function watchDogBehindParent() {
   parentEnergy.value -= 2;
   addMinutes(5);
 
-  resultMessage.value = '「わんわん、こっち見た！」だっこで少し離れて見ています。';
+  resultMessage.value = '「しっぽ、ふりふりしてる！」だっこされたまま、じっと見つめています。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -1987,13 +1987,13 @@ function watchDogBehindParent() {
   selectedCommandIndex.value = 0;
 }
 
-/* ③ 道をあけて見送る */
+/* ③ ばいばいして見送る */
 function keepDistanceFromDog() {
   startStatusChanges();
 
   addMinutes(5);
 
-  resultMessage.value = '「わんわん、ばいばーい！」犬はそのまま歩いていきました。';
+  resultMessage.value = '「ばいばーい！」犬の後ろ姿を見ながら、小さく手をふりました。';
 
   saveStatusChanges();
   fixAllStatus();
@@ -2494,7 +2494,7 @@ function runSelectedCommand() {
       }
       break;
 
-    /* 犬が近づいてきた（0 近くで見せてもらう／1 だっこで少し離れて見る／2 道をあけて見送る） */
+    /* 犬が近づいてきた（0 さわらせてもらう／1 だっこで少し離れて見る／2 ばいばいして見送る） */
     case 'dog':
       if (index === 0) {
         watchDogClose();
@@ -4030,7 +4030,7 @@ onUnmounted(() => {
               <CommandBox
                 v-model:selected-index="selectedCommandIndex"
                 variant="suddenEvent"
-                :commands="[{ label: '近くで|見せて|もらう' }, { label: 'だっこで|少し|離れて|見る' }, { label: '道をあけて|見送る' }]"
+                :commands="[{ label: 'さわらせて|もらう' }, { label: 'だっこで|少し|離れて|見る' }, { label: 'ばいばい|して|見送る' }]"
                 :result-message="resultMessage"
                 :next-place-command-label="nextPlaceCommandLabel"
                 :grid-class="choiceGridClass"
