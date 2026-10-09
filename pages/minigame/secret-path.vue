@@ -49,6 +49,7 @@ import {
   secretVocalSongUnlockDistance,
   unlockSecretVocalSongFromSavedBest,
 } from '~/utils/secretVocalSong';
+import { markNewSoundtrackTrack } from '~/utils/soundtrackNew';
 
 // 絵の先読みと、中の絵が表示できるようになってから箱ごと出す目印（→ utils/imagePreload.ts）
 import { preloadSecretPathImages, vRevealWithImages } from '~/utils/imagePreload';
@@ -259,6 +260,9 @@ watch(distanceMeters, (meters) => {
   hasUnlockedSecretVocalSong.value = true;
   isNewlyUnlockedSecretVocalSong.value = true;
   saveSecretVocalSongUnlocked();
+
+  // サウンドトラックの曲のカードと、A画面の「♪ サウンドトラック」に NEW を出す
+  markNewSoundtrackTrack('secret-vocal');
 
   playCountdownStartSound();
   playItemSound();

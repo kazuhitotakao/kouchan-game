@@ -5,6 +5,8 @@ import { loadHasUnlockedSPlusSong, sPlusSongSrc, sPlusSongTitle } from '~/utils/
 import { secretVocalSongSrc, secretVocalSongTitle, unlockSecretVocalSongFromSavedBest } from '~/utils/secretVocalSong';
 import { ladybugVocalSongSrc, ladybugVocalSongTitle, unlockLadybugVocalSongFromSavedBest } from '~/utils/ladybugVocalSong';
 import { loadUnlockedMinigames } from '~/utils/minigameStorage';
+import { clearNewSoundtrackTracks, loadNewSoundtrackTracks } from '~/utils/soundtrackNew';
+import type { SoundtrackNewKey } from '~/utils/soundtrackNew';
 
 import { sPlusSongLyrics, type LyricLine } from '~/data/sPlusSongLyrics';
 import { secretVocalSongLyrics } from '~/data/secretVocalSongLyrics';
@@ -39,7 +41,8 @@ import { setMediaSessionPlaybackState, setMediaSessionTrack, startMediaSession }
    number      … 画面に出す番号（01 など）。一覧もこの順にならぶ。曲を足したときは、こちらだけ振りなおせばよい
    description … 「|」は、せまい画面で折り返してよい場所のしるし（画面には出ない → splitPhrases）
                  「BGM」のような短い言葉だけが次の行に残らないよう、短い言葉は前の言葉とくっつけておく
-   lyrics      … 歌詞（うた入りの曲だけ） */
+   lyrics      … 歌詞（うた入りの曲だけ）
+   newKey      … あとから解放する曲だけ。NEW の印の名前（→ utils/soundtrackNew.ts） */
 type SoundtrackTrack = {
   id: number;
   number: number;
@@ -49,6 +52,7 @@ type SoundtrackTrack = {
   volume: number;
   credit: string;
   lyrics?: LyricLine[];
+  newKey?: SoundtrackNewKey;
 };
 
 /* 曲の一覧（はじめから聴ける曲だけ。ボーナストラックは下に分けてある → あわせて番号の順にならべたものが tracks）
@@ -144,6 +148,7 @@ const secretSpotTrack: SoundtrackTrack = {
   src: '/audio/secret-bgm.mp3',
   volume: 0.4,
   credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
+  newKey: 'secret-spot',
 };
 
 /* ミニゲーム「枝の上のてんとう虫」のBGM */
@@ -155,6 +160,7 @@ const ladybugDetourTrack: SoundtrackTrack = {
   src: '/audio/ladybug-detour-bgm.mp3',
   volume: 0.4,
   credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
+  newKey: 'ladybug-detour',
 };
 
 /* ミニゲームでずっと流れている曲（04 こもれびの奥で）に、うたを足したもの */
@@ -168,6 +174,7 @@ const secretVocalBonusTrack: SoundtrackTrack = {
   volume: 0.4,
   credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
   lyrics: secretVocalSongLyrics,
+  newKey: 'secret-vocal',
 };
 
 /* ミニゲーム「枝の上のてんとう虫」でずっと流れている曲（05 てんとうむしのよりみち）に、うたを足したもの */
@@ -181,6 +188,7 @@ const ladybugVocalBonusTrack: SoundtrackTrack = {
   volume: 0.4,
   credit: '原曲：こうちゃんの鼻歌 / 編曲・音楽生成：Suno',
   lyrics: ladybugVocalSongLyrics,
+  newKey: 'ladybug-vocal',
 };
 
 const sPlusBonusTrack: SoundtrackTrack = {
@@ -193,6 +201,7 @@ const sPlusBonusTrack: SoundtrackTrack = {
   volume: 0.43,
   credit: '原曲・演奏：こうちゃんの父 / 編曲：Suno',
   lyrics: sPlusSongLyrics,
+  newKey: 's-plus',
 };
 
 /* ボーナストラックを解放済みか（onMounted で localStorage から読む。サーバー側では読めないため） */
@@ -200,6 +209,14 @@ const hasUnlockedSPlusSong = ref(false);
 const hasUnlockedSecretVocalSong = ref(false);
 const hasUnlockedLadybugDetour = ref(false);
 const hasUnlockedLadybugVocalSong = ref(false);
+
+/* 新しく解放して、このページではじめて見る曲（カードに NEW を付ける。onMounted で読む）
+   読んだらすぐ保存のほうは消すので、NEW が出るのは この1回だけ（このページにいるあいだは残す。ミニゲームの一覧と同じ） */
+const newTrackKeys = ref<SoundtrackNewKey[]>([]);
+
+function isNewTrack(track: SoundtrackTrack) {
+  return track.newKey !== undefined && newTrackKeys.value.includes(track.newKey);
+}
 
 /* ミニゲーム「どこまで行ける？」を解放済みか（04 の解放と、09 のロック表示の出しわけに使う。てんとう虫のほうの 05 と同じ形） */
 const hasUnlockedSecretPathMinigame = ref(false);
@@ -2430,6 +2447,10 @@ onMounted(() => {
   hasUnlockedSecretPathMinigame.value = loadUnlockedMinigames().includes('secret-path');
   hasUnlockedLadybugVocalSong.value = unlockLadybugVocalSongFromSavedBest();
 
+  // 新しく解放した曲の NEW（読んだら保存のほうは消す。タイトルの「♪ サウンドトラック」の NEW も、これで消える）
+  newTrackKeys.value = loadNewSoundtrackTracks();
+  clearNewSoundtrackTracks();
+
   /* 前回の曲・再生位置と、曲の一覧のスクロール位置を戻す（順番が大事）
      ① ボーナストラックの解放（すぐ上）… ここで一覧に何曲あるかが決まる
      ② 前回の曲を戻す                  … もう一覧に無い曲なら、戻さない
@@ -2663,6 +2684,9 @@ onUnmounted(() => {
     <div v-show="!isLyricsView" ref="trackScrollRef" class="st-trackScroll" @scroll.passive="handleTrackScroll">
       <ol ref="trackListRef" class="st-list" @keydown="handleTrackListKeydown">
         <li v-for="track in tracks" :key="track.id" class="track" :class="{ 'track--current': playingTrackId === track.id }" :data-track-id="track.id">
+          <!-- 新しく解放したばかりの曲（左上の角。見た目はミニゲームの一覧のカードの NEW と同じ） -->
+          <span v-if="isNewTrack(track)" class="track__new">NEW</span>
+
           <button
             type="button"
             class="track__no"
@@ -3443,6 +3467,8 @@ onUnmounted(() => {
 
 /* 1曲ぶんのカード（番号・曲名と説明・再生ボタン を横にならべる） */
 .track {
+  /* 左上の NEW の印（.track__new）の置き場所の基準 */
+  position: relative;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -3456,6 +3482,27 @@ onUnmounted(() => {
   transition:
     border-color 0.15s ease,
     background-color 0.15s ease;
+}
+
+/* NEW の印（新しく解放して、はじめてこのページを開いたときだけ）
+   見た目は、ミニゲームの一覧のカード・タイトルの「♪ サウンドトラック」の NEW とそろえる
+   カードの左上の角にかぶせるだけなので、中の並びは変わらない
+   ※ 上へのはみ出しは、一覧の上の余白（スマホ幅で 8px）より小さくする（いちばん上の曲で切れないように） */
+.track__new {
+  position: absolute;
+  z-index: 1;
+  top: -8px;
+  left: -8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #ffcf4d;
+  box-shadow: 0 1px 3px rgb(35 57 94 / 35%);
+  color: #5a3b00;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 /* いま選んでいる曲のカード（点滅などの派手な動きはさせない） */

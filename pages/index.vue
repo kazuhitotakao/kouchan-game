@@ -4,6 +4,8 @@ import { sPlusSongTitle } from '~/utils/sPlusSong';
 import { changeClass, formatChange } from '~/utils/statusChange';
 
 import { loadNewMinigames, unlockMinigame } from '~/utils/minigameStorage';
+import { loadNewSoundtrackTracks, markNewSoundtrackTrack } from '~/utils/soundtrackNew';
+import type { SoundtrackNewKey } from '~/utils/soundtrackNew';
 
 import { buildGoalConfirmTimeText, buildParkEntranceText } from '~/utils/gameText';
 
@@ -1393,6 +1395,15 @@ function showMinigameUnlockNotice(id: MinigameId) {
   hasNewMinigame.value = true;
 }
 
+/* A画面の「♪ サウンドトラック」に NEW を付けるか（新しく解放して、まだサウンドトラックで見ていない曲があるとき。onMounted で読む） */
+const hasNewSoundtrack = ref(false);
+
+/* 曲を はじめて解放したときに呼ぶ（サウンドトラックの NEW の一覧に入れて、A画面の「♪ サウンドトラック」にも NEW を付ける） */
+function noticeNewSoundtrackTrack(key: SoundtrackNewKey) {
+  markNewSoundtrackTrack(key);
+  hasNewSoundtrack.value = true;
+}
+
 /* ミニゲーム「どこまで行ける？」の解放（秘密の小道をぬけたら、このブラウザに保存する）
 
    ※ A画面の「🎮 ミニゲーム」は、解放していなくてもいつも出す（一覧では「？？？」とヒントだけを出す）
@@ -1402,8 +1413,10 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
     return;
   }
 
+  // ミニゲームといっしょに、そのBGM（サウンドトラックの 04 こもれびの奥で）も聴けるようになる
   if (unlockMinigame('secret-path')) {
     showMinigameUnlockNotice('secret-path');
+    noticeNewSoundtrackTrack('secret-spot');
   }
 });
 
@@ -1413,8 +1426,17 @@ watch(hasDiscoveredSecretSpot, (discovered) => {
 watch(currentEvent, (event) => {
   unlockedMinigameNotice.value = null;
 
+  // ミニゲームといっしょに、そのBGM（サウンドトラックの 05 てんとうむしのよりみち）も聴けるようになる
   if (event === 'ladybug' && unlockMinigame('ladybug-balance')) {
     showMinigameUnlockNotice('ladybug-balance');
+    noticeNewSoundtrackTrack('ladybug-detour');
+  }
+});
+
+/* S+ランクで、うた入りエンディングBGMを はじめて解放したとき（NEW の一覧に入れるのは useGameResult.ts。ここでは A画面の NEW だけ） */
+watch(isSPlusSongNewlyUnlocked, (isNewlyUnlocked) => {
+  if (isNewlyUnlocked) {
+    hasNewSoundtrack.value = true;
   }
 });
 
@@ -2593,6 +2615,9 @@ onMounted(() => {
   // A画面の「🎮 ミニゲーム」の NEW（一覧を見て戻ってきたときも、ページが作り直されるのでここで読みなおす）
   hasNewMinigame.value = loadNewMinigames().length > 0;
 
+  // A画面の「♪ サウンドトラック」の NEW（サウンドトラックから戻ってきたときも、ここで読みなおす）
+  hasNewSoundtrack.value = loadNewSoundtrackTracks().length > 0;
+
   /* 前回のサウンドの設定（ON/OFFと音量）を思い出す
      ※ ここではBGMを鳴らさない（開いた直後は音を鳴らせないので、「▶ はじめる」を押したときに鳴らしはじめる） */
   restoreSoundSettings();
@@ -2975,8 +3000,15 @@ onUnmounted(() => {
             <div class="title-card__toolsLeft">
               <!-- サウンドトラックへの入口（入りきる幅に合わせて、文字を出しわける）
                    390px以上 … 「♪ サウンドトラック」／ 341〜389px … 「♪ サントラ」／ 340px以下 … 「♪」だけ（hover / focus で吹き出し）
-                   読み上げは、どの幅でも aria-label の「サウンドトラック」 -->
-              <button ref="soundtrackButtonRef" type="button" class="title-card__soundtrack" aria-label="サウンドトラック" @click="goToSoundtrack">
+                   読み上げは、どの幅でも aria-label の「サウンドトラック」
+                   新しく解放して、まだサウンドトラックで見ていない曲があれば、左上の角に NEW を付ける（「🎮 ミニゲーム」と同じ。開くと消える） -->
+              <button
+                ref="soundtrackButtonRef"
+                type="button"
+                class="title-card__soundtrack"
+                :aria-label="hasNewSoundtrack ? 'サウンドトラック（新しい曲あり）' : 'サウンドトラック'"
+                @click="goToSoundtrack">
+                <span v-if="hasNewSoundtrack" class="title-card__new" aria-hidden="true">NEW</span>
                 <span aria-hidden="true">♪</span>
                 <span class="title-card__soundtrackText--full" aria-hidden="true">サウンドトラック</span>
                 <span class="title-card__soundtrackText--short" aria-hidden="true">サントラ</span>
