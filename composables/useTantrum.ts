@@ -601,7 +601,7 @@ export function useTantrum(options: UseTantrumOptions) {
         parentCalm.value -= 2;
       }
 
-      const words = tantrumReason.value === 'doItMyself' ? '「自分でやりたかったんだね」' : '「まだ遊びたかったんだね」';
+      const words = tantrumReason.value === 'doItMyself' ? '『自分でやりたかったんだね』' : '『まだ遊びたかったんだね』';
 
       if (tantrumLevel.value === 3) {
         decreaseTantrumLevel();

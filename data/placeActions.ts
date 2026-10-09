@@ -65,7 +65,7 @@ export const placeActions = {
     parentEnergy: -12,
     parentCalm: -4,
     minutes: 25,
-    message: '一緒に大きな山を作りました。こうちゃんは夢中です！',
+    message: '「すごっ！おっきい！」できあがった砂のお山を見て、こうちゃんは大喜び！',
   },
 
   /* ② 砂のケーキ屋さんごっこ（軽いが休む行動ではないので、親の体力もきちんと減る） */
@@ -91,7 +91,7 @@ export const placeActions = {
     parentEnergy: -10,
     parentCalm: -3,
     minutes: 20,
-    message: 'こうちゃんは夢中でどんぐりを拾っています！',
+    message: '「こっちにもある！あ、あっちも！」次々とどんぐりを見つけて、こうちゃんは大忙し！',
   },
 
   /* ② 木のかげに隠れる */
@@ -117,7 +117,7 @@ export const placeActions = {
     parentEnergy: -13,
     parentCalm: -14,
     minutes: 20,
-    message: '白鳥を近くで見ました。こうちゃんは大興奮です！',
+    message: '「おっきい！」近くで見る白鳥の大きさに、こうちゃんは目をまんまるにしています。',
   },
 
   /* ② コイに餌をあげる */
@@ -129,7 +129,7 @@ export const placeActions = {
     parentEnergy: -5,
     parentCalm: -4,
     minutes: 15,
-    message: '「おさかな いっぱい！」コイがバシャンと集まってきました。',
+    message: '「おさかなー！」エサをあげると、コイたちがバシャバシャと集まってきました。',
   },
 
   /* ===== 芝生広場 ===== */
@@ -143,7 +143,7 @@ export const placeActions = {
     parentEnergy: -15,
     parentCalm: -8,
     minutes: 25,
-    message: '「きゃははっ！」芝生の上を、笑いながら走り回っています。',
+    message: '「まてまてまてーー！」追いかけたり、追いかけられたり。芝生広場に楽しそうな笑い声が響きます。',
   },
 
   /* ② シャボン玉で遊ぶ
@@ -156,7 +156,7 @@ export const placeActions = {
     parentEnergy: -6,
     parentCalm: -3,
     minutes: 20,
-    message: '「まてまてー！」飛んでいくシャボン玉を追いかけています。',
+    message: '「つかまえたい！」こうちゃんは両手を伸ばして、シャボン玉を追いかけています。',
   },
 
   /* ===== こもれびの広場 ===== */
