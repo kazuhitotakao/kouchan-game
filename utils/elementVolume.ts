@@ -22,10 +22,15 @@
      ・navigator.audioSession があるのは iOS 16.4 から、鳴りつづけるのは iOS 17.5 から
      ・車の Bluetooth・イヤホンが外れると、iPhone は曲といっしょに作業台も止める
        画面をさわれば起きるが、ロック画面などから鳴らしなおすときは起きないので、鳴らす直前にも起こす（→ wakeElementAudioContext()）
+     ・長いあいだロックしてスリープすると、作業台が固まって resume() では起きないことがある
+       起こしたあとに時計が進んでいなければ、止めてから起こしなおす（→ utils/audioContext.ts の wakeAudioContext()）
    ============================================================ */
 
 /* iPhone・iPad で、ゲームの BGM・mp3 の効果音を鳴らす係（→ createGameAudio()） */
 import { BufferedAudio } from '~/utils/bufferedAudio';
+
+/* 作業台を起こす（長いスリープのあとに固まった作業台も、起こしなおす → utils/audioContext.ts） */
+import { wakeAudioContext } from '~/utils/audioContext';
 
 /* iPhone・iPad（iPod touch もふくむ）かどうか
    いまの iPad は userAgent が Mac のふりをするので、「Macintosh なのに指でさわれる」で見分ける
@@ -469,16 +474,16 @@ function restoreGainAfterPause(audio: GameAudio) {
    画面をさわったときは keepAudioContextAwake() が起こすが、
    ロック画面・車・イヤホンの ▶ で鳴らしなおすときは、画面をさわらないので起きない。そこで、鳴らすたびに確かめる
    ・作業台につないでいない Audio（パソコン・Android など）は、何もしない
-   ・起きるのを待たずに play() してよい（起きたところから音が出る） */
+   ・起きるのを待たずに play() してよい（起きたところから音が出る）
+   ・長いあいだロックしてスリープしたあとは、running なのに時計が止まっていることもあるので、running でも確かめる（→ wakeAudioContext()） */
 export function wakeElementAudioContext(audio: GameAudio) {
   const context = getGainNode(audio)?.context;
 
-  // interrupted は iPhone だけの状態なので、「running でも closed でもない」で見る（→ keepAudioContextAwake()）
-  if (!(context instanceof AudioContext) || context.state === 'running' || context.state === 'closed') {
+  if (!(context instanceof AudioContext)) {
     return;
   }
 
-  context.resume().catch(() => {});
+  wakeAudioContext(context);
 }
 
 /* ページを離れるときに、audio を作業台（AudioContext）から外す
@@ -590,7 +595,7 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null, { b
 
   const owner = Symbol('backgroundPlayback');
 
-  function wakeAudioContext() {
+  function handleUserGesture() {
     if (canSetElementVolume()) {
       return;
     }
@@ -601,9 +606,9 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null, { b
 
     const context = getContext();
 
-    // interrupted は iPhone だけの状態なので、「running でも closed でもない」で見る
-    if (context && context.state !== 'running' && context.state !== 'closed') {
-      context.resume().catch(() => {});
+    // 止まっていたら起こす（固まっていたら、起こしなおす → wakeAudioContext()）
+    if (context) {
+      wakeAudioContext(context);
     }
   }
 
@@ -612,12 +617,12 @@ export function keepAudioContextAwake(getContext: () => AudioContext | null, { b
   const eventNames = ['touchend', 'click', 'keydown'] as const;
 
   for (const eventName of eventNames) {
-    window.addEventListener(eventName, wakeAudioContext, { capture: true, passive: true });
+    window.addEventListener(eventName, handleUserGesture, { capture: true, passive: true });
   }
 
   return () => {
     for (const eventName of eventNames) {
-      window.removeEventListener(eventName, wakeAudioContext, { capture: true });
+      window.removeEventListener(eventName, handleUserGesture, { capture: true });
     }
 
     if (backgroundPlayback && !canSetElementVolume()) {
