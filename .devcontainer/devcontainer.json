@@ -72,6 +72,7 @@
         // ドキュメント / 図
         "jebbs.plantuml",
         "hediet.vscode-drawio",
+        "tomoki1207.pdf",
 
         // 外観
         "akamud.vscode-theme-onedark",
