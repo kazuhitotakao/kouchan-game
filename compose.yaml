@@ -10,6 +10,7 @@ services:
       - .:/app
       - node_modules:/app/node_modules
       - gh_config:/root/.config/gh
+      - codex_config:/root/.codex
 
     ports:
       - "3000:3000"
@@ -23,3 +24,4 @@ services:
 volumes:
   node_modules:
   gh_config:
+  codex_config:
