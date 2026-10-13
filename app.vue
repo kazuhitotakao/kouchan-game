@@ -92,14 +92,15 @@ body {
    ふつうは env(safe-area-inset-top)（時計の欄・ノッチの高さ。よける場所が無い画面では 0）
    画面の上の余白は、どこもこの値を使う（ゲーム画面・サウンドトラック・ミニゲーム・下の時計の欄の帯）
 
-   ■ iPhone・iPad のホーム画面アプリ（縦向き）だけは、14px 以上とる
+   ■ iPhone・iPad のホーム画面アプリ（縦向き）だけは、12px 以上とる
      iOS 26.1 から、ホーム画面アプリのページは時計の欄の下から始まり（env(safe-area-inset-top) は 0）、
      ページの上のはし 約 35pt に、OS がぼかしと暗い影をかける（https://bugs.webkit.org/show_bug.cgi?id=301994）
      iOS 27.0.1 の iPhone SE では、ゲームの上部の時計（09:00 ／ 12:00）の行がぼやけた
      ・OS は、ページの上のはしを単色の固定の箱が覆っていると、ぼかしをやめて、その色で時計の欄をぬる
        → 下の .safe-top-band を、この高さで置く（10px 以下の箱は OS が見ない、と報告されているので、それより高くする）
        （iPhone SE で、24px の帯にしたら、ぼかしと影が消えて、時計の欄が帯の色になった）
-     ・14px … 10px より少し余裕をもたせた高さ（44px・24px では、帯のぶん中身が下がりすぎた）
+     ・12px … 10px より少し余裕をもたせた高さ（44px → 24px → 14px と、帯のぶん中身が下がりすぎないよう、つめてきた）
+       ゲーム画面では、上部ステータスの上の余白も つめて、帯を余白のかわりにしている（→ status.css）
      ・data-ios-standalone は、nuxt.config.ts の head の script が、画面が出る前に付ける
      ・横向きでは時計の欄が出ないので、足さない
    ============================================================ */
@@ -109,7 +110,7 @@ body {
 
 @media (orientation: portrait) {
   html[data-ios-standalone] {
-    --safe-top: max(env(safe-area-inset-top), 14px);
+    --safe-top: max(env(safe-area-inset-top), 12px);
   }
 }
 
