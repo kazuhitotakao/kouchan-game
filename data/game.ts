@@ -19,7 +19,7 @@ export const suddenEventChance = 0.2;
    画面に出すのも先読みも、ここを見る（絵ができたら、ここだけ書きかえればよい） */
 export const suddenEventBannerImages = {
   emergencySiren: { label: '救急車', ratio: '3 / 1' },
-  ladybug: { label: 'テントウムシ', ratio: '3 / 1' },
+  ladybug: { src: '/images/events/event-ladybug-found.webp', ratio: '2048 / 455' },
   dog: { src: '/images/events/event-dog-appears.webp', ratio: '2660 / 591' },
   fallDown: { label: 'ころんだ', ratio: '3 / 1' },
   fountain: { label: '噴水', ratio: '3 / 1' },
