@@ -6,9 +6,11 @@
    ・src が無いとき   … 灰色の点線の枠に「NO IMAGE」と label を出す
    ・縦横比（ratio）だけをここで決め、大きさの上限は使う側の CSS で決める
    ・どの絵も、となりの文字と同じことを表す飾りなので、読み上げでは読ませない
+   ・画像を読みこんでいるあいだは no-image--loading を付ける（使う側の CSS で、読みこんでから出す・動かすため）
    ============================================================ */
+import { onMounted, ref, watch } from 'vue';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     /* 縦横比（CSS の aspect-ratio の書きかた。例：'16 / 9'、'3 / 1'） */
     ratio: string;
@@ -24,13 +26,32 @@ withDefaults(
   }>(),
   { label: '', src: '', alt: '' },
 );
+
+const imgRef = ref<HTMLImageElement | null>(null);
+
+/* 読みこみが終わったか（失敗したときも「終わった」にする。いつまでも読みこみ中のまま、かくれっぱなしにならないように） */
+const isImageSettled = ref(false);
+
+watch(
+  () => props.src,
+  () => {
+    isImageSettled.value = false;
+  },
+);
+
+/* サーバーで描いた <img> は、Vue が動きだす前に読みこみ終わっていることがある（load を聞きのがす）ので、ここでも見る */
+onMounted(() => {
+  if (imgRef.value?.complete) {
+    isImageSettled.value = true;
+  }
+});
 </script>
 
 <template>
   <!-- いちばん外は span（CSS で block にする）
        ボタン（<button>）の中にも置けるようにするため（button の中に div は置けない） -->
-  <span class="no-image" :class="{ 'no-image--empty': !src }" :style="{ aspectRatio: ratio }">
-    <img v-if="src" class="no-image__img" :src="src" :alt="alt" />
+  <span class="no-image" :class="{ 'no-image--empty': !src, 'no-image--loading': src && !isImageSettled }" :style="{ aspectRatio: ratio }">
+    <img v-if="src" ref="imgRef" class="no-image__img" :src="src" :alt="alt" @load="isImageSettled = true" @error="isImageSettled = true" />
 
     <span v-else class="no-image__placeholder" aria-hidden="true">
       <span class="no-image__text">NO IMAGE</span>
