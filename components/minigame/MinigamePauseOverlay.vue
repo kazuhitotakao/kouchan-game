@@ -76,7 +76,7 @@ function handleKeydown(event: KeyboardEvent) {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  padding: var(--safe-top) 16px env(safe-area-inset-bottom);
   background: rgb(16 29 44 / 55%);
   animation: mg-pause-fade 0.15s ease-out;
 }

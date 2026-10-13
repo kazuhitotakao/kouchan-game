@@ -80,6 +80,16 @@ export default defineNuxtConfig({
         {
           innerHTML: "try{if(localStorage.getItem('kouchan-game-play-save'))document.documentElement.setAttribute('data-play-save','')}catch(e){}",
         },
+
+        /*
+         * iPhone・iPad のホーム画面アプリで開いているかを、画面が出る前に調べて、<html data-ios-standalone> の目印を付ける
+         *   iOS 26.1 から、ホーム画面アプリでは時計の欄の高さ（env(safe-area-inset-top)）が 0 になることがあり、
+         *   ゲームの上部が時計の欄にもぐって、OS のぼかしがかかってしまうので、目印があるときは上の余白を多めにとる（→ app.vue の --safe-top）
+         *   navigator.standalone … iPhone・iPad のホーム画面アプリのときだけ true（Safari のタブ・Android・パソコンでは付かない）
+         */
+        {
+          innerHTML: "try{if(navigator.standalone)document.documentElement.setAttribute('data-ios-standalone','')}catch(e){}",
+        },
       ],
 
       meta: [

@@ -69,11 +69,12 @@
 
   /* ===== iPhone のノッチ・ホームインジケーターをよける =====
      viewport-fit=cover なので画面のはしまで描かれる。枠の内がわに env(safe-area-inset-〜) ぶんの余白をとる
+     ・上だけは --safe-top（iPhone のホーム画面アプリでは、時計の欄の高さが 0 になることがあるので、多めにとる → app.vue）
      ・よける場所が無い画面では 0 になる
      ・border-box にして、height: 100dvh の中に余白をふくめる
      ・スマホ幅のゲーム画面の高さは、この余白のぶんを引いてある（→ responsive.css） */
   box-sizing: border-box;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  padding: var(--safe-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 
   display: flex;
   flex-direction: column;
@@ -1965,8 +1966,8 @@
   .title-screen--reading {
     box-sizing: border-box;
     flex: none;
-    height: calc(100vh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
-    height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    height: calc(100vh - var(--safe-top) - env(safe-area-inset-bottom));
+    height: calc(100dvh - var(--safe-top) - env(safe-area-inset-bottom));
   }
 
   .title-screen--reading .title-card--howto {
