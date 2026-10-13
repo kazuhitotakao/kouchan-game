@@ -32,7 +32,7 @@ export const placeBannerImages = {
   slide: { src: '/images/commands/play-slide.webp', ratio: '2660 / 591' },
   sandbox: { src: '/images/commands/play-sandbox.webp', ratio: '2660 / 591' },
   acornArea: { src: '/images/commands/play-acorn-tree.webp', ratio: '2164 / 727' },
-  pond: { label: '池', ratio: '3 / 1' },
+  pond: { src: '/images/commands/play-pond.webp', ratio: '1945 / 432' },
   grassArea: { src: '/images/commands/play-lawn.webp', ratio: '2172 / 724' },
   secretSpot: { label: 'こもれびの広場', ratio: '3 / 1' },
   restArea: { src: '/images/commands/break.webp', ratio: '2660 / 591' },
