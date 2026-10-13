@@ -523,7 +523,9 @@ function ensureSoundEnabled() {
 
    ・off … 1曲だけの再生は、終わったら止まる。全曲再生は、1周したら止まる
    ・all … 全曲再生が1周したら、開始曲へ戻って鳴らし続ける（→ playNextPlaylistTrack）
-           1曲だけの再生には効かない
+           1曲だけの再生では、その曲をくりかえす（1曲だけの並びを「全曲」くりかえすのと同じ。one と同じく loop を使う）
+           ふつうの音楽プレーヤーも「全曲リピート＝いまの並びをくりかえす」なので、それに合わせている
+           （🔁 が点いているのに止まると、リピートが効いていないように見えるため）
    ・one … いまの曲をずっとくりかえす。Audio の loop を true にするだけ（自分で書くより、つなぎ目がなめらか）
            loop のあいだは ended が来ないので、全曲再生の途中でも次の曲へは進まない
            「⏮ 前」「⏭ 次」を押せば、いつでも となりの曲へ移れる
@@ -551,6 +553,20 @@ const repeatButtonLabel = computed(() => {
   return 'リピート：なし。押すと全曲リピートになります';
 });
 
+/* いまの曲を、Audio の loop でくりかえすか
+   ・1曲リピート … いつでも
+   ・全曲リピート … 1曲だけの再生のときだけ（全曲再生のときは、1周したら playNextPlaylistTrack が先頭へ戻す）
+
+   ※ isPlaylistPlaying が切りかわるのは、曲を鳴らしはじめる直前か、止まっているあいだだけ
+     どちらのあとも、鳴らすときに playTrackAudio → applyRepeatToAudio を通るので、ここで見れば足りる */
+function shouldLoopTrack() {
+  if (repeatMode.value === 'one') {
+    return true;
+  }
+
+  return repeatMode.value === 'all' && !isPlaylistPlaying.value;
+}
+
 /* いまのリピートの設定を、Audioへ入れる（設定を変えたとき・曲を鳴らしはじめるときに呼ぶ） */
 function applyRepeatToAudio(audio: HTMLAudioElement | null = soundtrackAudio) {
   if (!audio) {
@@ -558,7 +574,7 @@ function applyRepeatToAudio(audio: HTMLAudioElement | null = soundtrackAudio) {
   }
 
   try {
-    audio.loop = repeatMode.value === 'one';
+    audio.loop = shouldLoopTrack();
   } catch {
     // 何もしない（次に曲を鳴らすときに、あらためて入れなおされる）
   }
@@ -893,7 +909,7 @@ function handleLoadedMetadata() {
   applyPendingStartTime(soundtrackAudio, playingTrackId.value);
 }
 
-/* 曲が最後まで流れきったとき（「🔁 リピート 1曲」のときは loop なので、ここへは来ない） */
+/* 曲が最後まで流れきったとき（loop でくりかえしているときは、ここへは来ない → shouldLoopTrack） */
 function handleTrackEnded() {
   /* 「曲が終わった」と「別の曲のボタンを押した」がほぼ同時のとき、この知らせだけ遅れて届くことがある
      そのまま進めると、新しい曲が鳴っているのに表示が「停止中」になるので、ほんとうに終わったときだけ進む */
@@ -910,7 +926,8 @@ function handleTrackEnded() {
     return;
   }
 
-  // 1曲だけの再生は、そこで停止（自動で次の曲へは進めない。続けて聴きたいときは全曲再生を使う）
+  /* 1曲だけの再生は、そこで停止（リピートOFFのときだけ、ここへ来る）
+     自動で次の曲へは進めない。続けて聴きたいときは全曲再生を使う */
   playingTrackId.value = null;
   isPlaying.value = false;
 }
@@ -976,7 +993,7 @@ function getSoundtrackAudio() {
 
       /* ふだんは loop しない（1曲を最初から最後まで聴くページなので）
          鳴らすたびに入れなおすので（→ applyRepeatToAudio）、ここは最初の状態を決めているだけ */
-      soundtrackAudio.loop = repeatMode.value === 'one';
+      soundtrackAudio.loop = shouldLoopTrack();
 
       soundtrackAudio.addEventListener('ended', handleTrackEnded);
       soundtrackAudio.addEventListener('timeupdate', handleTimeUpdate);
