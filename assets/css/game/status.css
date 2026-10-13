@@ -1095,12 +1095,3 @@
     position: static;
   }
 }
-
-/* iPhone・iPad のホーム画面アプリ（縦向きのスマホ）では、上部ステータスの上の余白をつめる
-   すぐ上に、同じ色の時計の欄の帯（app.vue の .safe-top-band）があり、帯が余白のかわりになるため
-   （つめないと、時計の欄から ゲームの時計の行まで、帯と余白のぶん すきまが空きすぎる） */
-@media (max-width: 700px) and (orientation: portrait) {
-  html[data-ios-standalone] .status-area {
-    padding-top: 2px;
-  }
-}

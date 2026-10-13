@@ -106,18 +106,6 @@ const titleEntered = ref(false);
 
 const gameStarted = ref(false);
 
-/* 時計の欄の帯は、画面のフェードを待たずにゲームの状態と同時に切りかえる
-   DOMの .status-area を目印にすると、消えていく旧画面が残る0.18秒だけ前の色が残るため */
-const safeTopBand = useSafeTopBand();
-
-watch(
-  gameStarted,
-  (started) => {
-    safeTopBand.value = started ? 'navy' : 'sky';
-  },
-  { immediate: true, flush: 'sync' },
-);
-
 /* おやつ選択画面を開いているか（ここではまだゲームは始まらず、タイトルBGMも鳴ったまま） */
 const isSnackSelectionOpen = ref(false);
 
@@ -2653,9 +2641,6 @@ onUnmounted(() => {
   cleanupAudio();
 
   hideTantrumAlert();
-
-  // ほかのページは、背景のいちばん上と同じ空色を使う
-  safeTopBand.value = 'sky';
 });
 </script>
 
