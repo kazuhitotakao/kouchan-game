@@ -2827,8 +2827,8 @@ onUnmounted(() => {
   flex-direction: column;
   box-sizing: border-box;
 
-  /* iPhone のノッチ・ホームインジケーターをよける余白（border-box なので、100dvh の中にふくまれる） */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* iPhone のノッチ・ホームインジケーターをよける余白（border-box なので、100dvh の中にふくまれる。上は --safe-top → app.vue） */
+  padding: var(--safe-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   width: 100%;
   max-width: 1180px;
   height: 100vh;
