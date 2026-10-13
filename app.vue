@@ -1,4 +1,6 @@
 <script setup lang="ts">
+const safeTopBand = useSafeTopBand();
+
 /* 何もしないクリック処理
    iPhone で、すばやく2回タップしても画面が拡大しないようにするためのもの（→ 下の .app-root の説明） */
 function acceptTap() {}
@@ -6,7 +8,7 @@ function acceptTap() {}
 
 <template>
   <VitePwaManifest />
-  <div class="app-root" @click="acceptTap">
+  <div class="app-root" :class="`app-root--safe-top-${safeTopBand}`" @click="acceptTap">
     <!-- 時計の欄の帯（空色・濃い青緑の2本。どちらか1本だけ出す → 下の CSS の .safe-top-band） -->
     <div class="safe-top-band safe-top-band--sky" aria-hidden="true"></div>
     <div class="safe-top-band safe-top-band--navy" aria-hidden="true"></div>
@@ -140,10 +142,12 @@ body {
      そのため ::before ではなく、本物の要素にしている（OS は ::before を見ない、と報告されている）
    ・色は、それぞれの画面の上のはしの色とそろえる（帯と画面の中身が、ひとつながりに見えるように）
      ふだんは背景のいちばん上の色、ゲーム中は上部ステータスの色（status.css の .status-area の --navy）
-   ・色ごとに帯を2本おいて、display でどちらか1本だけ出す（1本の帯の色を変えるのではなく）
+   ・色ごとに帯を2本おいて、useSafeTopBand() の状態でどちらか1本だけ出す（1本の帯の色を変えるのではなく）
      OS は、帯の色が変わっただけでは、時計の欄をすぐにはぬりなおさない
      （中断して はじめの画面に戻ったとき、時計の欄だけ 一瞬 濃い青緑のまま残った。ゲームを始めるときは、逆に空色が残った）
      帯ごと出しなおすと、すぐにぬりなおす、と報告されているため
+   ・画面の中に .status-area があるかでは決めない
+     mode="out-in" のフェード中は前の画面が0.18秒残り、時計の欄だけ前の色になってしまうため
    ・よける場所が無い画面では高さ 0 なので、何も出ない
    ・z-index は、ふだんの中身より手前、いやいや発生の演出などの暗い背景（1000〜）より奥
    ============================================================ */
@@ -166,12 +170,12 @@ body {
   background: #2a768f;
 }
 
-/* ゲーム中（上部ステータスが出ているあいだ）は、濃い青緑の帯にかえる */
-.app-root:has(.status-area) .safe-top-band--sky {
+/* ゲーム開始・終了の状態が変わった瞬間に、表示する帯を入れかえる */
+.app-root--safe-top-navy .safe-top-band--sky {
   display: none;
 }
 
-.app-root:has(.status-area) .safe-top-band--navy {
+.app-root--safe-top-navy .safe-top-band--navy {
   display: block;
 }
 
