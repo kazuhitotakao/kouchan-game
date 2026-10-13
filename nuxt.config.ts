@@ -14,7 +14,7 @@ const siteUrl = 'https://kouchan-game.vercel.app';
 const ogImageUrl = `${siteUrl}/images/og-image.jpg`;
 
 /*
- * 画面のいちばん上の色（本編・サウンドトラック・ミニゲームの背景のいちばん上と、app.vue の時計の欄の帯の色。ゲーム中の帯だけは上部ステータスの色）
+ * 画面のいちばん上の色（本編・サウンドトラック・ミニゲームの背景のいちばん上と、app.vue の時計の欄の帯の色）
  * スマホのブラウザの上のほうの色（theme-color）と、ホーム画面のアプリの色（manifest の theme_color）を、これにそろえる
  */
 const themeColor = '#d6f0fb';

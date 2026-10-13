@@ -1,15 +1,4 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
-
-const safeTopBand = useSafeTopBand();
-
-/* 最初の表示は単色のまま。空色 ⇄ 青緑が切りかわったあとだけ、iOS の色変更に帯の見た目を合わせる */
-const hasSafeTopBandChanged = ref(false);
-
-watch(safeTopBand, () => {
-  hasSafeTopBandChanged.value = true;
-});
-
 /* 何もしないクリック処理
    iPhone で、すばやく2回タップしても画面が拡大しないようにするためのもの（→ 下の .app-root の説明） */
 function acceptTap() {}
@@ -17,13 +6,9 @@ function acceptTap() {}
 
 <template>
   <VitePwaManifest />
-  <div
-    class="app-root"
-    :class="[`app-root--safe-top-${safeTopBand}`, { 'app-root--safe-top-transition': hasSafeTopBandChanged }]"
-    @click="acceptTap">
-    <!-- 時計の欄の帯（空色・濃い青緑の2本。どちらか1本だけ出す → 下の CSS の .safe-top-band） -->
-    <div class="safe-top-band safe-top-band--sky" aria-hidden="true"></div>
-    <div class="safe-top-band safe-top-band--navy" aria-hidden="true"></div>
+  <div class="app-root" @click="acceptTap">
+    <!-- 時計の欄の帯（→ 下の CSS の .safe-top-band） -->
+    <div class="safe-top-band" aria-hidden="true"></div>
 
     <NuxtPage />
   </div>
@@ -115,7 +100,6 @@ body {
        → 下の .safe-top-band を、この高さで置く（10px 以下の箱は OS が見ない、と報告されているので、それより高くする）
        （iPhone SE で、24px の帯にしたら、ぼかしと影が消えて、時計の欄が帯の色になった）
      ・12px … 10px より少し余裕をもたせた高さ（44px → 24px → 14px と、帯のぶん中身が下がりすぎないよう、つめてきた）
-       ゲーム画面では、上部ステータスの上の余白も つめて、帯を余白のかわりにしている（→ status.css）
      ・data-ios-standalone は、nuxt.config.ts の head の script が、画面が出る前に付ける
      ・横向きでは時計の欄が出ないので、足さない
    ============================================================ */
@@ -135,7 +119,6 @@ body {
    ページの下地（base.css の html・body）は、パソコンでゲームの枠の外を暗くするための色（#101d2c）
    ページを行き来するフェード（下の .page-fade-〜。サウンドトラック・ミニゲーム ⇄ はじめの画面）のあいだは、
    ページの下地が見えるので、スマホでは画面ぜんたいが一瞬 暗くなってしまう
-   ※ 中断・はじめに戻るで、時計の欄が一瞬 濃い青緑のまま残るのは、これとは別（→ 下の .safe-top-band）
    ゲームの枠が画面の幅いっぱいになる幅（--frame の 1180px 以下）だけ（それより広いと、枠の外が見えるので、暗いままにする）
    ============================================================ */
 @media (max-width: 1180px) {
@@ -152,14 +135,13 @@ body {
      ページ全体がスクロールする画面でも、中身が時計の文字と重ならないよう、position: fixed で隠す
    ・iPhone のホーム画面アプリでは、この帯がページの上のはしを覆うことで、OS のぼかしを止める（→ 上の --safe-top）
      そのため ::before ではなく、本物の要素にしている（OS は ::before を見ない、と報告されている）
-   ・色は、それぞれの画面の上のはしの色とそろえる（帯と画面の中身が、ひとつながりに見えるように）
-     ふだんは背景のいちばん上の色、ゲーム中は上部ステータスの色（status.css の .status-area の --navy）
-   ・色ごとに帯を2本おいて、useSafeTopBand() の状態でどちらか1本だけ出す
-     固定要素の表示・非表示を切りかえると、WebKit に上端の色の再取得が通知される
-     ただし、OS の時計欄は約0.1秒かけて色を変えるので、帯を即座に変えるだけでは色がずれて見える
-     → 下の ::before で、ページ内の帯の見た目も同じ長さで切りかえる
-   ・画面の中に .status-area があるかでは決めない
-     mode="out-in" のフェード中は前の画面が0.18秒残り、時計の欄だけ前の色になってしまうため
+   ・色は、どの画面でも空色（背景のいちばん上の色）の1色にする（ゲーム中も、上部ステータスの色にはしない）
+     画面ごとに色を変えると、OS は時計の欄を 約0.1秒かけて塗りかえるので
+     （WebKit の WKColorExtensionView の animationDuration
+       https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Cocoa/WKColorExtensionView.mm）、
+     中断・はじめに戻る・ゲームを始めるたびに、時計の欄だけ前の色が一瞬残った
+     （帯を2本にして入れかえても、ずれは消えなかった。ゲームの状態で切りかえる・帯の見た目も0.1秒かけて変える、も試したうえで、
+       色を切りかえない方針にした）
    ・よける場所が無い画面では高さ 0 なので、何も出ない
    ・z-index は、ふだんの中身より手前、いやいや発生の演出などの暗い背景（1000〜）より奥
    ============================================================ */
@@ -170,55 +152,8 @@ body {
   right: 0;
   left: 0;
   height: var(--safe-top);
-  pointer-events: none;
-}
-
-.safe-top-band--sky {
-  --safe-top-previous-color: #2a768f;
   background: #d6f0fb;
-}
-
-.safe-top-band--navy {
-  --safe-top-previous-color: #d6f0fb;
-  display: none;
-  background: #2a768f;
-}
-
-/* ゲーム開始・終了の状態が変わった瞬間に、表示する帯を入れかえる */
-.app-root--safe-top-navy .safe-top-band--sky {
-  display: none;
-}
-
-.app-root--safe-top-navy .safe-top-band--navy {
-  display: block;
-}
-
-/* iOS の時計欄は、新しい色を受けとったあとも約0.1秒かけて塗りかわる
-   （WebKit の WKColorExtensionView の animationDuration）
-   https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Cocoa/WKColorExtensionView.mm
-
-   帯の背景色は完成色のまま OS に渡し、前の色を重ねた見た目だけを0.1秒で消す
-   ・重ねる色は background-image にする（OS の色取得に、前の background-color を混ぜないため）
-   ・帯本体の background-color はアニメーションさせない（途中の色を OS が取得してしまうため）
-   ・display: none になった帯の動きは取り消され、次に表示するときは最初から始まる
-   ・最初の表示では動かさない（起動時に、前の画面があったかのように青緑を出さない）
-   ※ OS 側の描画時刻はページから取得できないので、実機でも見た目を確認すること */
-html[data-ios-standalone] .app-root--safe-top-transition .safe-top-band::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: linear-gradient(var(--safe-top-previous-color), var(--safe-top-previous-color));
-  animation: safe-top-color-settle 0.1s linear both;
-}
-
-@keyframes safe-top-color-settle {
-  from {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 0;
-  }
+  pointer-events: none;
 }
 
 /* ============================================================
