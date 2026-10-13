@@ -13,9 +13,9 @@
      （大きさ・置き場所の指定は sound.css・sound-control.css）
    ============================================================ */
 
-import { onMounted, ref } from 'vue';
+import { onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { isTouchOnlyDevice } from '~/utils/touchDevice';
+import { isTouchOnlyDevice, watchTouchOnlyDevice } from '~/utils/touchDevice';
 
 withDefaults(
   defineProps<{
@@ -49,11 +49,26 @@ const volumeSlider = ref<HTMLInputElement | null>(null);
 
 defineExpose({ toggleButton, volumeSlider });
 
-/* スマホ・タブレットか（サーバー側では分からないので、ブラウザで動きはじめてから見分ける） */
+/* スマホ・タブレットか（サーバー側では分からないので、ブラウザで動きはじめてから見分ける）
+
+   開いたあとで切りかわったときも、見分けなおす
+   開いたときだけだと、スマホ表示で開いてから PC の表示に戻したときに、
+   CSS のかくす指定は外れるのに、スライダーは作られないままで、音量を変えられなかったため */
 const isTouchOnly = ref(false);
+
+let stopWatchingTouchOnly: (() => void) | null = null;
 
 onMounted(() => {
   isTouchOnly.value = isTouchOnlyDevice();
+
+  stopWatchingTouchOnly = watchTouchOnlyDevice((touchOnly) => {
+    isTouchOnly.value = touchOnly;
+  });
+});
+
+onBeforeUnmount(() => {
+  stopWatchingTouchOnly?.();
+  stopWatchingTouchOnly = null;
 });
 
 /* Tab で、ミュートボタンと音量スライダーを行き来する
