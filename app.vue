@@ -7,6 +7,9 @@ function acceptTap() {}
 <template>
   <VitePwaManifest />
   <div class="app-root" @click="acceptTap">
+    <!-- 時計の欄の帯（→ 下の CSS の .safe-top-band） -->
+    <div class="safe-top-band" aria-hidden="true"></div>
+
     <NuxtPage />
   </div>
 </template>
@@ -89,13 +92,14 @@ body {
    ふつうは env(safe-area-inset-top)（時計の欄・ノッチの高さ。よける場所が無い画面では 0）
    画面の上の余白は、どこもこの値を使う（ゲーム画面・サウンドトラック・ミニゲーム・下の時計の欄の帯）
 
-   ■ iPhone・iPad のホーム画面アプリ（縦向き）だけは、多めにとる
-     iOS 26.1 から、時計の欄の下まで描かれているのに、env(safe-area-inset-top) が 0 になることがある
-     （iOS 27.0.1 の iPhone SE で、ゲームの上部が時計の欄にもぐった。https://bugs.webkit.org/show_bug.cgi?id=301994）
-     さらに iOS 26 からは、画面のいちばん上から 約 55pt まで、OS がぼかしをかける（CSS では止められない）
-     ・0 と言われたら、時計の欄の高さを 20px（ホームボタンのある iPhone の時計の欄）とみなす
-     ・ぼかしの外まで中身を下げるため、24px 足す
-       （iPhone SE では 44px になり、ゲームの上部の時計の文字が、ぼかしより 20pt ほど下に出る）
+   ■ iPhone・iPad のホーム画面アプリ（縦向き）だけは、24px 以上とる
+     iOS 26.1 から、ホーム画面アプリのページは時計の欄の下から始まり（env(safe-area-inset-top) は 0）、
+     ページの上のはし 約 35pt に、OS がぼかしと暗い影をかける（https://bugs.webkit.org/show_bug.cgi?id=301994）
+     iOS 27.0.1 の iPhone SE では、ゲームの上部の時計（09:00 ／ 12:00）の行がぼやけた
+     ・OS は、ページの上のはしを単色の固定の箱が覆っていると、ぼかしをやめて、その色で時計の欄をぬる（と報告されている）
+       → 下の .safe-top-band を、この高さで置く（10px 以下の箱は OS が見ないので、それより高くする）
+     ・24px … OS がそれでもぼかしたときに、ゲームの上部の時計の文字が、ぼかしの外に出る高さ
+       （44px にしたら、ぼかしは消えたが、時計の欄の下に白っぽい帯が目立った）
      ・data-ios-standalone は、nuxt.config.ts の head の script が、画面が出る前に付ける
      ・横向きでは時計の欄が出ないので、足さない
    ============================================================ */
@@ -105,21 +109,23 @@ body {
 
 @media (orientation: portrait) {
   html[data-ios-standalone] {
-    --safe-top: calc(max(env(safe-area-inset-top), 20px) + 24px);
+    --safe-top: max(env(safe-area-inset-top), 24px);
   }
 }
 
 /* ============================================================
-   ページ全体がスクロールしても、iPhone の時計の欄の下に中身がもぐらないようにする
+   時計の欄の帯（上の余白 --safe-top と同じ高さ）
 
-   ホーム画面に追加したアプリでは、時計の欄の下まで画面が描かれる（viewport-fit=cover）
-   ページ全体がスクロールする画面では、中身が時計の文字と重なってしまうので、
-   上の余白（--safe-top）と同じ高さの帯を position: fixed で置いて隠す
-   ・帯の色は、それぞれの画面の背景のいちばん上の色とそろえる
+   ・ホーム画面アプリでは、時計の欄の下まで画面が描かれることがある（viewport-fit=cover）
+     ページ全体がスクロールする画面でも、中身が時計の文字と重ならないよう、position: fixed で隠す
+   ・iPhone のホーム画面アプリでは、この帯がページの上のはしを覆うことで、OS のぼかしを止める（→ 上の --safe-top）
+     そのため ::before ではなく、本物の要素にしている（OS は ::before を見ない、と報告されている）
+   ・色は、それぞれの画面の上のはしの色とそろえる（帯と画面の中身が、ひとつながりに見えるように）
+     ふだんは背景のいちばん上の色、ゲーム中は上部ステータスの色（status.css の .status-area の --navy）
    ・よける場所が無い画面では高さ 0 なので、何も出ない
    ・z-index は、ふだんの中身より手前、いやいや発生の演出などの暗い背景（1000〜）より奥
    ============================================================ */
-.app-root::before {
+.safe-top-band {
   position: fixed;
   z-index: 900;
   top: 0;
@@ -127,8 +133,11 @@ body {
   left: 0;
   height: var(--safe-top);
   background: #d6f0fb;
-  content: '';
   pointer-events: none;
+}
+
+.app-root:has(.status-area) .safe-top-band {
+  background: #2a768f;
 }
 
 /* ============================================================
