@@ -1,5 +1,14 @@
 <script setup lang="ts">
+import { ref, watch } from 'vue';
+
 const safeTopBand = useSafeTopBand();
+
+/* 最初の表示は単色のまま。空色 ⇄ 青緑が切りかわったあとだけ、iOS の色変更に帯の見た目を合わせる */
+const hasSafeTopBandChanged = ref(false);
+
+watch(safeTopBand, () => {
+  hasSafeTopBandChanged.value = true;
+});
 
 /* 何もしないクリック処理
    iPhone で、すばやく2回タップしても画面が拡大しないようにするためのもの（→ 下の .app-root の説明） */
@@ -8,7 +17,10 @@ function acceptTap() {}
 
 <template>
   <VitePwaManifest />
-  <div class="app-root" :class="`app-root--safe-top-${safeTopBand}`" @click="acceptTap">
+  <div
+    class="app-root"
+    :class="[`app-root--safe-top-${safeTopBand}`, { 'app-root--safe-top-transition': hasSafeTopBandChanged }]"
+    @click="acceptTap">
     <!-- 時計の欄の帯（空色・濃い青緑の2本。どちらか1本だけ出す → 下の CSS の .safe-top-band） -->
     <div class="safe-top-band safe-top-band--sky" aria-hidden="true"></div>
     <div class="safe-top-band safe-top-band--navy" aria-hidden="true"></div>
@@ -142,10 +154,10 @@ body {
      そのため ::before ではなく、本物の要素にしている（OS は ::before を見ない、と報告されている）
    ・色は、それぞれの画面の上のはしの色とそろえる（帯と画面の中身が、ひとつながりに見えるように）
      ふだんは背景のいちばん上の色、ゲーム中は上部ステータスの色（status.css の .status-area の --navy）
-   ・色ごとに帯を2本おいて、useSafeTopBand() の状態でどちらか1本だけ出す（1本の帯の色を変えるのではなく）
-     OS は、帯の色が変わっただけでは、時計の欄をすぐにはぬりなおさない
-     （中断して はじめの画面に戻ったとき、時計の欄だけ 一瞬 濃い青緑のまま残った。ゲームを始めるときは、逆に空色が残った）
-     帯ごと出しなおすと、すぐにぬりなおす、と報告されているため
+   ・色ごとに帯を2本おいて、useSafeTopBand() の状態でどちらか1本だけ出す
+     固定要素の表示・非表示を切りかえると、WebKit に上端の色の再取得が通知される
+     ただし、OS の時計欄は約0.1秒かけて色を変えるので、帯を即座に変えるだけでは色がずれて見える
+     → 下の ::before で、ページ内の帯の見た目も同じ長さで切りかえる
    ・画面の中に .status-area があるかでは決めない
      mode="out-in" のフェード中は前の画面が0.18秒残り、時計の欄だけ前の色になってしまうため
    ・よける場所が無い画面では高さ 0 なので、何も出ない
@@ -162,10 +174,12 @@ body {
 }
 
 .safe-top-band--sky {
+  --safe-top-previous-color: #2a768f;
   background: #d6f0fb;
 }
 
 .safe-top-band--navy {
+  --safe-top-previous-color: #d6f0fb;
   display: none;
   background: #2a768f;
 }
@@ -177,6 +191,34 @@ body {
 
 .app-root--safe-top-navy .safe-top-band--navy {
   display: block;
+}
+
+/* iOS の時計欄は、新しい色を受けとったあとも約0.1秒かけて塗りかわる
+   （WebKit の WKColorExtensionView の animationDuration）
+   https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Cocoa/WKColorExtensionView.mm
+
+   帯の背景色は完成色のまま OS に渡し、前の色を重ねた見た目だけを0.1秒で消す
+   ・重ねる色は background-image にする（OS の色取得に、前の background-color を混ぜないため）
+   ・帯本体の background-color はアニメーションさせない（途中の色を OS が取得してしまうため）
+   ・display: none になった帯の動きは取り消され、次に表示するときは最初から始まる
+   ・最初の表示では動かさない（起動時に、前の画面があったかのように青緑を出さない）
+   ※ OS 側の描画時刻はページから取得できないので、実機でも見た目を確認すること */
+html[data-ios-standalone] .app-root--safe-top-transition .safe-top-band::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--safe-top-previous-color), var(--safe-top-previous-color));
+  animation: safe-top-color-settle 0.1s linear both;
+}
+
+@keyframes safe-top-color-settle {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
 }
 
 /* ============================================================
