@@ -1085,7 +1085,10 @@ onUnmounted(() => {
   animation: found-in 0.4s ease-out 0.3s backwards;
 }
 
-/* ===== 下の枠（本編のコマンド欄と同じ紺色の枠） ===== */
+/* ===== 下の枠（本編のコマンド欄と同じ紺色の枠） =====
+   ・user-select: none … スマホで長押ししても、案内の文字が選ばれないように
+     （「長押し：加速」と書いてあるので、ここを長押しする人がいるため。読み上げには、そのまま読まれる）
+   ・-webkit-touch-callout: none … iPhone で長押ししたときのメニューを出さない（フィールドと同じ） */
 .mg-command {
   position: relative; /* 知らせ（.mg-notice）を、この枠いっぱいに重ねるための基準 */
   box-sizing: border-box;
@@ -1095,6 +1098,9 @@ onUnmounted(() => {
   background: linear-gradient(180deg, #2e7d96 0%, #226981 100%);
   box-shadow: 0 6px 16px rgb(16 29 44 / 22%);
   text-align: center;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* 下の枠に重ねて出す知らせ（枠の大きさは変えないので、まわりの位置はずれない）
