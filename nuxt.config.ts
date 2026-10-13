@@ -14,7 +14,7 @@ const siteUrl = 'https://kouchan-game.vercel.app';
 const ogImageUrl = `${siteUrl}/images/og-image.jpg`;
 
 /*
- * 画面のいちばん上の色（本編・サウンドトラック・ミニゲームの背景のいちばん上と、app.vue の時計の欄の帯の色）
+ * 画面のいちばん上の色（本編・サウンドトラック・ミニゲームの背景のいちばん上と、app.vue の時計の欄の帯の色。ゲーム中の帯だけは上部ステータスの色）
  * スマホのブラウザの上のほうの色（theme-color）と、ホーム画面のアプリの色（manifest の theme_color）を、これにそろえる
  */
 const themeColor = '#d6f0fb';
@@ -83,8 +83,8 @@ export default defineNuxtConfig({
 
         /*
          * iPhone・iPad のホーム画面アプリで開いているかを、画面が出る前に調べて、<html data-ios-standalone> の目印を付ける
-         *   iOS 26.1 から、ホーム画面アプリでは時計の欄の高さ（env(safe-area-inset-top)）が 0 になることがあり、
-         *   ゲームの上部が時計の欄にもぐって、OS のぼかしがかかってしまうので、目印があるときは上の余白を多めにとる（→ app.vue の --safe-top）
+         *   iOS 26.1 から、ホーム画面アプリでは、ページの上のはしに OS のぼかしがかかり、ゲームの上部の時計がぼやけるので、
+         *   目印があるときは、上のはしを単色の帯で覆って、そのぶん中身を下げる（→ app.vue の --safe-top・.safe-top-band）
          *   navigator.standalone … iPhone・iPad のホーム画面アプリのときだけ true（Safari のタブ・Android・パソコンでは付かない）
          */
         {
