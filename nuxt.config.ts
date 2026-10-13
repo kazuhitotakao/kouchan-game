@@ -54,6 +54,15 @@ export default defineNuxtConfig({
        */
       viewport: 'width=device-width, initial-scale=1, viewport-fit=cover',
 
+      /*
+       * ブラウザのタブのアイコン（favicon）と、iPhone のホーム画面のアイコン
+       * ※ どちらも public/icons/app-icon.png から作る（npm run generate-icons → pwa-assets.config.ts）
+       */
+      link: [
+        { rel: 'icon', href: '/icons/favicon.ico', sizes: '48x48' },
+        { rel: 'apple-touch-icon', href: '/icons/apple-touch-icon-180x180.png' },
+      ],
+
       script: [
         /*
          * 「つづきから」の保存があるかだけを、画面が出る前に調べて、<html data-play-save> の目印を付ける
@@ -184,6 +193,17 @@ export default defineNuxtConfig({
        * ホーム画面のアプリの色（Android の時計の欄や、アプリを切りかえる画面に出る。上の themeColor）
        */
       theme_color: themeColor,
+
+      /*
+       * ホーム画面のアイコン（Android の Chrome は、192 と 512 が無いとアプリとして入れられない）
+       * maskable … Android が丸や角丸に切りぬく用（絵の大事なものは、切りぬかれない中央の円の中に描いてある）
+       * ※ どれも public/icons/app-icon.png から作る（npm run generate-icons → pwa-assets.config.ts）
+       */
+      icons: [
+        { src: '/icons/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/icons/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/icons/maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
     },
   },
 });

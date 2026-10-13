@@ -17,6 +17,9 @@ export type MediaSessionHandlers = {
   nextTrack: () => void;
 };
 
+/* ロック画面・車の画面に出す曲の画像（どの曲もアプリのアイコン。public/icons/app-icon.png から作る → pwa-assets.config.ts） */
+const trackArtwork: MediaImage[] = [{ src: '/icons/pwa-512x512.png', sizes: '512x512', type: 'image/png' }];
+
 /* 知らせる曲の情報（artist・album は、その欄に出す文字） */
 export type MediaSessionTrack = {
   title: string;
@@ -106,7 +109,7 @@ export function setMediaSessionTrack(track: MediaSessionTrack | null) {
   }
 
   try {
-    mediaSession.metadata = track && typeof MediaMetadata !== 'undefined' ? new MediaMetadata(track) : null;
+    mediaSession.metadata = track && typeof MediaMetadata !== 'undefined' ? new MediaMetadata({ ...track, artwork: trackArtwork }) : null;
   } catch {
     // 知らせられなくても、曲はふつうに鳴る
   }

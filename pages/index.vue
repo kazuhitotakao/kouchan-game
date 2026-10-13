@@ -727,6 +727,7 @@ const {
   playTitleBgmSoon,
   cancelTitleBgmStart,
   stopTitleBgm,
+  titleBgmStartCount,
 
   /* いやいやタイムのBGM */
   playTantrumBgmSoon,
@@ -1408,6 +1409,14 @@ function noticeNewSoundtrackTrack(key: SoundtrackNewKey) {
 
    ※ A画面の「🎮 ミニゲーム」は、解放していなくてもいつも出す（一覧では「？？？」とヒントだけを出す）
    ※ もう一度あそぶときも、解放は戻さない */
+/* B画面のタイトルの文字を、タイトルBGMの鳴りはじめに合わせて1回だけ弾ませる（→ base.css の .title-card__name--pop）
+   弾みおわったら（animationend）外す。付けたままだと、おやつ選択画面から戻ってきたときにも、また弾んでしまうため */
+const isTitleNamePopping = ref(false);
+
+watch(titleBgmStartCount, () => {
+  isTitleNamePopping.value = true;
+});
+
 watch(hasDiscoveredSecretSpot, (discovered) => {
   if (!discovered) {
     return;
@@ -3036,9 +3045,10 @@ onUnmounted(() => {
           </div>
 
           <!-- キービジュアル（大きさ・並び順は base.css の .title-card__visual） -->
-          <NoImage class="title-card__visual" ratio="16 / 9" label="キービジュアル" />
+          <NoImage class="title-card__visual" ratio="16 / 9" label="キービジュアル" src="/images/title/key-visual.webp" />
 
-          <h1 class="title-card__name">{{ gameTitle }}</h1>
+          <!-- タイトルはキービジュアルの絵の中にあるので、見た目からは消して読み上げ用に残す（sr-only は result.css） -->
+          <h1 class="title-card__name sr-only">{{ gameTitle }}</h1>
 
           <!-- 「ホーム画面に追加」の案内（ふつうの Safari / Chrome で開いているときだけ。パソコンでは CSS でかくす）
                iPhone も Android も「ホーム画面に追加」という名前のメニューを選ぶので、その名前だけ伝える
@@ -3082,7 +3092,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <h1 class="title-card__name">{{ gameTitle }}</h1>
+          <h1 class="title-card__name" :class="{ 'title-card__name--pop': isTitleNamePopping }" @animationend="isTitleNamePopping = false">{{ gameTitle }}</h1>
 
           <div class="title-card__rule">
             <p>
