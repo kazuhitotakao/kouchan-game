@@ -8,6 +8,12 @@ const gameName = 'こうちゃんの大冒険';
 const gameDescription = 'こうちゃんと公園を探検するゲーム';
 
 /*
+ * 公開しているアドレス（共有したときのカード（OGP）のアドレス・絵は、https から書かないと、LINE・X などが見つけられないため）
+ */
+const siteUrl = 'https://kouchan-game.vercel.app';
+const ogImageUrl = `${siteUrl}/images/og-image.jpg`;
+
+/*
  * 画面のいちばん上の色（本編・サウンドトラック・ミニゲームの背景のいちばん上と、app.vue の時計の欄の帯の色）
  * スマホのブラウザの上のほうの色（theme-color）と、ホーム画面のアプリの色（manifest の theme_color）を、これにそろえる
  */
@@ -89,13 +95,18 @@ export default defineNuxtConfig({
 
         /*
          * LINE・X などでアドレスを共有したときの、カードの中身（OGP）
-         * ※ カードの絵（og:image）は、キービジュアルができたら足す
+         * カードの絵は public/images/og-image.jpg（1376×768px。水彩の絵なので、軽い JPG にしてある。WebP は LINE で出ないことがあるので使わない）
          */
         { property: 'og:type', content: 'website' },
+        { property: 'og:url', content: siteUrl },
         { property: 'og:title', content: gameName },
         { property: 'og:description', content: gameDescription },
         { property: 'og:locale', content: 'ja_JP' },
-        { name: 'twitter:card', content: 'summary' },
+        { property: 'og:image', content: ogImageUrl },
+        { property: 'og:image:width', content: '1376' },
+        { property: 'og:image:height', content: '768' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:image', content: ogImageUrl },
 
         /*
          * 古い iPhone（iOS 16.3 まで）は manifest の display を読まないので、
