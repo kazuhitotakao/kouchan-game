@@ -158,10 +158,13 @@
     overflow: hidden;
   }
 
-  /* overscroll-behavior: contain … いちばん下までスクロールした勢いで、うしろのページまで動かないように */
+  /* overscroll-behavior: none … はしまでスクロールしたときに、中央エリアが「ばね」のように動かないように
+     （contain だと、うしろのページは動かないが、中央エリア自身のばねは残る
+       iPhone では、下に貼りつけた「どうする？」のコマンドまで、いっしょに引っぱられて動いてしまうため）
+     うしろのページまで動かないのは、contain と同じ */
   .game-screen .stage {
     overflow-y: auto;
-    overscroll-behavior: contain;
+    overscroll-behavior: none;
   }
 
   /* 結果カードは縮ませない（中央エリアごとスクロールさせる）
