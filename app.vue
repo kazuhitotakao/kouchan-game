@@ -84,11 +84,37 @@ body {
 }
 
 /* ============================================================
+   iPhone の時計の欄をよける、上の余白の高さ（--safe-top）
+
+   ふつうは env(safe-area-inset-top)（時計の欄・ノッチの高さ。よける場所が無い画面では 0）
+   画面の上の余白は、どこもこの値を使う（ゲーム画面・サウンドトラック・ミニゲーム・下の時計の欄の帯）
+
+   ■ iPhone・iPad のホーム画面アプリ（縦向き）だけは、多めにとる
+     iOS 26.1 から、時計の欄の下まで描かれているのに、env(safe-area-inset-top) が 0 になることがある
+     （iOS 27.0.1 の iPhone SE で、ゲームの上部が時計の欄にもぐった。https://bugs.webkit.org/show_bug.cgi?id=301994）
+     さらに iOS 26 からは、画面のいちばん上から 約 55pt まで、OS がぼかしをかける（CSS では止められない）
+     ・0 と言われたら、時計の欄の高さを 20px（ホームボタンのある iPhone の時計の欄）とみなす
+     ・ぼかしの外まで中身を下げるため、24px 足す
+       （iPhone SE では 44px になり、ゲームの上部の時計の文字が、ぼかしより 20pt ほど下に出る）
+     ・data-ios-standalone は、nuxt.config.ts の head の script が、画面が出る前に付ける
+     ・横向きでは時計の欄が出ないので、足さない
+   ============================================================ */
+:root {
+  --safe-top: env(safe-area-inset-top);
+}
+
+@media (orientation: portrait) {
+  html[data-ios-standalone] {
+    --safe-top: calc(max(env(safe-area-inset-top), 20px) + 24px);
+  }
+}
+
+/* ============================================================
    ページ全体がスクロールしても、iPhone の時計の欄の下に中身がもぐらないようにする
 
    ホーム画面に追加したアプリでは、時計の欄の下まで画面が描かれる（viewport-fit=cover）
    ページ全体がスクロールする画面では、中身が時計の文字と重なってしまうので、
-   時計の欄の高さぶんの帯を position: fixed で置いて隠す
+   上の余白（--safe-top）と同じ高さの帯を position: fixed で置いて隠す
    ・帯の色は、それぞれの画面の背景のいちばん上の色とそろえる
    ・よける場所が無い画面では高さ 0 なので、何も出ない
    ・z-index は、ふだんの中身より手前、いやいや発生の演出などの暗い背景（1000〜）より奥
@@ -99,7 +125,7 @@ body {
   top: 0;
   right: 0;
   left: 0;
-  height: env(safe-area-inset-top);
+  height: var(--safe-top);
   background: #d6f0fb;
   content: '';
   pointer-events: none;

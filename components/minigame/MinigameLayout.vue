@@ -180,8 +180,8 @@ watch(
   flex-direction: column;
   box-sizing: border-box;
 
-  /* iPhone のノッチ・ホームインジケーターをよける余白（ゲーム画面の .game と同じ考えかた） */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  /* iPhone のノッチ・ホームインジケーターをよける余白（ゲーム画面の .game と同じ考えかた。上は --safe-top → app.vue） */
+  padding: var(--safe-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   width: 100%;
   max-width: 1180px;
   min-height: 100vh;
