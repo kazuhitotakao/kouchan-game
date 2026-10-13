@@ -7,8 +7,9 @@ function acceptTap() {}
 <template>
   <VitePwaManifest />
   <div class="app-root" @click="acceptTap">
-    <!-- 時計の欄の帯（→ 下の CSS の .safe-top-band） -->
-    <div class="safe-top-band" aria-hidden="true"></div>
+    <!-- 時計の欄の帯（空色・濃い青緑の2本。どちらか1本だけ出す → 下の CSS の .safe-top-band） -->
+    <div class="safe-top-band safe-top-band--sky" aria-hidden="true"></div>
+    <div class="safe-top-band safe-top-band--navy" aria-hidden="true"></div>
 
     <NuxtPage />
   </div>
@@ -118,10 +119,9 @@ body {
    iPhone・iPad のホーム画面アプリでは、ページの下地を、黒っぽい色から空色にする
 
    ページの下地（base.css の html・body）は、パソコンでゲームの枠の外を暗くするための色（#101d2c）
-   ホーム画面アプリでは、画面の切りかえのときに、これが黒い帯のように一瞬見えることがある
-   ・OS が時計の欄の色を読みなおすとき（ゲーム画面 ⇄ はじめの画面で、帯の色が変わる）に、
-     ページの下地の色でぬることがある、と報告されている
-   ・ページを行き来するフェード（下の .page-fade-〜）のあいだは、ページの下地が見える
+   ページを行き来するフェード（下の .page-fade-〜。サウンドトラック・ミニゲーム ⇄ はじめの画面）のあいだは、
+   ページの下地が見えるので、スマホでは画面ぜんたいが一瞬 暗くなってしまう
+   ※ 中断・はじめに戻るで、時計の欄が一瞬 濃い青緑のまま残るのは、これとは別（→ 下の .safe-top-band）
    ゲームの枠が画面の幅いっぱいになる幅（--frame の 1180px 以下）だけ（それより広いと、枠の外が見えるので、暗いままにする）
    ============================================================ */
 @media (max-width: 1180px) {
@@ -140,6 +140,10 @@ body {
      そのため ::before ではなく、本物の要素にしている（OS は ::before を見ない、と報告されている）
    ・色は、それぞれの画面の上のはしの色とそろえる（帯と画面の中身が、ひとつながりに見えるように）
      ふだんは背景のいちばん上の色、ゲーム中は上部ステータスの色（status.css の .status-area の --navy）
+   ・色ごとに帯を2本おいて、display でどちらか1本だけ出す（1本の帯の色を変えるのではなく）
+     OS は、帯の色が変わっただけでは、時計の欄をすぐにはぬりなおさない
+     （中断して はじめの画面に戻ったとき、時計の欄だけ 一瞬 濃い青緑のまま残った。ゲームを始めるときは、逆に空色が残った）
+     帯ごと出しなおすと、すぐにぬりなおす、と報告されているため
    ・よける場所が無い画面では高さ 0 なので、何も出ない
    ・z-index は、ふだんの中身より手前、いやいや発生の演出などの暗い背景（1000〜）より奥
    ============================================================ */
@@ -150,12 +154,25 @@ body {
   right: 0;
   left: 0;
   height: var(--safe-top);
-  background: #d6f0fb;
   pointer-events: none;
 }
 
-.app-root:has(.status-area) .safe-top-band {
+.safe-top-band--sky {
+  background: #d6f0fb;
+}
+
+.safe-top-band--navy {
+  display: none;
   background: #2a768f;
+}
+
+/* ゲーム中（上部ステータスが出ているあいだ）は、濃い青緑の帯にかえる */
+.app-root:has(.status-area) .safe-top-band--sky {
+  display: none;
+}
+
+.app-root:has(.status-area) .safe-top-band--navy {
+  display: block;
 }
 
 /* ============================================================
