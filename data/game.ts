@@ -21,7 +21,7 @@ export const suddenEventBannerImages = {
   emergencySiren: { label: '救急車', ratio: '3 / 1' },
   ladybug: { src: '/images/events/event-ladybug-found.webp', ratio: '2048 / 455' },
   dog: { src: '/images/events/event-dog-appears.webp', ratio: '2660 / 591' },
-  fallDown: { label: 'ころんだ', ratio: '3 / 1' },
+  fallDown: { src: '/images/events/event-fall-down.webp', ratio: '2048 / 455' },
   fountain: { label: '噴水', ratio: '3 / 1' },
 } satisfies Partial<Record<GameEvent, BannerImage>>;
 
