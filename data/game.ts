@@ -22,7 +22,7 @@ export const suddenEventBannerImages = {
   ladybug: { src: '/images/events/event-ladybug-found.webp', ratio: '2048 / 455' },
   dog: { src: '/images/events/event-dog-appears.webp', ratio: '2660 / 591' },
   fallDown: { src: '/images/events/event-fall-down.webp', ratio: '2048 / 455' },
-  fountain: { src: '/images/events/event-fountain-spray.webp', ratio: '1881 / 418' },
+  fountain: { src: '/images/events/event-fountain-spray.webp', ratio: '2160 / 480' },
 } satisfies Partial<Record<GameEvent, BannerImage>>;
 
 /* ===== ゲージのしきい値（目もり） =====
