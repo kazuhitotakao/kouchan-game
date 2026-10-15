@@ -8,7 +8,7 @@
 すべり台で遊んだり、どんぐりを探したり、おやつでひとやすみしたり。
 こうちゃんの「いやいや」にも向き合いながら、親子で楽しいおでかけを目指します。
 
-**[ゲームで遊ぶ](https://kouchan-game.vercel.app/)** · [ミニゲーム](https://kouchan-game.vercel.app/minigame) · [サウンドトラック](https://kouchan-game.vercel.app/soundtrack)
+**[ゲームで遊ぶ](https://kouchan-game.vercel.app/)** · [サウンドトラック](https://kouchan-game.vercel.app/soundtrack)
 
 ## どんなゲーム？
 
