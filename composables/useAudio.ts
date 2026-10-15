@@ -1155,10 +1155,6 @@ export function useAudio(options: UseAudioOptions) {
 
   let titleBgmTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /* タイトルBGMの「鳴りはじめ」の合図（鳴りはじめるたびに 1 ずつ増える。B画面のタイトルの文字を弾ませるのに使う）
-     サウンドOFFでも、鳴るはずだった時刻に増やす（音が無くても、画面の動きは同じにするため） */
-  const titleBgmStartCount = ref(0);
-
   /* タイトルBGMを「少し待ってから」最初から鳴らす（押した瞬間に曲が始まると唐突に聞こえるため） */
   function playTitleBgmSoon() {
     cancelTitleBgmStart();
@@ -1176,8 +1172,6 @@ export function useAudio(options: UseAudioOptions) {
       if (gameStarted.value) {
         return;
       }
-
-      titleBgmStartCount.value += 1;
 
       playTitleBgm();
     }, titleBgmStartDelay);
@@ -2448,7 +2442,6 @@ export function useAudio(options: UseAudioOptions) {
     playTitleBgmSoon,
     cancelTitleBgmStart,
     stopTitleBgm,
-    titleBgmStartCount,
 
     /* ===== いやいやタイムのBGM ===== */
     playTantrumBgmSoon,

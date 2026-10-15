@@ -214,53 +214,12 @@
   max-width: 88%;
   margin: auto auto 28px;
   border: 2px solid var(--navy-line);
-  animation: key-visual-in 0.5s ease-out both;
 }
 
-/* キービジュアルは、画像を読みこみおわってから ふわっと出す（読みこみ中は枠ごとかくしておく。場所は aspect-ratio でとってあるので、まわりは動かない）
-   読みこみ中の印（no-image--loading）が外れたときに animation が付くので、そこから動きはじめる */
+/* キービジュアルは、画像を読みこみおわってから出す（読みこみ中は枠ごとかくしておく。ふちの線だけの空の枠が見えないように）
+   場所は aspect-ratio でとってあるので、出たときに まわりは動かない */
 .title-card__visual.no-image--loading {
   opacity: 0;
-  animation: none;
-}
-
-@keyframes key-visual-in {
-  from {
-    opacity: 0;
-    transform: scale(1.04);
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-/* B画面のタイトルの文字が、タイトルBGMの鳴りはじめに1回だけ「ぽよん」と弾む（付けはずしは pages/index.vue の isTitleNamePopping） */
-.title-card__name--pop {
-  animation: title-name-pop 0.6s ease-out;
-}
-
-@keyframes title-name-pop {
-  0% {
-    transform: scale(1);
-  }
-
-  30% {
-    transform: scale(1.12);
-  }
-
-  55% {
-    transform: scale(0.96);
-  }
-
-  75% {
-    transform: scale(1.03);
-  }
-
-  100% {
-    transform: scale(1);
-  }
 }
 
 /* ============================================================
@@ -1392,8 +1351,8 @@
   line-height: 1.8;
 }
 
-/* 場所の絵（カードのいちばん上のバナー。縦横比は 3:1）
-   幅いっぱいだとPCで高さが280pxほどになり、中央エリアの場所を取りすぎるので、高さに上限をつける（スマホは responsive.css）
+/* 場所の絵（カードのいちばん上のバナー。縦横比は 4.5:1）
+   幅いっぱいだとPCで高さが185pxほどになり、中央エリアの場所を取りすぎるので、高さに上限をつける（スマホは responsive.css）
    上限にかかると横長の帯になり、本番の画像は上下が切れる（大事なものは まんなかの高さに描いてもらう） */
 .place-card__banner {
   max-height: 160px;

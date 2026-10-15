@@ -727,7 +727,6 @@ const {
   playTitleBgmSoon,
   cancelTitleBgmStart,
   stopTitleBgm,
-  titleBgmStartCount,
 
   /* いやいやタイムのBGM */
   playTantrumBgmSoon,
@@ -1409,14 +1408,6 @@ function noticeNewSoundtrackTrack(key: SoundtrackNewKey) {
 
    ※ A画面の「🎮 ミニゲーム」は、解放していなくてもいつも出す（一覧では「？？？」とヒントだけを出す）
    ※ もう一度あそぶときも、解放は戻さない */
-/* B画面のタイトルの文字を、タイトルBGMの鳴りはじめに合わせて1回だけ弾ませる（→ base.css の .title-card__name--pop）
-   弾みおわったら（animationend）外す。付けたままだと、おやつ選択画面から戻ってきたときにも、また弾んでしまうため */
-const isTitleNamePopping = ref(false);
-
-watch(titleBgmStartCount, () => {
-  isTitleNamePopping.value = true;
-});
-
 watch(hasDiscoveredSecretSpot, (discovered) => {
   if (!discovered) {
     return;
@@ -3092,7 +3083,7 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <h1 class="title-card__name" :class="{ 'title-card__name--pop': isTitleNamePopping }" @animationend="isTitleNamePopping = false">{{ gameTitle }}</h1>
+          <h1 class="title-card__name">{{ gameTitle }}</h1>
 
           <div class="title-card__rule">
             <p>
