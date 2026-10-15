@@ -68,13 +68,47 @@ PWAに対応しているので、スマートフォンのブラウザからホ�
 
 ## ローカルで動かす
 
-### 必要なもの
+このプロジェクトでは、Docker内のNode.js 24を使って開発しています。起動方法は、Dockerを使う方法と、パソコンにNode.jsを直接インストールする方法の2つです。初回の環境準備にはインターネット接続が必要です。3000番ポートを使う別のアプリがある場合は、先に停止してください。
 
-- Node.js 24.x（GitHub Actionsで使用しているバージョン）
-- npm
-- Git
+### 1. Dockerで起動する（推奨）
 
-### 起動手順
+必要なものは、**Docker（Docker Composeを含む）**と**Git**です。Docker Desktopなどをインストールし、Dockerを起動しておきます。この方法では、Node.jsとnpmはコンテナ内に用意されるため、パソコンへの個別インストールは不要です。
+
+ターミナルで以下を1行ずつ実行します。
+
+```bash
+git clone https://github.com/kazuhitotakao/kouchan-game.git
+cd kouchan-game
+docker compose up --build
+```
+
+初回はDockerイメージの準備と依存パッケージのインストールに時間がかかります。
+
+すでにリポジトリを取得済みの場合は、そのフォルダに移動してから`docker compose up --build`を実行してください。
+
+#### 補足：Docker環境をVS Codeで開く（任意）
+
+[Dev Containers](https://code.visualstudio.com/docs/devcontainers/containers)は、上の手順で使うDockerコンテナ内の開発環境に、VS Codeを接続して編集するための機能です。
+
+1. VS CodeにMicrosoft製の「Dev Containers」拡張機能をインストールします。
+2. VS Codeでこのリポジトリのフォルダを開きます。
+3. コマンドパレットから`Dev Containers: Reopen in Container`を実行します。
+
+同梱の`.devcontainer/devcontainer.json`が、`app`サービスの`/app`を開きます。npmコマンドは、コンテナに接続したVS Codeのターミナルで実行してください。
+
+### 2. Node.jsで直接起動する
+
+必要なものは、**Node.js（npmを含む）**と**Git**です。Docker環境とそろえるため、**Node.js 24系**を推奨します。先にインストールしておきます。
+
+ターミナルで次のコマンドを実行し、Node.jsが`v24.`で始まるバージョンであることと、npm・Gitが使えることを確認します。
+
+```bash
+node --version
+npm --version
+git --version
+```
+
+その後、以下を1行ずつ実行します。
 
 ```bash
 git clone https://github.com/kazuhitotakao/kouchan-game.git
@@ -83,15 +117,17 @@ npm ci
 npm run dev
 ```
 
-起動したら、ブラウザで[http://localhost:3000](http://localhost:3000)を開きます。
+### 起動後の確認・終了（Docker・Node.js共通）
 
-Dockerを使う場合は、リポジトリのルートで次のコマンドを実行します。コンテナ内で依存関係のインストールと開発サーバーの起動を行います。
+Dockerで起動した場合も、Node.jsで直接起動した場合も、確認先と終了方法は同じです。
 
-```bash
-docker compose up --build
-```
+- 開発サーバーの起動が完了したら、ブラウザで[http://localhost:3000](http://localhost:3000)を開きます。
+- 起動コマンドを実行したターミナルは、起動中は開いたままにします。
+- 終了するときは、起動コマンドを実行したターミナルで`Ctrl + C`を押します。
 
 ### 主なコマンド
+
+Dockerを使う場合、以下のnpmコマンドはコンテナ内で実行します。Dev Containersを使わない場合は、`docker compose exec app npm run typecheck`のように実行できます。
 
 | コマンド | 内容 |
 | --- | --- |
