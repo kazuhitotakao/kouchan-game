@@ -34,7 +34,7 @@ export const placeBannerImages = {
   acornArea: { src: '/images/commands/play-acorn-tree.webp', ratio: '2164 / 727' },
   pond: { src: '/images/commands/play-pond.webp', ratio: '1945 / 432' },
   grassArea: { src: '/images/commands/play-lawn.webp', ratio: '2172 / 724' },
-  secretSpot: { label: 'こもれびの広場', ratio: '3 / 1' },
+  secretSpot: { src: '/images/commands/play-komorebi-plaza.webp', ratio: '2171 / 482' },
   restArea: { src: '/images/commands/break.webp', ratio: '2660 / 591' },
 } satisfies Partial<Record<GameEvent, BannerImage>>;
 

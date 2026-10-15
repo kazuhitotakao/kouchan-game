@@ -18,11 +18,11 @@ export const suddenEventChance = 0.2;
 /* とつぜんのできごとの絵（カードのいちばん上のバナー。書きかたは data/places.ts の placeBannerImages と同じ）
    画面に出すのも先読みも、ここを見る（絵ができたら、ここだけ書きかえればよい） */
 export const suddenEventBannerImages = {
-  emergencySiren: { label: '救急車', ratio: '3 / 1' },
+  emergencySiren: { src: '/images/events/event-emergency-siren.webp', ratio: '2048 / 455' },
   ladybug: { src: '/images/events/event-ladybug-found.webp', ratio: '2048 / 455' },
   dog: { src: '/images/events/event-dog-appears.webp', ratio: '2660 / 591' },
-  fallDown: { label: 'ころんだ', ratio: '3 / 1' },
-  fountain: { label: '噴水', ratio: '3 / 1' },
+  fallDown: { src: '/images/events/event-fall-down.webp', ratio: '2048 / 455' },
+  fountain: { src: '/images/events/event-fountain-spray.webp', ratio: '1881 / 418' },
 } satisfies Partial<Record<GameEvent, BannerImage>>;
 
 /* ===== ゲージのしきい値（目もり） =====
