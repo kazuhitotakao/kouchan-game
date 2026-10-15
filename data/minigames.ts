@@ -59,9 +59,10 @@ export const minigames = [
   },
   {
     id: 'ladybug-balance',
+    /* 絵がある場合も icon は書いておく（型で必須のため。カードには出ない） */
     icon: '🐞',
-    /* 絵はまだ無いので、絵文字（icon）を出す（書いておかないと、一覧の型から iconImage が消えて、読む側がエラーになる） */
-    iconImage: undefined,
+    /* とつぜんのできごと「テントウムシ」の絵から、葉っぱの上のてんとう虫を切りだしたもの */
+    iconImage: '/images/minigames/ladybug-balance/ladybug-balance-icon.webp',
     title: '枝の上のてんとう虫',
     description: '枝を傾けて、てんとう虫が飛んでいかないようにしよう！',
     lockedHint: '公園のどこかで、てんとう虫に会えるかも…',
