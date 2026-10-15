@@ -137,5 +137,3 @@ public/         画像・音源・アイコン
 - `develop`と`main`には直接pushしません。
 - 対象のPull Requestでは、GitHub Actionsが型チェックとビルドを行い、成功後に`develop`へsquash mergeしてリモートの作業ブランチを削除します。
 - Vercelの自動デプロイは、`main`ブランチを対象にしています。
-
-詳しい作業ルールは[AGENTS.md](AGENTS.md)を参照してください。
