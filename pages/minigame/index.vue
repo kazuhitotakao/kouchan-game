@@ -15,7 +15,7 @@ import MinigameLayout from '~/components/minigame/MinigameLayout.vue';
 import { useAudio } from '~/composables/useAudio';
 import { moveMinigameFocusByArrow } from '~/composables/useMinigameKeyboardNav';
 import { minigames, splitMinigameTitle } from '~/data/minigames';
-import type { MinigameBestPart, MinigameId } from '~/data/minigames';
+import type { MinigameBestPart, MinigameId, MinigameInfo } from '~/data/minigames';
 import type { GameEvent } from '~/types/game';
 import { clearNewMinigames, loadMinigameBest, loadNewMinigames, loadUnlockedMinigames } from '~/utils/minigameStorage';
 // 絵の先読みと、中の絵が表示できるようになってから箱ごと出す目印（→ utils/imagePreload.ts）
@@ -62,6 +62,9 @@ const bestParts = ref<Partial<Record<MinigameId, MinigameBestPart[]>>>({});
 const cards = computed(() =>
   minigames.map((minigame) => ({
     ...minigame,
+    /* 絵は「無いこともある」型にもどしておく（いまはどれにも絵があるので、そのままだと、絵文字を出すほうの v-else が型エラーになる。
+       絵の無いミニゲームを足したときに、絵文字（icon）を出すため） */
+    iconImage: minigame.iconImage as MinigameInfo['iconImage'],
     isUnlocked: unlockedIds.value.includes(minigame.id),
     isNew: newIds.value.includes(minigame.id),
     bestParts: bestParts.value[minigame.id] ?? null,

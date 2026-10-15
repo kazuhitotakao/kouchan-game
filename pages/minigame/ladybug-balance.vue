@@ -47,6 +47,7 @@ import {
   saveLadybugVocalSongUnlocked,
   unlockLadybugVocalSongFromSavedBest,
 } from '~/utils/ladybugVocalSong';
+import { vRevealWithImages } from '~/utils/imagePreload';
 import { markNewSoundtrackTrack } from '~/utils/soundtrackNew';
 
 /* このミニゲームの id（URL の /minigame/ladybug-balance と、保存場所の名前に使う）と、一覧の情報（data/minigames.ts） */
@@ -674,11 +675,12 @@ onUnmounted(() => {
       <!-- スクロールする部分（はじまる前の説明・遊んでいる最中・結果） -->
       <div ref="scrollRef" class="lb-scroll">
         <!-- はじまる前（名前・ねらいと、ステージ選び。操作などの説明は「あそびかた」 → 下の #howto） -->
-        <article v-if="phase === 'ready'" class="place-card">
-          <!-- アイコン（🐞）と名前を ひとまとまりにして、カードのまん中に置く（.mg-title。どこまで行ける？ の見出しと同じ置きかた）
+        <article v-if="phase === 'ready'" v-reveal-with-images class="place-card">
+          <!-- アイコンは一覧のカードと同じ絵（となりに名前があるので、読み上げでは読ませない）
+               アイコンと名前を ひとまとまりにして、カードのまん中に置く（.mg-title。どこまで行ける？ の見出しと同じ置きかた）
                名前は、ことばの区切りごとに まとめて出す（細い画面で、ことばの途中で切れないように） -->
           <h1 class="place-card__title mg-title">
-            <span class="mg-title__icon" aria-hidden="true">🐞</span>
+            <img v-if="minigameInfo.iconImage" class="mg-title__icon" :src="minigameInfo.iconImage" alt="" decoding="async" />
             <span class="mg-title__text">
               <span v-for="part in splitMinigameTitle(minigameInfo.title)" :key="part" class="lb-titlePart">{{ part }}</span>
             </span>
@@ -993,6 +995,18 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 12px;
+}
+
+/* 見出しのアイコンの絵（どこまで行ける？ の .mg-title__icon と同じ）
+   絵は文字の高さの2倍ほどにして、ゲームの顔として目立たせる
+   絵のまわりの透明な余白は、1.12倍に広げて切り落とす（一覧のカードと同じしかけ） */
+.mg-title__icon {
+  flex: none;
+  width: 2.1em;
+  height: 2.1em;
+  object-fit: contain;
+  transform: scale(1.12);
+  filter: drop-shadow(0 2px 3px rgb(87 56 158 / 22%));
 }
 
 /* 見出しの名前の区切りひとつぶん（入りきるなら1行のまま。入りきらないときは、区切りのところで折り返す） */
