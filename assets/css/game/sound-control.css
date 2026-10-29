@@ -247,9 +247,15 @@
   transition: opacity 0.12s ease;
 }
 
-.sound-toggle:hover .sound-control__tooltip,
+/* hover で出すのは、マウスが使える機械だけ（スマホは、タップした場所に hover がしばらく残ってしまうため） */
+@media (hover: hover) {
+  .sound-toggle:hover .sound-control__tooltip,
+  .sound-control__sliderWrap:hover .sound-control__tooltip {
+    opacity: 1;
+  }
+}
+
 .sound-toggle:focus-visible .sound-control__tooltip,
-.sound-control__sliderWrap:hover .sound-control__tooltip,
 .sound-control__sliderWrap:focus-within .sound-control__tooltip {
   opacity: 1;
 }

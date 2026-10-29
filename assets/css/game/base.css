@@ -526,7 +526,13 @@
   transition: opacity 0.12s ease;
 }
 
-.title-card__soundtrack:hover .title-card__tooltip,
+/* hover で出すのは、マウスが使える機械だけ（スマホは、タップした場所に hover がしばらく残ってしまうため） */
+@media (hover: hover) {
+  .title-card__soundtrack:hover .title-card__tooltip {
+    opacity: 1;
+  }
+}
+
 .title-card__soundtrack:focus-visible .title-card__tooltip {
   opacity: 1;
 }
